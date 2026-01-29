@@ -1,0 +1,37 @@
+{
+    "id": "lancer-reactionChecker",
+    "title": "Lancer Reaction Checker",
+    "version": "1.0.0",
+    "description": "Port of the Overwatch Reaction Auto-Checker from csm-lancer-qol.",
+    "socket": true,
+    "authors": [
+        {
+            "name": "Agraael"
+        }
+    ],
+    "url": "https://github.com/Agraael/lancer-reactionChecker",
+    "manifest": "https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.json",
+    "download": "https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.zip",
+    "esmodules": [
+        "scripts/reaction.js",
+        "scripts/main.js"
+    ],
+    "compatibility": {
+        "minimum": "12",
+        "verified": "12"
+    },
+    "relationships": {
+        "systems": [
+            {
+                "id": "lancer",
+                "type": "system"
+            }
+        ],
+        "requires": [
+            {
+                "id": "lancer-style-library",
+                "type": "module"
+            }
+        ]
+    }
+}
