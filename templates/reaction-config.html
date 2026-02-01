@@ -1,0 +1,181 @@
+<form class="{{cssClass}}" autocomplete="off">
+    <header class="sheet-header">
+        <div class="flexrow" style="align-items: center;">
+            <h1 style="flex: 1; border: none;">Reaction Manager</h1>
+            <a class="help-btn" title="Help"><i class="fas fa-question-circle"></i></a>
+        </div>
+        <p>Manage default and custom reactions for checking triggers.</p>
+    </header>
+
+    <nav class="sheet-tabs tabs" data-group="primary">
+        <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Reactions</a>
+        <a class="item" data-tab="defaults"><i class="fas fa-book"></i> Defaults</a>
+    </nav>
+
+    <div class="content">
+        <!-- CUSTOM TAB (merged general + item-based) -->
+        <div class="tab" data-tab="custom">
+            <div class="flexrow" style="margin-bottom: 5px;">
+                <button type="button" class="add-reaction"><i class="fas fa-plus"></i> Add Reaction</button>
+            </div>
+            <p class="notes" style="margin-bottom: 10px;">Custom reactions can be General (all tokens) or Item-Based
+                (requires matching LID).</p>
+            <div class="reaction-list flexcol">
+                <div class="reaction-header flexrow">
+                    <span class="col-enabled" title="Enabled">En</span>
+                    <span class="col-type">Type</span>
+                    <span class="col-name">Name / LID</span>
+                    <span class="col-triggers">Triggers</span>
+                    <span class="col-controls">Controls</span>
+                </div>
+                <hr>
+                <div class="scrollable">
+                    {{#each allReactions}}
+                    <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                        data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                        <span class="col-enabled">
+                            <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
+                        </span>
+                        <span class="col-type">
+                            {{#if this.isGeneral}}
+                            <i class="fas fa-globe" title="General"></i>
+                            {{else}}
+                            <i class="fas fa-cube" title="Item-Based"></i>
+                            {{/if}}
+                        </span>
+                        <span class="col-name">
+                            {{#if this.isGeneral}}{{this.name}}{{else}}
+                            {{this.lid}}
+                            {{#if this.reactionPath}}<br><span
+                                style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
+                            {{/if}}
+                        </span>
+                        <span class="col-triggers">{{this.triggers}}</span>
+                        <span class="col-controls">
+                            <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
+                            <a class="delete-reaction" title="Delete"><i class="fas fa-trash"></i></a>
+                        </span>
+                    </div>
+                    {{else}}
+                    <p class="notes" style="text-align: center;">No custom reactions defined.</p>
+                    {{/each}}
+                </div>
+            </div>
+        </div>
+
+        <!-- DEFAULTS TAB -->
+        <div class="tab" data-tab="defaults">
+            <p class="notes" style="margin-bottom: 10px;">Default reactions from the registry. Click copy to create an
+                editable override.</p>
+            <div class="reaction-list flexcol">
+                <div class="reaction-header flexrow">
+                    <span class="col-enabled" title="Enabled">En</span>
+                    <span class="col-type">Type</span>
+                    <span class="col-name">Name / LID</span>
+                    <span class="col-triggers">Triggers</span>
+                    <span class="col-controls"></span>
+                </div>
+                <hr>
+                <div class="scrollable">
+                    {{#each defaultReactions}}
+                    <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                        data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                        <span class="col-enabled">
+                            <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
+                        </span>
+                        <span class="col-type">
+                            {{#if this.isGeneral}}
+                            <i class="fas fa-globe" title="General"></i>
+                            {{else}}
+                            <i class="fas fa-cube" title="Item-Based"></i>
+                            {{/if}}
+                        </span>
+                        <span class="col-name">
+                            {{#if this.isGeneral}}{{this.name}}{{else}}
+                            {{this.lid}}
+                            {{#if this.reactionPath}}<br><span
+                                style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
+                            {{/if}}
+                        </span>
+                        <span class="col-triggers">{{this.triggers}}</span>
+                        <span class="col-controls">
+                            <a class="copy-default" title="Copy to Custom"><i class="fas fa-copy"></i></a>
+                        </span>
+                    </div>
+                    {{/each}}
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<style>
+    .reaction-list .reaction-header {
+        font-weight: bold;
+        padding: 5px;
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    .reaction-list .col-enabled {
+        flex: 0.15;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .reaction-list .col-type {
+        flex: 0.3;
+        text-align: center;
+    }
+
+    .reaction-list .col-name,
+    .reaction-list .col-lid {
+        flex: 3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .reaction-list .col-triggers {
+        flex: 2;
+        font-size: 0.8em;
+    }
+
+    .reaction-list .col-controls {
+        flex: 0.5;
+        text-align: right;
+    }
+
+    .reaction-item {
+        padding: 5px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .reaction-item:nth-child(even) {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .scrollable {
+        max-height: 550px;
+        overflow-y: auto;
+    }
+
+    .sheet-tabs {
+        margin-bottom: 10px;
+        border-bottom: 1px solid #aaa;
+    }
+
+    .sheet-tabs .item {
+        padding: 5px 10px;
+        border: 1px solid transparent;
+        border-bottom: none;
+        cursor: pointer;
+    }
+
+    .sheet-tabs .item.active {
+        border: 1px solid #aaa;
+        border-bottom: 1px solid #303030;
+        background: rgba(0, 0, 0, 0.2);
+        font-weight: bold;
+    }
+</style>

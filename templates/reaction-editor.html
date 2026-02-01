@@ -1,0 +1,201 @@
+<form autocomplete="off">
+    <input type="hidden" name="reactionIndex" value="{{reactionIndex}}">
+    <!-- General Toggle -->
+    <div class="form-group"
+        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+        <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
+            <span>General Reaction</span>
+            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item
+                required)</span>
+        </label>
+    </div>
+
+    <!-- Reaction Name (General only) -->
+    <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
+        <label>Reaction Name</label>
+        <div class="form-fields">
+            <input type="text" name="name" value="{{name}}" placeholder="e.g. Custom Overwatch">
+        </div>
+        <p class="notes">A unique name for this general reaction.</p>
+    </div>
+
+    <!-- Item LID (Item-based only) -->
+    <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
+        <label>Item LID</label>
+        <div class="form-fields">
+            <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
+        </div>
+        <p class="notes">The ID of the item (system.lid) to attach this reaction to.</p>
+    </div>
+
+    <!-- Item Preview (dynamically updated) -->
+    <div class="form-group item-only item-preview-container"
+        style="{{#if isGeneral}}display:none{{/if}}; background: rgba(0,150,0,0.1); padding: 4px 10px; border-radius: 4px; margin-bottom: 8px;">
+        <span style="font-size: 0.85em;">
+            <span id="preview-item-name">{{#if foundItemName}}<strong>Item:</strong> {{foundItemName}}{{else}}<em>No
+                    item found</em>{{/if}}</span>
+            {{#if foundActionName}}<span id="preview-action-name" style="margin-left: 8px;"><strong>Action:</strong>
+                {{foundActionName}}</span>{{/if}}
+            {{#if foundItemUuid}}<a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
+                style="margin-left: 8px; color: #4a90d9; cursor: pointer;"><i class="fas fa-eye"></i></a>{{/if}}
+            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #4a90d9; cursor: pointer;"><i
+                    class="fas fa-search"></i></a>
+        </span>
+    </div>
+
+    <!-- Action Path (Item-based only) -->
+    <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
+        <label>Action Path</label>
+        <div class="form-fields">
+            <input type="text" name="reactionPath" value="{{reactionPath}}">
+        </div>
+        <p class="notes">Path within <code>system</code> to the action data. Leave empty for NPC features (uses
+            <code>system.trigger</code> directly).
+        </p>
+    </div>
+
+    <!-- Custom Trigger Description -->
+    <div class="form-group">
+        <label>Trigger Description <span class="optional">(optional)</span></label>
+        <div class="form-fields">
+            <textarea name="triggerDescription" rows="2"
+                placeholder="When this reaction triggers...">{{triggerDescription}}</textarea>
+        </div>
+        <p class="notes">Overrides trigger text from Action Path. Required for general reactions.</p>
+    </div>
+
+    <!-- Custom Effect Description -->
+    <div class="form-group">
+        <label>Effect Description <span class="optional">(optional)</span></label>
+        <div class="form-fields">
+            <textarea name="effectDescription" rows="2"
+                placeholder="What this reaction does...">{{effectDescription}}</textarea>
+        </div>
+        <p class="notes">Overrides effect text from Action Path. Required for general reactions.</p>
+    </div>
+
+    <!-- Is Reaction Toggle -->
+    <div class="form-group"
+        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+        <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="isReaction" id="isReaction" {{#if isReaction}}checked{{/if}} {{#unless
+                isReactionDefined}}checked{{/unless}}>
+            <span>Consumes Reaction</span>
+            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(uncheck for Free Action)</span>
+        </label>
+    </div>
+
+    <!-- Triggers -->
+    <div class="form-group">
+        <label>Triggers</label>
+        <div class="trigger-grid">
+            {{#each triggers}}
+            <label class="checkbox">
+                <input type="checkbox" name="trigger.{{@key}}" {{#if (eq this true)}}checked{{/if}}> {{@key}}
+            </label>
+            {{/each}}
+        </div>
+    </div>
+
+    <!-- Evaluate Function -->
+    <div class="form-group stacked">
+        <label>Evaluate Function</label>
+        <div class="form-fields">
+            <textarea name="evaluate" rows="10"
+                style="font-family: monospace; white-space: pre;">{{evaluate}}</textarea>
+        </div>
+        <p class="notes">
+            JavaScript code to evaluate if the reaction should trigger.<br>
+            Variables: <code>triggerType</code>, <code>data</code>, <code>token</code>{{#unless isGeneral}},
+            <code>item</code>{{/unless}}.<br>
+            Must return <code>true</code> or <code>false</code>.
+        </p>
+
+        <details style="margin-top: 10px;">
+            <summary style="cursor: pointer; font-weight: bold; color: #444;">Trigger Data Reference</summary>
+            <div class="trigger-help"
+                style="font-size: 0.8em; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; margin-top: 5px; display: grid; grid-template-columns: 1fr; gap: 4px; border: 1px solid #ccc;">
+                {{#each triggerHelp}}
+                <div style="padding: 2px;"><strong>{{@key}}:</strong> <code
+                        style="background: none; border: none; font-family: monospace; color: #000;">{{this}}</code>
+                </div>
+                {{/each}}
+            </div>
+        </details>
+    </div>
+
+    <!-- Custom Activation -->
+    <div class="form-group">
+        <label>Custom Activation</label>
+        <div class="form-fields" style="display: flex; gap: 8px; align-items: center;">
+            <select name="activationType" id="activationType" style="flex: 1;">
+                <option value="none" {{#if (eq activationType "none" )}}selected{{/if}}>None (default)</option>
+                <option value="macro" {{#if (eq activationType "macro" )}}selected{{/if}}>Macro</option>
+                <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>JavaScript Code</option>
+            </select>
+            <select name="activationMode" id="activationMode" style="flex: 1;">
+                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>After Chat</option>
+                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Chat</option>
+            </select>
+        </div>
+        <p class="notes">Optional custom activation: run a macro or JS code when this reaction is activated.</p>
+    </div>
+
+    <!-- Macro Name (shown when activationType = macro) -->
+    <div class="form-group activation-macro" style="display:none;">
+        <label>Macro Name</label>
+        <div class="form-fields">
+            <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
+        </div>
+        <p class="notes">Name of the macro to execute. The macro receives <code>token</code>, <code>actor</code>, and
+            <code>item</code>
+            variables.
+        </p>
+    </div>
+
+    <!-- Activation Code (shown when activationType = code) -->
+    <div class="form-group stacked activation-code" style="display:none;">
+        <label>Activation Code</label>
+        <div class="form-fields">
+            <textarea name="activationCode" rows="6"
+                style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
+        </div>
+        <p class="notes">JavaScript code to execute. Variables: <code>token</code>, <code>actor</code>,
+            <code>item</code>,
+            <code>reactionName</code>.
+        </p>
+    </div>
+
+    <footer class="sheet-footer flexrow">
+        <button type="submit">
+            <i class="far fa-save"></i> Save Reaction
+        </button>
+    </footer>
+</form>
+
+<style>
+    .trigger-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        padding: 5px;
+        background: rgba(0, 0, 0, 0.03);
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    .trigger-grid .checkbox {
+        white-space: nowrap;
+        font-size: 0.85em;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .optional {
+        font-weight: normal;
+        font-size: 0.85em;
+        color: #666;
+    }
+</style>
