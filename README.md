@@ -14,6 +14,7 @@ https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/modul
 - FoundryVTT v12+
 - [Lancer System](https://foundryvtt.com/packages/lancer)
 - [Lancer Style Library](https://github.com/Agraael/lancer-style-library) - CSS styling
+- [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) (Optional) - For syntax highlighting in code editors
 
 ## Features
 

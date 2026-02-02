@@ -637,6 +637,50 @@ export class ReactionEditor extends FormApplication {
         lidInput.on('input', debouncedUpdate);
         pathInput.on('input', debouncedUpdate);
 
+        // Initialize CodeMirror if available
+        if (typeof CodeMirror !== 'undefined') {
+            const evaluateTextarea = html.find('textarea[name="evaluate"]')[0];
+            if (evaluateTextarea) {
+                this.evaluateEditor = CodeMirror.fromTextArea(evaluateTextarea, {
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true
+                });
+                this.evaluateEditor.on('change', (cm) => cm.save());
+            }
+
+            const activationCodeTextarea = html.find('textarea[name="activationCode"]')[0];
+            if (activationCodeTextarea) {
+                this.codeEditor = CodeMirror.fromTextArea(activationCodeTextarea, {
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true
+                });
+                this.codeEditor.on('change', (cm) => cm.save());
+            }
+
+            // Handle tab switching refreshes
+            // If CodeMirror is inside a tab that starts hidden, it needs a refresh when shown
+            const refreshEditors = () => {
+                if (this.evaluateEditor) this.evaluateEditor.refresh();
+                if (this.codeEditor) this.codeEditor.refresh();
+            };
+
+            // Refresh on activationType change (since code fields toggle visibility)
+            activationTypeSelect.on('change', () => {
+                setTimeout(refreshEditors, 50);
+            });
+
+            // Also refresh initially
+            setTimeout(refreshEditors, 100);
+        }
+
         // Find Item Button - open item browser
         html.find('.find-item-btn').on('click', async (ev) => {
             ev.preventDefault();

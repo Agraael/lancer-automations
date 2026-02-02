@@ -1,7 +1,7 @@
 {
     "id": "lancer-reactionChecker",
     "title": "Lancer Reaction Checker",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Port of the Overwatch Reaction Auto-Checker from csm-lancer-qol.",
     "socket": true,
     "authors": [
@@ -15,6 +15,9 @@
     "esmodules": [
         "scripts/overwatch.js",
         "scripts/main.js"
+    ],
+    "styles": [
+        "styles/codemirror-dark.css"
     ],
     "compatibility": {
         "minimum": "12",
@@ -30,6 +33,12 @@
         "requires": [
             {
                 "id": "lancer-style-library",
+                "type": "module"
+            }
+        ],
+        "optional": [
+            {
+                "id": "_CodeMirror",
                 "type": "module"
             }
         ]
