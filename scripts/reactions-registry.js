@@ -7,7 +7,7 @@ export function getDefaultItemReactionRegistry() {
                 {
                     reactionPath: "system.trigger",
                     triggers: ["onHit"],
-                    evaluate: "return data.target?.id === token.id;"
+                    evaluate: "return data.target?.id === reactorToken.id;"
                 }
             ]
         }
@@ -26,9 +26,9 @@ export function getDefaultGeneralReactionRegistry() {
             effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
             evaluate: `const api = game.modules.get('lancer-reactionChecker').api;
-const mover = data.mover;
+const mover = data.triggeringToken;
 if (!mover) return false;
-return api.checkOverwatchCondition(token, mover, data.startPos);`,
+return api.checkOverwatchCondition(reactorToken, mover, data.startPos);`,
             activationType: hasExecuteOverwatch ? "code" : "none",
             activationMode: hasExecuteOverwatch ? "instead" : "after",
             activationMacro: "",

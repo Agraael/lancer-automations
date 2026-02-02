@@ -100,7 +100,7 @@ export class ReactionConfig extends FormApplication {
         });
     }
 
-    getData() {
+    async getData() {
         const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
         const userGeneralSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
@@ -110,7 +110,59 @@ export class ReactionConfig extends FormApplication {
         const defaultList = [];
         const allReactions = [];
 
-        // Helper to ensure enabled defaults to true
+        // Collect all LIDs to look up
+        const midsToLookup = new Set([
+            ...Object.keys(userItemSettings).map(k => k.trim()),
+            ...Object.keys(defaultItemRegistry).map(k => k.trim())
+        ]);
+
+        // Bulk lookup items
+        const itemMap = new Map(); // lid -> { name: string, system: object }
+
+        // Optimize: scan compendiums for these LIDs
+        // This can be heavy, so we try to be efficient
+        for (const pack of game.packs) {
+            if (pack.documentName !== "Item") continue;
+            // Only query packs if we have LIDs to find
+            if (midsToLookup.size === 0) break;
+
+            const index = await pack.getIndex({ fields: ["system.lid"] });
+            for (const entry of index) {
+                if (entry.system?.lid && midsToLookup.has(entry.system.lid)) {
+                    // We found an item. We need its full data to resolve action names via path
+                    // But loading all might be too slow. For now let's just get the Item Name from index
+                    // If we really need action name, we'd need to load the doc. 
+                    // Let's try to load the doc if the user requested it.
+                    const itemDoc = await fromUuid(entry.uuid);
+                    if (itemDoc) {
+                        itemMap.set(entry.system.lid, {
+                            name: itemDoc.name,
+                            system: itemDoc.system
+                        });
+                        midsToLookup.delete(entry.system.lid); // Found it
+                    }
+                }
+            }
+        }
+
+        const resolveActionName = (itemData, path) => {
+            if (!itemData || !path || path === "system.trigger" || path === "system") return null;
+            try {
+                const pathParts = path.split(/\.|\[|\]/).filter(p => p !== "");
+                let current = itemData;
+                for (const part of pathParts) {
+                    if (current && (typeof current === 'object' || Array.isArray(current))) {
+                        current = current[part];
+                    } else {
+                        return null;
+                    }
+                }
+                return current?.name || null;
+            } catch (e) {
+                return null;
+            }
+        };
+
         const startEnabled = (r) => {
             if (r.enabled === undefined) r.enabled = true;
             return r;
@@ -125,16 +177,30 @@ export class ReactionConfig extends FormApplication {
             return foundry.utils.objectsEqual(s, d);
         };
 
-        // 1. Process ITEM reactions
-        // Add User Customized Items
-        for (const [lid, data] of Object.entries(userItemSettings)) {
+        for (const [rawLid, data] of Object.entries(userItemSettings)) {
+            const lid = rawLid.trim();
             data.reactions.forEach((reaction, index) => {
                 const defItem = defaultItemRegistry[lid]?.reactions?.find(r => r.name === reaction.name);
                 if (defItem && isPureDefault(reaction, defItem)) return;
 
+                const itemInfo = itemMap.get(lid);
+                let displayName = reaction.name || rawLid;
+                let displaySubname = rawLid;
+
+                if (itemInfo) {
+                    const actionName = resolveActionName(itemInfo.system, reaction.reactionPath);
+                    if (actionName) {
+                        displayName = `${itemInfo.name}: ${actionName}`;
+                    } else {
+                        displayName = itemInfo.name;
+                    }
+                    displaySubname = lid;
+                }
+
                 allReactions.push(startEnabled({
-                    lid: lid,
-                    name: reaction.name || lid,
+                    lid: rawLid,
+                    name: displayName,
+                    subname: displaySubname,
                     reactionPath: reaction.reactionPath,
                     triggers: reaction.triggers.join(", "),
                     isCustom: true,
@@ -145,7 +211,6 @@ export class ReactionConfig extends FormApplication {
                 }));
             });
         }
-        // Add Default Items
         for (const [lid, data] of Object.entries(defaultItemRegistry)) {
             data.reactions.forEach((reaction, index) => {
                 // Try to find matching user entry by name or index? Name is safer for defaults.
@@ -154,9 +219,24 @@ export class ReactionConfig extends FormApplication {
                 const isOverridden = !!userEntry && !isPure;
                 const enabledState = isPure ? userEntry.enabled : reaction.enabled;
 
+                const itemInfo = itemMap.get(lid);
+                let displayName = reaction.name || lid;
+                let displaySubname = lid;
+
+                if (itemInfo) {
+                    const actionName = resolveActionName(itemInfo.system, reaction.reactionPath);
+                    if (actionName) {
+                        displayName = `${itemInfo.name}: ${actionName}`;
+                    } else {
+                        displayName = itemInfo.name;
+                    }
+                    displaySubname = lid;
+                }
+
                 defaultList.push(startEnabled({
                     lid: lid,
-                    name: reaction.name || lid,
+                    name: displayName,
+                    subname: displaySubname,
                     reactionPath: reaction.reactionPath,
                     triggers: reaction.triggers.join(", "),
                     isGeneral: false,
@@ -169,8 +249,6 @@ export class ReactionConfig extends FormApplication {
             });
         }
 
-        // 2. Process GENERAL reactions
-        // Add User Customized Generals
         for (const [name, reaction] of Object.entries(userGeneralSettings)) {
             const def = defaultGeneralRegistry[name];
             if (def && isPureDefault(reaction, def)) continue;
@@ -185,7 +263,6 @@ export class ReactionConfig extends FormApplication {
                 enabled: reaction.enabled
             }));
         }
-        // Add Default Generals
         for (const [name, reaction] of Object.entries(defaultGeneralRegistry)) {
             const userSaved = userGeneralSettings[name];
             const isPure = isPureDefault(userSaved, reaction);
@@ -463,27 +540,27 @@ export class ReactionEditor extends FormApplication {
         }
 
         const triggerHelp = {
-            onAttack: "{ attacker, weapon, targets, attackType, attackName, tags, distance }",
-            onHit: "{ attacker, weapon, target, roll, isCrit, attackType, attackName, tags, distance }",
-            onMiss: "{ attacker, weapon, target, roll, attackType, attackName, tags, distance }",
-            onDamage: "{ attacker, weapon, target, damages, types, isCrit, attackType, attackName, tags, distance }",
-            onMove: "{ mover, distance, elevation, startPos, endPos }",
-            onTurnStart: "{ token, distance }",
-            onTurnEnd: "{ token, distance }",
-            onStatusApplied: "{ token, statusId, effect, distance }",
-            onStatusRemoved: "{ token, statusId, effect, distance }",
-            onStructure: "{ token, remainingStructure, rollResult, distance }",
-            onStress: "{ token, remainingStress, rollResult, distance }",
-            onHeat: "{ token, heatGained, currentHeat, inDangerZone, distance }",
-            onDestroyed: "{ token, distance }",
-            onTechAttack: "{ attacker, techItem, targets, attackName, isInvade, tags, distance }",
-            onTechHit: "{ attacker, techItem, target, roll, attackName, isInvade, tags, distance }",
-            onTechMiss: "{ attacker, techItem, target, roll, attackName, isInvade, tags, distance }",
-            onCheck: "{ token, statName, roll, total, success, distance }",
-            onReaction: "{ token, reactionName, reactionItem, distance }",
-            onHPRestored: "{ token, hpRestored, currentHP, maxHP, distance }",
-            onHpLoss: "{ token, hpLost, currentHP, distance }",
-            onClearHeat: "{ token, heatCleared, currentHeat, distance }"
+            onAttack: "{ triggeringToken, weapon, targets, attackType, attackName, tags, distance }",
+            onHit: "{ triggeringToken, weapon, target, roll, isCrit, attackType, attackName, tags, distance }",
+            onMiss: "{ triggeringToken, weapon, target, roll, attackType, attackName, tags, distance }",
+            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, attackType, attackName, tags, distance }",
+            onMove: "{ triggeringToken, distance, elevation, startPos, endPos }",
+            onTurnStart: "{ triggeringToken, distance }",
+            onTurnEnd: "{ triggeringToken, distance }",
+            onStatusApplied: "{ triggeringToken, statusId, effect, distance }",
+            onStatusRemoved: "{ triggeringToken, statusId, effect, distance }",
+            onStructure: "{ triggeringToken, remainingStructure, rollResult, distance }",
+            onStress: "{ triggeringToken, remainingStress, rollResult, distance }",
+            onHeat: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distance }",
+            onDestroyed: "{ triggeringToken, distance }",
+            onTechAttack: "{ triggeringToken, techItem, targets, attackName, isInvade, tags, distance }",
+            onTechHit: "{ triggeringToken, techItem, target, roll, attackName, isInvade, tags, distance }",
+            onTechMiss: "{ triggeringToken, techItem, target, roll, attackName, isInvade, tags, distance }",
+            onCheck: "{ triggeringToken, statName, roll, total, success, distance }",
+            onReaction: "{ triggeringToken, reactionName, reactionItem, distance }",
+            onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distance }",
+            onHpLoss: "{ triggeringToken, hpLost, currentHP, distance }",
+            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distance }"
         };
 
         const result = {
@@ -498,6 +575,8 @@ export class ReactionEditor extends FormApplication {
             effectDescription: reaction.effectDescription || "",
             isReaction: reaction.isReaction !== false,
             isReactionDefined: reaction.isReaction !== undefined,
+            triggerSelf: reaction.triggerSelf === true,
+            triggerOther: reaction.triggerOther !== false, // Default to true
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: triggerHelp,
@@ -505,7 +584,26 @@ export class ReactionEditor extends FormApplication {
             activationMode: reaction.activationMode || "after",
             activationMacro: reaction.activationMacro || "",
             activationCode: reaction.activationCode || "",
-            reactionIndex: data.reactionIndex
+            reactionIndex: data.reactionIndex,
+            // New Action Type Logic
+            actionType: reaction.actionType || (reaction.isReaction !== false ? "Reaction" : "Free Action"),
+            consumesReaction: reaction.consumesReaction !== false, // Defaults to true
+            actionTypeOptions: {
+                "Reaction": "Reaction",
+                "Free Action": "Free Action",
+                "Quick Action": "Quick Action",
+                "Full Action": "Full Action",
+                "Protocol": "Protocol",
+                "Other": "Other"
+            },
+            frequency: reaction.frequency || "1/Round",
+            frequencyOptions: {
+                "1/Round": "1/Round",
+                "Unlimited": "Unlimited",
+                "1/Scene": "1/Scene",
+                "1/Combat": "1/Combat",
+                "Other": "Other"
+            }
         };
         return result;
     }
@@ -558,7 +656,25 @@ export class ReactionEditor extends FormApplication {
         const previewItemName = html.find('#preview-item-name');
         const previewActionName = html.find('#preview-action-name');
 
-        const updatePreview = async () => {
+        const actionTypeSelect = html.find('#actionType');
+        const frequencySelect = html.find('#frequency');
+        const consumesReactionContainer = html.find('#consumesReactionContainer');
+
+        const toggleConsumesReaction = () => {
+            const type = actionTypeSelect.val();
+            if (type === 'Reaction') {
+                consumesReactionContainer.show();
+            } else {
+                consumesReactionContainer.hide();
+                // If not a reaction, it shouldn't consume a reaction resource by default
+                consumesReactionContainer.find('input[type="checkbox"]').prop('checked', false);
+            }
+        };
+
+        actionTypeSelect.on('change', toggleConsumesReaction);
+        toggleConsumesReaction();
+
+        const updatePreview = async (autoSelect = true) => {
             const lid = lidInput.val()?.trim();
             const reactionPath = pathInput.val()?.trim() || "";
 
@@ -587,8 +703,11 @@ export class ReactionEditor extends FormApplication {
                 return;
             }
 
-            // Resolve action name
+            // Resolve action name, type and frequency
             let foundActionName = null;
+            let detectedActionType = null;
+            let detectedFrequency = null;
+
             try {
                 const item = await fromUuid(foundItemUuid);
                 if (item) {
@@ -606,6 +725,35 @@ export class ReactionEditor extends FormApplication {
                             }
                         }
                         foundActionName = actionData?.name || item.name;
+
+                        // Auto-detect action type from activation
+                        const activation = actionData?.activation;
+                        if (activation) {
+                            if (activation === "Quick") detectedActionType = "Quick Action";
+                            else if (activation === "Full") detectedActionType = "Full Action";
+                            else if (activation === "Reaction") detectedActionType = "Reaction";
+                            else if (activation === "Free") detectedActionType = "Free Action";
+                            else if (activation === "Protocol") detectedActionType = "Protocol";
+                            else detectedActionType = activation;
+                        }
+
+                        // Attempt to detect frequency
+                        if (actionData?.frequency) {
+                            detectedFrequency = actionData.frequency;
+                        } else if (item.system?.frequency) {
+                            detectedFrequency = item.system.frequency;
+                        } else if (item.system?.uses?.per) {
+                            // E.g. 1/Scene -> we might map this?
+                            // Standard Lancer uses "Scene", "Mission", "Round", "Combat"
+                            const per = item.system.uses.per;
+                            if (per === "Round") detectedFrequency = "1/Round";
+                            else if (per === "Scene") detectedFrequency = "1/Scene";
+                            else if (per === "Combat") detectedFrequency = "1/Combat";
+                            else if (per === "Mission") detectedFrequency = "1/Mission"; // Not in our list but good to know
+                        } else if (detectedActionType === "Reaction" || detectedActionType === "Free Action") {
+                            // Default to 1/Round for reactions/free actions if not specified? 
+                            detectedFrequency = "1/Round";
+                        }
                     }
                 }
             } catch (e) {
@@ -623,6 +771,55 @@ export class ReactionEditor extends FormApplication {
             } else {
                 previewActionName.hide();
             }
+
+            // Auto-select and highlight logic
+            if (detectedActionType) {
+                const options = ["Reaction", "Free Action", "Quick Action", "Full Action", "Protocol", "Other"];
+
+                // Highlight options
+                const $options = actionTypeSelect.find('option');
+                $options.css('color', ''); // Reset
+                $options.each(function () {
+                    if ($(this).val() === detectedActionType) {
+                        $(this).css({
+                            'color': '#4caf50', // Green
+                            'font-weight': 'bold'
+                        });
+                    }
+                });
+
+                // Auto-select the detected action type
+                // We update it if it's currently on the default "Reaction" (and user hasn't likely changed it yet) 
+                // OR if the preview update was triggered by a significant change (like changing path).
+                // Given the user request "when action path is updated we need to update the action type", we force update.
+                if (autoSelect && (options.includes(detectedActionType) || detectedActionType === "Other")) { // "Other" handling?
+                    actionTypeSelect.val(options.includes(detectedActionType) ? detectedActionType : "Other");
+
+                    // Trigger change event to update the conditional checkbox visibility
+                    actionTypeSelect.trigger('change');
+                }
+            }
+
+            // Auto-select and highlight logic for Frequency
+            if (detectedFrequency) {
+                const options = ["1/Round", "Unlimited", "1/Scene", "1/Combat", "Other"];
+                // Highlight options
+                const $options = frequencySelect.find('option');
+                $options.css('color', ''); // Reset
+                $options.each(function () {
+                    if ($(this).val() === detectedFrequency) {
+                        $(this).css({
+                            'color': '#4caf50', // Green
+                            'font-weight': 'bold'
+                        });
+                    }
+                });
+
+                if (autoSelect && (options.includes(detectedFrequency) || detectedFrequency === "Other")) {
+                    frequencySelect.val(options.includes(detectedFrequency) ? detectedFrequency : "Other");
+                }
+            }
+
             showItemBtn.data('uuid', foundItemUuid);
             previewContainer.show();
         };
@@ -636,6 +833,11 @@ export class ReactionEditor extends FormApplication {
 
         lidInput.on('input', debouncedUpdate);
         pathInput.on('input', debouncedUpdate);
+
+        // Initial update (highlight only)
+        if (lidInput.val()) {
+            updatePreview(false);
+        }
 
         // Initialize CodeMirror if available
         if (typeof CodeMirror !== 'undefined') {
@@ -897,11 +1099,16 @@ export class ReactionEditor extends FormApplication {
                 evaluate: formData.evaluate,
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
-                isReaction: formData.isReaction === true || formData.isReaction === "on",
+                // isReaction deprecated in favor of actionType, but keeping for backward compat if needed
+                isReaction: formData.actionType === "Reaction",
+                actionType: formData.actionType || "Reaction",
+                consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
                 activationType: formData.activationType || "none",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
-                activationCode: formData.activationCode || ""
+                activationCode: formData.activationCode || "",
+                triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
+                triggerOther: formData.triggerOther === true || formData.triggerOther === "on"
             };
 
             await ReactionManager.saveGeneralReaction(name, newReaction);
@@ -915,11 +1122,17 @@ export class ReactionEditor extends FormApplication {
                 evaluate: formData.evaluate,
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
-                isReaction: formData.isReaction === true || formData.isReaction === "on",
+                // isReaction deprecated in favor of actionType
+                isReaction: formData.actionType === "Reaction",
+                actionType: formData.actionType || "Reaction",
+                frequency: formData.frequency || "1/Round",
+                consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
                 activationType: formData.activationType || "none",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
-                activationCode: formData.activationCode || ""
+                activationCode: formData.activationCode || "",
+                triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
+                triggerOther: formData.triggerOther === true || formData.triggerOther === "on"
             };
 
             let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);

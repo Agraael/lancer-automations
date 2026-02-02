@@ -53,20 +53,26 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     let activationPath = null;
     let displayTitle = "Unknown";
     let isReactionType = true;
+    let actionType = "Reaction";
+    let frequency = "1/Round";
 
     if (isGeneral) {
         displayTitle = reactionData.reactionName;
         const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
         triggerText = generalReaction?.triggerDescription || "General reaction (applies to all tokens)";
         effectText = generalReaction?.effectDescription || "Defined in Reaction Manager";
-        isReactionType = generalReaction?.isReaction !== false;
+        isReactionType = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
+        actionType = generalReaction?.actionType || (isReactionType ? "Reaction" : "Free Action");
+        frequency = generalReaction?.frequency || "1/Round";
     } else if (item) {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
         const reactionEntry = reactionConfig?.reactions?.[0];
 
         const reactionPath = reactionEntry?.reactionPath || "system.trigger";
-        isReactionType = reactionEntry?.isReaction !== false;
+        isReactionType = reactionEntry?.actionType ? (reactionEntry.actionType === "Reaction") : (reactionEntry?.isReaction !== false);
+        actionType = reactionEntry?.actionType || (isReactionType ? "Reaction" : "Free Action");
+        frequency = reactionEntry?.frequency || "1/Round";
 
         const resolvePath = (obj, path) => {
             if (!path) return undefined;
@@ -150,14 +156,18 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         
         <div style="font-size: 0.85em; margin-bottom: 10px;">
             <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px; margin-right: 5px;">
-                <i class="fas fa-sync"></i> 1/Round
+                <i class="fas fa-sync"></i> ${frequency}
             </span>
-            ${isReactionType ?
+             ${actionType === "Reaction" ?
             `<span style="background: rgba(153, 30, 42, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-bolt"></i> Reaction
                 </span>` :
-            `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
+            actionType === "Free Action" ?
+                `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-check"></i> Free Action
+                </span>` :
+                `<span style="background: rgba(42, 153, 200, 0.3); padding: 2px 8px; border-radius: 10px;">
+                    <i class="fas fa-play"></i> ${actionType}
                 </span>`
         }
         </div>
@@ -207,6 +217,9 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             const lid = item.system?.lid;
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
             const reactionEntry = reactionConfig?.reactions?.[0];
+
+            const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
+            const consumesReaction = reactionEntry?.consumesReaction !== false; // Default true
 
             const activationType = reactionEntry?.activationType || "none";
             const activationMode = reactionEntry?.activationMode || "after";
@@ -262,9 +275,12 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 }
             }
         } else {
-            const actionType = isReactionType ? "Reaction" : "Free Action";
             const actor = token.actor;
             const generalReaction = ReactionManager.getGeneralReaction(displayTitle);
+
+            const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
+            const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
+            const consumesReaction = generalReaction?.consumesReaction !== false;
 
             const activationType = generalReaction?.activationType || "none";
             const activationMode = generalReaction?.activationMode || "after";
@@ -323,10 +339,35 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         }
 
         if (game.settings.get('lancer-reactionChecker', 'consumeReaction')) {
-            const actor = token.actor;
-            if (actor?.system?.action_tracker?.reaction > 0) {
-                const newReaction = actor.system.action_tracker.reaction - 1;
-                await actor.update({ 'system.action_tracker.reaction': newReaction });
+            // New Logic: Only consume if actionType is Reaction AND consumesReaction is true (or undefined/default)
+            // But we need to access the configuration for the specific reaction used.
+            // We defined 'actionType' and 'consumesReaction' constants in the activation block above,
+            // but they were scoped locally. We should check them here.
+
+            let shouldConsume = false;
+
+            if (item) {
+                const lid = item.system?.lid;
+                const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
+                const entry = reactionConfig?.reactions?.[0];
+                const type = entry?.actionType || (entry?.isReaction !== false ? "Reaction" : "Free Action");
+                const consumes = entry?.consumesReaction !== false;
+
+                shouldConsume = (type === "Reaction" && consumes);
+            } else {
+                const generalReaction = ReactionManager.getGeneralReaction(displayTitle);
+                const type = generalReaction?.actionType || (generalReaction?.isReaction !== false ? "Reaction" : "Free Action");
+                const consumes = generalReaction?.consumesReaction !== false;
+
+                shouldConsume = (type === "Reaction" && consumes);
+            }
+
+            if (shouldConsume) {
+                const actor = token.actor;
+                if (actor?.system?.action_tracker?.reaction > 0) {
+                    const newReaction = actor.system.action_tracker.reaction - 1;
+                    await actor.update({ 'system.action_tracker.reaction': newReaction });
+                }
             }
         }
 
@@ -448,7 +489,7 @@ function renderReactionDialog(popupData) {
     <div class="lancer-dialog-base">
         <div class="lancer-dialog-header">
             <div class="lancer-dialog-title">${triggerDisplay} TRIGGERED</div>
-            <div class="lancer-dialog-subtitle">The following reactions may be activated</div>
+            <div class="lancer-dialog-subtitle">The following Actions may be activated</div>
         </div>
         
         <div class="lancer-list">

@@ -110,21 +110,22 @@ function hasReactionAvailable(token) {
     return reaction !== undefined && reaction > 0;
 }
 
-function getCombatTokensWithReactions() {
+function getCombatTokens() {
     if (!game.combat) return [];
 
     return canvas.tokens.placeables.filter(token => {
         if (!token.inCombat) return false;
         if (!token.actor) return false;
-        return hasReactionAvailable(token);
+        return true;
     });
 }
 
 function checkReactions(triggerType, data) {
-    const tokensWithReactions = getCombatTokensWithReactions();
+    const combatTokens = getCombatTokens();
 
-    for (const token of tokensWithReactions) {
-        if (data.attacker?.id === token.id) continue;
+    for (const token of combatTokens) {
+        // triggeringToken is the token that caused the event (attacker, mover, etc.)
+        const isSelf = data.triggeringToken?.id === token.id;
 
         const items = getReactionItems(token);
 
@@ -138,6 +139,17 @@ function checkReactions(triggerType, data) {
             for (const reaction of registryEntry.reactions) {
                 if (!reaction.triggers.includes(triggerType)) continue;
                 if (reaction.enabled === false) continue;
+
+                // Self/Other Trigger Check
+                if (isSelf) {
+                    if (!reaction.triggerSelf) continue;
+                } else {
+                    // Default to true for others
+                    if (reaction.triggerOther === false) continue;
+                }
+
+                // Resource Check
+                if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
 
                 // Check item availability (destroyed, rank, profile, loaded, charged, uses)
                 const reactionPath = reaction.reactionPath || "";
@@ -158,7 +170,7 @@ function checkReactions(triggerType, data) {
                         shouldTrigger = reaction.evaluate(triggerType, enrichedData, item, token);
                     } else if (typeof reaction.evaluate === 'string') {
                         try {
-                            const evalFunc = new Function("triggerType", "data", "item", "token", reaction.evaluate);
+                            const evalFunc = new Function("triggerType", "data", "item", "reactorToken", reaction.evaluate);
                             shouldTrigger = evalFunc(triggerType, enrichedData, item, token);
                         } catch (e) {
                             console.error(`lancer-reactionChecker | Error parsing custom evaluate for ${item.name}:`, e);
@@ -208,8 +220,18 @@ function checkReactions(triggerType, data) {
         if (!reaction.triggers?.includes(triggerType)) continue;
         if (reaction.enabled === false) continue;
 
-        for (const token of tokensWithReactions) {
-            if (data.attacker?.id === token.id) continue;
+        for (const token of combatTokens) {
+            const isSelf = data.triggeringToken?.id === token.id;
+
+            // Self/Other Trigger Check
+            if (isSelf) {
+                if (!reaction.triggerSelf) continue;
+            } else {
+                if (reaction.triggerOther === false) continue;
+            }
+
+            // Resource Check
+            if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
 
             try {
                 const sourceToken = data.attacker || data.mover || data.target || data.token;
@@ -226,7 +248,7 @@ function checkReactions(triggerType, data) {
                     shouldTrigger = reaction.evaluate(triggerType, enrichedData, null, token);
                 } else if (typeof reaction.evaluate === 'string') {
                     try {
-                        const evalFunc = new Function("triggerType", "data", "item", "token", reaction.evaluate);
+                        const evalFunc = new Function("triggerType", "data", "item", "reactorToken", reaction.evaluate);
                         shouldTrigger = evalFunc(triggerType, enrichedData, null, token);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
@@ -328,7 +350,8 @@ function checkReactions(triggerType, data) {
 function registerReactionHooks() {
     Hooks.on('lancer-reactionChecker.onAttack', (attacker, weapon, targets, flowData) => {
         checkReactions('onAttack', {
-            attacker, weapon, targets,
+            triggeringToken: attacker,
+            weapon, targets,
             attackType: flowData?.attack_type || null,
             attackName: flowData?.title || weapon?.name || null,
             tags: flowData?.tags || weapon?.system?.tags || []
@@ -337,7 +360,8 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-reactionChecker.onHit', (attacker, weapon, target, roll, isCrit, flowData) => {
         checkReactions('onHit', {
-            attacker, weapon, target, roll, isCrit,
+            triggeringToken: attacker,
+            weapon, target, roll, isCrit,
             attackType: flowData?.attack_type || null,
             attackName: flowData?.title || weapon?.name || null,
             tags: flowData?.tags || weapon?.system?.tags || []
@@ -346,7 +370,8 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-reactionChecker.onMiss', (attacker, weapon, target, roll, flowData) => {
         checkReactions('onMiss', {
-            attacker, weapon, target, roll,
+            triggeringToken: attacker,
+            weapon, target, roll,
             attackType: flowData?.attack_type || null,
             attackName: flowData?.title || weapon?.name || null,
             tags: flowData?.tags || weapon?.system?.tags || []
@@ -355,7 +380,8 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-reactionChecker.onDamage', (attacker, weapon, target, damages, types, isCrit, flowData) => {
         checkReactions('onDamage', {
-            attacker, weapon, target, damages, types, isCrit,
+            triggeringToken: attacker,
+            weapon, target, damages, types, isCrit,
             attackType: flowData?.attack_type || null,
             attackName: flowData?.title || weapon?.name || null,
             tags: flowData?.tags || weapon?.system?.tags || []
@@ -363,44 +389,45 @@ function registerReactionHooks() {
     });
 
     Hooks.on('lancer-reactionChecker.onMove', (mover, distance, elevation, startPos, endPos) => {
-        checkReactions('onMove', { mover, distance, elevation, startPos, endPos });
+        checkReactions('onMove', { triggeringToken: mover, distance, elevation, startPos, endPos });
     });
 
     Hooks.on('lancer-reactionChecker.onTurnStart', (token) => {
-        checkReactions('onTurnStart', { token });
+        checkReactions('onTurnStart', { triggeringToken: token });
     });
 
     Hooks.on('lancer-reactionChecker.onTurnEnd', (token) => {
-        checkReactions('onTurnEnd', { token });
+        checkReactions('onTurnEnd', { triggeringToken: token });
     });
 
     Hooks.on('lancer-reactionChecker.onStatusApplied', (token, statusId, effect) => {
-        checkReactions('onStatusApplied', { token, statusId, effect });
+        checkReactions('onStatusApplied', { triggeringToken: token, statusId, effect });
     });
 
     Hooks.on('lancer-reactionChecker.onStatusRemoved', (token, statusId, effect) => {
-        checkReactions('onStatusRemoved', { token, statusId, effect });
+        checkReactions('onStatusRemoved', { triggeringToken: token, statusId, effect });
     });
 
     Hooks.on('lancer-reactionChecker.onStructure', (token, remainingStructure, rollResult) => {
-        checkReactions('onStructure', { token, remainingStructure, rollResult });
+        checkReactions('onStructure', { triggeringToken: token, remainingStructure, rollResult });
     });
 
     Hooks.on('lancer-reactionChecker.onStress', (token, remainingStress, rollResult) => {
-        checkReactions('onStress', { token, remainingStress, rollResult });
+        checkReactions('onStress', { triggeringToken: token, remainingStress, rollResult });
     });
 
     Hooks.on('lancer-reactionChecker.onHeat', (token, heatGained, currentHeat, inDangerZone) => {
-        checkReactions('onHeat', { token, heatGained, currentHeat, inDangerZone });
+        checkReactions('onHeat', { triggeringToken: token, heatGained, currentHeat, inDangerZone });
     });
 
     Hooks.on('lancer-reactionChecker.onDestroyed', (token) => {
-        checkReactions('onDestroyed', { token });
+        checkReactions('onDestroyed', { triggeringToken: token });
     });
 
     Hooks.on('lancer-reactionChecker.onTechAttack', (attacker, techItem, targets, flowData) => {
         checkReactions('onTechAttack', {
-            attacker, techItem, targets,
+            triggeringToken: attacker,
+            techItem, targets,
             attackName: flowData?.title || techItem?.name || null,
             isInvade: flowData?.invade || false,
             tags: flowData?.tags || techItem?.system?.tags || []
@@ -409,7 +436,8 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-reactionChecker.onTechHit', (attacker, techItem, target, roll, flowData) => {
         checkReactions('onTechHit', {
-            attacker, techItem, target, roll,
+            triggeringToken: attacker,
+            techItem, target, roll,
             attackName: flowData?.title || techItem?.name || null,
             isInvade: flowData?.invade || false,
             tags: flowData?.tags || techItem?.system?.tags || []
@@ -418,7 +446,8 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-reactionChecker.onTechMiss', (attacker, techItem, target, roll, flowData) => {
         checkReactions('onTechMiss', {
-            attacker, techItem, target, roll,
+            triggeringToken: attacker,
+            techItem, target, roll,
             attackName: flowData?.title || techItem?.name || null,
             isInvade: flowData?.invade || false,
             tags: flowData?.tags || techItem?.system?.tags || []
@@ -426,23 +455,23 @@ function registerReactionHooks() {
     });
 
     Hooks.on('lancer-reactionChecker.onCheck', (token, statName, roll, total, success) => {
-        checkReactions('onCheck', { token, statName, roll, total, success });
+        checkReactions('onCheck', { triggeringToken: token, statName, roll, total, success });
     });
 
     Hooks.on('lancer-reactionChecker.onReaction', (token, reactionName, reactionItem) => {
-        checkReactions('onReaction', { token, reactionName, reactionItem });
+        checkReactions('onReaction', { triggeringToken: token, reactionName, reactionItem });
     });
 
     Hooks.on('lancer-reactionChecker.onHPRestored', (token, hpRestored, currentHP, maxHP) => {
-        checkReactions('onHPRestored', { token, hpRestored, currentHP, maxHP });
+        checkReactions('onHPRestored', { triggeringToken: token, hpRestored, currentHP, maxHP });
     });
 
     Hooks.on('lancer-reactionChecker.onHpLoss', (token, hpLost, currentHP) => {
-        checkReactions('onHpLoss', { token, hpLost, currentHP });
+        checkReactions('onHpLoss', { triggeringToken: token, hpLost, currentHP });
     });
 
     Hooks.on('lancer-reactionChecker.onClearHeat', (token, heatCleared, currentHeat) => {
-        checkReactions('onClearHeat', { token, heatCleared, currentHeat });
+        checkReactions('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
     });
 }
 
@@ -686,17 +715,14 @@ async function onReactionStep(state) {
     const reactionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Reaction';
 
     if (activation !== 'Reaction') {
-        console.log(`lancer-reactionChecker | onReactionStep: skipping non-reaction activation: ${activation}`);
         return true;
     }
 
-    console.log(`lancer-reactionChecker | onReaction triggered: ${reactionName}`);
     Hooks.callAll('lancer-reactionChecker.onReaction', token, reactionName, item);
     return true;
 }
 
 Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
-    console.log('lancer-reactionChecker | Registering combat hooks');
 
     flowSteps.set('lancer-reactionChecker:onAttack', onAttackStep);
     flowSteps.set('lancer-reactionChecker:onHitMiss', onHitMissStep);

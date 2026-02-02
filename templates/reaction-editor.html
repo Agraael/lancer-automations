@@ -76,22 +76,71 @@
     </div>
 
     <!-- Is Reaction Toggle -->
+    <!-- Action Type & Consumption -->
+    <!-- Action Type, Frequency & Consumption -->
+    <!-- Action Type, Frequency, Consumption & Trigger Options -->
     <div class="form-group"
         style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
-        <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="isReaction" id="isReaction" {{#if isReaction}}checked{{/if}} {{#unless
-                isReactionDefined}}checked{{/unless}}>
-            <span>Consumes Reaction</span>
-            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(uncheck for Free Action)</span>
-        </label>
+        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+            <!-- Action Type -->
+            <div style="flex: 1; min-width: 110px;">
+                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Action
+                    Type</label>
+                <select name="actionType" id="actionType" style="width: 100%;">
+                    {{#each actionTypeOptions}}
+                    <option value="{{this}}" {{#if (eq ../actionType this)}}selected{{/if}}>{{this}}</option>
+                    {{/each}}
+                </select>
+            </div>
+
+            <!-- Frequency -->
+            <div style="flex: 1; min-width: 110px;">
+                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Frequency</label>
+                <select name="frequency" id="frequency" style="width: 100%;">
+                    {{#each frequencyOptions}}
+                    <option value="{{this}}" {{#if (eq ../frequency this)}}selected{{/if}}>{{this}}</option>
+                    {{/each}}
+                </select>
+            </div>
+
+            <!-- Options Group -->
+            <div style="min-width: 220px;">
+                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Options</label>
+                <div style="display: flex; gap: 15px; align-items: center; height: 26px;">
+                    <!-- Consumes Reaction -->
+                    <label class="checkbox" id="consumesReactionContainer" title="Consumes Reaction"
+                        style="display: flex; align-items: center; gap: 5px; font-weight: bold; white-space: nowrap; {{#unless (eq actionType 'Reaction')}}display:none !important;{{/unless}}">
+                        <input type="checkbox" name="consumesReaction" id="consumesReaction" {{#if
+                            consumesReaction}}checked{{/if}}>
+                        <span>Consumes</span>
+                    </label>
+
+                    <!-- Vertical Divider -->
+                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
+
+                    <!-- Self/Others -->
+                    <label class="checkbox ps-tooltip" title="Triggers on Self (default: false)"
+                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                        <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
+                        <span>Self</span>
+                    </label>
+
+                    <label class="checkbox ps-tooltip" title="Triggers on Others (default: true)"
+                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                        <input type="checkbox" name="triggerOther" {{#if triggerOther}}checked{{/if}}>
+                        <span>Others</span>
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Triggers -->
-    <div class="form-group">
+    <div class="form-group stacked">
         <label>Triggers</label>
         <div class="trigger-grid">
             {{#each triggers}}
-            <label class="checkbox">
+            <label class="checkbox" title="{{lookup ../triggerHelp @key}}">
                 <input type="checkbox" name="trigger.{{@key}}" {{#if (eq this true)}}checked{{/if}}> {{@key}}
             </label>
             {{/each}}
@@ -107,7 +156,7 @@
         </div>
         <p class="notes">
             JavaScript code to evaluate if the reaction should trigger.<br>
-            Variables: <code>triggerType</code>, <code>data</code>, <code>token</code>{{#unless isGeneral}},
+            Variables: <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>{{#unless isGeneral}},
             <code>item</code>{{/unless}}.<br>
             Must return <code>true</code> or <code>false</code>.
         </p>

@@ -44,8 +44,12 @@
                             {{/if}}
                         </span>
                         <span class="col-name">
-                            {{#if this.isGeneral}}{{this.name}}{{else}}
-                            {{this.lid}}
+                            {{#if this.isGeneral}}
+                            <strong>{{this.name}}</strong>
+                            {{else}}
+                            <strong>{{this.name}}</strong>
+                            <br><span
+                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
                             {{#if this.reactionPath}}<br><span
                                 style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
                             {{/if}}
@@ -91,8 +95,12 @@
                             {{/if}}
                         </span>
                         <span class="col-name">
-                            {{#if this.isGeneral}}{{this.name}}{{else}}
-                            {{this.lid}}
+                            {{#if this.isGeneral}}
+                            <strong>{{this.name}}</strong>
+                            {{else}}
+                            <strong>{{this.name}}</strong>
+                            <br><span
+                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
                             {{#if this.reactionPath}}<br><span
                                 style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
                             {{/if}}
