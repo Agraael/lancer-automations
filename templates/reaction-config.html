@@ -38,9 +38,13 @@
                         </span>
                         <span class="col-type">
                             {{#if this.isGeneral}}
-                            <i class="fas fa-globe" title="General"></i>
+                            {{#if this.useActionName}}
+                            <i class="fas fa-angles-right" title="Action-Based"></i>
                             {{else}}
-                            <i class="fas fa-cube" title="Item-Based"></i>
+                            <i class="fas fa-globe" title="General"></i>
+                            {{/if}}
+                            {{else}}
+                            <i class="fas fa-eye" title="Item-Based"></i>
                             {{/if}}
                         </span>
                         <span class="col-name">
@@ -89,9 +93,13 @@
                         </span>
                         <span class="col-type">
                             {{#if this.isGeneral}}
-                            <i class="fas fa-globe" title="General"></i>
+                            {{#if this.useActionName}}
+                            <i class="fas fa-angles-right" title="Action-Based"></i>
                             {{else}}
-                            <i class="fas fa-cube" title="Item-Based"></i>
+                            <i class="fas fa-globe" title="General"></i>
+                            {{/if}}
+                            {{else}}
+                            <i class="fas fa-eye" title="Item-Based"></i>
                             {{/if}}
                         </span>
                         <span class="col-name">

@@ -1,7 +1,5 @@
 /*global game, Dialog, ChatMessage, canvas, CONST */
 
-const log = console.log;
-
 function getReactionsOnMech(mech) {
     let response = [];
     const items = mech.items.filter(x => typeof x.system.tags != 'undefined');
@@ -70,7 +68,7 @@ export function displayReactions(actor, token) {
         getReactionsOnMech(actor) :
         getReactionsOnUnlinkedMech(token);
     if (reactions.length > 0) {
-        let html = "<h3>Someone has targeted " + actor.name + "! Consider using your reactions!</h3>";
+        let html = "<h3>Someone has targeted " + actor.name + "! Consider using your activations!</h3>";
         html += "<ul>";
         for (let i = 0; i < reactions.length; i++) {
             html += "<li>" + reactions[i] + "</li>";
@@ -78,7 +76,7 @@ export function displayReactions(actor, token) {
         html += "</ul>";
         if (game.settings.get('lancer-reactionChecker', 'reactionReminder') == 'p') {
             new Dialog({
-                title: "Reaction Reminder for " + actor.name,
+                title: "Activation Reminder for " + actor.name,
                 content: html,
                 buttons: {
                     ok: {

@@ -6,6 +6,219 @@ let activeDetailPanel = null;
 let selectedReactionKey = null; // Track currently selected reaction for toggle
 
 /**
+ * Activate a reaction (called from popup or auto-activate)
+ * @param {Token} token - The token performing the reaction
+ * @param {Item} item - The item (or null for general reactions)
+ * @param {Object} reaction - The reaction configuration
+ * @param {boolean} isGeneral - Whether this is a general reaction
+ * @param {string} displayTitle - The display name
+ * @param {string} itemName - The item name
+ * @param {Object} triggerData - The trigger data from the event
+ */
+export async function activateReaction(token, item, reaction, isGeneral, displayTitle, itemName, triggerData = null) {
+    token.control({ releaseOthers: true });
+
+    if (item) {
+        const lid = item.system?.lid;
+        const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
+        const reactionEntry = reactionConfig?.reactions?.[0] || reaction;
+
+        const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
+        const consumesReaction = reactionEntry?.consumesReaction !== false;
+
+        const activationType = reactionEntry?.activationType || "flow";
+        const activationMode = reactionEntry?.activationMode || "after";
+
+        const executeCustomActivation = async () => {
+            if (activationType === "macro") {
+                const macroName = reactionEntry?.activationMacro;
+                if (macroName) {
+                    const macro = game.macros.find(m => m.name === macroName);
+                    if (macro) {
+                        await macro.execute({ token, actor: token.actor, item, reactionName: displayTitle, triggerData });
+                    } else {
+                        ui.notifications.warn(`Macro "${macroName}" not found`);
+                    }
+                }
+            } else if (activationType === "code") {
+                const code = reactionEntry?.activationCode;
+                if (code) {
+                    try {
+                        if (typeof code === 'function') {
+                            await code(token, token.actor, item, displayTitle, triggerData);
+                        } else if (typeof code === 'string') {
+                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+                            const fn = new AsyncFunction("token", "actor", "item", "reactionName", "triggerData", code);
+                            await fn(token, token.actor, item, displayTitle, triggerData);
+                        }
+                    } catch (e) {
+                        console.error(`lancer-reactionChecker | Error executing activation code:`, e);
+                    }
+                }
+            }
+        };
+
+        const itemActivation = async () => {
+            const reactionPath = reactionEntry?.reactionPath;
+            let activationPath = null;
+
+            if (reactionPath) {
+                activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
+            }
+
+            if (activationPath) {
+                await item.beginActivationFlow(activationPath);
+            } else if (item.system?.actions?.length > 0) {
+                const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
+                const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
+                await item.beginActivationFlow(path);
+            } else if (item.beginSystemFlow) {
+                await item.beginSystemFlow();
+            } else {
+                await item.toChat();
+            }
+        };
+
+        // Handle activation based on type
+        if (activationType === "none") {
+            // Do nothing
+        } else if (activationType === "flow") {
+            // Just activate the item
+            await itemActivation();
+        } else if (activationType === "macro" || activationType === "code") {
+            // Custom activation (macro or code)
+            if (activationMode === "instead") {
+                // Run custom activation instead of flow
+                await executeCustomActivation();
+            } else {
+                // Run flow first, then custom activation
+                await itemActivation();
+                await executeCustomActivation();
+            }
+        }
+    } else {
+        const actor = token.actor;
+        const generalReaction = ReactionManager.getGeneralReaction(displayTitle) || reaction;
+
+        const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
+        const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
+        const consumesReaction = generalReaction?.consumesReaction !== false;
+
+        const activationType = generalReaction?.activationType || "flow";
+        const activationMode = generalReaction?.activationMode || "after";
+
+        const executeCustomActivation = async () => {
+            if (activationType === "macro") {
+                const macroName = generalReaction?.activationMacro;
+                if (macroName) {
+                    const macro = game.macros.find(m => m.name === macroName);
+                    if (macro) {
+                        await macro.execute({ token, actor, reactionName: displayTitle, triggerData });
+                    } else {
+                        ui.notifications.warn(`Macro "${macroName}" not found`);
+                    }
+                }
+            } else if (activationType === "code") {
+                const code = generalReaction?.activationCode;
+                if (code) {
+                    try {
+                        if (typeof code === 'function') {
+                            await code(token, actor, displayTitle, triggerData);
+                        } else if (typeof code === 'string') {
+                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+                            const fn = new AsyncFunction("token", "actor", "reactionName", "triggerData", code);
+                            await fn(token, actor, displayTitle, triggerData);
+                        }
+                    } catch (e) {
+                        console.error(`lancer-reactionChecker | Error executing activation code:`, e);
+                    }
+                }
+            }
+        };
+
+        const showChatActivation = async () => {
+            const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
+
+            let flowData;
+
+            // For action-based reactions, use actionData from trigger if available
+            if (generalReaction?.useActionName && triggerData?.actionData) {
+                const actionData = triggerData.actionData;
+                flowData = {
+                    title: actionData.title || displayTitle,
+                    action: {
+                        name: actionData.action?.name || displayTitle,
+                        activation: actionData.action?.activation || actionType
+                    },
+                    detail: actionData.detail || "No description"
+                };
+            } else {
+                // Regular general reaction format
+                const triggerText = generalReaction?.triggerDescription || "No trigger description";
+                const effectText = generalReaction?.effectDescription || "No effect description";
+                flowData = {
+                    title: displayTitle,
+                    action: {
+                        name: displayTitle,
+                        activation: actionType
+                    },
+                    detail: `<strong>Trigger:</strong> ${triggerText}<br><strong>Effect:</strong> ${effectText}`
+                };
+            }
+
+            const flow = new SimpleActivationFlow(actor, flowData);
+            await flow.begin();
+        };
+
+        // Handle activation based on type
+        if (activationType === "none") {
+            // Do nothing
+        } else if (activationType === "flow") {
+            // Just show chat activation
+            await showChatActivation();
+        } else if (activationType === "macro" || activationType === "code") {
+            // Custom activation (macro or code)
+            if (activationMode === "instead") {
+                // Run custom activation instead of flow
+                await executeCustomActivation();
+            } else {
+                // Run flow first, then custom activation
+                await showChatActivation();
+                await executeCustomActivation();
+            }
+        }
+    }
+
+    if (game.settings.get('lancer-reactionChecker', 'consumeReaction')) {
+        let shouldConsume = false;
+
+        if (item) {
+            const lid = item.system?.lid;
+            const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
+            const entry = reactionConfig?.reactions?.[0] || reaction;
+            const type = entry?.actionType || (entry?.isReaction !== false ? "Reaction" : "Free Action");
+            const consumes = entry?.consumesReaction !== false;
+
+            shouldConsume = (type === "Reaction" && consumes);
+        } else {
+            const generalReaction = ReactionManager.getGeneralReaction(displayTitle) || reaction;
+            const type = generalReaction?.actionType || (generalReaction?.isReaction !== false ? "Reaction" : "Free Action");
+            const consumes = generalReaction?.consumesReaction !== false;
+
+            shouldConsume = (type === "Reaction" && consumes);
+        }
+
+        if (shouldConsume) {
+            const actor = token.actor;
+            if (actor?.system?.action_tracker?.reaction > 0) {
+                const newReaction = actor.system.action_tracker.reaction - 1;
+                await actor.update({ 'system.action_tracker.reaction': newReaction });
+            }
+        }
+    }
+}
+
+/**
  * Display the reaction trigger popup
  * @param {string} triggerType - The trigger event name
  * @param {Array} triggeredReactions - Array of { token, item, reaction, itemName, reactionName }
@@ -31,7 +244,7 @@ function closeDetailPanel() {
     }
 }
 
-function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = null) {
+function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = null, triggerData = null) {
     const isGeneral = reactionData?.isGeneral || false;
     const reactionKey = isGeneral ? `${token.id}-general-${reactionData.reactionName}` : `${token.id}-${item.id}`;
 
@@ -59,8 +272,22 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     if (isGeneral) {
         displayTitle = reactionData.reactionName;
         const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
-        triggerText = generalReaction?.triggerDescription || "General reaction (applies to all tokens)";
-        effectText = generalReaction?.effectDescription || "Defined in Reaction Manager";
+
+        // For action-based reactions, try to get description from action data in triggerData
+        if (generalReaction?.useActionName && triggerData?.actionData) {
+            const actionData = triggerData.actionData;
+            if (actionData.action) {
+                triggerText = generalReaction?.triggerDescription || actionData.action.trigger || "";
+                effectText = generalReaction?.effectDescription || actionData.detail || actionData.action.detail || "";
+            } else {
+                triggerText = generalReaction?.triggerDescription || "";
+                effectText = generalReaction?.effectDescription || actionData.detail || "";
+            }
+        } else {
+            triggerText = generalReaction?.triggerDescription || "";
+            effectText = generalReaction?.effectDescription || "";
+        }
+
         isReactionType = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         actionType = generalReaction?.actionType || (isReactionType ? "Reaction" : "Free Action");
         frequency = generalReaction?.frequency || "1/Round";
@@ -135,7 +362,8 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             <span style="font-weight: bold; font-size: 1.1em; color: #fff;">${displayTitle}</span>
             <span class="detail-close" style="cursor: pointer; color: #888;">&times; Close</span>
         </div>
-        
+
+        ${triggerText ? `
         <div style="margin-bottom: 12px;">
             <div style="background: #991e2a; color: white; padding: 2px 8px; border-radius: 2px; display: inline-block; font-size: 0.8em; font-weight: bold; margin-bottom: 4px;">
                 TRIGGER
@@ -144,7 +372,9 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 ${triggerText}
             </div>
         </div>
-        
+        ` : ''}
+
+        ${effectText ? `
         <div style="margin-bottom: 12px;">
             <div style="background: #2a5599; color: white; padding: 2px 8px; border-radius: 2px; display: inline-block; font-size: 0.8em; font-weight: bold; margin-bottom: 4px;">
                 ACTION INFO
@@ -153,6 +383,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 ${effectText}
             </div>
         </div>
+        ` : ''}
         
         <div style="font-size: 0.85em; margin-bottom: 10px;">
             <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px; margin-right: 5px;">
@@ -211,165 +442,18 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     });
 
     activeDetailPanel.find('.activate-btn').click(async () => {
-        token.control({ releaseOthers: true });
-
+        // Get the reaction object
+        let reaction = null;
         if (item) {
             const lid = item.system?.lid;
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-            const reactionEntry = reactionConfig?.reactions?.[0];
-
-            const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
-            const consumesReaction = reactionEntry?.consumesReaction !== false; // Default true
-
-            const activationType = reactionEntry?.activationType || "none";
-            const activationMode = reactionEntry?.activationMode || "after";
-
-            // Helper to execute custom activation for item-based reactions
-            const executeCustomActivation = async () => {
-                if (activationType === "macro") {
-                    const macroName = reactionEntry?.activationMacro;
-                    if (macroName) {
-                        const macro = game.macros.find(m => m.name === macroName);
-                        if (macro) {
-                            await macro.execute({ token, actor: token.actor, item, reactionName: item.name });
-                        } else {
-                            ui.notifications.warn(`Macro "${macroName}" not found`);
-                        }
-                    }
-                } else if (activationType === "code") {
-                    const code = reactionEntry?.activationCode;
-                    if (code) {
-                        try {
-                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-                            const fn = new AsyncFunction("token", "actor", "item", "reactionName", code);
-                            await fn(token, token.actor, item, item.name);
-                        } catch (e) {
-                            console.error(`lancer-reactionChecker | Error executing activation code:`, e);
-                        }
-                    }
-                }
-            };
-
-            // Helper to do the normal item activation
-            const itemActivation = async () => {
-                if (activationPath) {
-                    await item.beginActivationFlow(activationPath);
-                } else if (item.system?.actions?.length > 0) {
-                    const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
-                    const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
-                    await item.beginActivationFlow(path);
-                } else if (item.beginSystemFlow) {
-                    await item.beginSystemFlow();
-                } else {
-                    await item.toChat();
-                }
-            };
-
-            // Execute based on mode
-            if (activationMode === "instead" && activationType !== "none") {
-                await executeCustomActivation();
-            } else {
-                await itemActivation();
-                if (activationType !== "none") {
-                    await executeCustomActivation();
-                }
-            }
+            reaction = reactionConfig?.reactions?.[0];
         } else {
-            const actor = token.actor;
-            const generalReaction = ReactionManager.getGeneralReaction(displayTitle);
-
-            const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
-            const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
-            const consumesReaction = generalReaction?.consumesReaction !== false;
-
-            const activationType = generalReaction?.activationType || "none";
-            const activationMode = generalReaction?.activationMode || "after";
-
-            // Helper to execute custom activation
-            const executeCustomActivation = async () => {
-                if (activationType === "macro") {
-                    const macroName = generalReaction?.activationMacro;
-                    if (macroName) {
-                        const macro = game.macros.find(m => m.name === macroName);
-                        if (macro) {
-                            await macro.execute({ token, actor, reactionName: displayTitle });
-                        } else {
-                            ui.notifications.warn(`Macro "${macroName}" not found`);
-                        }
-                    }
-                } else if (activationType === "code") {
-                    const code = generalReaction?.activationCode;
-                    if (code) {
-                        try {
-                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-                            const fn = new AsyncFunction("token", "actor", "reactionName", code);
-                            await fn(token, actor, displayTitle);
-                        } catch (e) {
-                            console.error(`lancer-reactionChecker | Error executing activation code:`, e);
-                        }
-                    }
-                }
-            };
-
-            // Helper to show chat/activation flow
-            const showChatActivation = async () => {
-                // Try to use standard Lancer SimpleActivationFlow
-                const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-                const flow = new SimpleActivationFlow(actor, {
-                    title: displayTitle,
-                    action: {
-                        name: displayTitle,
-                        activation: actionType
-                    },
-                    detail: `<strong>Trigger:</strong> ${triggerText}<br><strong>Effect:</strong> ${effectText}`
-                });
-                await flow.begin();
-
-            };
-
-            // Execute based on mode
-            if (activationMode === "instead" && activationType !== "none") {
-                await executeCustomActivation();
-            } else {
-                await showChatActivation();
-                if (activationType !== "none") {
-                    await executeCustomActivation();
-                }
-            }
+            reaction = ReactionManager.getGeneralReaction(displayTitle);
         }
 
-        if (game.settings.get('lancer-reactionChecker', 'consumeReaction')) {
-            // New Logic: Only consume if actionType is Reaction AND consumesReaction is true (or undefined/default)
-            // But we need to access the configuration for the specific reaction used.
-            // We defined 'actionType' and 'consumesReaction' constants in the activation block above,
-            // but they were scoped locally. We should check them here.
-
-            let shouldConsume = false;
-
-            if (item) {
-                const lid = item.system?.lid;
-                const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-                const entry = reactionConfig?.reactions?.[0];
-                const type = entry?.actionType || (entry?.isReaction !== false ? "Reaction" : "Free Action");
-                const consumes = entry?.consumesReaction !== false;
-
-                shouldConsume = (type === "Reaction" && consumes);
-            } else {
-                const generalReaction = ReactionManager.getGeneralReaction(displayTitle);
-                const type = generalReaction?.actionType || (generalReaction?.isReaction !== false ? "Reaction" : "Free Action");
-                const consumes = generalReaction?.consumesReaction !== false;
-
-                shouldConsume = (type === "Reaction" && consumes);
-            }
-
-            if (shouldConsume) {
-                const actor = token.actor;
-                if (actor?.system?.action_tracker?.reaction > 0) {
-                    const newReaction = actor.system.action_tracker.reaction - 1;
-                    await actor.update({ 'system.action_tracker.reaction': newReaction });
-                }
-            }
-        }
+        // Call the activation function
+        await activateReaction(token, item, reaction, isGeneral, displayTitle, item?.name || displayTitle, triggerData);
 
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
@@ -424,16 +508,29 @@ function renderReactionDialog(popupData) {
         let reactionList = "";
         for (const r of data.reactions) {
             const isGeneral = r.isGeneral || false;
+            const isActionBased = isGeneral && r.reaction?.useActionName;
             const itemId = r.item?.id || '';
             const itemName = isGeneral ? 'General' : r.itemName;
 
+            let icon = 'fa-eye';
+            let iconColor = '#cc3333';
+
+            if (isActionBased) {
+                icon = 'fa-angles-right';
+                iconColor = '#cc9933';
+            } else if (isGeneral) {
+                icon = 'fa-globe';
+                iconColor = '#3366cc';
+            }
+
             reactionList += `
-            <div class="lancer-reaction-item" 
-                 data-token-id="${tokenId}" 
+            <div class="lancer-reaction-item"
+                 data-token-id="${tokenId}"
                  data-item-id="${itemId}"
                  data-reaction-name="${r.reactionName}"
-                 data-general="${isGeneral}">
-                <i class="fas ${isGeneral ? 'fa-globe' : 'fa-bolt'}" style="color: ${isGeneral ? '#3366cc' : '#cc3333'}; margin-right: 6px;"></i>
+                 data-general="${isGeneral}"
+                 data-action-based="${isActionBased}">
+                <i class="fas ${icon}" style="color: ${iconColor}; margin-right: 6px;"></i>
                 <span class="lancer-reaction-name">${r.reactionName}</span>
                 ${(!isGeneral && r.reactionName !== r.itemName) ? `<span class="lancer-reaction-source">(${r.itemName})</span>` : ''}
             </div>`;
@@ -507,7 +604,7 @@ function renderReactionDialog(popupData) {
     }
 
     activeReactionDialog = new Dialog({
-        title: `Reaction Opportunity: ${triggerDisplay}`,
+        title: `Activation Opportunity: ${triggerDisplay}`,
         content: html,
         buttons: {
             ok: { label: "ACKNOWLEDGE" }
@@ -539,24 +636,27 @@ function renderReactionDialog(popupData) {
 
                 let item = null;
                 let reactionData = null;
+                let triggerData = null;
 
                 if (isGeneral) {
                     reactionData = triggeredReactions.find(r =>
                         r.token.id === tokenId && r.isGeneral && r.reactionName === reactionName
                     );
+                    triggerData = reactionData?.triggerData;
                 } else {
                     // Find the reaction in triggeredReactions to get the actual item reference
                     const reactionEntry = triggeredReactions.find(r =>
                         r.token.id === tokenId && !r.isGeneral && r.item?.id === itemId
                     );
                     item = reactionEntry?.item;
+                    triggerData = reactionEntry?.triggerData;
                     if (!item) return;
                 }
 
                 htmlEl.find('.lancer-reaction-item').removeClass('selected');
                 el.classList.add('selected');
 
-                showDetailPanel(token, item, htmlEl, popupData, reactionData);
+                showDetailPanel(token, item, htmlEl, popupData, reactionData, triggerData);
             });
         },
         close: () => {

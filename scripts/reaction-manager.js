@@ -20,8 +20,8 @@ export class ReactionManager {
 
     static initialize() {
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {
-            name: "Custom Reactions",
-            hint: "Define custom reactions for items.",
+            name: "Custom Activations",
+            hint: "Define custom activations for items.",
             scope: "world",
             config: false,
             type: Object,
@@ -29,8 +29,8 @@ export class ReactionManager {
         });
 
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, {
-            name: "General Reactions",
-            hint: "Define reactions that apply to all tokens.",
+            name: "General Activations",
+            hint: "Define activations that apply to all tokens.",
             scope: "world",
             config: false,
             type: Object,
@@ -38,9 +38,9 @@ export class ReactionManager {
         });
 
         game.settings.registerMenu(ReactionManager.ID, "reactionConfig", {
-            name: "Reaction Manager",
-            label: "Open Reaction Manager",
-            hint: "Configure custom reactions and triggers.",
+            name: "Activation Manager",
+            label: "Open Activation Manager",
+            hint: "Configure custom activations and triggers.",
             icon: "fas fa-bolt",
             type: ReactionConfig,
             restricted: true
@@ -90,7 +90,7 @@ export class ReactionManager {
 export class ReactionConfig extends FormApplication {
     static get defaultOptions() {
         return mergeObject(super.defaultOptions, {
-            title: "Reaction Manager",
+            title: "Activation Manager",
             id: "reaction-manager-config",
             template: `modules/lancer-reactionChecker/templates/reaction-config.html`,
             width: 800,
@@ -170,6 +170,10 @@ export class ReactionConfig extends FormApplication {
 
         const isPureDefault = (saved, def) => {
             if (!saved || !def) return false;
+            // If saved only has 'enabled' property, it's a pure default with just the toggle state
+            const savedKeys = Object.keys(saved);
+            if (savedKeys.length === 1 && savedKeys[0] === 'enabled') return true;
+            // Otherwise compare the full objects minus enabled
             const s = foundry.utils.deepClone(saved);
             const d = foundry.utils.deepClone(def);
             delete s.enabled;
@@ -180,6 +184,10 @@ export class ReactionConfig extends FormApplication {
         for (const [rawLid, data] of Object.entries(userItemSettings)) {
             const lid = rawLid.trim();
             data.reactions.forEach((reaction, index) => {
+                // Skip minimal entries (only have 'enabled') - they're shown in defaults tab
+                const reactionKeys = Object.keys(reaction);
+                if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled') return;
+
                 const defItem = defaultItemRegistry[lid]?.reactions?.find(r => r.name === reaction.name);
                 if (defItem && isPureDefault(reaction, defItem)) return;
 
@@ -213,11 +221,12 @@ export class ReactionConfig extends FormApplication {
         }
         for (const [lid, data] of Object.entries(defaultItemRegistry)) {
             data.reactions.forEach((reaction, index) => {
-                // Try to find matching user entry by name or index? Name is safer for defaults.
-                const userEntry = userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
+                // Look up by index first (for minimal enabled-only entries), then by name
+                const userEntry = userItemSettings[lid]?.reactions?.[index] ||
+                                  userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
                 const isPure = isPureDefault(userEntry, reaction);
                 const isOverridden = !!userEntry && !isPure;
-                const enabledState = isPure ? userEntry.enabled : reaction.enabled;
+                const enabledState = isPure ? userEntry.enabled : (userEntry?.enabled ?? reaction.enabled);
 
                 const itemInfo = itemMap.get(lid);
                 let displayName = reaction.name || lid;
@@ -259,6 +268,7 @@ export class ReactionConfig extends FormApplication {
                 triggers: reaction.triggers?.join(", ") || "",
                 isGeneral: true,
                 isCustom: true,
+                useActionName: reaction.useActionName || false,
                 original: reaction,
                 enabled: reaction.enabled
             }));
@@ -277,6 +287,7 @@ export class ReactionConfig extends FormApplication {
                 isGeneral: true,
                 isDefault: true,
                 isOverridden: isOverridden,
+                useActionName: reaction.useActionName || false,
                 original: reaction,
                 enabled: enabledState
             }));
@@ -328,7 +339,7 @@ export class ReactionConfig extends FormApplication {
         `;
 
         new Dialog({
-            title: "Reaction Manager Help",
+            title: "Activation Manager Help",
             content: content,
             buttons: {
                 ok: {
@@ -426,11 +437,9 @@ export class ReactionConfig extends FormApplication {
             if (userSaved[name]) {
                 userSaved[name].enabled = checked;
             } else {
-                const defaults = getDefaultGeneralReactionRegistry();
-                if (defaults[name]) {
-                    userSaved[name] = foundry.utils.deepClone(defaults[name]);
-                    userSaved[name].enabled = checked;
-                }
+                // Only store enabled state for defaults, not the full clone
+                // This keeps it as a "pure default" that just has enabled toggled
+                userSaved[name] = { enabled: checked };
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
         } else {
@@ -445,10 +454,13 @@ export class ReactionConfig extends FormApplication {
             } else {
                 const defaults = getDefaultItemReactionRegistry();
                 if (defaults[lid]) {
-                    userItemSettings[lid] = foundry.utils.deepClone(defaults[lid]);
-                    if (userItemSettings[lid].reactions?.[index]) {
-                        userItemSettings[lid].reactions[index].enabled = checked;
-                    }
+                    // Only store enabled state for defaults
+                    userItemSettings[lid] = {
+                        itemType: defaults[lid].itemType,
+                        reactions: defaults[lid].reactions.map((r, i) =>
+                            i === parseInt(index) ? { enabled: checked } : { enabled: r.enabled !== false }
+                        )
+                    };
                 }
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userItemSettings);
@@ -470,7 +482,7 @@ export class ReactionEditor extends FormApplication {
 
     static get defaultOptions() {
         return mergeObject(super.defaultOptions, {
-            title: "Edit Reaction",
+            title: "Edit Activation",
             id: "reaction-editor",
             template: `modules/lancer-reactionChecker/templates/reaction-editor.html`,
             width: 800,
@@ -540,27 +552,27 @@ export class ReactionEditor extends FormApplication {
         }
 
         const triggerHelp = {
-            onAttack: "{ triggeringToken, weapon, targets, attackType, attackName, tags, distance }",
-            onHit: "{ triggeringToken, weapon, target, roll, isCrit, attackType, attackName, tags, distance }",
-            onMiss: "{ triggeringToken, weapon, target, roll, attackType, attackName, tags, distance }",
-            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, attackType, attackName, tags, distance }",
-            onMove: "{ triggeringToken, distance, elevation, startPos, endPos }",
-            onTurnStart: "{ triggeringToken, distance }",
-            onTurnEnd: "{ triggeringToken, distance }",
-            onStatusApplied: "{ triggeringToken, statusId, effect, distance }",
-            onStatusRemoved: "{ triggeringToken, statusId, effect, distance }",
-            onStructure: "{ triggeringToken, remainingStructure, rollResult, distance }",
-            onStress: "{ triggeringToken, remainingStress, rollResult, distance }",
-            onHeat: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distance }",
-            onDestroyed: "{ triggeringToken, distance }",
-            onTechAttack: "{ triggeringToken, techItem, targets, attackName, isInvade, tags, distance }",
-            onTechHit: "{ triggeringToken, techItem, target, roll, attackName, isInvade, tags, distance }",
-            onTechMiss: "{ triggeringToken, techItem, target, roll, attackName, isInvade, tags, distance }",
-            onCheck: "{ triggeringToken, statName, roll, total, success, distance }",
-            onReaction: "{ triggeringToken, reactionName, reactionItem, distance }",
-            onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distance }",
-            onHpLoss: "{ triggeringToken, hpLost, currentHP, distance }",
-            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distance }"
+            onAttack: "{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData, distanceToTrigger }",
+            onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
+            onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
+            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, attackType, actionName, tags, actionData, distanceToTrigger }",
+            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, distanceToTrigger }",
+            onTurnStart: "{ triggeringToken, distanceToTrigger }",
+            onTurnEnd: "{ triggeringToken, distanceToTrigger }",
+            onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
+            onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger }",
+            onStructure: "{ triggeringToken, remainingStructure, rollResult, distanceToTrigger }",
+            onStress: "{ triggeringToken, remainingStress, rollResult, distanceToTrigger }",
+            onHeat: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
+            onDestroyed: "{ triggeringToken, distanceToTrigger }",
+            onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
+            onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
+            onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
+            onCheck: "{ triggeringToken, statName, roll, total, success, distanceToTrigger }",
+            onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger }",
+            onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
+            onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
+            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }"
         };
 
         const result = {
@@ -577,13 +589,16 @@ export class ReactionEditor extends FormApplication {
             isReactionDefined: reaction.isReaction !== undefined,
             triggerSelf: reaction.triggerSelf === true,
             triggerOther: reaction.triggerOther !== false, // Default to true
+            outOfCombat: reaction.outOfCombat === true, // Default to false
+            autoActivate: reaction.autoActivate || false,
+            useActionName: reaction.useActionName || false, // For general reactions
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: triggerHelp,
-            activationType: reaction.activationType || "none",
+            activationType: reaction.activationType || "flow",
             activationMode: reaction.activationMode || "after",
             activationMacro: reaction.activationMacro || "",
-            activationCode: reaction.activationCode || "",
+            activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
             // New Action Type Logic
             actionType: reaction.actionType || (reaction.isReaction !== false ? "Reaction" : "Free Action"),
@@ -624,8 +639,42 @@ export class ReactionEditor extends FormApplication {
         generalCheckbox.on('change', toggleFields);
         toggleFields();
 
+        // Toggle Action-Based mode for General reactions
+        const useActionNameCheckbox = html.find('#useActionName');
+        const triggerCheckboxes = html.find('input[name^="trigger."]');
+
+        // Triggers that support action names
+        const actionNameTriggers = [
+            'onAttack', 'onHit', 'onMiss', 'onDamage',
+            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation'
+        ];
+
+        const toggleActionBasedTriggers = () => {
+            const isActionBased = useActionNameCheckbox.prop('checked');
+
+            triggerCheckboxes.each(function () {
+                const triggerName = $(this).attr('name').replace('trigger.', '');
+                const isCompatible = actionNameTriggers.includes(triggerName);
+
+                if (isActionBased && !isCompatible) {
+                    // Disable and uncheck incompatible triggers
+                    $(this).prop('disabled', true);
+                    $(this).prop('checked', false);
+                    $(this).closest('label').css('opacity', '0.5');
+                } else {
+                    // Enable all triggers
+                    $(this).prop('disabled', false);
+                    $(this).closest('label').css('opacity', '1');
+                }
+            });
+        };
+
+        useActionNameCheckbox.on('change', toggleActionBasedTriggers);
+        toggleActionBasedTriggers();
+
         // Toggle activation type fields
         const activationTypeSelect = html.find('#activationType');
+        const activationModeSelect = html.find('#activationMode');
         const macroFields = html.find('.activation-macro');
         const codeFields = html.find('.activation-code');
 
@@ -633,6 +682,8 @@ export class ReactionEditor extends FormApplication {
             const type = activationTypeSelect.val();
             macroFields.toggle(type === 'macro');
             codeFields.toggle(type === 'code');
+            // Show activation mode only for macro and code
+            activationModeSelect.toggle(type === 'macro' || type === 'code');
         };
 
         activationTypeSelect.on('change', toggleActivationFields);
@@ -762,6 +813,15 @@ export class ReactionEditor extends FormApplication {
 
             // Update UI
             previewItemName.html(`<strong>Item:</strong> ${foundItemName}`);
+
+            if (foundItemUuid) {
+                showItemBtn.data('uuid', foundItemUuid);
+                showItemBtn.attr('data-uuid', foundItemUuid);
+                showItemBtn.show();
+            } else {
+                showItemBtn.hide();
+            }
+
             if (foundActionName && foundActionName !== foundItemName) {
                 if (previewActionName.length) {
                     previewActionName.html(`<strong>Action:</strong> ${foundActionName}`).show();
@@ -1072,7 +1132,7 @@ export class ReactionEditor extends FormApplication {
             "onStructure", "onStress", "onHeat", "onDestroyed",
             "onTechAttack", "onTechHit", "onTechMiss",
             "onCheck",
-            "onReaction", "onHPRestored", "onHpLoss", "onClearHeat"
+            "onActivation", "onHPRestored", "onHpLoss", "onClearHeat"
         ];
         return options.reduce((obj, trigger) => {
             obj[trigger] = selected.includes(trigger);
@@ -1092,7 +1152,7 @@ export class ReactionEditor extends FormApplication {
 
         if (isGeneral) {
             const name = formData.name;
-            if (!name) return ui.notifications.error("Reaction Name is required for general reactions");
+            if (!name) return ui.notifications.error("Activation Name is required for general activations");
 
             const newReaction = {
                 triggers: triggers,
@@ -1102,13 +1162,17 @@ export class ReactionEditor extends FormApplication {
                 // isReaction deprecated in favor of actionType, but keeping for backward compat if needed
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Reaction",
+                frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
-                activationType: formData.activationType || "none",
+                autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
+                useActionName: formData.useActionName === true || formData.useActionName === "on",
+                activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
-                triggerOther: formData.triggerOther === true || formData.triggerOther === "on"
+                triggerOther: formData.triggerOther === true || formData.triggerOther === "on",
+                outOfCombat: formData.outOfCombat === true || formData.outOfCombat === "on"
             };
 
             await ReactionManager.saveGeneralReaction(name, newReaction);
@@ -1117,7 +1181,7 @@ export class ReactionEditor extends FormApplication {
             if (!lid) return ui.notifications.error("Item LID is required");
 
             const newReaction = {
-                reactionPath: formData.reactionPath || "system.trigger",
+                reactionPath: formData.reactionPath || "",
                 triggers: triggers,
                 evaluate: formData.evaluate,
                 triggerDescription: formData.triggerDescription || "",
@@ -1127,12 +1191,14 @@ export class ReactionEditor extends FormApplication {
                 actionType: formData.actionType || "Reaction",
                 frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
-                activationType: formData.activationType || "none",
+                autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
+                activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
-                triggerOther: formData.triggerOther === true || formData.triggerOther === "on"
+                triggerOther: formData.triggerOther === true || formData.triggerOther === "on",
+                outOfCombat: formData.outOfCombat === true || formData.outOfCombat === "on"
             };
 
             let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);

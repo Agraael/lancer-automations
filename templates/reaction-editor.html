@@ -5,19 +5,27 @@
         style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
         <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
-            <span>General Reaction</span>
+            <span>General Activation</span>
             <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item
                 required)</span>
         </label>
     </div>
 
-    <!-- Reaction Name (General only) -->
+    <!-- Activation Name (General only) -->
     <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
-        <label>Reaction Name</label>
+        <label>Activation Name</label>
         <div class="form-fields">
             <input type="text" name="name" value="{{name}}" placeholder="e.g. Custom Overwatch">
         </div>
-        <p class="notes">A unique name for this general reaction.</p>
+        <p class="notes">A unique name for this general activation.</p>
+    </div>
+
+    <!-- Use as Action-Based (General only) -->
+    <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        <label class="checkbox ps-tooltip" title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode." style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="useActionName" id="useActionName" {{#if useActionName}}checked{{/if}}>
+            <span>Use as Action-Based</span>
+        </label>
     </div>
 
     <!-- Item LID (Item-based only) -->
@@ -26,7 +34,7 @@
         <div class="form-fields">
             <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
         </div>
-        <p class="notes">The ID of the item (system.lid) to attach this reaction to.</p>
+        <p class="notes">The ID of the item (system.lid) to attach this activation to.</p>
     </div>
 
     <!-- Item Preview (dynamically updated) -->
@@ -37,8 +45,9 @@
                     item found</em>{{/if}}</span>
             {{#if foundActionName}}<span id="preview-action-name" style="margin-left: 8px;"><strong>Action:</strong>
                 {{foundActionName}}</span>{{/if}}
-            {{#if foundItemUuid}}<a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
-                style="margin-left: 8px; color: #4a90d9; cursor: pointer;"><i class="fas fa-eye"></i></a>{{/if}}
+            <a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
+                style="margin-left: 8px; color: #4a90d9; cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
+                    class="fas fa-eye"></i></a>
             <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #4a90d9; cursor: pointer;"><i
                     class="fas fa-search"></i></a>
         </span>
@@ -118,17 +127,37 @@
                     <!-- Vertical Divider -->
                     <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
 
-                    <!-- Self/Others -->
-                    <label class="checkbox ps-tooltip" title="Triggers on Self (default: false)"
+                    <!-- Auto Activate -->
+                    <label class="checkbox ps-tooltip" title="Auto-activate without showing popup (default: false)"
                         style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
-                        <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
-                        <span>Self</span>
+                        <input type="checkbox" name="autoActivate" {{#if autoActivate}}checked{{/if}}>
+                        <span>Auto</span>
                     </label>
 
-                    <label class="checkbox ps-tooltip" title="Triggers on Others (default: true)"
+                    <!-- Vertical Divider -->
+                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
+
+                    <!-- Self/Others -->
+                    <label class="checkbox ps-tooltip" title="Allow token to react to its own trigger (default: false)"
+                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                        <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
+                        <span>React to Self</span>
+                    </label>
+
+                    <label class="checkbox ps-tooltip" title="Allow other tokens to react to this trigger (default: true)"
                         style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
                         <input type="checkbox" name="triggerOther" {{#if triggerOther}}checked{{/if}}>
-                        <span>Others</span>
+                        <span>React to Others</span>
+                    </label>
+
+                    <!-- Vertical Divider -->
+                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
+
+                    <!-- Out of Combat -->
+                    <label class="checkbox ps-tooltip" title="Allow tokens not in combat to react (default: false)"
+                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                        <input type="checkbox" name="outOfCombat" {{#if outOfCombat}}checked{{/if}}>
+                        <span>Out of Combat</span>
                     </label>
                 </div>
             </div>
@@ -176,19 +205,20 @@
 
     <!-- Custom Activation -->
     <div class="form-group">
-        <label>Custom Activation</label>
+        <label>Activation Type</label>
         <div class="form-fields" style="display: flex; gap: 8px; align-items: center;">
             <select name="activationType" id="activationType" style="flex: 1;">
-                <option value="none" {{#if (eq activationType "none" )}}selected{{/if}}>None (default)</option>
+                <option value="none" {{#if (eq activationType "none" )}}selected{{/if}}>None</option>
+                <option value="flow" {{#if (eq activationType "flow" )}}selected{{/if}}>Flow (default)</option>
                 <option value="macro" {{#if (eq activationType "macro" )}}selected{{/if}}>Macro</option>
-                <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>JavaScript Code</option>
+                <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>JavaScript</option>
             </select>
             <select name="activationMode" id="activationMode" style="flex: 1;">
-                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>After Chat</option>
-                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Chat</option>
+                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>After Flow</option>
+                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Flow</option>
             </select>
         </div>
-        <p class="notes">Optional custom activation: run a macro or JS code when this reaction is activated.</p>
+        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run after or instead of flow.</p>
     </div>
 
     <!-- Macro Name (shown when activationType = macro) -->
@@ -197,9 +227,11 @@
         <div class="form-fields">
             <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
         </div>
-        <p class="notes">Name of the macro to execute. The macro receives <code>token</code>, <code>actor</code>, and
-            <code>item</code>
-            variables.
+        <p class="notes">Name of the macro to execute.</p>
+        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
+            <strong>Available arguments:</strong> <code>token</code> (Token), <code>actor</code> (Actor),
+            <code>item</code> (Item or null for general), <code>activationName</code> (String),
+            <code>triggerData</code> (Object with trigger event data)
         </p>
     </div>
 
@@ -210,15 +242,17 @@
             <textarea name="activationCode" rows="6"
                 style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
         </div>
-        <p class="notes">JavaScript code to execute. Variables: <code>token</code>, <code>actor</code>,
-            <code>item</code>,
-            <code>reactionName</code>.
+        <p class="notes">JavaScript code to execute.</p>
+        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
+            <strong>Available variables:</strong> <code>token</code> (Token), <code>actor</code> (Actor),
+            <code>item</code> (Item or null for general), <code>activationName</code> (String),
+            <code>triggerData</code> (Object with trigger event data including actionData, targets, etc.)
         </p>
     </div>
 
     <footer class="sheet-footer flexrow">
         <button type="submit">
-            <i class="far fa-save"></i> Save Reaction
+            <i class="far fa-save"></i> Save Activation
         </button>
     </footer>
 </form>
