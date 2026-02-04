@@ -5,7 +5,7 @@ export class ReactionReset extends FormApplication {
         return mergeObject(super.defaultOptions, {
             id: "reaction-checker-reset",
             title: "Reset Lancer Reaction Checker",
-            template: "modules/lancer-reactionChecker/templates/reset-confirm.html", // Won't actually be used effectively as we render a Dialog
+            template: "modules/lancer-reactionChecker/templates/reset-confirm.html",
             width: 400,
             height: "auto"
         });
@@ -32,7 +32,6 @@ export class ReactionReset extends FormApplication {
                     label: "Reset Everything",
                     callback: async () => {
                         try {
-                            // Clear all settings associated with this module
                             for (const [key, setting] of game.settings.settings.entries()) {
                                 if (setting.namespace === ReactionManager.ID) {
                                     await game.settings.set(ReactionManager.ID, setting.key, setting.default);
@@ -40,13 +39,11 @@ export class ReactionReset extends FormApplication {
                                 }
                             }
 
-                            // Specifically ensure reaction registries are cleared
                             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {});
                             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, {});
 
                             ui.notifications.info("Lancer Reaction Checker: Module reset to defaults.");
 
-                            // Reload to apply changes cleanly
                             window.location.reload();
                         } catch (err) {
                             ui.notifications.error("Error resetting module: " + err.message);

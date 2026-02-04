@@ -2,9 +2,23 @@
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 
-/**
- * Manages the reaction data, merging default registry with user configurations.
- */
+export function stringToFunction(str, args = []) {
+    const trimmed = str.trim();
+    if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
+        return eval(`(${trimmed})`);
+    }
+    return new Function(...args, trimmed);
+}
+
+export function stringToAsyncFunction(str, args = []) {
+    const trimmed = str.trim();
+    if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
+        return eval(`(${trimmed})`);
+    }
+    const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+    return new AsyncFunction(...args, trimmed);
+}
+
 export class ReactionManager {
     static get ID() {
         return "lancer-reactionChecker";
@@ -82,11 +96,71 @@ export class ReactionManager {
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
         }
     }
+
+    static exportReactions() {
+        const itemReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+        const generalReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+
+        const exportData = {
+            version: 1,
+            exportDate: new Date().toISOString(),
+            itemReactions: itemReactions,
+            generalReactions: generalReactions
+        };
+
+        const jsonStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `lancer-activations-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        ui.notifications.info("Activations exported successfully.");
+    }
+
+    static async importReactions(file, mode = "merge") {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+
+                    if (!data.itemReactions && !data.generalReactions) {
+                        throw new Error("Invalid activation file format.");
+                    }
+
+                    if (mode === "replace") {
+                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, data.itemReactions || {});
+                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, data.generalReactions || {});
+                    } else {
+                        const existingItem = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+                        const existingGeneral = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+
+                        const mergedItem = { ...existingItem, ...data.itemReactions };
+                        const mergedGeneral = { ...existingGeneral, ...data.generalReactions };
+
+                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, mergedItem);
+                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, mergedGeneral);
+                    }
+
+                    ui.notifications.info(`Activations imported successfully (${mode} mode).`);
+                    resolve(true);
+                } catch (e) {
+                    ui.notifications.error(`Failed to import activations: ${e.message}`);
+                    reject(e);
+                }
+            };
+            reader.onerror = () => reject(new Error("Failed to read file."));
+            reader.readAsText(file);
+        });
+    }
 }
 
-/**
- * UI for managing custom reactions
- */
 export class ReactionConfig extends FormApplication {
     static get defaultOptions() {
         return mergeObject(super.defaultOptions, {
@@ -110,36 +184,27 @@ export class ReactionConfig extends FormApplication {
         const defaultList = [];
         const allReactions = [];
 
-        // Collect all LIDs to look up
         const midsToLookup = new Set([
             ...Object.keys(userItemSettings).map(k => k.trim()),
             ...Object.keys(defaultItemRegistry).map(k => k.trim())
         ]);
 
-        // Bulk lookup items
-        const itemMap = new Map(); // lid -> { name: string, system: object }
+        const itemMap = new Map();
 
-        // Optimize: scan compendiums for these LIDs
-        // This can be heavy, so we try to be efficient
         for (const pack of game.packs) {
             if (pack.documentName !== "Item") continue;
-            // Only query packs if we have LIDs to find
             if (midsToLookup.size === 0) break;
 
             const index = await pack.getIndex({ fields: ["system.lid"] });
             for (const entry of index) {
                 if (entry.system?.lid && midsToLookup.has(entry.system.lid)) {
-                    // We found an item. We need its full data to resolve action names via path
-                    // But loading all might be too slow. For now let's just get the Item Name from index
-                    // If we really need action name, we'd need to load the doc. 
-                    // Let's try to load the doc if the user requested it.
                     const itemDoc = await fromUuid(entry.uuid);
                     if (itemDoc) {
                         itemMap.set(entry.system.lid, {
                             name: itemDoc.name,
                             system: itemDoc.system
                         });
-                        midsToLookup.delete(entry.system.lid); // Found it
+                        midsToLookup.delete(entry.system.lid);
                     }
                 }
             }
@@ -170,10 +235,8 @@ export class ReactionConfig extends FormApplication {
 
         const isPureDefault = (saved, def) => {
             if (!saved || !def) return false;
-            // If saved only has 'enabled' property, it's a pure default with just the toggle state
             const savedKeys = Object.keys(saved);
             if (savedKeys.length === 1 && savedKeys[0] === 'enabled') return true;
-            // Otherwise compare the full objects minus enabled
             const s = foundry.utils.deepClone(saved);
             const d = foundry.utils.deepClone(def);
             delete s.enabled;
@@ -184,7 +247,6 @@ export class ReactionConfig extends FormApplication {
         for (const [rawLid, data] of Object.entries(userItemSettings)) {
             const lid = rawLid.trim();
             data.reactions.forEach((reaction, index) => {
-                // Skip minimal entries (only have 'enabled') - they're shown in defaults tab
                 const reactionKeys = Object.keys(reaction);
                 if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled') return;
 
@@ -221,9 +283,8 @@ export class ReactionConfig extends FormApplication {
         }
         for (const [lid, data] of Object.entries(defaultItemRegistry)) {
             data.reactions.forEach((reaction, index) => {
-                // Look up by index first (for minimal enabled-only entries), then by name
                 const userEntry = userItemSettings[lid]?.reactions?.[index] ||
-                                  userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
+                    userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
                 const isPure = isPureDefault(userEntry, reaction);
                 const isOverridden = !!userEntry && !isPure;
                 const enabledState = isPure ? userEntry.enabled : (userEntry?.enabled ?? reaction.enabled);
@@ -268,7 +329,7 @@ export class ReactionConfig extends FormApplication {
                 triggers: reaction.triggers?.join(", ") || "",
                 isGeneral: true,
                 isCustom: true,
-                useActionName: reaction.useActionName || false,
+                onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                 original: reaction,
                 enabled: reaction.enabled
             }));
@@ -287,13 +348,12 @@ export class ReactionConfig extends FormApplication {
                 isGeneral: true,
                 isDefault: true,
                 isOverridden: isOverridden,
-                useActionName: reaction.useActionName || false,
+                onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                 original: reaction,
                 enabled: enabledState
             }));
         }
 
-        // Sort: Generals first (descending isGeneral), then Name
         const sorter = (a, b) => {
             if (a.isGeneral !== b.isGeneral) return b.isGeneral - a.isGeneral;
             return a.name.localeCompare(b.name);
@@ -322,14 +382,14 @@ export class ReactionConfig extends FormApplication {
         event.preventDefault();
         const content = `
         <div style="font-family: 'Roboto', sans-serif; line-height: 1.5;">
-            <p>Each reaction can be either <strong>General</strong> (global) or <strong>Item-based</strong>.</p>
-            <p>A reaction listens for a specific <strong>Trigger</strong> (e.g., <code>onDamage</code> fires when a token deals damage).</p>
+            <p>Each activation can be either <strong>General</strong> (global) or <strong>Item-based</strong>.</p>
+            <p>An activation listens for a specific <strong>Trigger</strong> (e.g., <code>onDamage</code> fires when a token deals damage).</p>
             <hr>
-            <p>Reactions are checked for every token in combat. If a token has the reaction available, the <strong>Evaluation Function</strong> is executed.</p>
-            <p>If the evaluation returns <code>true</code>, the reaction triggers and appears in the popup window.</p>
+            <p>Activations are checked for every token in combat. If a token has the activation available, the <strong>Evaluation Function</strong> is executed.</p>
+            <p>If the evaluation returns <code>true</code>, the activation triggers and appears in the popup window.</p>
             <p><em>(Note: Different data is passed to the evaluation function depending on the trigger type.)</em></p>
             <hr>
-            <p>You can also execute <strong>Macros</strong> or plain <strong>JS Code</strong> when activating the reaction from the popup.</p>
+            <p>You can also execute <strong>Macros</strong> or plain <strong>JS Code</strong> when activating the activation from the popup.</p>
             <p>Useful functions available in this module:</p>
             <ul>
                 <li><code>isHostile(token1, token2)</code></li>
@@ -373,7 +433,6 @@ export class ReactionConfig extends FormApplication {
             const entry = all[lid];
             if (!entry) return;
 
-            // Use index if available, otherwise 0 fallback
             const reactionIndex = (typeof index !== 'undefined') ? index : 0;
             const reaction = entry.reactions[reactionIndex];
             new ReactionEditor({ isGeneral: false, lid, reaction, reactionIndex: reactionIndex }).render(true);
@@ -403,23 +462,20 @@ export class ReactionConfig extends FormApplication {
         const lid = li.data("lid");
         const name = li.data("name");
         const isGeneral = li.data("general");
-        const index = li.data("index"); // Might be useful if default has multiple
+        const index = li.data("index");
 
         if (isGeneral) {
-            // Copy from getDefaultGeneralReactionRegistry
             const defaultReaction = getDefaultGeneralReactionRegistry()[name];
             if (!defaultReaction) return;
             const reaction = foundry.utils.deepClone(defaultReaction);
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
         } else {
-            // Copy from item-based registry
             const all = ReactionManager.getAllReactions();
             const entry = all[lid];
             if (!entry) return;
-            // Use index if available, otherwise 0
             const reactionIndex = (typeof index !== 'undefined') ? index : 0;
             const reaction = foundry.utils.deepClone(entry.reactions[reactionIndex]);
-            new ReactionEditor({ isGeneral: false, lid, reaction }).render(true); // Don't pass index here, we want to create NEW custom
+            new ReactionEditor({ isGeneral: false, lid, reaction }).render(true);
         }
     }
 
@@ -437,8 +493,6 @@ export class ReactionConfig extends FormApplication {
             if (userSaved[name]) {
                 userSaved[name].enabled = checked;
             } else {
-                // Only store enabled state for defaults, not the full clone
-                // This keeps it as a "pure default" that just has enabled toggled
                 userSaved[name] = { enabled: checked };
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
@@ -454,7 +508,6 @@ export class ReactionConfig extends FormApplication {
             } else {
                 const defaults = getDefaultItemReactionRegistry();
                 if (defaults[lid]) {
-                    // Only store enabled state for defaults
                     userItemSettings[lid] = {
                         itemType: defaults[lid].itemType,
                         reactions: defaults[lid].reactions.map((r, i) =>
@@ -472,9 +525,6 @@ export class ReactionConfig extends FormApplication {
     }
 }
 
-/**
- * Editor for a single reaction
- */
 export class ReactionEditor extends FormApplication {
     constructor(object, options) {
         super(object, options);
@@ -499,9 +549,7 @@ export class ReactionEditor extends FormApplication {
         let foundItemUuid = null;
 
         if (!data.isGeneral && data.lid) {
-            // Search compendiums for the LID
             for (const pack of game.packs) {
-                // Focus on Lancer packs if possible to optimize, or just check all Item packs
                 if (pack.documentName !== "Item") continue;
 
                 const index = await pack.getIndex({ fields: ["system.lid"] });
@@ -514,7 +562,6 @@ export class ReactionEditor extends FormApplication {
             }
         }
 
-        // Resolve action name based on reactionPath
         let foundActionName = null;
         const reactionPath = reaction.reactionPath || "";
 
@@ -523,10 +570,8 @@ export class ReactionEditor extends FormApplication {
                 const item = await fromUuid(foundItemUuid);
                 if (item) {
                     if (!reactionPath || reactionPath === "system" || reactionPath === "") {
-                        // NPC item - action name is the item name itself
                         foundActionName = item.name;
                     } else {
-                        // Player item - navigate to system.{reactionPath} to get action
                         const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
                         let actionData = item.system;
                         for (const part of pathParts) {
@@ -537,11 +582,9 @@ export class ReactionEditor extends FormApplication {
                                 break;
                             }
                         }
-                        // If we found an action object with a name, use it
                         if (actionData && actionData.name) {
                             foundActionName = actionData.name;
                         } else {
-                            // Fallback to item name
                             foundActionName = item.name;
                         }
                     }
@@ -588,10 +631,10 @@ export class ReactionEditor extends FormApplication {
             isReaction: reaction.isReaction !== false,
             isReactionDefined: reaction.isReaction !== undefined,
             triggerSelf: reaction.triggerSelf === true,
-            triggerOther: reaction.triggerOther !== false, // Default to true
-            outOfCombat: reaction.outOfCombat === true, // Default to false
+            triggerOther: reaction.triggerOther !== false,
+            outOfCombat: reaction.outOfCombat === true,
             autoActivate: reaction.autoActivate || false,
-            useActionName: reaction.useActionName || false, // For general reactions
+            onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: triggerHelp,
@@ -600,9 +643,8 @@ export class ReactionEditor extends FormApplication {
             activationMacro: reaction.activationMacro || "",
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
-            // New Action Type Logic
             actionType: reaction.actionType || (reaction.isReaction !== false ? "Reaction" : "Free Action"),
-            consumesReaction: reaction.consumesReaction !== false, // Defaults to true
+            consumesReaction: reaction.consumesReaction !== false,
             actionTypeOptions: {
                 "Reaction": "Reaction",
                 "Free Action": "Free Action",
@@ -639,40 +681,35 @@ export class ReactionEditor extends FormApplication {
         generalCheckbox.on('change', toggleFields);
         toggleFields();
 
-        // Toggle Action-Based mode for General reactions
-        const useActionNameCheckbox = html.find('#useActionName');
+        const onlyOnSourceMatchCheckbox = html.find('#onlyOnSourceMatch');
         const triggerCheckboxes = html.find('input[name^="trigger."]');
 
-        // Triggers that support action names
-        const actionNameTriggers = [
+        const sourceMatchTriggers = [
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation'
         ];
 
-        const toggleActionBasedTriggers = () => {
-            const isActionBased = useActionNameCheckbox.prop('checked');
+        const toggleSourceMatchTriggers = () => {
+            const isSourceMatch = onlyOnSourceMatchCheckbox.prop('checked');
 
             triggerCheckboxes.each(function () {
                 const triggerName = $(this).attr('name').replace('trigger.', '');
-                const isCompatible = actionNameTriggers.includes(triggerName);
+                const isCompatible = sourceMatchTriggers.includes(triggerName);
 
-                if (isActionBased && !isCompatible) {
-                    // Disable and uncheck incompatible triggers
+                if (isSourceMatch && !isCompatible) {
                     $(this).prop('disabled', true);
                     $(this).prop('checked', false);
                     $(this).closest('label').css('opacity', '0.5');
                 } else {
-                    // Enable all triggers
                     $(this).prop('disabled', false);
                     $(this).closest('label').css('opacity', '1');
                 }
             });
         };
 
-        useActionNameCheckbox.on('change', toggleActionBasedTriggers);
-        toggleActionBasedTriggers();
+        onlyOnSourceMatchCheckbox.on('change', toggleSourceMatchTriggers);
+        toggleSourceMatchTriggers();
 
-        // Toggle activation type fields
         const activationTypeSelect = html.find('#activationType');
         const activationModeSelect = html.find('#activationMode');
         const macroFields = html.find('.activation-macro');
@@ -682,14 +719,12 @@ export class ReactionEditor extends FormApplication {
             const type = activationTypeSelect.val();
             macroFields.toggle(type === 'macro');
             codeFields.toggle(type === 'code');
-            // Show activation mode only for macro and code
             activationModeSelect.toggle(type === 'macro' || type === 'code');
         };
 
         activationTypeSelect.on('change', toggleActivationFields);
         toggleActivationFields();
 
-        // Show Item Button
         html.find('.show-item-btn').on('click', async (ev) => {
             ev.preventDefault();
             const uuid = $(ev.currentTarget).data('uuid');
@@ -699,7 +734,6 @@ export class ReactionEditor extends FormApplication {
             }
         });
 
-        // Dynamic preview update on LID or Action Path change
         const lidInput = html.find('input[name="lid"]');
         const pathInput = html.find('input[name="reactionPath"]');
         const previewContainer = html.find('.item-preview-container');
@@ -717,7 +751,6 @@ export class ReactionEditor extends FormApplication {
                 consumesReactionContainer.show();
             } else {
                 consumesReactionContainer.hide();
-                // If not a reaction, it shouldn't consume a reaction resource by default
                 consumesReactionContainer.find('input[type="checkbox"]').prop('checked', false);
             }
         };
@@ -734,7 +767,6 @@ export class ReactionEditor extends FormApplication {
                 return;
             }
 
-            // Search for item in compendiums
             let foundItemUuid = null;
             let foundItemName = null;
 
@@ -754,7 +786,6 @@ export class ReactionEditor extends FormApplication {
                 return;
             }
 
-            // Resolve action name, type and frequency
             let foundActionName = null;
             let detectedActionType = null;
             let detectedFrequency = null;
@@ -777,7 +808,6 @@ export class ReactionEditor extends FormApplication {
                         }
                         foundActionName = actionData?.name || item.name;
 
-                        // Auto-detect action type from activation
                         const activation = actionData?.activation;
                         if (activation) {
                             if (activation === "Quick") detectedActionType = "Quick Action";
@@ -788,21 +818,17 @@ export class ReactionEditor extends FormApplication {
                             else detectedActionType = activation;
                         }
 
-                        // Attempt to detect frequency
                         if (actionData?.frequency) {
                             detectedFrequency = actionData.frequency;
                         } else if (item.system?.frequency) {
                             detectedFrequency = item.system.frequency;
                         } else if (item.system?.uses?.per) {
-                            // E.g. 1/Scene -> we might map this?
-                            // Standard Lancer uses "Scene", "Mission", "Round", "Combat"
                             const per = item.system.uses.per;
                             if (per === "Round") detectedFrequency = "1/Round";
                             else if (per === "Scene") detectedFrequency = "1/Scene";
                             else if (per === "Combat") detectedFrequency = "1/Combat";
-                            else if (per === "Mission") detectedFrequency = "1/Mission"; // Not in our list but good to know
+                            else if (per === "Mission") detectedFrequency = "1/Mission";
                         } else if (detectedActionType === "Reaction" || detectedActionType === "Free Action") {
-                            // Default to 1/Round for reactions/free actions if not specified? 
                             detectedFrequency = "1/Round";
                         }
                     }
@@ -811,7 +837,6 @@ export class ReactionEditor extends FormApplication {
                 console.warn("lancer-reactionChecker | Error resolving action name:", e);
             }
 
-            // Update UI
             previewItemName.html(`<strong>Item:</strong> ${foundItemName}`);
 
             if (foundItemUuid) {
@@ -832,44 +857,34 @@ export class ReactionEditor extends FormApplication {
                 previewActionName.hide();
             }
 
-            // Auto-select and highlight logic
             if (detectedActionType) {
                 const options = ["Reaction", "Free Action", "Quick Action", "Full Action", "Protocol", "Other"];
 
-                // Highlight options
                 const $options = actionTypeSelect.find('option');
-                $options.css('color', ''); // Reset
+                $options.css('color', '');
                 $options.each(function () {
                     if ($(this).val() === detectedActionType) {
                         $(this).css({
-                            'color': '#4caf50', // Green
+                            'color': '#4caf50',
                             'font-weight': 'bold'
                         });
                     }
                 });
 
-                // Auto-select the detected action type
-                // We update it if it's currently on the default "Reaction" (and user hasn't likely changed it yet) 
-                // OR if the preview update was triggered by a significant change (like changing path).
-                // Given the user request "when action path is updated we need to update the action type", we force update.
-                if (autoSelect && (options.includes(detectedActionType) || detectedActionType === "Other")) { // "Other" handling?
+                if (autoSelect && (options.includes(detectedActionType) || detectedActionType === "Other")) {
                     actionTypeSelect.val(options.includes(detectedActionType) ? detectedActionType : "Other");
-
-                    // Trigger change event to update the conditional checkbox visibility
                     actionTypeSelect.trigger('change');
                 }
             }
 
-            // Auto-select and highlight logic for Frequency
             if (detectedFrequency) {
                 const options = ["1/Round", "Unlimited", "1/Scene", "1/Combat", "Other"];
-                // Highlight options
                 const $options = frequencySelect.find('option');
-                $options.css('color', ''); // Reset
+                $options.css('color', '');
                 $options.each(function () {
                     if ($(this).val() === detectedFrequency) {
                         $(this).css({
-                            'color': '#4caf50', // Green
+                            'color': '#4caf50',
                             'font-weight': 'bold'
                         });
                     }
@@ -884,7 +899,6 @@ export class ReactionEditor extends FormApplication {
             previewContainer.show();
         };
 
-        // Debounce to avoid too many requests
         let updateTimeout;
         const debouncedUpdate = () => {
             clearTimeout(updateTimeout);
@@ -894,12 +908,10 @@ export class ReactionEditor extends FormApplication {
         lidInput.on('input', debouncedUpdate);
         pathInput.on('input', debouncedUpdate);
 
-        // Initial update (highlight only)
         if (lidInput.val()) {
             updatePreview(false);
         }
 
-        // Initialize CodeMirror if available
         if (typeof CodeMirror !== 'undefined') {
             const evaluateTextarea = html.find('textarea[name="evaluate"]')[0];
             if (evaluateTextarea) {
@@ -927,23 +939,18 @@ export class ReactionEditor extends FormApplication {
                 this.codeEditor.on('change', (cm) => cm.save());
             }
 
-            // Handle tab switching refreshes
-            // If CodeMirror is inside a tab that starts hidden, it needs a refresh when shown
             const refreshEditors = () => {
                 if (this.evaluateEditor) this.evaluateEditor.refresh();
                 if (this.codeEditor) this.codeEditor.refresh();
             };
 
-            // Refresh on activationType change (since code fields toggle visibility)
             activationTypeSelect.on('change', () => {
                 setTimeout(refreshEditors, 50);
             });
 
-            // Also refresh initially
             setTimeout(refreshEditors, 100);
         }
 
-        // Find Item Button - open item browser
         html.find('.find-item-btn').on('click', async (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
@@ -952,7 +959,6 @@ export class ReactionEditor extends FormApplication {
     }
 
     async _openItemBrowser(lidInput, pathInput, updatePreview, previewContainer) {
-        // Collect items from compendiums
         const items = [];
         for (const pack of game.packs) {
             if (pack.documentName !== "Item") continue;
@@ -969,17 +975,14 @@ export class ReactionEditor extends FormApplication {
             }
         }
 
-        // Sort by name
         items.sort((a, b) => a.name.localeCompare(b.name));
 
-        // Build item list HTML
         const itemListHtml = items.map(item =>
             `<div class="item-browser-entry" data-lid="${item.lid}" data-uuid="${item.uuid}" style="padding: 4px 8px; cursor: pointer; border-bottom: 1px solid #333;">
                 <strong>${item.name}</strong> <span style="color: #888; font-size: 0.85em;">(${item.type})</span>
             </div>`
         ).join('');
 
-        // Step 1: Select Item
         const selectedItem = await new Promise((resolve) => {
             new Dialog({
                 title: "Find Item",
@@ -1021,14 +1024,11 @@ export class ReactionEditor extends FormApplication {
 
         if (!selectedItem) return;
 
-        // Load the item to get its actions
         const item = await fromUuid(selectedItem.uuid);
         if (!item) return;
 
-        // Collect actions from the item
         const actions = [];
 
-        // For NPC features - direct system.trigger (no path needed)
         if (item.type === "npc_feature") {
             if (item.system?.trigger) {
                 actions.push({ name: item.name, path: "", isDefault: true });
@@ -1039,8 +1039,6 @@ export class ReactionEditor extends FormApplication {
                 });
             }
         } else {
-            // For player items - check various paths
-            // Talents: ranks[x].actions[y]
             if (item.system?.ranks) {
                 item.system.ranks.forEach((rank, rIdx) => {
                     if (rank.actions) {
@@ -1053,7 +1051,6 @@ export class ReactionEditor extends FormApplication {
                     }
                 });
             }
-            // Weapons: profiles[x].actions[y] or just actions[x]
             if (item.system?.profiles) {
                 item.system.profiles.forEach((profile, pIdx) => {
                     if (profile.actions) {
@@ -1066,7 +1063,6 @@ export class ReactionEditor extends FormApplication {
                     }
                 });
             }
-            // Direct actions
             if (item.system?.actions) {
                 item.system.actions.forEach((action, idx) => {
                     actions.push({ name: action.name || `Action ${idx + 1}`, path: `actions[${idx}]` });
@@ -1074,12 +1070,10 @@ export class ReactionEditor extends FormApplication {
             }
         }
 
-        // If no actions found, just use empty path
         if (actions.length === 0) {
             actions.push({ name: item.name, path: "", isDefault: true });
         }
 
-        // Step 2: Select Action (if multiple)
         let selectedPath = "";
         if (actions.length === 1) {
             selectedPath = actions[0].path;
@@ -1115,11 +1109,9 @@ export class ReactionEditor extends FormApplication {
             if (selectedPath === null) return;
         }
 
-        // Apply to form fields
         lidInput.val(selectedItem.lid);
         pathInput.val(selectedPath);
 
-        // Trigger preview update
         await updatePreview();
     }
 
@@ -1159,13 +1151,12 @@ export class ReactionEditor extends FormApplication {
                 evaluate: formData.evaluate,
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
-                // isReaction deprecated in favor of actionType, but keeping for backward compat if needed
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Reaction",
                 frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
                 autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
-                useActionName: formData.useActionName === true || formData.useActionName === "on",
+                onlyOnSourceMatch: formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on",
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
@@ -1186,12 +1177,12 @@ export class ReactionEditor extends FormApplication {
                 evaluate: formData.evaluate,
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
-                // isReaction deprecated in favor of actionType
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Reaction",
                 frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
                 autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
+                onlyOnSourceMatch: formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on",
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
@@ -1207,13 +1198,12 @@ export class ReactionEditor extends FormApplication {
                 userReactions[lid] = { itemType: "any", reactions: [] };
             }
 
-            // Check if we are updating a specific index
             const index = formData.reactionIndex;
             if (index !== undefined && index !== null && index !== "") {
                 if (userReactions[lid].reactions[index]) {
                     userReactions[lid].reactions[index] = newReaction;
                 } else {
-                    userReactions[lid].reactions.push(newReaction); // Fallback
+                    userReactions[lid].reactions.push(newReaction);
                 }
             } else {
                 userReactions[lid].reactions.push(newReaction);

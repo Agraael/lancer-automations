@@ -1,20 +1,10 @@
 /*global game, Dialog, ChatMessage, canvas, $, foundry */
-import { ReactionManager } from "./reaction-manager.js";
+import { ReactionManager, stringToAsyncFunction } from "./reaction-manager.js";
 
 let activeReactionDialog = null;
 let activeDetailPanel = null;
-let selectedReactionKey = null; // Track currently selected reaction for toggle
+let selectedReactionKey = null;
 
-/**
- * Activate a reaction (called from popup or auto-activate)
- * @param {Token} token - The token performing the reaction
- * @param {Item} item - The item (or null for general reactions)
- * @param {Object} reaction - The reaction configuration
- * @param {boolean} isGeneral - Whether this is a general reaction
- * @param {string} displayTitle - The display name
- * @param {string} itemName - The item name
- * @param {Object} triggerData - The trigger data from the event
- */
 export async function activateReaction(token, item, reaction, isGeneral, displayTitle, itemName, triggerData = null) {
     token.control({ releaseOthers: true });
 
@@ -47,8 +37,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                         if (typeof code === 'function') {
                             await code(token, token.actor, item, displayTitle, triggerData);
                         } else if (typeof code === 'string') {
-                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-                            const fn = new AsyncFunction("token", "actor", "item", "reactionName", "triggerData", code);
+                            const fn = stringToAsyncFunction(code, ["token", "actor", "item", "reactionName", "triggerData"]);
                             await fn(token, token.actor, item, displayTitle, triggerData);
                         }
                     } catch (e) {
@@ -79,19 +68,13 @@ export async function activateReaction(token, item, reaction, isGeneral, display
             }
         };
 
-        // Handle activation based on type
         if (activationType === "none") {
-            // Do nothing
         } else if (activationType === "flow") {
-            // Just activate the item
             await itemActivation();
         } else if (activationType === "macro" || activationType === "code") {
-            // Custom activation (macro or code)
             if (activationMode === "instead") {
-                // Run custom activation instead of flow
                 await executeCustomActivation();
             } else {
-                // Run flow first, then custom activation
                 await itemActivation();
                 await executeCustomActivation();
             }
@@ -125,8 +108,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                         if (typeof code === 'function') {
                             await code(token, actor, displayTitle, triggerData);
                         } else if (typeof code === 'string') {
-                            const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-                            const fn = new AsyncFunction("token", "actor", "reactionName", "triggerData", code);
+                            const fn = stringToAsyncFunction(code, ["token", "actor", "reactionName", "triggerData"]);
                             await fn(token, actor, displayTitle, triggerData);
                         }
                     } catch (e) {
@@ -141,8 +123,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
 
             let flowData;
 
-            // For action-based reactions, use actionData from trigger if available
-            if (generalReaction?.useActionName && triggerData?.actionData) {
+            if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
                 const actionData = triggerData.actionData;
                 flowData = {
                     title: actionData.title || displayTitle,
@@ -153,7 +134,6 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                     detail: actionData.detail || "No description"
                 };
             } else {
-                // Regular general reaction format
                 const triggerText = generalReaction?.triggerDescription || "No trigger description";
                 const effectText = generalReaction?.effectDescription || "No effect description";
                 flowData = {
@@ -170,19 +150,13 @@ export async function activateReaction(token, item, reaction, isGeneral, display
             await flow.begin();
         };
 
-        // Handle activation based on type
         if (activationType === "none") {
-            // Do nothing
         } else if (activationType === "flow") {
-            // Just show chat activation
             await showChatActivation();
         } else if (activationType === "macro" || activationType === "code") {
-            // Custom activation (macro or code)
             if (activationMode === "instead") {
-                // Run custom activation instead of flow
                 await executeCustomActivation();
             } else {
-                // Run flow first, then custom activation
                 await showChatActivation();
                 await executeCustomActivation();
             }
@@ -218,11 +192,6 @@ export async function activateReaction(token, item, reaction, isGeneral, display
     }
 }
 
-/**
- * Display the reaction trigger popup
- * @param {string} triggerType - The trigger event name
- * @param {Array} triggeredReactions - Array of { token, item, reaction, itemName, reactionName }
- */
 export function displayReactionPopup(triggerType, triggeredReactions) {
     if (triggeredReactions.length === 0) return;
 
@@ -273,8 +242,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         displayTitle = reactionData.reactionName;
         const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
 
-        // For action-based reactions, try to get description from action data in triggerData
-        if (generalReaction?.useActionName && triggerData?.actionData) {
+        if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
             const actionData = triggerData.actionData;
             if (actionData.action) {
                 triggerText = generalReaction?.triggerDescription || actionData.action.trigger || "";
@@ -328,7 +296,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             triggerText = resolvedData.trigger || resolvedData.description || "No trigger text";
             effectText = resolvedData.effect || resolvedData.detail || "No effect info";
 
-            // Ensure activation path starts with system.
             activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
         } else {
             triggerText = "Path not found: " + reactionPath;
@@ -384,7 +351,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             </div>
         </div>
         ` : ''}
-        
+
         <div style="font-size: 0.85em; margin-bottom: 10px;">
             <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px; margin-right: 5px;">
                 <i class="fas fa-sync"></i> ${frequency}
@@ -402,7 +369,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 </span>`
         }
         </div>
-        
+
         <button class="activate-btn" style="
             background: #991e2a;
             color: white;
@@ -415,11 +382,9 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         "><i class="fas fa-bolt"></i> ACTIVATE</button>
     </div>`;
 
-    // Add to body
     $('body').append(html);
     activeDetailPanel = $('#reaction-detail-panel');
 
-    // Position to the right of main dialog
     const mainDialog = mainDialogEl.closest('.dialog');
     if (mainDialog.length) {
         const rect = mainDialog[0].getBoundingClientRect();
@@ -429,20 +394,17 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         });
     }
 
-    // Animate in
     activeDetailPanel.animate(
         { opacity: 1 },
         200
     );
 
-    // Close button
     activeDetailPanel.find('.detail-close').click(() => {
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
     });
 
     activeDetailPanel.find('.activate-btn').click(async () => {
-        // Get the reaction object
         let reaction = null;
         if (item) {
             const lid = item.system?.lid;
@@ -452,7 +414,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             reaction = ReactionManager.getGeneralReaction(displayTitle);
         }
 
-        // Call the activation function
         await activateReaction(token, item, reaction, isGeneral, displayTitle, item?.name || displayTitle, triggerData);
 
         closeDetailPanel();
@@ -470,7 +431,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 function renderReactionDialog(popupData) {
     const { triggerType, triggeredReactions } = popupData;
 
-    // Group by token
     const byToken = new Map();
     for (const tr of triggeredReactions) {
         if (!byToken.has(tr.token.id)) {
@@ -482,7 +442,6 @@ function renderReactionDialog(popupData) {
         byToken.get(tr.token.id).reactions.push(tr);
     }
 
-    // Filter out tokens with no reactions remaining
     for (const [tokenId, data] of byToken) {
         const actor = data.token.actor;
         const hasReaction = actor?.system?.action_tracker?.reaction > 0;
@@ -508,7 +467,7 @@ function renderReactionDialog(popupData) {
         let reactionList = "";
         for (const r of data.reactions) {
             const isGeneral = r.isGeneral || false;
-            const isActionBased = isGeneral && r.reaction?.useActionName;
+            const isActionBased = isGeneral && r.reaction?.onlyOnSourceMatch;
             const itemId = r.item?.id || '';
             const itemName = isGeneral ? 'General' : r.itemName;
 
@@ -588,11 +547,11 @@ function renderReactionDialog(popupData) {
             <div class="lancer-dialog-title">${triggerDisplay} TRIGGERED</div>
             <div class="lancer-dialog-subtitle">The following Actions may be activated</div>
         </div>
-        
+
         <div class="lancer-list">
             ${tokenItems}
         </div>
-        
+
         <div class="lancer-info-box">
             <i class="fas fa-bolt"></i>
             <span>Click a reaction to view details.</span>
@@ -611,7 +570,6 @@ function renderReactionDialog(popupData) {
         },
         default: "ok",
         render: (htmlEl) => {
-            // Click token box to select and pan
             htmlEl.find('.lancer-list-item').click((event) => {
                 if (event.target.closest('.lancer-reaction-item')) return;
 
@@ -624,7 +582,6 @@ function renderReactionDialog(popupData) {
                 }
             });
 
-            // Click reaction to show/toggle floating detail panel
             htmlEl.find('.lancer-reaction-item').click((event) => {
                 const el = event.currentTarget;
                 const tokenId = el.dataset.tokenId;
@@ -644,7 +601,6 @@ function renderReactionDialog(popupData) {
                     );
                     triggerData = reactionData?.triggerData;
                 } else {
-                    // Find the reaction in triggeredReactions to get the actual item reference
                     const reactionEntry = triggeredReactions.find(r =>
                         r.token.id === tokenId && !r.isGeneral && r.item?.id === itemId
                     );

@@ -1,8 +1,9 @@
 /*global game, Hooks, canvas */
 
 import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance } from "./overwatch.js";
-import { ReactionManager } from "./reaction-manager.js";
+import { ReactionManager, stringToFunction } from "./reaction-manager.js";
 import { ReactionReset } from "./reaction-reset.js";
+import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup } from "./reactions-ui.js";
 import { registerExternalItemReactions, registerExternalGeneralReactions } from "./reactions-registry.js";
 
@@ -17,14 +18,12 @@ function getReactionItems(token) {
     const itemTypes = ["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"];
     let items = actor.items.filter(item => itemTypes.includes(item.type));
 
-    // Support Pilot items on Mechs
     if (actor.type === "mech") {
         let pilot = null;
         const pilotRef = actor.system.pilot;
 
         if (pilotRef) {
             if (typeof pilotRef === 'object' && pilotRef.id) {
-                // Object with id property
                 const idStr = pilotRef.id;
                 if (idStr.startsWith('Actor.')) {
                     pilot = fromUuidSync(idStr);
@@ -32,7 +31,6 @@ function getReactionItems(token) {
                     pilot = game.actors.get(idStr);
                 }
             } else if (typeof pilotRef === 'string') {
-                // String - could be "Actor.{id}" or just "{id}"
                 if (pilotRef.startsWith('Actor.')) {
                     pilot = fromUuidSync(pilotRef);
                 } else {
@@ -54,28 +52,18 @@ function getItemLID(item) {
     return item.system?.lid || null;
 }
 
-/**
- * Check if an item is available for use based on various conditions
- * @param {Object} item - The item to check
- * @param {string} reactionPath - The path to the reaction data
- * @returns {boolean} True if item is available
- */
 function isItemAvailable(item, reactionPath) {
     if (!item) return false;
-
-    // 1. Destroyed/Disabled check
     if (item.system?.destroyed || item.system?.disabled) return false;
 
-    // 2. Talent rank check
     if (item.type === "talent" && reactionPath) {
         const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
         if (rankMatch) {
-            const requiredRank = parseInt(rankMatch[1]) + 1; // ranks[0] = rank 1
+            const requiredRank = parseInt(rankMatch[1]) + 1;
             if ((item.system?.curr_rank || 0) < requiredRank) return false;
         }
     }
 
-    // 3. Weapon profile check
     if (item.type === "mech_weapon" && reactionPath) {
         const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
         if (profileMatch) {
@@ -83,24 +71,6 @@ function isItemAvailable(item, reactionPath) {
             const currentProfile = item.system?.selected_profile_index ?? 0;
             if (currentProfile !== requiredProfile) return false;
         }
-    }
-
-    // Get tags for remaining checks
-    const tags = item.system?.tags || [];
-
-    // 4. Loading check
-    const hasLoadingTag = tags.some(t => t.lid === "tg_loading");
-    if (hasLoadingTag && item.system?.loaded === false) return false;
-
-    // 5. Recharge check (NPC features)
-    const hasRechargeTag = tags.some(t => t.lid === "tg_recharge");
-    if (hasRechargeTag && item.system?.charged === false) return false;
-
-    // 6. Limited uses check
-    const hasLimitedTag = tags.some(t => t.lid === "tg_limited");
-    if (hasLimitedTag) {
-        const uses = item.system?.uses;
-        if (uses && typeof uses === 'object' && uses.value <= 0) return false;
     }
 
     return true;
@@ -132,12 +102,12 @@ function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const generalReactions = ReactionManager.getGeneralReactions();
 
-    const actionBasedReaction = data.actionName && generalReactions[data.actionName]?.useActionName ?
+    const actionBasedReaction = data.actionName && generalReactions[data.actionName]?.onlyOnSourceMatch ?
         { name: data.actionName, reaction: generalReactions[data.actionName] } : null;
 
     const nonActionBasedReactions = [];
     for (const [reactionName, reaction] of Object.entries(generalReactions)) {
-        if (reaction.useActionName) continue;
+        if (reaction.onlyOnSourceMatch) continue;
         if (!reaction.triggers?.includes(triggerType)) continue;
         if (reaction.enabled === false) continue;
         nonActionBasedReactions.push([reactionName, reaction]);
@@ -163,7 +133,12 @@ function checkReactions(triggerType, data) {
                 if (!reaction.triggers.includes(triggerType)) continue;
                 if (reaction.enabled === false) continue;
 
-                // Skip if token not in combat and reaction doesn't allow out of combat
+                if (reaction.onlyOnSourceMatch) {
+                    const triggeringItem = data.weapon || data.techItem || data.item;
+                    const triggeringItemLid = triggeringItem?.system?.lid;
+                    if (!triggeringItemLid || triggeringItemLid !== lid) continue;
+                }
+
                 if (!isInCombat && !reaction.outOfCombat) continue;
 
                 if (isSelf) {
@@ -192,13 +167,12 @@ function checkReactions(triggerType, data) {
                         shouldTrigger = reaction.evaluate(triggerType, enrichedData, item, token);
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
-                            const evalFunc = new Function("triggerType", "data", "item", "reactorToken", reaction.evaluate);
+                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
                             shouldTrigger = evalFunc(triggerType, enrichedData, item, token);
                         } catch (e) {
                             console.error(`lancer-reactionChecker | Error parsing custom evaluate for ${item.name}:`, e);
                         }
                     } else {
-                        // No evaluate function defined - default to true (always trigger)
                         shouldTrigger = true;
                     }
 
@@ -242,7 +216,6 @@ function checkReactions(triggerType, data) {
             const reactionName = actionBasedReaction.name;
             const reaction = actionBasedReaction.reaction;
 
-            // Skip if token not in combat and reaction doesn't allow out of combat
             if (!isInCombat && !reaction.outOfCombat) continue;
 
             if (isSelf && !reaction.triggerSelf) continue;
@@ -265,13 +238,12 @@ function checkReactions(triggerType, data) {
                     shouldTrigger = reaction.evaluate(triggerType, enrichedData, null, token);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
-                        const evalFunc = new Function("triggerType", "data", "item", "reactorToken", reaction.evaluate);
+                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
                         shouldTrigger = evalFunc(triggerType, enrichedData, null, token);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
                 } else {
-                    // No evaluate function defined - default to true (always trigger)
                     shouldTrigger = true;
                 }
 
@@ -293,7 +265,6 @@ function checkReactions(triggerType, data) {
         }
 
         for (const [reactionName, reaction] of nonActionBasedReactions) {
-            // Skip if token not in combat and reaction doesn't allow out of combat
             if (!isInCombat && !reaction.outOfCombat) continue;
 
             if (isSelf && !reaction.triggerSelf) continue;
@@ -316,13 +287,12 @@ function checkReactions(triggerType, data) {
                     shouldTrigger = reaction.evaluate(triggerType, enrichedData, null, token);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
-                        const evalFunc = new Function("triggerType", "data", "item", "reactorToken", reaction.evaluate);
+                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
                         shouldTrigger = evalFunc(triggerType, enrichedData, null, token);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
                 } else {
-                    // No evaluate function defined - default to true (always trigger)
                     shouldTrigger = true;
                 }
 
@@ -579,11 +549,6 @@ function registerSettings() {
         default: "both"
     });
 
-
-
-
-
-
     game.settings.register('lancer-reactionChecker', 'consumeReaction', {
         name: 'Consume Activation on Activate',
         hint: 'Automatically reduce reaction count by 1 when activating an activation.',
@@ -599,6 +564,24 @@ function registerSettings() {
         hint: 'Reset all module settings and activations to their default values.',
         icon: 'fas fa-undo',
         type: ReactionReset,
+        restricted: true
+    });
+
+    game.settings.registerMenu('lancer-reactionChecker', 'exportActivations', {
+        name: 'Export Activations',
+        label: 'Export to JSON',
+        hint: 'Export all custom activations to a JSON file.',
+        icon: 'fas fa-file-export',
+        type: ReactionExport,
+        restricted: true
+    });
+
+    game.settings.registerMenu('lancer-reactionChecker', 'importActivations', {
+        name: 'Import Activations',
+        label: 'Import from JSON',
+        hint: 'Import activations from a JSON file.',
+        icon: 'fas fa-file-import',
+        type: ReactionImport,
         restricted: true
     });
 }
@@ -625,7 +608,6 @@ function handleSocketEvent({ action, payload }) {
                 reactionName: r.reactionName,
                 itemName: r.itemName,
                 isGeneral: r.isGeneral,
-                // Pass minimal data needed by UI
             });
         }
 
@@ -736,7 +718,6 @@ async function onHitMissStep(state) {
 
     return true;
 }
-
 
 async function onDamageStep(state) {
     const actor = state.actor;
@@ -909,7 +890,6 @@ async function onActivationStep(state) {
         }
     }
 
-    // Build actionData object from state
     const actionData = {
         type: "action",
         title: state.data?.title || actionName,
@@ -926,7 +906,6 @@ async function onActivationStep(state) {
 }
 
 Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
-
     flowSteps.set('lancer-reactionChecker:onAttack', onAttackStep);
     flowSteps.set('lancer-reactionChecker:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-reactionChecker:onDamage', onDamageStep);
@@ -964,7 +943,6 @@ Hooks.on('init', () => {
 
 Hooks.on('ready', () => {
     console.log('lancer-reactionChecker | Ready');
-
 
     ReactionManager.initialize();
     registerReactionHooks();

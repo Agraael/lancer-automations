@@ -1,14 +1,14 @@
 <form class="{{cssClass}}" autocomplete="off">
     <header class="sheet-header">
         <div class="flexrow" style="align-items: center;">
-            <h1 style="flex: 1; border: none;">Reaction Manager</h1>
+            <h1 style="flex: 1; border: none;">Activation Manager</h1>
             <a class="help-btn" title="Help"><i class="fas fa-question-circle"></i></a>
         </div>
-        <p>Manage default and custom reactions for checking triggers.</p>
+        <p>Manage default and custom activations for checking triggers.</p>
     </header>
 
     <nav class="sheet-tabs tabs" data-group="primary">
-        <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Reactions</a>
+        <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Activations</a>
         <a class="item" data-tab="defaults"><i class="fas fa-book"></i> Defaults</a>
     </nav>
 
@@ -16,9 +16,9 @@
         <!-- CUSTOM TAB (merged general + item-based) -->
         <div class="tab" data-tab="custom">
             <div class="flexrow" style="margin-bottom: 5px;">
-                <button type="button" class="add-reaction"><i class="fas fa-plus"></i> Add Reaction</button>
+                <button type="button" class="add-reaction"><i class="fas fa-plus"></i> Add Activation</button>
             </div>
-            <p class="notes" style="margin-bottom: 10px;">Custom reactions can be General (all tokens) or Item-Based
+            <p class="notes" style="margin-bottom: 10px;">Custom activations can be General (all tokens) or Item-Based
                 (requires matching LID).</p>
             <div class="reaction-list flexcol">
                 <div class="reaction-header flexrow">
@@ -38,13 +38,13 @@
                         </span>
                         <span class="col-type">
                             {{#if this.isGeneral}}
-                            {{#if this.useActionName}}
-                            <i class="fas fa-angles-right" title="Action-Based"></i>
+                            {{#if this.onlyOnSourceMatch}}
+                            <i class="fas fa-input-text" title="Action-Based"></i>
                             {{else}}
                             <i class="fas fa-globe" title="General"></i>
                             {{/if}}
                             {{else}}
-                            <i class="fas fa-eye" title="Item-Based"></i>
+                            <i class="fas fa-cube" title="Item-Based"></i>
                             {{/if}}
                         </span>
                         <span class="col-name">
@@ -65,7 +65,7 @@
                         </span>
                     </div>
                     {{else}}
-                    <p class="notes" style="text-align: center;">No custom reactions defined.</p>
+                    <p class="notes" style="text-align: center;">No custom activations defined.</p>
                     {{/each}}
                 </div>
             </div>
@@ -73,7 +73,7 @@
 
         <!-- DEFAULTS TAB -->
         <div class="tab" data-tab="defaults">
-            <p class="notes" style="margin-bottom: 10px;">Default reactions from the registry. Click copy to create an
+            <p class="notes" style="margin-bottom: 10px;">Default activations from the registry. Click copy to create an
                 editable override.</p>
             <div class="reaction-list flexcol">
                 <div class="reaction-header flexrow">
@@ -93,13 +93,13 @@
                         </span>
                         <span class="col-type">
                             {{#if this.isGeneral}}
-                            {{#if this.useActionName}}
-                            <i class="fas fa-angles-right" title="Action-Based"></i>
+                            {{#if this.onlyOnSourceMatch}}
+                            <i class="fas fa-input-text" title="Action-Based"></i>
                             {{else}}
                             <i class="fas fa-globe" title="General"></i>
                             {{/if}}
                             {{else}}
-                            <i class="fas fa-eye" title="Item-Based"></i>
+                            <i class="fas fa-cube" title="Item-Based"></i>
                             {{/if}}
                         </span>
                         <span class="col-name">

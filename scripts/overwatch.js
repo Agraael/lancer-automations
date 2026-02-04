@@ -1,16 +1,5 @@
 /*global game, Dialog, ChatMessage, canvas, CONST */
 
-
-
-
-
-
-/**
- * Check if two tokens are hostile to each other
- * @param {Token} reactor - The token that might react
- * @param {Token} mover - The token that moved
- * @returns {boolean} True if they are hostile
- */
 export function isFriendly(token1, token2) {
     const tokenFactions = game.modules.get("token-factions")?.api;
     if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
@@ -57,26 +46,14 @@ export function isHostile(reactor, mover) {
     }
 }
 
-/**
- * Check if a reactor can trigger overwatch on a mover
- * Called from the general reaction's evaluate function
- * @param {Token} reactor - The reactor token
- * @param {Token} mover - The moving token
- * @param {Object} startPos - The mover's starting position {x, y}
- * @returns {boolean} True if overwatch should trigger
- */
 export function checkOverwatchCondition(reactor, mover, startPos) {
-    // Skip self
     if (reactor.id === mover.id) return false;
 
-    // Check hostility
     if (!isHostile(reactor, mover)) return false;
 
-    // Check if reactor has reactions available
     const reaction = reactor.actor?.system?.action_tracker?.reaction;
     if (!reaction || reaction <= 0) return false;
 
-    // Check aura-based threat (Grid-Aware Auras)
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
@@ -89,7 +66,6 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
         }
     }
 
-    // Fallback: distance-based check
     const maxThreat = getActorMaxThreat(reactor.actor);
     const distanceStart = getMinGridDistance(mover, reactor, startPos);
 
@@ -222,11 +198,11 @@ export function displayOverwatch(reactors, target) {
              <div class="lancer-dialog-title">OVERWATCH OPPORTUNITY</div>
              <div class="lancer-dialog-subtitle">Target: ${target.name}</div>
         </div>
-        
+
         <div class="lancer-list">
             ${reactorItems}
         </div>
-        
+
         <div class="lancer-info-box">
              <i class="fas fa-crosshairs"></i>
              <span>Click a reactor to select and pan. You may immediately <strong>SKIRMISH</strong>.</span>
@@ -263,8 +239,6 @@ export function displayOverwatch(reactors, target) {
         });
     }
 }
-
-
 
 export function getActorMaxThreat(actor) {
     if (!actor) return 0;

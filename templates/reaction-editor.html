@@ -20,12 +20,13 @@
         <p class="notes">A unique name for this general activation.</p>
     </div>
 
-    <!-- Use as Action-Based (General only) -->
+    <!-- Only On Source Match (General only - matches action name) -->
     <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip" title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode." style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="useActionName" id="useActionName" {{#if useActionName}}checked{{/if}}>
-            <span>Use as Action-Based</span>
+            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
+            <span>Only On Source Match</span>
         </label>
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches action name from trigger</p>
     </div>
 
     <!-- Item LID (Item-based only) -->
@@ -62,6 +63,15 @@
         <p class="notes">Path within <code>system</code> to the action data. Leave empty for NPC features (uses
             <code>system.trigger</code> directly).
         </p>
+    </div>
+
+    <!-- Only On Source Match (Item-based only - matches item LID) -->
+    <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        <label class="checkbox ps-tooltip" title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode." style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
+            <span>Only On Source Match</span>
+        </label>
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches item LID from trigger</p>
     </div>
 
     <!-- Custom Trigger Description -->

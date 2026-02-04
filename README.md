@@ -1,6 +1,6 @@
 # Lancer Reaction Checker
 
-A FoundryVTT module for the LANCER system that automates reaction detection and prompts players when reactions can be triggered.
+A FoundryVTT module for the LANCER system that automates reactions, scripted reminders for item actions, or just global triggers.
 
 ## Installation
 
@@ -9,135 +9,116 @@ A FoundryVTT module for the LANCER system that automates reaction detection and 
 https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.json
 ```
 
-## Requirements
+### Requirements
 
 - FoundryVTT v12+
 - [Lancer System](https://foundryvtt.com/packages/lancer)
-- [Lancer Style Library](https://github.com/Agraael/lancer-style-library) - CSS styling
-- [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) (Optional) - For syntax highlighting in code editors
+- [Lancer Style Library](https://github.com/Agraael/lancer-style-library)
+- [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) (Optional, for syntax highlighting)
 
-## Features
+## How It Works
+
+The module uses a list of triggers: `onHit`, `onAttack`, `onMove`, etc. When an actor does something that corresponds to a trigger, it fires. Other tokens (including the actor itself) can react to it.
+
+You can write an evaluation function that returns `true` to validate the activation. For item-based activations, you can also specify a specific action from an item using the Action Path (useful for reactions provided by a weapon or system).
+
+By default, a popup appears showing all activations that have been triggered and which actors can respond.
+
+### Example: Overwatch
+
+Overwatch is a built-in general activation listening to `onMove`. When any token moves, other actors can listen to this trigger. The evaluation checks "did it move within your threat range?" and returns `true` if so, allowing actors with available reactions to respond.
+
+### Activation Types
+
+You can also add Macro or JavaScript code to run either:
+- When clicking "Activate" in the summary popup
+- Automatically (skipping the popup entirely)
+
+This allows you to set up reminders or fully automate macros/code upon item usage.
+
+### Example: Item with On-Crit Effect
+
+Let's say you have an item with LID `big_gun` that deploys something on a critical hit.
+
+1. Create an activation with that item's LID, listening to `onHit`
+2. By default, any actor with this item would trigger on any hit. Toggle **React to Self** so only the item owner triggers it
+3. But this still fires on any hit you make while owning the item. Toggle **Only On Source Match** so it only triggers when that specific item is used (note: this limits compatible triggers - things like `onMove` can't be triggered by items)
+4. In the evaluate function, check the data package from `onHit`, look at `hitTarget` for a crit, return `true` if found
+5. The item now appears in the summary popup for `onHit` events
+6. Add activation code to deploy the effect. If you enable **Auto Activate**, the code runs automatically without showing in the summary
+
+## Configuration
+
+Access via: **Configure Settings > Module Settings > Lancer Reaction Checker > Reactions Configuration**
 
 ### Trigger Types
-
-The module monitors the following game events:
 
 | Trigger | Event |
 |---------|-------|
 | `onMove` | Token movement starts |
+| `onAttack` | Attack roll made |
 | `onHit` | Attack roll hits |
 | `onMiss` | Attack roll misses |
 | `onCrit` | Critical hit |
 | `onDamage` | Damage is applied |
+| `onTechAttack` | Tech attack made |
 | `onTechHit` | Tech attack hits |
 | `onTechMiss` | Tech attack misses |
 | `onStructure` | Structure damage taken |
 | `onStress` | Heat stress applied |
-| `onCheck` | Skill check made |
-| `onReaction` | Another reaction triggered |
+| `onActivation` | Item activated |
 | `onStartOfTurn` | Combat turn starts |
 | `onEndOfTurn` | Combat turn ends |
 
-### Reaction Types
-
-**Item Reactions** - Linked to specific items (weapons, systems, talents, NPC features). Identified by item LID. Automatically checks item availability (uses, loaded state, destroyed).
-
-**General Reactions** - Not linked to items. Custom conditions and effects.
-
-## Configuration
-
-Access via: `Configure Settings > Module Settings > Lancer Reaction Checker > Reactions Configuration`
-
-### Reaction Properties
+### Activation Properties
 
 | Property | Description |
 |----------|-------------|
-| `name` | Display name |
-| `lid` | Lancer Item ID (item reactions only) |
-| `reactionPath` | Path to action data in item (e.g., `system.actions.0`) |
-| `triggers` | Array of trigger types |
-| `triggerDescription` | Displayed trigger text |
-| `effectDescription` | Displayed effect text |
-| `evaluate` | JavaScript code returning boolean. Context: `token`, `actor`, `data` |
-| `enabled` | Toggle reaction on/off |
-| `activationType` | `none`, `code`, or `macro` |
-| `activationMode` | `after` (after chat) or `instead` (replace chat) |
-| `activationCode` | JS code for `code` type |
-| `activationMacro` | Macro name for `macro` type |
+| Item LID | Lancer Item ID (item-based only) |
+| Action Path | Path to action data in item (e.g., `system.actions.0`) |
+| Triggers | Which events to listen for |
+| Trigger Description | Displayed trigger text |
+| Effect Description | Displayed effect text |
+| Action Type | Reaction, Free Action, Quick Action, etc. |
+| Frequency | 1/round, 1/turn, unlimited, etc. |
+| Consumes Reaction | Whether using this consumes the token's reaction |
+| Auto Activate | Skip popup and run activation automatically |
+| React to Self | Allow token to react to its own triggers |
+| React to Others | Allow reacting to other tokens' triggers |
+| Only On Source Match | Only trigger when the source item/action matches |
+| Activation Type | None, Flow (chat card), Macro, or JavaScript |
+| Activation Mode | Run after or instead of the flow |
 
-### Evaluate Context
+### Evaluate Function
 
-The `evaluate` function receives:
-- `token` - Reactor's token document
-- `actor` - Reactor's actor document
-- `data` - Trigger-specific data object
+The evaluate function determines if an activation should trigger. It receives:
+- `triggerType` - Which trigger fired
+- `data` - Trigger-specific data (targets, damage, positions, etc.)
+- `reactorToken` - The token that might react
+- `item` - The item (for item-based activations)
 
-**Data properties by trigger:**
+Must return `true` or `false`.
 
-| Trigger | Data Properties |
-|---------|-----------------|
-| `onMove` | `mover`, `startPos`, `endPos` |
-| `onHit/Miss/Crit` | `attacker`, `target`, `weapon`, `damage` |
-| `onDamage` | `attacker`, `target`, `damageResults` |
-| `onTechHit/Miss` | `attacker`, `target`, `techType` |
-| `onStructure/Stress` | `actor`, `result` |
-| `onCheck` | `actor`, `checkType`, `result` |
-| `onStartOfTurn/EndOfTurn` | `combatant`, `combat` |
+## Export & Import
+
+You can export and import activations to share with others. Overwatch is provided as a default. The rest depends on what people find useful - the system is flexible enough to automate most things.
+
+## Utilities
+
+- **LID Item Finder** - Helps you find item LIDs in your world
+- **Debug Mode** - Enable console logging for troubleshooting
 
 ## API
 
 ```javascript
 const api = game.modules.get('lancer-reactionChecker').api;
 
-// Functions
-api.checkOverwatchCondition(reactorToken, moverToken, startPos) // boolean
-api.getActorMaxThreat(actor) // number
-api.getTokenDistance(token1, token2) // number
-api.isHostile(token1, token2) // boolean
-api.isFriendly(token1, token2) // boolean
-api.getMinGridDistance(token, hexCenter) // number
-
-// Debug (temporary)
-api.drawThreatDebug(token) // Draws threat range overlay
-api.drawDistanceDebug(token1, token2) // Draws distance line
+api.checkOverwatchCondition(reactorToken, moverToken, startPos)
+api.getActorMaxThreat(actor)
+api.getTokenDistance(token1, token2)
+api.isHostile(token1, token2)
+api.isFriendly(token1, token2)
 ```
-
-## Module Settings
-
-| Setting | Description |
-|---------|-------------|
-| Show Popup | Display popup dialog vs chat message |
-| Debug Mode | Enable console logging |
-
-## Default Reactions
-
-Default reactions are included and will be expanded over time.
-
-### Overwatch (General)
-- **Trigger:** `onMove`
-- **Condition:** Hostile starts movement in threat range, reactor has reaction available
-
-### Hunker Down (NPC Feature)
-- **LID:** `npc-rebake_npcf_trait_hunker_down`
-- **Trigger:** `onHit`
-- **Condition:** Target is the reactor
-
-## Adding Custom Reactions
-
-1. Open Reactions Configuration
-2. Click "Add Reaction" or "Add General Reaction"
-3. Fill in properties:
-   - Set trigger(s)
-   - Write evaluate condition
-   - Optionally configure activation code/macro
-4. Save
-
-## Notes
-
-- Reactions are evaluated per-token when triggers fire
-- Item reactions auto-check: uses remaining, loaded state, not destroyed
-- General reactions require manual availability logic in evaluate
-- Popup shows to token owner only
 
 ## Support
 

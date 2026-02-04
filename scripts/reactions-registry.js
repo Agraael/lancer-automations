@@ -1,45 +1,11 @@
 
-// Storage for external module registrations
 const externalItemReactions = {};
 const externalGeneralReactions = {};
 
-/**
- * Register item-based reactions from external modules
- * @param {Object} reactions - Object mapping item LIDs to reaction configs
- * @example
- * registerExternalItemReactions({
- *     "my-module_my-item-lid": {
- *         itemType: "npc_feature",
- *         reactions: [{
- *             reactionPath: "system.trigger",
- *             triggers: ["onHit"],
- *             evaluate: function(triggerType, data, item, reactorToken) {
- *                 // data.targets is array of {target, roll, crit} for onHit/onMiss/onTechHit/onTechMiss
- *                 return data.targets?.some(t => t.target?.id === reactorToken.id);
- *             }
- *         }]
- *     }
- * });
- */
 export function registerExternalItemReactions(reactions) {
     Object.assign(externalItemReactions, reactions);
 }
 
-/**
- * Register general reactions from external modules
- * @param {Object} reactions - Object mapping reaction names to reaction configs
- * @example
- * registerExternalGeneralReactions({
- *     "My Custom Reaction": {
- *         triggers: ["onMove"],
- *         triggerDescription: "When something moves",
- *         effectDescription: "Do something cool",
- *         evaluate: function(triggerType, data, item, reactorToken) {
- *             return true;
- *         }
- *     }
- * });
- */
 export function registerExternalGeneralReactions(reactions) {
     Object.assign(externalGeneralReactions, reactions);
 }
@@ -60,7 +26,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
             effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
-            evaluate: function (triggerType, data, item, reactorToken) {
+            evaluate: async function (triggerType, data, item, reactorToken) {
                 const api = game.modules.get('lancer-reactionChecker').api;
                 const mover = data.triggeringToken;
                 if (!mover) return false;
@@ -81,7 +47,7 @@ export function getDefaultGeneralReactionRegistry() {
             isReaction: true,
             triggerOther: true,
             triggerSelf: false,
-            evaluate: function (triggerType, data, item, reactorToken) {
+            evaluate: async function (triggerType, data, item, reactorToken) {
                 if (reactorToken.actor?.type !== 'mech') return false;
                 if (data.target?.id !== reactorToken.id) return false;
 
