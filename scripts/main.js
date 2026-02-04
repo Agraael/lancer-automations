@@ -98,7 +98,7 @@ function getAllSceneTokens() {
     });
 }
 
-function checkReactions(triggerType, data) {
+async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const generalReactions = ReactionManager.getGeneralReactions();
 
@@ -164,11 +164,11 @@ function checkReactions(triggerType, data) {
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
-                        shouldTrigger = reaction.evaluate(triggerType, enrichedData, item, token);
+                        shouldTrigger = await reaction.evaluate(triggerType, enrichedData, item, token);
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                            shouldTrigger = evalFunc(triggerType, enrichedData, item, token);
+                            shouldTrigger = await evalFunc(triggerType, enrichedData, item, token);
                         } catch (e) {
                             console.error(`lancer-reactionChecker | Error parsing custom evaluate for ${item.name}:`, e);
                         }
@@ -235,11 +235,11 @@ function checkReactions(triggerType, data) {
                 let shouldTrigger = false;
 
                 if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = reaction.evaluate(triggerType, enrichedData, null, token);
+                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, null, token);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
                         const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                        shouldTrigger = evalFunc(triggerType, enrichedData, null, token);
+                        shouldTrigger = await evalFunc(triggerType, enrichedData, null, token);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
@@ -284,11 +284,11 @@ function checkReactions(triggerType, data) {
                 let shouldTrigger = false;
 
                 if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = reaction.evaluate(triggerType, enrichedData, null, token);
+                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, null, token);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
                         const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                        shouldTrigger = evalFunc(triggerType, enrichedData, null, token);
+                        shouldTrigger = await evalFunc(triggerType, enrichedData, null, token);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
