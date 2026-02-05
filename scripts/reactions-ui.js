@@ -5,7 +5,7 @@ let activeReactionDialog = null;
 let activeDetailPanel = null;
 let selectedReactionKey = null;
 
-export async function activateReaction(token, item, reaction, isGeneral, displayTitle, itemName, triggerData = null) {
+export async function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
     token.control({ releaseOthers: true });
 
     if (item) {
@@ -25,7 +25,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                 if (macroName) {
                     const macro = game.macros.find(m => m.name === macroName);
                     if (macro) {
-                        await macro.execute({ token, actor: token.actor, item, reactionName: displayTitle, triggerData });
+                        await macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
                     } else {
                         ui.notifications.warn(`Macro "${macroName}" not found`);
                     }
@@ -35,10 +35,10 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                 if (code) {
                     try {
                         if (typeof code === 'function') {
-                            await code(token, token.actor, item, displayTitle, triggerData);
+                            await code(triggerType, triggerData, token, item, activationName);
                         } else if (typeof code === 'string') {
-                            const fn = stringToAsyncFunction(code, ["token", "actor", "item", "reactionName", "triggerData"]);
-                            await fn(token, token.actor, item, displayTitle, triggerData);
+                            const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                            await fn(triggerType, triggerData, token, item, activationName);
                         }
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error executing activation code:`, e);
@@ -81,7 +81,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
         }
     } else {
         const actor = token.actor;
-        const generalReaction = ReactionManager.getGeneralReaction(displayTitle) || reaction;
+        const generalReaction = ReactionManager.getGeneralReaction(activationName) || reaction;
 
         const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
@@ -96,7 +96,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                 if (macroName) {
                     const macro = game.macros.find(m => m.name === macroName);
                     if (macro) {
-                        await macro.execute({ token, actor, reactionName: displayTitle, triggerData });
+                        await macro.execute({ triggerType, triggerData, reactorToken: token, item: null, activationName });
                     } else {
                         ui.notifications.warn(`Macro "${macroName}" not found`);
                     }
@@ -106,10 +106,10 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                 if (code) {
                     try {
                         if (typeof code === 'function') {
-                            await code(token, actor, displayTitle, triggerData);
+                            await code(triggerType, triggerData, token, null, activationName);
                         } else if (typeof code === 'string') {
-                            const fn = stringToAsyncFunction(code, ["token", "actor", "reactionName", "triggerData"]);
-                            await fn(token, actor, displayTitle, triggerData);
+                            const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                            await fn(triggerType, triggerData, token, null, activationName);
                         }
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error executing activation code:`, e);
@@ -126,9 +126,9 @@ export async function activateReaction(token, item, reaction, isGeneral, display
             if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
                 const actionData = triggerData.actionData;
                 flowData = {
-                    title: actionData.title || displayTitle,
+                    title: actionData.title || activationName,
                     action: {
-                        name: actionData.action?.name || displayTitle,
+                        name: actionData.action?.name || activationName,
                         activation: actionData.action?.activation || actionType
                     },
                     detail: actionData.detail || "No description"
@@ -137,9 +137,9 @@ export async function activateReaction(token, item, reaction, isGeneral, display
                 const triggerText = generalReaction?.triggerDescription || "No trigger description";
                 const effectText = generalReaction?.effectDescription || "No effect description";
                 flowData = {
-                    title: displayTitle,
+                    title: activationName,
                     action: {
-                        name: displayTitle,
+                        name: activationName,
                         activation: actionType
                     },
                     detail: `<strong>Trigger:</strong> ${triggerText}<br><strong>Effect:</strong> ${effectText}`
@@ -175,7 +175,7 @@ export async function activateReaction(token, item, reaction, isGeneral, display
 
             shouldConsume = (type === "Reaction" && consumes);
         } else {
-            const generalReaction = ReactionManager.getGeneralReaction(displayTitle) || reaction;
+            const generalReaction = ReactionManager.getGeneralReaction(activationName) || reaction;
             const type = generalReaction?.actionType || (generalReaction?.isReaction !== false ? "Reaction" : "Free Action");
             const consumes = generalReaction?.consumesReaction !== false;
 
@@ -233,13 +233,13 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     let triggerText = "No trigger text";
     let effectText = "No effect info";
     let activationPath = null;
-    let displayTitle = "Unknown";
+    let panelActivationName = "Unknown";
     let isReactionType = true;
     let actionType = "Reaction";
     let frequency = "1/Round";
 
     if (isGeneral) {
-        displayTitle = reactionData.reactionName;
+        panelActivationName = reactionData.reactionName;
         const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
 
         if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
@@ -308,7 +308,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             effectText = reactionEntry.effectDescription;
         }
 
-        displayTitle = item.name;
+        panelActivationName = item.name;
     }
 
     const html = `
@@ -326,7 +326,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         opacity: 0;
     ">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #444;">
-            <span style="font-weight: bold; font-size: 1.1em; color: #fff;">${displayTitle}</span>
+            <span style="font-weight: bold; font-size: 1.1em; color: #fff;">${panelActivationName}</span>
             <span class="detail-close" style="cursor: pointer; color: #888;">&times; Close</span>
         </div>
 
@@ -411,10 +411,10 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
             reaction = reactionConfig?.reactions?.[0];
         } else {
-            reaction = ReactionManager.getGeneralReaction(displayTitle);
+            reaction = ReactionManager.getGeneralReaction(panelActivationName);
         }
 
-        await activateReaction(token, item, reaction, isGeneral, displayTitle, item?.name || displayTitle, triggerData);
+        await activateReaction(popupData.triggerType, triggerData, token, item, panelActivationName, reaction, isGeneral);
 
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');

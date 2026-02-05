@@ -26,18 +26,18 @@ export function getDefaultGeneralReactionRegistry() {
             triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
             effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
-            evaluate: async function (triggerType, data, item, reactorToken) {
+            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
                 const api = game.modules.get('lancer-reactionChecker').api;
-                const mover = data.triggeringToken;
+                const mover = triggerData.triggeringToken;
                 if (!mover) return false;
-                return api.checkOverwatchCondition(reactorToken, mover, data.startPos);
+                return api.checkOverwatchCondition(reactorToken, mover, triggerData.startPos);
             },
             activationType: hasExecuteOverwatch ? "code" : "none",
             activationMode: hasExecuteOverwatch ? "instead" : "after",
             activationMacro: "",
-            activationCode: hasExecuteOverwatch ? async function (token, actor, reactionName, triggerData) {
+            activationCode: hasExecuteOverwatch ? async function (triggerType, triggerData, reactorToken, item, activationName) {
                 const qol = game.modules.get('csm-lancer-qol');
-                await qol.exposed.executeOverwatch(actor);
+                await qol.exposed.executeOverwatch(reactorToken.actor);
             } : ""
         },
         "Brace": {
@@ -47,13 +47,13 @@ export function getDefaultGeneralReactionRegistry() {
             isReaction: true,
             triggerOther: true,
             triggerSelf: false,
-            evaluate: async function (triggerType, data, item, reactorToken) {
+            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
                 if (reactorToken.actor?.type !== 'mech') return false;
-                if (data.target?.id !== reactorToken.id) return false;
+                if (triggerData.target?.id !== reactorToken.id) return false;
 
                 const currentHP = reactorToken.actor?.system?.hp?.value ?? 0;
                 const halfHP = currentHP / 2;
-                const totalDamage = (data.damages || []).reduce((sum, d) => sum + (d || 0), 0);
+                const totalDamage = (triggerData.damages || []).reduce((sum, d) => sum + (d || 0), 0);
                 const wouldKill = (currentHP - totalDamage) <= 0;
                 const isHalfHP = totalDamage >= halfHP;
 
@@ -62,9 +62,9 @@ export function getDefaultGeneralReactionRegistry() {
             activationType: hasExecuteBrace ? "code" : "none",
             activationMode: hasExecuteBrace ? "instead" : "after",
             activationMacro: "",
-            activationCode: hasExecuteBrace ? async function (token, actor, reactionName, triggerData) {
+            activationCode: hasExecuteBrace ? async function (triggerType, triggerData, reactorToken, item, activationName) {
                 const qol = game.modules.get('csm-lancer-qol');
-                await qol.exposed.executeBrace(actor);
+                await qol.exposed.executeBrace(reactorToken.actor);
             } : ""
         }
     };

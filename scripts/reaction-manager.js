@@ -660,6 +660,12 @@ export class ReactionEditor extends FormApplication {
                 "1/Scene": "1/Scene",
                 "1/Combat": "1/Combat",
                 "Other": "Other"
+            },
+            dispositionFilter: {
+                friendly: reaction.dispositionFilter?.includes('friendly') || false,
+                neutral: reaction.dispositionFilter?.includes('neutral') || false,
+                hostile: reaction.dispositionFilter?.includes('hostile') || false,
+                secret: reaction.dispositionFilter?.includes('secret') || false
             }
         };
         return result;
@@ -1133,7 +1139,7 @@ export class ReactionEditor extends FormApplication {
     }
 
     async _updateObject(event, formData) {
-        const isGeneral = formData.isGeneral === true || formData.isGeneral === "on";
+        const isGeneral = formData.isGeneral === true;
 
         const triggers = [];
         for (const [key, value] of Object.entries(formData)) {
@@ -1141,6 +1147,12 @@ export class ReactionEditor extends FormApplication {
                 triggers.push(key.replace("trigger.", ""));
             }
         }
+
+        const dispositionFilter = [];
+        if (formData['dispositionFilter.friendly']) dispositionFilter.push('friendly');
+        if (formData['dispositionFilter.neutral']) dispositionFilter.push('neutral');
+        if (formData['dispositionFilter.hostile']) dispositionFilter.push('hostile');
+        if (formData['dispositionFilter.secret']) dispositionFilter.push('secret');
 
         if (isGeneral) {
             const name = formData.name;
@@ -1154,16 +1166,17 @@ export class ReactionEditor extends FormApplication {
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Reaction",
                 frequency: formData.frequency || "1/Round",
-                consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
-                autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
-                onlyOnSourceMatch: formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on",
+                consumesReaction: formData.consumesReaction === true,
+                autoActivate: formData.autoActivate === true,
+                onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
-                triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
-                triggerOther: formData.triggerOther === true || formData.triggerOther === "on",
-                outOfCombat: formData.outOfCombat === true || formData.outOfCombat === "on"
+                triggerSelf: formData.triggerSelf === true,
+                triggerOther: formData.triggerOther === true,
+                outOfCombat: formData.outOfCombat === true,
+                dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };
 
             await ReactionManager.saveGeneralReaction(name, newReaction);
@@ -1180,16 +1193,17 @@ export class ReactionEditor extends FormApplication {
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Reaction",
                 frequency: formData.frequency || "1/Round",
-                consumesReaction: formData.consumesReaction === true || formData.consumesReaction === "on",
-                autoActivate: formData.autoActivate === true || formData.autoActivate === "on",
-                onlyOnSourceMatch: formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on",
+                consumesReaction: formData.consumesReaction === true,
+                autoActivate: formData.autoActivate === true,
+                onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
-                triggerSelf: formData.triggerSelf === true || formData.triggerSelf === "on",
-                triggerOther: formData.triggerOther === true || formData.triggerOther === "on",
-                outOfCombat: formData.outOfCombat === true || formData.outOfCombat === "on"
+                triggerSelf: formData.triggerSelf === true,
+                triggerOther: formData.triggerOther === true,
+                outOfCombat: formData.outOfCombat === true,
+                dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };
 
             let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);

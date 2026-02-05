@@ -21,12 +21,17 @@
     </div>
 
     <!-- Only On Source Match (General only - matches action name) -->
-    <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
-        <label class="checkbox ps-tooltip" title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode." style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
+    <div class="form-group general-only"
+        style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        <label class="checkbox ps-tooltip"
+            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode."
+            style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if
+                onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
-        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches action name from trigger</p>
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches action name from trigger
+        </p>
     </div>
 
     <!-- Item LID (Item-based only) -->
@@ -66,9 +71,13 @@
     </div>
 
     <!-- Only On Source Match (Item-based only - matches item LID) -->
-    <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
-        <label class="checkbox ps-tooltip" title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode." style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
+    <div class="form-group item-only"
+        style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        <label class="checkbox ps-tooltip"
+            title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode."
+            style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
+            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if
+                onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
         <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches item LID from trigger</p>
@@ -154,7 +163,8 @@
                         <span>React to Self</span>
                     </label>
 
-                    <label class="checkbox ps-tooltip" title="Allow other tokens to react to this trigger (default: true)"
+                    <label class="checkbox ps-tooltip"
+                        title="Allow other tokens to react to this trigger (default: true)"
                         style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
                         <input type="checkbox" name="triggerOther" {{#if triggerOther}}checked{{/if}}>
                         <span>React to Others</span>
@@ -171,6 +181,38 @@
                     </label>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Disposition Filter -->
+    <div class="form-group"
+        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+        <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 8px;">Disposition Filter <span
+                class="optional">(optional)</span></label>
+        <p class="notes" style="margin-bottom: 8px;">Filter which tokens can react based on their disposition relative
+            to the triggering token. If none selected, no filtering is applied.</p>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Friendly"
+                style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" name="dispositionFilter.friendly" {{#if
+                    dispositionFilter.friendly}}checked{{/if}}>
+                <span style="color: #2a9d2a;">Friendly</span>
+            </label>
+            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Neutral"
+                style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" name="dispositionFilter.neutral" {{#if dispositionFilter.neutral}}checked{{/if}}>
+                <span style="color: #d4a017;">Neutral</span>
+            </label>
+            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Hostile"
+                style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" name="dispositionFilter.hostile" {{#if dispositionFilter.hostile}}checked{{/if}}>
+                <span style="color: #cc3333;">Hostile</span>
+            </label>
+            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Secret"
+                style="display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" name="dispositionFilter.secret" {{#if dispositionFilter.secret}}checked{{/if}}>
+                <span style="color: #9933cc;">Secret</span>
+            </label>
         </div>
     </div>
 
@@ -195,8 +237,8 @@
         </div>
         <p class="notes">
             JavaScript code to evaluate if the reaction should trigger.<br>
-            Variables: <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>{{#unless isGeneral}},
-            <code>item</code>{{/unless}}.<br>
+            Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>
+            (null for general), <code>activationName</code>.<br>
             Must return <code>true</code> or <code>false</code>.
         </p>
 
@@ -228,7 +270,8 @@
                 <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Flow</option>
             </select>
         </div>
-        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run after or instead of flow.</p>
+        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run
+            after or instead of flow.</p>
     </div>
 
     <!-- Macro Name (shown when activationType = macro) -->
@@ -239,9 +282,8 @@
         </div>
         <p class="notes">Name of the macro to execute.</p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available arguments:</strong> <code>token</code> (Token), <code>actor</code> (Actor),
-            <code>item</code> (Item or null for general), <code>activationName</code> (String),
-            <code>triggerData</code> (Object with trigger event data)
+            <strong>Available arguments:</strong> <code>triggerType</code>, <code>triggerData</code>,
+            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>
         </p>
     </div>
 
@@ -254,9 +296,8 @@
         </div>
         <p class="notes">JavaScript code to execute.</p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>token</code> (Token), <code>actor</code> (Actor),
-            <code>item</code> (Item or null for general), <code>activationName</code> (String),
-            <code>triggerData</code> (Object with trigger event data including actionData, targets, etc.)
+            <strong>Available variables:</strong> <code>triggerType</code>, <code>triggerData</code>,
+            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>
         </p>
     </div>
 

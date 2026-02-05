@@ -11,6 +11,32 @@ let reactionQueue = [];
 let reactionDebounceTimer = null;
 const REACTION_DEBOUNCE_MS = 100;
 
+function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter) {
+    if (!dispositionFilter || dispositionFilter.length === 0) return true;
+    if (!triggeringToken) return true;
+
+    const tokenFactions = game.modules.get("token-factions")?.api;
+    let disposition;
+
+    if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
+        disposition = tokenFactions.getDisposition(reactorToken, triggeringToken);
+    } else {
+        disposition = triggeringToken.document.disposition;
+    }
+
+    const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+    const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
+    const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
+    const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
+
+    if (disposition === FRIENDLY && dispositionFilter.includes('friendly')) return true;
+    if (disposition === NEUTRAL && dispositionFilter.includes('neutral')) return true;
+    if (disposition === HOSTILE && dispositionFilter.includes('hostile')) return true;
+    if (disposition === SECRET && dispositionFilter.includes('secret')) return true;
+
+    return false;
+}
+
 function getReactionItems(token) {
     const actor = token.actor;
     if (!actor) return [];
@@ -152,6 +178,8 @@ async function checkReactions(triggerType, data) {
                 const reactionPath = reaction.reactionPath || "";
                 if (!isItemAvailable(item, reactionPath)) continue;
 
+                if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
+
                 try {
                     const sourceToken = data.triggeringToken;
                     let distanceToTrigger = null;
@@ -161,14 +189,33 @@ async function checkReactions(triggerType, data) {
 
                     const enrichedData = { ...data, distanceToTrigger };
 
+                    let activationName = item.name;
+                    const reactionPath = reaction.reactionPath || "";
+
+                    if (reactionPath && reactionPath !== "" && reactionPath !== "system" && reactionPath !== "system.trigger") {
+                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
+                        let actionData = item.system;
+                        for (const part of pathParts) {
+                            if (actionData && (typeof actionData === 'object' || Array.isArray(actionData))) {
+                                actionData = actionData[part];
+                            } else {
+                                actionData = null;
+                                break;
+                            }
+                        }
+                        if (actionData && actionData.name) {
+                            activationName = actionData.name;
+                        }
+                    }
+
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
-                        shouldTrigger = await reaction.evaluate(triggerType, enrichedData, item, token);
+                        shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, item, activationName);
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
-                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                            shouldTrigger = await evalFunc(triggerType, enrichedData, item, token);
+                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                            shouldTrigger = await evalFunc(triggerType, enrichedData, token, item, activationName);
                         } catch (e) {
                             console.error(`lancer-reactionChecker | Error parsing custom evaluate for ${item.name}:`, e);
                         }
@@ -177,32 +224,13 @@ async function checkReactions(triggerType, data) {
                     }
 
                     if (shouldTrigger) {
-                        let actionName = item.name;
-                        const reactionPath = reaction.reactionPath || "";
-
-                        if (reactionPath && reactionPath !== "" && reactionPath !== "system" && reactionPath !== "system.trigger") {
-                            const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
-                            let actionData = item.system;
-                            for (const part of pathParts) {
-                                if (actionData && (typeof actionData === 'object' || Array.isArray(actionData))) {
-                                    actionData = actionData[part];
-                                } else {
-                                    actionData = null;
-                                    break;
-                                }
-                            }
-                            if (actionData && actionData.name) {
-                                actionName = actionData.name;
-                            }
-                        }
-
                         reactionQueue.push({
                             triggerType,
                             token,
                             item,
                             reaction,
                             itemName: item.name,
-                            reactionName: actionName,
+                            reactionName: activationName,
                             triggerData: enrichedData
                         });
                     }
@@ -223,6 +251,8 @@ async function checkReactions(triggerType, data) {
 
             if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
 
+            if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
+
             try {
                 const sourceToken = data.triggeringToken;
                 let distanceToTrigger = null;
@@ -235,11 +265,11 @@ async function checkReactions(triggerType, data) {
                 let shouldTrigger = false;
 
                 if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, null, token);
+                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
-                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                        shouldTrigger = await evalFunc(triggerType, enrichedData, null, token);
+                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                        shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
@@ -272,6 +302,8 @@ async function checkReactions(triggerType, data) {
 
             if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
 
+            if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
+
             try {
                 const sourceToken = data.triggeringToken;
                 let distanceToTrigger = null;
@@ -284,11 +316,11 @@ async function checkReactions(triggerType, data) {
                 let shouldTrigger = false;
 
                 if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, null, token);
+                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
                 } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                     try {
-                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "data", "item", "reactorToken"]);
-                        shouldTrigger = await evalFunc(triggerType, enrichedData, null, token);
+                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                        shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
                     } catch (e) {
                         console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
                     }
@@ -334,7 +366,7 @@ async function checkReactions(triggerType, data) {
             for (const r of autoReactions) {
                 try {
                     const { activateReaction } = await import('./reactions-ui.js');
-                    await activateReaction(r.token, r.item, r.reaction, r.isGeneral, r.reactionName, r.itemName, r.triggerData);
+                    await activateReaction(r.triggerType, r.triggerData, r.token, r.item, r.reactionName, r.reaction, r.isGeneral);
                 } catch (error) {
                     console.error(`lancer-reactionChecker | Error auto-activating reaction:`, error);
                 }
