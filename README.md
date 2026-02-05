@@ -126,7 +126,7 @@ This feature tracks cumulative token movement during a turn to detect when a Boo
 
 ### Requirements
 
-- [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [Lancer Elevation Ruler Fork](https://github.com/Agraael/fvtt-lancer-elevation-ruler)
+- [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [Lancer Elevation Ruler Fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)
 
 ### How It Works
 
