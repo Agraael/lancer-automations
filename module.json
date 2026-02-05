@@ -1,7 +1,7 @@
 {
     "id": "lancer-reactionChecker",
     "title": "Lancer Reaction Checker",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "description": "Port of the Overwatch Reaction Auto-Checker from csm-lancer-qol.",
     "socket": true,
     "authors": [

@@ -599,7 +599,7 @@ export class ReactionEditor extends FormApplication {
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger }",
-            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, distanceToTrigger }",
+            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: {isInvoluntary, isTeleport, isBoost, boostSet}, distanceToTrigger }",
             onTurnStart: "{ triggeringToken, distanceToTrigger }",
             onTurnEnd: "{ triggeringToken, distanceToTrigger }",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
@@ -927,7 +927,9 @@ export class ReactionEditor extends FormApplication {
                     lineNumbers: true,
                     matchBrackets: true,
                     indentUnit: 4,
-                    smartIndent: true
+                    smartIndent: true,
+                    lineWrapping: false,
+                    scrollbarStyle: "native"
                 });
                 this.evaluateEditor.on('change', (cm) => cm.save());
             }
@@ -940,7 +942,9 @@ export class ReactionEditor extends FormApplication {
                     lineNumbers: true,
                     matchBrackets: true,
                     indentUnit: 4,
-                    smartIndent: true
+                    smartIndent: true,
+                    lineWrapping: false,
+                    scrollbarStyle: "native"
                 });
                 this.codeEditor.on('change', (cm) => cm.save());
             }
@@ -962,6 +966,133 @@ export class ReactionEditor extends FormApplication {
             ev.stopPropagation();
             await this._openItemBrowser(lidInput, pathInput, updatePreview, previewContainer);
         });
+
+        html.find('.expand-editor').on('click', this._onExpandEditor.bind(this));
+    }
+
+    async _onExpandEditor(event) {
+        event.preventDefault();
+        const targetName = $(event.currentTarget).data('target');
+        let editorInstance;
+        let title;
+
+        if (targetName === 'evaluate') {
+            editorInstance = this.evaluateEditor;
+            title = "Evaluate Function";
+        } else if (targetName === 'activationCode') {
+            editorInstance = this.codeEditor;
+            title = "Activation Code";
+        }
+
+        if (!editorInstance) return;
+
+        const content = editorInstance.getValue();
+
+        const dialogContent = `
+            <div class="editor-wrapper">
+                <textarea id="expanded-code-editor"></textarea>
+            </div>
+            <style>
+                .expanded-editor-dialog .window-content {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    height: 100% !important;
+                    overflow: hidden !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    background: #272822; /* Monokai background */
+                }
+                .expanded-editor-dialog .window-content .editor-wrapper {
+                    flex: 1;
+                    overflow: hidden;
+                    position: relative;
+                    height: 100%;
+                }
+                .expanded-editor-dialog .CodeMirror {
+                    height: 100% !important;
+                    width: 100% !important;
+                }
+                .expanded-editor-dialog .dialog-buttons {
+                    flex: 0 0 50px;
+                    height: 50px;
+                    background: #333;
+                    border-top: 1px solid #111;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    display: flex;
+                    flex-direction: row;
+                }
+                .expanded-editor-dialog button.dialog-button {
+                    background: #444;
+                    color: #fff;
+                    border: none;
+                    border-right: 1px solid #222;
+                    width: 100%;
+                    height: 100%;
+                    margin: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.2em;
+                    border-radius: 0;
+                }
+                .expanded-editor-dialog button.dialog-button:last-child {
+                    border-right: none;
+                }
+                .expanded-editor-dialog button.dialog-button:hover {
+                    background: #555;
+                    box-shadow: none;
+                }
+            </style>
+        `;
+
+        let expandedEditor;
+
+        new Dialog({
+            title: `Edit ${title}`,
+            content: dialogContent,
+            buttons: {
+                save: {
+                    label: "Save & Close",
+                    icon: '<i class="fas fa-save" style="margin-right: 8px;"></i>',
+                    callback: (html) => {
+                        const newContent = expandedEditor.getValue();
+                        editorInstance.setValue(newContent);
+                    }
+                }
+            },
+            default: "save",
+            render: (html) => {
+                const textarea = html.find('#expanded-code-editor')[0];
+                // Safe content setting
+                textarea.value = content;
+
+                expandedEditor = CodeMirror.fromTextArea(textarea, {
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true,
+                    lineWrapping: false,
+                    scrollbarStyle: "native"
+                });
+
+                // Refresh to ensure layout is correct after render
+                setTimeout(() => {
+                    expandedEditor.refresh();
+                }, 50);
+            },
+
+            close: () => {
+                // Optional: Auto-save on close? usually better to require explicit save
+            }
+        }, {
+            width: 800,
+            height: 600,
+            resizable: true,
+            classes: ["dialog", "expanded-editor-dialog"]
+        }).render(true);
     }
 
     async _openItemBrowser(lidInput, pathInput, updatePreview, previewContainer) {

@@ -136,6 +136,28 @@
 
 /* Force height for editor */
 .lancer-reaction-editor .CodeMirror {
-    height: 150px;
+    height: 150px !important;
     border: 1px solid #111;
+
+    /* CRITICAL: Constrain width to prevent overflow in flex containers */
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    /* Forces flex item to shrink if needed */
+    box-sizing: border-box !important;
+}
+
+.lancer-reaction-editor .form-group .form-fields {
+    /* Ensure the parent container constrains its children */
+    min-width: 0;
+}
+
+/* Enable lateral scrolling */
+.lancer-reaction-editor .CodeMirror-scroll {
+    overflow-x: scroll !important;
+    /* Force scrollbar presence */
+    overflow-y: scroll !important;
+    margin-right: 0 !important;
+    /* Prevent double scrollbar offset issues */
+    padding-bottom: 0 !important;
 }

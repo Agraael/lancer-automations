@@ -120,6 +120,36 @@ api.isHostile(token1, token2)
 api.isFriendly(token1, token2)
 ```
 
+## Experimental Boost Detection (WIP)
+
+This feature tracks cumulative token movement during a turn to detect when a Boost action is used.
+
+### Requirements
+
+- [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [Lancer Elevation Ruler Fork](https://github.com/Agraael/fvtt-lancer-elevation-ruler)
+
+### How It Works
+
+When enabled, the module tracks cumulative drag movement for each token. When movement exceeds the token's base speed, a boost is detected. The `onMove` trigger data includes:
+
+- `moveInfo.isBoost` - `true` if this move crossed a boost threshold
+- `moveInfo.boostSet` - Array of boost numbers crossed (e.g., `[1]` for first boost, `[1,2]` if a single long move crossed multiple thresholds)
+
+### Testing
+
+1. Enable **Experimental Boost Detection (WIP)** in module settings
+2. Enable **Debug Boost Detection** to see UI notifications showing cumulative movement and boost detection
+3. Drag a token to move it - notifications will show `moved X, cumulative Y/Z | isBoost: true/false, boostSet: [...]`
+
+### API
+
+```javascript
+// Manually reset cumulative movement data for a token
+game.modules.get("lancer-reactionChecker").api.clearMoveData(tokenDocumentId)
+```
+
+Cumulative movement automatically resets when a token's turn starts.
+
 ## Support
 
 For help or questions, ask on the [Pilot NET Discord](https://discord.gg/pilot-net).

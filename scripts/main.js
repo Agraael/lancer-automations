@@ -474,8 +474,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onMove', (mover, distanceMoved, elevationMoved, startPos, endPos) => {
-        checkReactions('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos });
+    Hooks.on('lancer-reactionChecker.onMove', (mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo) => {
+        checkReactions('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
     });
 
     Hooks.on('lancer-reactionChecker.onTurnStart', (token) => {
@@ -590,6 +590,24 @@ function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-reactionChecker', 'experimentalBoostDetection', {
+        name: 'Experimental Boost Detection (WIP)',
+        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or https://github.com/Agraael/fvtt-lancer-elevation-ruler. Enable "Debug Boost Detection" to test. Use game.modules.get("lancer-reactionChecker").api.clearMoveData(tokenDocId) to manually reset cumulative data.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-reactionChecker', 'debugBoostDetection', {
+        name: 'Debug Boost Detection',
+        hint: 'Show UI notifications when boost detection triggers (for testing purposes).',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.registerMenu('lancer-reactionChecker', 'resetSettings', {
         name: 'Reset Module',
         label: 'Reset to Defaults',
@@ -649,6 +667,12 @@ function handleSocketEvent({ action, payload }) {
     }
 }
 
+const cumulativeMoveData = new Map();
+
+function clearMoveData(tokenId) {
+    cumulativeMoveData.delete(tokenId);
+}
+
 function handleTokenMove(document, change, options, userId) {
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
@@ -656,6 +680,7 @@ function handleTokenMove(document, change, options, userId) {
     const hasYChange = change.y !== undefined && Math.abs(change.y - document.y) >= threshold;
 
     if (!hasElevationChange && !hasXChange && !hasYChange) return;
+    if (options.isUndo) return;
 
     const token = canvas.tokens.get(document.id);
     if (!token) return;
@@ -672,7 +697,44 @@ function handleTokenMove(document, change, options, userId) {
     }
     distanceMoved = Math.round(distanceMoved / canvas.scene.grid.distance);
 
-    Hooks.callAll('lancer-reactionChecker.onMove', token, distanceMoved, elevationMoved, startPos, endPos);
+    const isDrag = 'rulerSegment' in options;
+    const isTeleport = !!options.teleport;
+
+    // Check for Elevation Ruler free movement (not counted in cumulative boost tracking)
+    let isFreeMovement = false;
+    const elevationRulerSettings = game.modules.get('elevationruler')?.api?.Settings;
+    if (elevationRulerSettings?.FORCE_FREE_MOVEMENT) {
+        isFreeMovement = true;
+    }
+
+    const moveInfo = { isInvoluntary: !isDrag, isTeleport };
+
+    if (game.settings.get('lancer-reactionChecker', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
+        const speed = token.actor?.system?.speed || 0;
+        const prev = cumulativeMoveData.get(document.id) || 0;
+        const cumulative = prev + distanceMoved;
+        cumulativeMoveData.set(document.id, cumulative);
+
+        const boostSet = [];
+        if (speed > 0) {
+            // Standard move is 1-speed, boost 1 is speed+1 to 2*speed, boost 2 is 2*speed+1 to 3*speed, etc.
+            // Boost N is used when cumulative > N * speed
+            const prevBoostCount = prev > 0 ? Math.floor((prev - 1) / speed) : 0;
+            const newBoostCount = cumulative > 0 ? Math.floor((cumulative - 1) / speed) : 0;
+            for (let n = prevBoostCount + 1; n <= newBoostCount; n++) {
+                boostSet.push(n);
+            }
+        }
+        moveInfo.boostSet = boostSet;
+        moveInfo.isBoost = boostSet.length > 0;
+
+        // Debug notification for boost detection testing
+        if (game.settings.get('lancer-reactionChecker', 'debugBoostDetection')) {
+            ui.notifications.info(`${token.name}: moved ${distanceMoved}, cumulative ${cumulative}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
+        }
+    }
+
+    Hooks.callAll('lancer-reactionChecker.onMove', token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo);
 }
 
 async function onAttackStep(state) {
@@ -990,7 +1052,8 @@ Hooks.on('ready', () => {
         getActorMaxThreat,
         getMinGridDistance,
         registerDefaultItemReactions: registerExternalItemReactions,
-        registerDefaultGeneralReactions: registerExternalGeneralReactions
+        registerDefaultGeneralReactions: registerExternalGeneralReactions,
+        clearMoveData
     };
     game.socket.on('module.lancer-reactionChecker', handleSocketEvent);
 
@@ -1014,6 +1077,7 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
         const startingCombatant = combat.combatants.get(current.combatantId);
         const startingToken = startingCombatant?.token ? canvas.tokens.get(startingCombatant.token.id) : null;
         if (startingToken) {
+            clearMoveData(startingToken.document.id);
             Hooks.callAll('lancer-reactionChecker.onTurnStart', startingToken);
         }
     }
@@ -1037,6 +1101,7 @@ Hooks.on('updateCombat', (combat, change, options, userId) => {
 
     const startingToken = currentCombatant.token ? canvas.tokens.get(currentCombatant.token.id) : null;
     if (startingToken && currentCombatant.id !== previousCombatantId) {
+        clearMoveData(startingToken.document.id);
         Hooks.callAll('lancer-reactionChecker.onTurnStart', startingToken);
     }
 
