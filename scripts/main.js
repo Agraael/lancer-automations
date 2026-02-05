@@ -463,10 +463,10 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onDamage', (attacker, weapon, target, damages, types, isCrit, actionData) => {
+    Hooks.on('lancer-reactionChecker.onDamage', (attacker, weapon, target, damages, types, isCrit, isHit, actionData) => {
         checkReactions('onDamage', {
             triggeringToken: attacker,
-            weapon, target, damages, types, isCrit,
+            weapon, target, damages, types, isCrit, isHit,
             attackType: actionData?.attack_type || null,
             actionName: actionData?.title || actionData?.action?.name || null,
             tags: actionData?.tags || [],
@@ -777,11 +777,12 @@ async function onDamageStep(state) {
     for (const targetInfo of targets) {
         const targetToken = targetInfo.target;
         const isCrit = targetInfo.crit || false;
+        const isHit = targetInfo.hit || false;
         const targetDamages = targetInfo.damage?.map(d => d.amount) || [];
         const targetTypes = targetInfo.damage?.map(d => d.type) || [];
 
         if (targetDamages.length > 0) {
-            Hooks.callAll('lancer-reactionChecker.onDamage', token, weapon, targetToken, targetDamages, targetTypes, isCrit, actionData);
+            Hooks.callAll('lancer-reactionChecker.onDamage', token, weapon, targetToken, targetDamages, targetTypes, isCrit, isHit, actionData);
         }
     }
 

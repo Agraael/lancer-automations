@@ -598,7 +598,7 @@ export class ReactionEditor extends FormApplication {
             onAttack: "{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData, distanceToTrigger }",
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
-            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, attackType, actionName, tags, actionData, distanceToTrigger }",
+            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger }",
             onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, distanceToTrigger }",
             onTurnStart: "{ triggeringToken, distanceToTrigger }",
             onTurnEnd: "{ triggeringToken, distanceToTrigger }",
