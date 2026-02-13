@@ -1,49 +1,45 @@
 /*global game, Dialog, ChatMessage, canvas, CONST */
 
-export function isFriendly(token1, token2) {
+const THREAT_AURA_NAMES = ["Threat_detail", "Threat"];
+const isThreatAura = (a) => THREAT_AURA_NAMES.includes(a.config.name);
+
+function measureGridDistance(c1, c2) {
+    return canvas.grid.measurePath
+        ? canvas.grid.measurePath([c1, c2]).distance
+        : canvas.grid.measureDistance(c1, c2);
+}
+
+function getDispositionData(t1, t2) {
     const tokenFactions = game.modules.get("token-factions")?.api;
     if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
-        const disposition = tokenFactions.getDisposition(token1, token2);
-        const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-        return disposition === FRIENDLY;
-    } else {
-        const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-        const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-        const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-        const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-
-        const d1 = token1.document.disposition;
-        const d2 = token2.document.disposition;
-
-        const is1Bad = d1 === HOSTILE || d1 === SECRET;
-        const is2Bad = d2 === HOSTILE || d2 === SECRET;
-        const is1Good = d1 === FRIENDLY || d1 === NEUTRAL;
-        const is2Good = d2 === FRIENDLY || d2 === NEUTRAL;
-
-        return (is1Good && is2Good) || (is1Bad && is2Bad);
+        return { factionDisposition: tokenFactions.getDisposition(t1, t2) };
     }
+    const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
+    const d1 = t1.document.disposition;
+    const d2 = t2.document.disposition;
+    return {
+        is1Bad: d1 === HOSTILE || d1 === SECRET,
+        is2Bad: d2 === HOSTILE || d2 === SECRET,
+        is1Good: d1 === FRIENDLY || d1 === NEUTRAL,
+        is2Good: d2 === FRIENDLY || d2 === NEUTRAL
+    };
+}
+
+export function isFriendly(token1, token2) {
+    const d = getDispositionData(token1, token2);
+    if (d.factionDisposition !== undefined) {
+        return d.factionDisposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+    }
+    return (d.is1Good && d.is2Good) || (d.is1Bad && d.is2Bad);
 }
 
 export function isHostile(reactor, mover) {
-    const tokenFactions = game.modules.get("token-factions")?.api;
-    if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
-        const disposition = tokenFactions.getDisposition(reactor, mover);
-        const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-        const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-        return disposition === HOSTILE || disposition === SECRET;
-    } else {
-        const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-        const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-        const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-        const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-
-        const isTargetBad = mover.document.disposition === HOSTILE || mover.document.disposition === SECRET;
-        const isReactorBad = reactor.document.disposition === HOSTILE || reactor.document.disposition === SECRET;
-        const isTargetFriendly = mover.document.disposition === FRIENDLY || mover.document.disposition === NEUTRAL;
-        const isReactorFriendly = reactor.document.disposition === FRIENDLY || reactor.document.disposition === NEUTRAL;
-
-        return (isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly);
+    const d = getDispositionData(reactor, mover);
+    if (d.factionDisposition !== undefined) {
+        const disp = d.factionDisposition;
+        return disp === CONST.TOKEN_DISPOSITIONS.HOSTILE || disp === CONST.TOKEN_DISPOSITIONS.SECRET;
     }
+    return (d.is1Good && d.is2Bad) || (d.is1Bad && d.is2Good);
 }
 
 export function checkOverwatchCondition(reactor, mover, startPos) {
@@ -59,7 +55,7 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
 
     if (manager) {
         const auras = manager.getTokenAuras(reactor);
-        const threatAura = auras.find(a => a.config.name === "Threat_detail" || a.config.name === "Threat");
+        const threatAura = auras.find(a => isThreatAura(a));
 
         if (threatAura) {
             return manager.isInside(mover, reactor, threatAura.config.id);
@@ -73,7 +69,7 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
 }
 
 export async function checkOverwatch(token, distance, elevation, startPos, endPos) {
-    if (!game.settings.get('lancer-reactionChecker', 'overwatchEnabled')) return;
+    if (!game.settings.get('lancer-automations', 'overwatchEnabled')) return;
 
     const movedToken = token;
 
@@ -122,7 +118,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
 
         if (manager) {
             const auras = manager.getTokenAuras(reactor);
-            const threatAura = auras.find(a => a.config.name === "Threat_detail" || a.config.name === "Threat");
+            const threatAura = auras.find(a => isThreatAura(a));
 
             if (threatAura) {
                 const wasInside = manager.isInside(movedToken, reactor, threatAura.config.id);
@@ -133,7 +129,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         }
 
         if (!isTriggered) {
-            const hasGaaSupport = manager && manager.getTokenAuras(reactor).some(a => a.config.name === "Threat_detail" || a.config.name === "Threat");
+            const hasGaaSupport = manager && manager.getTokenAuras(reactor).some(a => isThreatAura(a));
 
             if (!hasGaaSupport) {
                 const maxThreat = getActorMaxThreat(reactor.actor);
@@ -166,7 +162,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
                 const myReactors = reactorIds.map(id => canvas.tokens.get(id));
                 displayOverwatch(myReactors, movedToken.document);
             } else {
-                game.socket.emit('module.lancer-reactionChecker', {
+                game.socket.emit('module.lancer-automations', {
                     action: 'overwatchAlert',
                     payload: {
                         reactorIds: reactorIds,
@@ -210,7 +206,7 @@ export function displayOverwatch(reactors, target) {
     </div>
     `;
 
-    const mode = game.settings.get('lancer-reactionChecker', 'reactionReminder');
+    const mode = game.settings.get('lancer-automations', 'reactionReminder');
 
     if (mode === 'p') {
         new Dialog({
@@ -445,12 +441,7 @@ export function getMinGridDistance(token1, token2, overridePos1 = null) {
         let minDist = Infinity;
         for (const c1 of centers1) {
             for (const c2 of centers2) {
-                let dPixel;
-                if (canvas.grid.measurePath) {
-                    dPixel = canvas.grid.measurePath([c1, c2]).distance;
-                } else {
-                    dPixel = canvas.grid.measureDistance(c1, c2);
-                }
+                const dPixel = measureGridDistance(c1, c2);
                 if (dPixel < minDist) minDist = dPixel;
             }
         }
@@ -602,12 +593,7 @@ export async function drawDistanceDebug() {
         const centers2 = getOccupiedCenters(token2);
         for (const c1 of centers1) {
             for (const c2 of centers2) {
-                let dPixel;
-                if (canvas.grid.measurePath) {
-                    dPixel = canvas.grid.measurePath([c1, c2]).distance;
-                } else {
-                    dPixel = canvas.grid.measureDistance(c1, c2);
-                }
+                const dPixel = measureGridDistance(c1, c2);
                 if (dPixel < closestPair.dist) {
                     closestPair = { c1, c2, dist: dPixel };
                 }

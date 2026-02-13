@@ -1,23 +1,21 @@
 /*global game, Dialog, ChatMessage, canvas, CONST */
 
-function getReactionsOnMech(mech) {
-    let response = [];
-    const items = mech.items.filter(x => typeof x.system.tags != 'undefined');
-    for (let i = 0; i < items.length; i++) {
-        let itemType = items[i].type;
-        if (itemType === 'talent') {
-            let talentRanks = items[i].system.ranks;
-            for (const rank of talentRanks) {
-                let actions = rank.actions;
-            }
-        }
-        let itemTags = items[i].system.tags;
-        for (let j = 0; j < itemTags.length; j++) {
-            if (itemTags[j].lid === 'tg_reaction') {
-                response.push(items[i].name);
-            }
+function getReactionNamesFromItems(items) {
+    const names = [];
+    for (const item of items) {
+        if (!item.system?.tags)
+            continue;
+        for (const tag of item.system.tags) {
+            if (tag.lid === 'tg_reaction')
+                names.push(item.name);
         }
     }
+    return names;
+}
+
+function getReactionsOnMech(mech) {
+    const items = mech.items.filter(x => typeof x.system.tags != 'undefined');
+    const response = getReactionNamesFromItems(items);
 
     let pilot = game.actors.find(x => x.id === mech.system.pilot?.value._id);
     if (typeof pilot !== 'undefined') {
@@ -28,23 +26,12 @@ function getReactionsOnMech(mech) {
 }
 
 function getReactionsOnUnlinkedMech(token) {
-    let response = [];
     const items = token.document.actor.items?.filter(x => typeof x.system.tags != 'undefined');
-    if (items) {
-        for (let i = 0; i < items.length; i++) {
-            let itemTags = items[i].system.tags;
-            for (let j = 0; j < itemTags.length; j++) {
-                if (itemTags[j].lid === 'tg_reaction') {
-                    response.push(items[i].name);
-                }
-            }
-        }
-    }
-    return response;
+    return items ? getReactionNamesFromItems(items) : [];
 }
 
 function getReactionsOnPilot(pilot) {
-    let response = [];
+    const response = [];
     const items = pilot.items.filter(x => x.type === 'talent');
     for (let i = 0; i < items.length; i++) {
         let curRank = items[i].system.curr_rank;
@@ -68,15 +55,15 @@ export function displayReactions(actor, token) {
         getReactionsOnMech(actor) :
         getReactionsOnUnlinkedMech(token);
     if (reactions.length > 0) {
-        let html = "<h3>Someone has targeted " + actor.name + "! Consider using your activations!</h3>";
+        let html = `<h3>Someone has targeted ${actor.name}! Consider using your activations!</h3>`;
         html += "<ul>";
         for (let i = 0; i < reactions.length; i++) {
-            html += "<li>" + reactions[i] + "</li>";
+            html += `<li>${reactions[i]}</li>`;
         }
         html += "</ul>";
-        if (game.settings.get('lancer-reactionChecker', 'reactionReminder') == 'p') {
+        if (game.settings.get('lancer-automations', 'reactionReminder') == 'p') {
             new Dialog({
-                title: "Activation Reminder for " + actor.name,
+                title: `Activation Reminder for ${actor.name}`,
                 content: html,
                 buttons: {
                     ok: {
@@ -85,7 +72,7 @@ export function displayReactions(actor, token) {
                 }
             }).render(true);
         }
-        if (game.settings.get('lancer-reactionChecker', 'reactionReminder') == 'c') {
+        if (game.settings.get('lancer-automations', 'reactionReminder') == 'c') {
             ChatMessage.create({
                 user: game.userId,
                 content: html,
@@ -100,23 +87,30 @@ export async function checkOverwatch(document, change, options, userId) {
     const hasXChange = change.x !== undefined && Math.abs(change.x - document.x) >= 1;
     const hasYChange = change.y !== undefined && Math.abs(change.y - document.y) >= 1;
 
-    if (!hasElevationChange && !hasXChange && !hasYChange) return;
+    if (!hasElevationChange && !hasXChange && !hasYChange)
+        return;
 
     const movedToken = canvas.tokens.get(document.id);
-    if (!movedToken) return;
+    if (!movedToken)
+        return;
 
-    if (!movedToken.inCombat) return;
+    if (!movedToken.inCombat)
+        return;
 
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
     const potentialReactors = canvas.tokens.placeables.filter(t => {
-        if (t.id === movedToken.id) return false;
-        if (!t.actor) return false;
-        if (!t.isOwner) return false;
+        if (t.id === movedToken.id)
+            return false;
+        if (!t.actor)
+            return false;
+        if (!t.isOwner)
+            return false;
 
         const reaction = t.actor.system.action_tracker?.reaction;
-        if (!reaction || reaction <= 0) return false;
+        if (!reaction || reaction <= 0)
+            return false;
 
         const tokenFactions = game.modules.get("token-factions")?.api;
         if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
@@ -138,7 +132,8 @@ export async function checkOverwatch(document, change, options, userId) {
             const isTargetFriendly = movedToken.document.disposition === FRIENDLY || movedToken.document.disposition === NEUTRAL;
             const isReactorFriendly = t.document.disposition === FRIENDLY || t.document.disposition === NEUTRAL;
 
-            if (!((isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly))) return false;
+            if (!((isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly)))
+                return false;
         }
         return true;
     });
@@ -184,7 +179,8 @@ export async function checkOverwatch(document, change, options, userId) {
         for (const reactor of triggeredReactors) {
             const owners = game.users.filter(u => u.active && reactor.document.testUserPermission(u, "OWNER"));
             for (const user of owners) {
-                if (!ownerMap[user.id]) ownerMap[user.id] = [];
+                if (!ownerMap[user.id])
+                    ownerMap[user.id] = [];
                 ownerMap[user.id].push(reactor.id);
             }
         }
@@ -194,7 +190,7 @@ export async function checkOverwatch(document, change, options, userId) {
                 const myReactors = reactorIds.map(id => canvas.tokens.get(id));
                 displayOverwatch(myReactors, movedToken.document);
             } else {
-                game.socket.emit('module.lancer-reactionChecker', {
+                game.socket.emit('module.lancer-automations', {
                     action: 'overwatchAlert',
                     payload: {
                         reactorIds: reactorIds,
@@ -238,7 +234,7 @@ export function displayOverwatch(reactors, target) {
     </div>
     `;
 
-    const mode = game.settings.get('lancer-reactionChecker', 'reactionReminder');
+    const mode = game.settings.get('lancer-automations', 'reactionReminder');
 
     if (mode === 'p') {
         new Dialog({
@@ -269,9 +265,11 @@ export function displayOverwatch(reactors, target) {
 }
 
 function getActorMaxThreat(actor) {
-    if (!actor) return 0;
+    if (!actor)
+        return 0;
     const actorType = actor.type;
-    if (!["mech", "npc", "pilot"].includes(actorType)) return 0;
+    if (!["mech", "npc", "pilot"].includes(actorType))
+        return 0;
 
     let maxThreat = 1;
 
@@ -285,11 +283,14 @@ function getActorMaxThreat(actor) {
 
             if (item.system?.profiles) {
                 for (const profile of item.system.profiles) {
-                    if (profile.range) ranges.push(...profile.range);
+                    if (profile.range)
+                        ranges.push(...profile.range);
                 }
             }
-            if (item.system?.range) ranges.push(...item.system.range);
-            if (item.system?.active_profile?.range) ranges.push(...item.system.active_profile.range);
+            if (item.system?.range)
+                ranges.push(...item.system.range);
+            if (item.system?.active_profile?.range)
+                ranges.push(...item.system.active_profile.range);
 
             for (const range of ranges) {
                 if (range.type === "Threat") {
@@ -319,30 +320,30 @@ function offsetToCube(col, row) {
     let q, r, s;
 
     switch (gridType) {
-        case 2:
-            q = col - Math.floor((row - (row & 1)) / 2);
-            r = row;
-            s = -q - r;
-            break;
-        case 3:
-            q = col - Math.floor((row + (row & 1)) / 2);
-            r = row;
-            s = -q - r;
-            break;
-        case 4:
-            q = col;
-            r = row - Math.floor((col - (col & 1)) / 2);
-            s = -q - r;
-            break;
-        case 5:
-            q = col;
-            r = row - Math.floor((col + (col & 1)) / 2);
-            s = -q - r;
-            break;
-        default:
-            q = col;
-            r = row;
-            s = 0;
+    case 2:
+        q = col - Math.floor((row - (row & 1)) / 2);
+        r = row;
+        s = -q - r;
+        break;
+    case 3:
+        q = col - Math.floor((row + (row & 1)) / 2);
+        r = row;
+        s = -q - r;
+        break;
+    case 4:
+        q = col;
+        r = row - Math.floor((col - (col & 1)) / 2);
+        s = -q - r;
+        break;
+    case 5:
+        q = col;
+        r = row - Math.floor((col + (col & 1)) / 2);
+        s = -q - r;
+        break;
+    default:
+        q = col;
+        r = row;
+        s = 0;
     }
 
     return { q, r, s };
@@ -376,25 +377,25 @@ function cubeToOffset(cube) {
     let col, row;
 
     switch (gridType) {
-        case 2:
-            col = cube.q + Math.floor((cube.r - (cube.r & 1)) / 2);
-            row = cube.r;
-            break;
-        case 3:
-            col = cube.q + Math.floor((cube.r + (cube.r & 1)) / 2);
-            row = cube.r;
-            break;
-        case 4:
-            col = cube.q;
-            row = cube.r + Math.floor((cube.q - (cube.q & 1)) / 2);
-            break;
-        case 5:
-            col = cube.q;
-            row = cube.r + Math.floor((cube.q + (cube.q & 1)) / 2);
-            break;
-        default:
-            col = cube.q;
-            row = cube.r;
+    case 2:
+        col = cube.q + Math.floor((cube.r - (cube.r & 1)) / 2);
+        row = cube.r;
+        break;
+    case 3:
+        col = cube.q + Math.floor((cube.r + (cube.r & 1)) / 2);
+        row = cube.r;
+        break;
+    case 4:
+        col = cube.q;
+        row = cube.r + Math.floor((cube.q - (cube.q & 1)) / 2);
+        break;
+    case 5:
+        col = cube.q;
+        row = cube.r + Math.floor((cube.q + (cube.q & 1)) / 2);
+        break;
+    default:
+        col = cube.q;
+        row = cube.r;
     }
 
     return { col, row };
@@ -479,7 +480,8 @@ function getMinGridDistance(token1, token2, overridePos1 = null) {
                 } else {
                     dPixel = canvas.grid.measureDistance(c1, c2);
                 }
-                if (dPixel < minDist) minDist = dPixel;
+                if (dPixel < minDist)
+                    minDist = dPixel;
             }
         }
         return Math.round(minDist / canvas.scene.grid.distance);
@@ -495,7 +497,8 @@ function getMinGridDistance(token1, token2, overridePos1 = null) {
         for (const o2 of offsets2) {
             const cube2 = offsetToCube(o2.col, o2.row);
             const dist = cubeDistance(cube1, cube2);
-            if (dist < minDist) minDist = dist;
+            if (dist < minDist)
+                minDist = dist;
         }
     }
 
@@ -503,7 +506,8 @@ function getMinGridDistance(token1, token2, overridePos1 = null) {
 }
 
 export async function drawThreatDebug(token) {
-    if (!token) return;
+    if (!token)
+        return;
 
     canvas.controls.debug.clear();
 
@@ -542,7 +546,8 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.beginFill(0x00FF00, 0.15);
 
     for (const key of threatHexSet) {
-        if (footprintSet.has(key)) continue;
+        if (footprintSet.has(key))
+            continue;
 
         const [col, row] = key.split(',').map(Number);
         drawHexAt(col, row, gridSize);

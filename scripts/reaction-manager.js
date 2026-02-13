@@ -21,7 +21,7 @@ export function stringToAsyncFunction(str, args = []) {
 
 export class ReactionManager {
     static get ID() {
-        return "lancer-reactionChecker";
+        return "lancer-automations";
     }
 
     static get SETTING_REACTIONS() {
@@ -166,7 +166,7 @@ export class ReactionConfig extends FormApplication {
         return mergeObject(super.defaultOptions, {
             title: "Activation Manager",
             id: "reaction-manager-config",
-            template: `modules/lancer-reactionChecker/templates/reaction-config.html`,
+            template: `modules/lancer-automations/templates/reaction-config.html`,
             width: 800,
             height: 700,
             resizable: true,
@@ -244,8 +244,11 @@ export class ReactionConfig extends FormApplication {
             return foundry.utils.objectsEqual(s, d);
         };
 
+        // GROUPING LOGIC FOR CUSTOM ITEMS
         for (const [rawLid, data] of Object.entries(userItemSettings)) {
             const lid = rawLid.trim();
+            const validReactions = [];
+
             data.reactions.forEach((reaction, index) => {
                 const reactionKeys = Object.keys(reaction);
                 if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled') return;
@@ -267,7 +270,7 @@ export class ReactionConfig extends FormApplication {
                     displaySubname = lid;
                 }
 
-                allReactions.push(startEnabled({
+                validReactions.push(startEnabled({
                     lid: rawLid,
                     name: displayName,
                     subname: displaySubname,
@@ -280,8 +283,34 @@ export class ReactionConfig extends FormApplication {
                     enabled: reaction.enabled
                 }));
             });
+
+            if (validReactions.length === 0) continue;
+
+            if (validReactions.length === 1) {
+                allReactions.push(validReactions[0]);
+            } else {
+                const first = validReactions[0];
+                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                const itemInfo = itemMap.get(lid);
+                const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
+
+                allReactions.push({
+                    lid: lid,
+                    name: groupName,
+                    subname: first.subname,
+                    triggers: uniqueTriggers,
+                    isCustom: true,
+                    isGeneral: false,
+                    isGroup: true,
+                    reactions: validReactions,
+                    enabled: validReactions.every(r => r.enabled)
+                });
+            }
         }
+
+        // GROUPING LOGIC FOR DEFAULTS (ITEMS)
         for (const [lid, data] of Object.entries(defaultItemRegistry)) {
+            const validReactions = [];
             data.reactions.forEach((reaction, index) => {
                 const userEntry = userItemSettings[lid]?.reactions?.[index] ||
                     userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
@@ -303,7 +332,7 @@ export class ReactionConfig extends FormApplication {
                     displaySubname = lid;
                 }
 
-                defaultList.push(startEnabled({
+                validReactions.push(startEnabled({
                     lid: lid,
                     name: displayName,
                     subname: displaySubname,
@@ -317,8 +346,32 @@ export class ReactionConfig extends FormApplication {
                     enabled: enabledState
                 }));
             });
+
+            if (validReactions.length === 0) continue;
+
+            if (validReactions.length === 1) {
+                defaultList.push(validReactions[0]);
+            } else {
+                const first = validReactions[0];
+                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                const itemInfo = itemMap.get(lid);
+                const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
+
+                defaultList.push({
+                    lid: lid,
+                    name: groupName,
+                    subname: first.subname,
+                    triggers: uniqueTriggers,
+                    isGeneral: false,
+                    isDefault: true,
+                    isGroup: true,
+                    reactions: validReactions,
+                    enabled: validReactions.every(r => r.enabled)
+                });
+            }
         }
 
+        // GROUPING LOGIC FOR GENERAL REACTIONS (CUSTOM)
         for (const [name, reaction] of Object.entries(userGeneralSettings)) {
             const def = defaultGeneralRegistry[name];
             if (def && isPureDefault(reaction, def)) continue;
@@ -334,11 +387,12 @@ export class ReactionConfig extends FormApplication {
                 enabled: reaction.enabled
             }));
         }
+
+        // GROUPING LOGIC FOR GENERAL REACTIONS (DEFAULTS)
         for (const [name, reaction] of Object.entries(defaultGeneralRegistry)) {
             const userSaved = userGeneralSettings[name];
             const isPure = isPureDefault(userSaved, reaction);
             const isOverridden = !!userSaved && !isPure;
-
             const enabledState = isPure ? userSaved.enabled : reaction.enabled;
 
             defaultList.push(startEnabled({
@@ -376,6 +430,21 @@ export class ReactionConfig extends FormApplication {
         html.find('.copy-default').click(this._onCopyDefault.bind(this));
         html.find('.reaction-enabled').change(this._onToggleEnabled.bind(this));
         html.find('.help-btn').click(this._onHelp.bind(this));
+
+        html.find('.group-header').click((ev) => {
+            ev.preventDefault();
+            const header = $(ev.currentTarget);
+            const icon = header.find('.expand-icon');
+            const sublist = header.next('.reaction-sublist');
+
+            if (sublist.is(':visible')) {
+                sublist.slideUp(200);
+                icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+            } else {
+                sublist.slideDown(200);
+                icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+            }
+        });
     }
 
     _onHelp(event) {
@@ -534,7 +603,7 @@ export class ReactionEditor extends FormApplication {
         return mergeObject(super.defaultOptions, {
             title: "Edit Activation",
             id: "reaction-editor",
-            template: `modules/lancer-reactionChecker/templates/reaction-editor.html`,
+            template: `modules/lancer-automations/templates/reaction-editor.html`,
             width: 800,
             height: "auto",
             classes: ["lancer-reaction-editor"]
@@ -563,17 +632,20 @@ export class ReactionEditor extends FormApplication {
         }
 
         let foundActionName = null;
+        let foundEffectDescription = "";
         const reactionPath = reaction.reactionPath || "";
 
         if (foundItemUuid) {
             try {
                 const item = await fromUuid(foundItemUuid);
                 if (item) {
+                    const rootSystem = item.system;
+                    let actionData = rootSystem;
+
                     if (!reactionPath || reactionPath === "system" || reactionPath === "") {
                         foundActionName = item.name;
                     } else {
                         const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
-                        let actionData = item.system;
                         for (const part of pathParts) {
                             if (actionData && (typeof actionData === 'object' || Array.isArray(actionData))) {
                                 actionData = actionData[part];
@@ -588,9 +660,11 @@ export class ReactionEditor extends FormApplication {
                             foundActionName = item.name;
                         }
                     }
+
+                    foundEffectDescription = actionData?.effect || actionData?.on_hit || actionData?.on_crit || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
                 }
             } catch (e) {
-                console.warn("lancer-reactionChecker | Could not load item for action name:", e);
+                console.warn("lancer-automations | Could not load item for action name:", e);
             }
         }
 
@@ -627,7 +701,7 @@ export class ReactionEditor extends FormApplication {
             foundActionName: foundActionName,
             reactionPath: reaction.reactionPath || "",
             triggerDescription: reaction.triggerDescription || "",
-            effectDescription: reaction.effectDescription || "",
+            effectDescription: reaction.effectDescription || foundEffectDescription || "",
             isReaction: reaction.isReaction !== false,
             isReactionDefined: reaction.isReaction !== undefined,
             triggerSelf: reaction.triggerSelf === true,
@@ -643,6 +717,7 @@ export class ReactionEditor extends FormApplication {
             activationMacro: reaction.activationMacro || "",
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
+            onInit: typeof reaction.onInit === 'function' ? reaction.onInit.toString() : (reaction.onInit || ""),
             actionType: reaction.actionType || (reaction.isReaction !== false ? "Reaction" : "Free Action"),
             consumesReaction: reaction.consumesReaction !== false,
             actionTypeOptions: {
@@ -840,7 +915,7 @@ export class ReactionEditor extends FormApplication {
                     }
                 }
             } catch (e) {
-                console.warn("lancer-reactionChecker | Error resolving action name:", e);
+                console.warn("lancer-automations | Error resolving action name:", e);
             }
 
             previewItemName.html(`<strong>Item:</strong> ${foundItemName}`);
@@ -949,9 +1024,25 @@ export class ReactionEditor extends FormApplication {
                 this.codeEditor.on('change', (cm) => cm.save());
             }
 
+            const onInitTextarea = html.find('textarea[name="onInit"]')[0];
+            if (onInitTextarea) {
+                this.onInitEditor = CodeMirror.fromTextArea(onInitTextarea, {
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true,
+                    lineWrapping: false,
+                    scrollbarStyle: "native"
+                });
+                this.onInitEditor.on('change', (cm) => cm.save());
+            }
+
             const refreshEditors = () => {
                 if (this.evaluateEditor) this.evaluateEditor.refresh();
                 if (this.codeEditor) this.codeEditor.refresh();
+                if (this.onInitEditor) this.onInitEditor.refresh();
             };
 
             activationTypeSelect.on('change', () => {
@@ -982,6 +1073,9 @@ export class ReactionEditor extends FormApplication {
         } else if (targetName === 'activationCode') {
             editorInstance = this.codeEditor;
             title = "Activation Code";
+        } else if (targetName === 'onInit') {
+            editorInstance = this.onInitEditor;
+            title = "onInit Code";
         }
 
         if (!editorInstance) return;
@@ -1085,7 +1179,6 @@ export class ReactionEditor extends FormApplication {
             },
 
             close: () => {
-                // Optional: Auto-save on close? usually better to require explicit save
             }
         }, {
             width: 800,
@@ -1331,6 +1424,7 @@ export class ReactionEditor extends FormApplication {
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
+                onInit: formData.onInit || "",
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 outOfCombat: formData.outOfCombat === true,

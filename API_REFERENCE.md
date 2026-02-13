@@ -1,0 +1,964 @@
+# Lancer Automations — API Reference
+
+## Accessing the API
+
+```javascript
+const api = game.modules.get('lancer-automations').api;
+```
+
+Also available via hook (fires once the module is ready):
+
+```javascript
+Hooks.on('lancer-automations.ready', (api) => {
+    // api is the same object as above
+});
+```
+
+---
+
+## Exposed Functions
+
+### Effect Management
+
+#### `applyFlaggedEffectToTokens(options, extraOptions)`
+
+Apply one or more status effects to a list of tokens. Supports stacking, duration, consumption triggers, stat bonuses, and ActiveEffect changes.
+
+**Parameters:**
+
+`options` object:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `tokens` | `Array<Token>` | *required* | Tokens to apply the effect to |
+| `effectNames` | `string \| Array<string> \| Object` | *required* | Effect name(s) or custom effect object `{ name, icon, isCustom, stack }` |
+| `note` | `string` | `undefined` | Description/note stored on the effect |
+| `duration` | `Object` | `undefined` | `{ label: "start"\|"end"\|"indefinite", turns: number, rounds: number }` |
+| `useTokenAsOrigin` | `boolean` | `true` | Use the target token's ID as origin for duration tracking |
+| `customOriginId` | `string` | `null` | Override origin ID (ignored if `useTokenAsOrigin` is true) |
+| `checkEffectCallback` | `Function` | `null` | Custom predicate `(token, effect) => boolean` to check duplicates |
+
+`extraOptions` object:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `stack` | `number` | Stack count (for statuscounter) |
+| `linkedBonusId` | `string` | Link this effect to a global bonus ID |
+| `consumption` | `Object` | Consumption trigger config (see [Consumption Object](#consumption-object)) |
+| `statDirect` | `Object` | Direct stat modification `{ key, value, preBonusValue }` for current resources |
+| `changes` | `Array` | ActiveEffect changes `[{ key, value, mode }]` for max/flat stats |
+
+**Returns:** `Array<Token>` — tokens that received the effect(s).
+
+---
+
+#### `removeFlaggedEffectToTokens(options)`
+
+Remove effect(s) from a list of tokens.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `options.tokens` | `Array<Token>` | Tokens to remove from |
+| `options.effectNames` | `string \| Array<string>` | Effect name(s) to remove |
+| `options.originId` | `string` | Optional origin ID to filter which effects to remove |
+
+**Returns:** `Array<Token>` — processed tokens.
+
+---
+
+#### `findFlaggedEffectOnToken(token, identifier)`
+
+Find a flagged effect on a token.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to search |
+| `identifier` | `string \| Function` | Effect name, or a predicate `(effect) => boolean` |
+
+**Returns:** `ActiveEffect | undefined`
+
+---
+
+#### `consumeEffectCharge(effect)`
+
+Decrement one charge from a consumable effect. If it reaches 0, the effect is removed. If the effect has a `groupId`, all effects in the group share the same counter.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `effect` | `ActiveEffect` | The effect to consume a charge from |
+
+**Returns:** `Promise<boolean>`
+
+---
+
+#### `executeEffectManager(options)`
+
+Open the Effect Manager dialog UI.
+
+---
+
+### Global Bonuses
+
+#### `addGlobalBonus(actor, bonusData, options)`
+
+Add a global bonus to an actor. Creates a linked status effect on the token.
+
+**`bonusData` object:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Auto-generated if not provided |
+| `name` | `string` | Bonus display name |
+| `val` | `number` | Bonus value |
+| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, or `"stat"` |
+| `uses` | `number` | Stack count (optional) |
+| `stat` | `string` | For stat bonuses: property path (e.g. `"system.hp.max"`, `"system.evasion"`) |
+| `targetTypes` | `Array<string>` | Flow type filters: `["all"]`, `["attack"]`, `["check"]`, `["damage"]`, etc. |
+| `condition` | `string` | JS condition string: `(state, actor, data, context) => boolean` |
+| `itemLids` | `Array<string>` | Item LID filters |
+| `context` | `Object` | Data passed to condition evaluation |
+| `damage` | `Array<Object>` | For damage bonuses: `[{ type: "Kinetic", val: 2 }]` |
+
+**`options` object:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `duration` | `string` | `undefined` | `"indefinite"`, `"end"`, or `"start"` |
+| `durationTurns` | `number` | `1` | Turns until expiration (if not indefinite) |
+| `origin` | `Token \| string` | token | Origin token or ID for duration tracking |
+| `consumption` | `Object` | `undefined` | Consumption trigger config (see [Consumption Object](#consumption-object)) |
+
+**Returns:** `string` — the bonus ID.
+
+---
+
+#### `removeGlobalBonus(actor, bonusId, skipEffectRemoval)`
+
+Remove a global bonus and its linked effect.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | | The actor to remove from |
+| `bonusId` | `string` | | The bonus ID to remove |
+| `skipEffectRemoval` | `boolean` | `false` | Skip removing the linked ActiveEffect |
+
+**Returns:** `Promise<boolean>`
+
+---
+
+#### `getGlobalBonuses(actor)`
+
+Get all global bonuses for an actor.
+
+**Returns:** `Array<Object>` — array of bonus data objects.
+
+---
+
+### Activation Registration
+
+#### `registerDefaultItemReactions(reactions)`
+
+Register item-based activations by code. Merged with built-in and user-configured activations.
+
+```javascript
+api.registerDefaultItemReactions({
+    "item_lid_here": {
+        itemType: "mech_weapon",  // or "any", "npc_feature", "mech_system", etc.
+        reactions: [{ /* activation object */ }]
+    }
+});
+```
+
+---
+
+#### `registerDefaultGeneralReactions(reactions)`
+
+Register general (name-based) activations by code.
+
+```javascript
+api.registerDefaultGeneralReactions({
+    "My Custom Reaction": { /* activation object */ }
+});
+```
+
+---
+
+### Spatial / Distance
+
+#### `getActorMaxThreat(actor)`
+
+Get the highest Threat range value across all of an actor's weapons.
+
+**Returns:** `number` (minimum 1 for mechs/NPCs/pilots, 0 for other types)
+
+---
+
+#### `getTokenDistance(token1, token2)`
+
+Get the grid distance between two tokens (in spaces). Handles multi-cell tokens on both square and hex grids.
+
+**Returns:** `number`
+
+---
+
+#### `isHostile(token1, token2)`
+
+Check if two tokens are hostile to each other. Uses Token Factions if available, otherwise falls back to default disposition logic.
+
+**Returns:** `boolean`
+
+---
+
+#### `isFriendly(token1, token2)`
+
+Check if two tokens are friendly to each other.
+
+**Returns:** `boolean`
+
+---
+
+### Utilities
+
+#### `performStatRoll(actor, stat, title, target)`
+
+Trigger a stat roll and get the result back. For NPCs, it uses Tier for Grit.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor making the roll |
+| `stat` | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` (or a full path) |
+| `title` | `string` | auto | Roll title |
+| `target` | `number` | `10` | Pass threshold |
+
+**Returns:** `{ completed, total, roll, passed }`
+
+```javascript
+const result = await api.performStatRoll(actor, "AGI", "AGILITY Save");
+if (result.completed && !result.passed) {
+    // failed
+}
+```
+
+---
+
+#### `clearMoveData(tokenDocId)`
+
+Reset cumulative movement data for a token. Automatically called at the start of each turn.
+
+---
+
+#### `getCumulativeMoveData(tokenDocId)`
+
+Get the current cumulative movement distance for a token this turn.
+
+**Returns:** `number` (0 if no data)
+
+---
+
+#### `getTokenCells(token)`
+
+Get all grid cells occupied by a token.
+
+**Returns:** `Array<[number, number]>` — array of `[gridX, gridY]` coordinates.
+
+---
+
+#### `getMaxGroundHeightUnderToken(token, terrainAPI)`
+
+Get the maximum ground height under a token, considering all occupied cells. Requires Terrain Height Tools.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to check |
+| `terrainAPI` | `Object` | `globalThis.terrainHeightTools` |
+
+**Returns:** `number`
+
+---
+
+#### `openItemBrowser(targetInput)`
+
+Open a searchable item browser dialog. Searches all compendium packs for items with LIDs.
+
+---
+
+#### `drawThreatDebug(token)`
+
+Debug visualization: draw threat range cells around a token (hex grids only).
+
+---
+
+#### `drawDistanceDebug()`
+
+Debug visualization: select 2 tokens and run this to display the grid distance between them.
+
+---
+
+## Trigger Types & Data
+
+Every trigger passes a data object to evaluate/activation functions. All data objects also receive `distanceToTrigger` (distance from the reactor to the triggering token) when processed by the activation system.
+
+### Attack Triggers
+
+#### `onAttack`
+
+Fires when an attack roll is made (before hit/miss is determined).
+
+```javascript
+{
+    triggeringToken: Token,     // The attacker
+    weapon: Item,               // The weapon used
+    targets: Array<Token>,      // Targeted tokens
+    attackType: string,         // "Ranged", "Melee", etc.
+    actionName: string,         // Weapon/attack name
+    tags: Array,                // Weapon tags
+    actionData: Object          // Full Lancer flow action data
+}
+```
+
+#### `onHit`
+
+Fires when an attack hits.
+
+```javascript
+{
+    triggeringToken: Token,
+    weapon: Item,
+    targets: Array<{target: Token, roll: number, crit: boolean}>,
+    attackType: string,
+    actionName: string,
+    tags: Array,
+    actionData: Object
+}
+```
+
+#### `onMiss`
+
+Fires when an attack misses.
+
+```javascript
+{
+    triggeringToken: Token,
+    weapon: Item,
+    targets: Array<{target: Token, roll: number}>,
+    attackType: string,
+    actionName: string,
+    tags: Array,
+    actionData: Object
+}
+```
+
+#### `onDamage`
+
+Fires when damage is applied.
+
+```javascript
+{
+    triggeringToken: Token,
+    weapon: Item,
+    target: Token,              // Single target that took damage
+    damages: Array<number>,     // Damage amounts per type
+    types: Array<string>,       // Damage types (Kinetic, Energy, etc.)
+    isCrit: boolean,
+    isHit: boolean,
+    attackType: string,
+    actionName: string,
+    tags: Array,
+    actionData: Object
+}
+```
+
+### Tech Triggers
+
+#### `onTechAttack`
+
+Fires when a tech attack is made.
+
+```javascript
+{
+    triggeringToken: Token,
+    techItem: Item,             // The tech system used
+    targets: Array<Token>,
+    actionName: string,
+    isInvade: boolean,          // true if this is an Invade action
+    tags: Array,
+    actionData: Object
+}
+```
+
+#### `onTechHit`
+
+Fires when a tech attack hits.
+
+```javascript
+{
+    triggeringToken: Token,
+    techItem: Item,
+    targets: Array<{target: Token, roll: number, crit: boolean}>,
+    actionName: string,
+    isInvade: boolean,
+    tags: Array,
+    actionData: Object
+}
+```
+
+#### `onTechMiss`
+
+Fires when a tech attack misses.
+
+```javascript
+{
+    triggeringToken: Token,
+    techItem: Item,
+    targets: Array<{target: Token, roll: number}>,
+    actionName: string,
+    isInvade: boolean,
+    tags: Array,
+    actionData: Object
+}
+```
+
+### Movement
+
+#### `onMove`
+
+Fires when a token moves.
+
+```javascript
+{
+    triggeringToken: Token,
+    distanceMoved: number,      // Grid distance moved this drag
+    elevationMoved: number,     // New elevation value
+    startPos: { x, y },        // Position before the move
+    endPos: { x, y },          // Position after the move
+    isDrag: boolean,
+    moveInfo: {
+        isInvoluntary: boolean,
+        isTeleport: boolean,
+        isBoost: boolean,       // Only with experimental boost detection
+        boostSet: Array<number> // Boost numbers crossed (1-based)
+    }
+}
+```
+
+### Turn Events
+
+#### `onTurnStart`
+
+Fires at the start of a combat turn.
+
+```javascript
+{
+    triggeringToken: Token
+}
+```
+
+#### `onTurnEnd`
+
+Fires at the end of a combat turn.
+
+```javascript
+{
+    triggeringToken: Token
+}
+```
+
+### Status Effects
+
+#### `onStatusApplied`
+
+Fires when a status effect is applied to a token.
+
+```javascript
+{
+    triggeringToken: Token,
+    statusId: string,           // e.g. "prone", "immobilized", "stunned"
+    effect: ActiveEffect
+}
+```
+
+#### `onStatusRemoved`
+
+Fires when a status effect is removed.
+
+```javascript
+{
+    triggeringToken: Token,
+    statusId: string,
+    effect: ActiveEffect
+}
+```
+
+### Damage & Structure
+
+#### `onStructure`
+
+Fires when a mech takes structure damage.
+
+```javascript
+{
+    triggeringToken: Token,
+    remainingStructure: number,
+    rollResult: number          // Structure table roll total
+}
+```
+
+#### `onStress`
+
+Fires when a mech takes stress (overheat).
+
+```javascript
+{
+    triggeringToken: Token,
+    remainingStress: number,
+    rollResult: number          // Stress table roll total
+}
+```
+
+#### `onHeat`
+
+Fires when heat is gained.
+
+```javascript
+{
+    triggeringToken: Token,
+    heatGained: number,
+    currentHeat: number,
+    inDangerZone: boolean       // true if at or above half max heat
+}
+```
+
+#### `onDestroyed`
+
+Fires when a mech is destroyed.
+
+```javascript
+{
+    triggeringToken: Token
+}
+```
+
+#### `onHPRestored`
+
+Fires when HP is restored.
+
+```javascript
+{
+    triggeringToken: Token,
+    hpRestored: number,
+    currentHP: number,
+    maxHP: number
+}
+```
+
+#### `onHpLoss`
+
+Fires when HP is lost.
+
+```javascript
+{
+    triggeringToken: Token,
+    hpLost: number,
+    currentHP: number           // HP after the loss
+}
+```
+
+#### `onClearHeat`
+
+Fires when heat is cleared.
+
+```javascript
+{
+    triggeringToken: Token,
+    heatCleared: number,
+    currentHeat: number         // Heat after clearing
+}
+```
+
+### Other
+
+#### `onCheck`
+
+Fires when a stat check/save is rolled.
+
+```javascript
+{
+    triggeringToken: Token,
+    statName: string,           // "Hull", "Agility", "Systems", "Engineering", "Grit"
+    roll: Roll,                 // Foundry Roll object
+    total: number,              // Roll total
+    success: boolean
+}
+```
+
+#### `onActivation`
+
+Fires when an item/action is activated (via SimpleActivationFlow or SystemFlow).
+
+```javascript
+{
+    triggeringToken: Token,
+    actionType: string,         // "Quick", "Full", "Reaction", "Protocol", "Free"
+    actionName: string,
+    item: Item,                 // null for non-item actions
+    actionData: Object
+}
+```
+
+---
+
+## Evaluate Function
+
+The evaluate function determines whether an activation should trigger. It's called for every potential reactor token when a trigger fires.
+
+**Signature:**
+
+```javascript
+async function evaluate(triggerType, triggerData, reactorToken, item, activationName) {
+    // triggerType  - string, e.g. "onMove", "onDamage"
+    // triggerData  - the trigger data object (see above), plus distanceToTrigger
+    // reactorToken - the token that might react
+    // item         - the item associated with this activation (null for general activations)
+    // activationName - the name of the activation
+
+    return true;  // or false
+}
+```
+
+**Example: only trigger when target is within 5 spaces:**
+
+```javascript
+async function evaluate(triggerType, triggerData, reactorToken, item, activationName) {
+    return triggerData.distanceToTrigger <= 5;
+}
+```
+
+**Example: only trigger on critical hits against self:**
+
+```javascript
+async function evaluate(triggerType, triggerData, reactorToken, item, activationName) {
+    if (!triggerData.targets) return false;
+    return triggerData.targets.some(t => t.target?.id === reactorToken.id && t.crit);
+}
+```
+
+---
+
+## Activation Function
+
+The activation code runs when the user clicks Activate (manual mode) or immediately on trigger (auto mode).
+
+**Signature:**
+
+```javascript
+async function activate(triggerType, triggerData, reactorToken, item, activationName) {
+    // Same parameters as evaluate
+}
+```
+
+**Example: apply an effect on activation:**
+
+```javascript
+async function activate(triggerType, triggerData, reactorToken, item, activationName) {
+    const api = game.modules.get('lancer-automations').api;
+    await api.applyFlaggedEffectToTokens({
+        tokens: [reactorToken],
+        effectNames: ["Immobilized"],
+        duration: { label: 'end', turns: 1 },
+        useTokenAsOrigin: true
+    });
+}
+```
+
+---
+
+## Activation Object Structure
+
+The full structure of an activation config object, used by both item-based and general activations:
+
+```javascript
+{
+    // Trigger configuration
+    triggers: ["onMove", "onDamage"],   // Which triggers to listen for
+    enabled: true,                       // Whether this activation is active
+
+    // Display
+    triggerDescription: "When a hostile moves within range",
+    effectDescription: "Make an attack as a reaction",
+    actionType: "Reaction",             // "Reaction", "Free Action", "Quick Action",
+                                        // "Full Action", "Protocol", "Other"
+    frequency: "1/Round",               // "1/Round", "Unlimited", "1/Scene", "1/Combat", "Other"
+
+    // Who can react
+    triggerSelf: false,                  // Can the triggering token react to its own trigger?
+    triggerOther: true,                  // Can other tokens react?
+    consumesReaction: true,              // Does activating consume the token's reaction?
+    outOfCombat: false,                  // Works outside of combat?
+
+    // Filters
+    onlyOnSourceMatch: false,            // Only trigger if the source item/action matches
+    dispositionFilter: ["hostile"],      // Filter by disposition: "friendly", "hostile",
+                                         // "neutral", "secret"
+
+    // Evaluate
+    evaluate: "return true;",            // String (code) or Function
+
+    // Activation
+    activationType: "code",              // "flow", "code", "macro", "none"
+    activationMode: "after",             // "after" (run after flow) or "instead" (replace flow)
+    activationCode: "",                  // String (code) or Function
+    activationMacro: "",                 // Macro name (if activationType is "macro")
+    autoActivate: false,                 // Skip popup, run automatically
+
+    // Item-specific
+    reactionPath: "",                    // Path to action in item (e.g., "ranks[0].actions[0]")
+    onInit: "",                          // Code to run when token is created
+
+    // Internal
+    isReaction: true                     // Whether this counts as a reaction
+}
+```
+
+---
+
+## Consumption Object
+
+Used in `extraOptions.consumption` for effects and `options.consumption` for bonuses:
+
+```javascript
+{
+    trigger: "onDamage",        // Which trigger consumes a charge
+    originId: "tokenId123",     // Only consume when this token is involved
+    groupId: "sharedGroup",     // Share charge counter with other effects in this group
+    evaluate: null,             // Custom consumption check: (triggerType, data, token, effect) => boolean
+    itemLid: "weapon_lid",     // Only consume when this item LID is the source (comma-separated for multiple)
+    actionName: "Skirmish",     // Only consume when this action name matches
+    isBoost: true,              // Only consume on boost movement
+    minDistance: 1,             // Only consume when distance moved >= this
+    checkType: "Agility",      // Only consume when this stat is checked
+    checkAbove: 10,             // Only consume when check total >= this
+    checkBelow: 5               // Only consume when check total <= this
+}
+```
+
+---
+
+## How To: Register Default Activations by Code
+
+Use the `lancer-automations.ready` hook to register activations from your own module or macro:
+
+```javascript
+Hooks.on('lancer-automations.ready', (api) => {
+    // Item-based: only tokens with this item can react
+    api.registerDefaultItemReactions({
+        "my_custom_weapon_lid": {
+            itemType: "mech_weapon",
+            reactions: [{
+                triggers: ["onHit"],
+                triggerSelf: true,
+                triggerOther: false,
+                onlyOnSourceMatch: true,
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "after",
+                evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    return triggerData.targets?.some(t => t.crit);
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    ui.notifications.info(`${activationName} scored a critical hit!`);
+                }
+            }]
+        }
+    });
+
+    // General: all tokens can react
+    api.registerDefaultGeneralReactions({
+        "My Custom Trigger": {
+            triggers: ["onDamage"],
+            triggerSelf: false,
+            triggerOther: true,
+            consumesReaction: false,
+            autoActivate: false,
+            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                return triggerData.target?.id === reactorToken.id;
+            },
+            activationType: "flow",
+            activationMode: "after"
+        }
+    });
+});
+```
+
+---
+
+## How To: Create Status Effects with Consumption
+
+Apply an effect with charges that get consumed when a specific trigger fires:
+
+```javascript
+const api = game.modules.get('lancer-automations').api;
+
+// Apply Soft Cover with 2 charges, consumed on boost
+await api.applyFlaggedEffectToTokens({
+    tokens: [myToken],
+    effectNames: ["cover_soft"],
+    note: "Soft Cover (2 charges)",
+    duration: { label: 'indefinite', turns: null },
+    useTokenAsOrigin: true
+}, {
+    stack: 2,
+    consumption: {
+        trigger: "onMove",
+        originId: myToken.id,
+        isBoost: true
+    }
+});
+```
+
+**Shared consumption with `groupId`:**
+
+When multiple effects share a `groupId`, consuming a charge from one decrements all of them. When charges hit 0, all effects in the group are removed.
+
+```javascript
+const groupId = foundry.utils.randomID();
+
+// Apply multiple resistances that share the same charge pool
+await api.applyFlaggedEffectToTokens({
+    tokens: [target],
+    effectNames: [
+        "lancer.statusIconsNames.resistance_kinetic",
+        "lancer.statusIconsNames.resistance_energy"
+    ],
+    duration: { label: 'indefinite', turns: null },
+    useTokenAsOrigin: false,
+    customOriginId: target.id
+}, {
+    stack: 3,
+    consumption: {
+        trigger: "onDamage",
+        originId: target.id,
+        groupId: groupId
+    }
+});
+```
+
+**Custom consumption evaluate:**
+
+```javascript
+await api.applyFlaggedEffectToTokens({
+    tokens: [myToken],
+    effectNames: ["My Effect"],
+    duration: { label: 'indefinite', turns: null },
+    useTokenAsOrigin: true
+}, {
+    stack: 1,
+    consumption: {
+        trigger: "onDamage",
+        originId: myToken.id,
+        evaluate: function (triggerType, triggerData, effectBearerToken, effect) {
+            // Only consume if damage is Kinetic
+            return triggerData.types?.includes("Kinetic");
+        }
+    }
+});
+```
+
+---
+
+## How To: Create Bonuses by Code
+
+```javascript
+const api = game.modules.get('lancer-automations').api;
+const actor = token.actor;
+```
+
+**Accuracy bonus (all attacks, 1 round):**
+
+```javascript
+await api.addGlobalBonus(actor, {
+    name: "+1 Accuracy",
+    val: 1,
+    type: "accuracy",
+    targetTypes: ["all"]
+}, {
+    duration: "end",
+    durationTurns: 1,
+    origin: token
+});
+```
+
+**Damage bonus (specific weapon, consumed on use):**
+
+```javascript
+await api.addGlobalBonus(actor, {
+    name: "Bonus Damage",
+    val: 2,
+    type: "damage",
+    damage: [{ type: "Kinetic", val: 2 }],
+    targetTypes: ["all"],
+    itemLids: ["my_weapon_lid"]
+}, {
+    duration: "indefinite",
+    consumption: {
+        trigger: "onDamage",
+        originId: token.id
+    }
+});
+```
+
+**Stat bonus (increase max HP):**
+
+```javascript
+await api.addGlobalBonus(actor, {
+    name: "+2 Max HP",
+    val: 2,
+    type: "stat",
+    stat: "system.hp.max"
+}, {
+    duration: "end",
+    durationTurns: 1,
+    origin: token
+});
+```
+
+**Stat bonus (current resource — e.g., overshield):**
+
+Current resources like HP, Heat, and Overshield use direct `actor.update()` instead of ActiveEffect changes, because AE changes get re-applied on every data refresh (which breaks consumable resources).
+
+```javascript
+await api.addGlobalBonus(actor, {
+    name: "+5 Overshield",
+    val: 5,
+    type: "stat",
+    stat: "system.overshield.value"
+}, {
+    duration: "end",
+    durationTurns: 1,
+    origin: token
+});
+```
+
+**Difficulty with custom condition:**
+
+```javascript
+await api.addGlobalBonus(actor, {
+    name: "Impaired Attacks",
+    val: 1,
+    type: "difficulty",
+    targetTypes: ["attack"],
+    condition: "(state, actor, data, context) => { return state.data?.title?.includes('Melee'); }"
+}, {
+    duration: "start",
+    durationTurns: 2,
+    origin: token
+});
+```
+
+**Removing a bonus:**
+
+```javascript
+const bonusId = await api.addGlobalBonus(actor, { ... }, { ... });
+
+// Later:
+await api.removeGlobalBonus(actor, bonusId);
+```

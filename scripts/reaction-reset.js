@@ -5,7 +5,7 @@ export class ReactionReset extends FormApplication {
         return mergeObject(super.defaultOptions, {
             id: "reaction-checker-reset",
             title: "Reset Lancer Reaction Checker",
-            template: "modules/lancer-reactionChecker/templates/reset-confirm.html",
+            template: "modules/lancer-automations/templates/reset-confirm.html",
             width: 400,
             height: "auto"
         });
@@ -35,7 +35,7 @@ export class ReactionReset extends FormApplication {
                             for (const [key, setting] of game.settings.settings.entries()) {
                                 if (setting.namespace === ReactionManager.ID) {
                                     await game.settings.set(ReactionManager.ID, setting.key, setting.default);
-                                    console.log(`lancer-reactionChecker | Resetting ${setting.key}`);
+                                    console.log(`lancer-automations | Resetting ${setting.key}`);
                                 }
                             }
 

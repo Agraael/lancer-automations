@@ -65,9 +65,8 @@
         <div class="form-fields">
             <input type="text" name="reactionPath" value="{{reactionPath}}">
         </div>
-        <p class="notes">Path within <code>system</code> to the action data. Leave empty for NPC features (uses
-            <code>system.trigger</code> directly).
-        </p>
+        <p class="notes">Path within <code>system</code> to the action data. Leave empty to use the item itself.
+            (system)</p>
     </div>
 
     <!-- Only On Source Match (Item-based only - matches item LID) -->
@@ -300,6 +299,22 @@
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
             <strong>Available variables:</strong> <code>triggerType</code>, <code>triggerData</code>,
             <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>
+        </p>
+    </div>
+
+    <!-- onInit Code (Item-based only) -->
+    <div class="form-group stacked item-only" style="{{#if isGeneral}}display:none{{/if}}">
+        <label>onInit Code <span class="optional">(optional)</span> <a class="expand-editor" data-target="onInit"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></label>
+        <div class="form-fields">
+            <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
+        </div>
+        <p class="notes">
+            JavaScript code executed when a token with this item is created on the scene.<br>
+            Useful for applying passive effects or setting up initial state.
+        </p>
+        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
+            <strong>Available variables:</strong> <code>token</code>, <code>item</code>
         </p>
     </div>
 

@@ -1,19 +1,42 @@
-/*global game, Hooks, canvas */
-
 import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance } from "./overwatch.js";
 import { ReactionManager, stringToFunction } from "./reaction-manager.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup } from "./reactions-ui.js";
 import { registerExternalItemReactions, registerExternalGeneralReactions } from "./reactions-registry.js";
+import {
+    setFlaggedEffect,
+    removeFlaggedEffect,
+    applyFlaggedEffectToTokens,
+    removeFlaggedEffectToTokens,
+    findFlaggedEffectOnToken,
+    consumeEffectCharge,
+    processDurationEffects
+} from "./flagged-effects.js";
+import {
+    addGlobalBonus,
+    removeGlobalBonus,
+    getGlobalBonuses,
+    executeGenericBonusMenu,
+    genericAccuracyStepAttack,
+    genericAccuracyStepTechAttack,
+    genericAccuracyStepWeaponAttack,
+    genericAccuracyStepStatRoll,
+    genericBonusStepDamage
+} from "./genericBonuses.js";
+import { executeEffectManager, openItemBrowser } from "./effectManager.js";
+import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
 
-let reactionQueue = [];
+
 let reactionDebounceTimer = null;
+let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
 
 function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter) {
-    if (!dispositionFilter || dispositionFilter.length === 0) return true;
-    if (!triggeringToken) return true;
+    if (!dispositionFilter || dispositionFilter.length === 0)
+        return true;
+    if (!triggeringToken)
+        return true;
 
     const tokenFactions = game.modules.get("token-factions")?.api;
     let disposition;
@@ -29,17 +52,22 @@ function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter
     const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
     const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
 
-    if (disposition === FRIENDLY && dispositionFilter.includes('friendly')) return true;
-    if (disposition === NEUTRAL && dispositionFilter.includes('neutral')) return true;
-    if (disposition === HOSTILE && dispositionFilter.includes('hostile')) return true;
-    if (disposition === SECRET && dispositionFilter.includes('secret')) return true;
+    if (disposition === FRIENDLY && dispositionFilter.includes('friendly'))
+        return true;
+    if (disposition === NEUTRAL && dispositionFilter.includes('neutral'))
+        return true;
+    if (disposition === HOSTILE && dispositionFilter.includes('hostile'))
+        return true;
+    if (disposition === SECRET && dispositionFilter.includes('secret'))
+        return true;
 
     return false;
 }
 
 function getReactionItems(token) {
     const actor = token.actor;
-    if (!actor) return [];
+    if (!actor)
+        return [];
 
     const itemTypes = ["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"];
     let items = actor.items.filter(item => itemTypes.includes(item.type));
@@ -79,14 +107,17 @@ function getItemLID(item) {
 }
 
 function isItemAvailable(item, reactionPath) {
-    if (!item) return false;
-    if (item.system?.destroyed || item.system?.disabled) return false;
+    if (!item)
+        return false;
+    if (item.system?.destroyed || item.system?.disabled)
+        return false;
 
     if (item.type === "talent" && reactionPath) {
         const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
         if (rankMatch) {
             const requiredRank = parseInt(rankMatch[1]) + 1;
-            if ((item.system?.curr_rank || 0) < requiredRank) return false;
+            if ((item.system?.curr_rank || 0) < requiredRank)
+                return false;
         }
     }
 
@@ -95,7 +126,8 @@ function isItemAvailable(item, reactionPath) {
         if (profileMatch) {
             const requiredProfile = parseInt(profileMatch[1]);
             const currentProfile = item.system?.selected_profile_index ?? 0;
-            if (currentProfile !== requiredProfile) return false;
+            if (currentProfile !== requiredProfile)
+                return false;
         }
     }
 
@@ -108,20 +140,127 @@ function hasReactionAvailable(token) {
 }
 
 function getCombatTokens() {
-    if (!game.combat) return [];
+    if (!game.combat)
+        return [];
 
     return canvas.tokens.placeables.filter(token => {
-        if (!token.inCombat) return false;
-        if (!token.actor) return false;
+        if (!token.inCombat)
+            return false;
+        if (!token.actor)
+            return false;
         return true;
     });
 }
 
 function getAllSceneTokens() {
     return canvas.tokens.placeables.filter(token => {
-        if (!token.actor) return false;
+        if (!token.actor)
+            return false;
         return true;
     });
+}
+
+async function checkOnInitReactions(token) {
+    const items = getReactionItems(token);
+
+    for (const item of items) {
+        const lid = getItemLID(item);
+        if (!lid)
+            continue;
+
+        const registryEntry = ReactionManager.getReactions(lid);
+        if (!registryEntry)
+            continue;
+
+        for (const reaction of registryEntry.reactions) {
+            if (reaction.enabled === false)
+                continue;
+            if (!reaction.onInit)
+                continue;
+
+            const reactionPath = reaction.reactionPath || "";
+            if (!isItemAvailable(item, reactionPath))
+                continue;
+
+            try {
+                if (typeof reaction.onInit === 'function') {
+                    await reaction.onInit(token, item);
+                } else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '') {
+                    const onInitFunc = stringToFunction(reaction.onInit, ["token", "item"]);
+                    await onInitFunc(token, item);
+                }
+                console.log(`lancer-automations | onInit executed for ${item.name} on token ${token.name}`);
+            } catch (error) {
+                console.error(`lancer-automations | Error executing onInit for ${item.name}:`, error);
+            }
+        }
+    }
+}
+
+const STAT_PATHS = {
+    HULL: "system.hull",
+    AGI: "system.agi",
+    SYS: "system.sys",
+    ENG: "system.eng",
+    GRIT: "system.grit"
+};
+
+async function performStatRoll(actor, stat, title, target = 10) {
+    const StatRollFlow = game.lancer.flows.get("StatRollFlow");
+    if (!StatRollFlow) {
+        console.error("lancer-automations | StatRollFlow not found");
+        return { completed: false };
+    }
+    const upperStat = stat.toUpperCase();
+    const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
+    const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
+    const rollTitle = title || `${upperStat} Check`;
+    const flow = new StatRollFlow(actor, { path: statPath, title: rollTitle });
+    const completed = await flow.begin();
+    if (!completed) {
+        return { completed: false };
+    }
+    const total = flow.state.data?.result?.roll?.total ?? null;
+    return {
+        completed: true,
+        total,
+        roll: flow.state.data?.result?.roll ?? null,
+        passed: total !== null ? total >= target : false
+    };
+}
+
+async function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
+    if (!isInCombat && !reaction.outOfCombat)
+        return null;
+    if (isSelf && !reaction.triggerSelf)
+        return null;
+    if (!isSelf && reaction.triggerOther === false)
+        return null;
+    if (reaction.consumesReaction && !hasReactionAvailable(token))
+        return null;
+    if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
+        return null;
+
+    try {
+        const sourceToken = data.triggeringToken;
+        const distanceToTrigger = (sourceToken && token) ? getTokenDistance(token, sourceToken) : null;
+        const enrichedData = { ...data, distanceToTrigger };
+
+        let shouldTrigger = false;
+        if (typeof reaction.evaluate === 'function') {
+            shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
+        } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
+            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+            shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
+        } else {
+            shouldTrigger = true;
+        }
+
+        return shouldTrigger ? enrichedData : null;
+    } catch (error) {
+        console.error(`lancer-automations | Error evaluating general reaction ${reactionName}:`, error);
+        return null;
+    }
 }
 
 async function checkReactions(triggerType, data) {
@@ -133,9 +272,12 @@ async function checkReactions(triggerType, data) {
 
     const nonActionBasedReactions = [];
     for (const [reactionName, reaction] of Object.entries(generalReactions)) {
-        if (reaction.onlyOnSourceMatch) continue;
-        if (!reaction.triggers?.includes(triggerType)) continue;
-        if (reaction.enabled === false) continue;
+        if (reaction.onlyOnSourceMatch)
+            continue;
+        if (!reaction.triggers?.includes(triggerType))
+            continue;
+        if (reaction.enabled === false)
+            continue;
         nonActionBasedReactions.push([reactionName, reaction]);
     }
 
@@ -150,35 +292,46 @@ async function checkReactions(triggerType, data) {
         const items = getReactionItems(token);
         for (const item of items) {
             const lid = getItemLID(item);
-            if (!lid) continue;
+            if (!lid)
+                continue;
 
             const registryEntry = ReactionManager.getReactions(lid);
-            if (!registryEntry) continue;
+            if (!registryEntry)
+                continue;
 
             for (const reaction of registryEntry.reactions) {
-                if (!reaction.triggers.includes(triggerType)) continue;
-                if (reaction.enabled === false) continue;
+                if (!reaction.triggers.includes(triggerType))
+                    continue;
+                if (reaction.enabled === false)
+                    continue;
 
                 if (reaction.onlyOnSourceMatch) {
                     const triggeringItem = data.weapon || data.techItem || data.item;
                     const triggeringItemLid = triggeringItem?.system?.lid;
-                    if (!triggeringItemLid || triggeringItemLid !== lid) continue;
+                    if (!triggeringItemLid || triggeringItemLid !== lid)
+                        continue;
                 }
 
-                if (!isInCombat && !reaction.outOfCombat) continue;
+                if (!isInCombat && !reaction.outOfCombat)
+                    continue;
 
                 if (isSelf) {
-                    if (!reaction.triggerSelf) continue;
+                    if (!reaction.triggerSelf)
+                        continue;
                 } else {
-                    if (reaction.triggerOther === false) continue;
+                    if (reaction.triggerOther === false)
+                        continue;
                 }
 
-                if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
+                if (reaction.consumesReaction && !hasReactionAvailable(token))
+                    continue;
 
                 const reactionPath = reaction.reactionPath || "";
-                if (!isItemAvailable(item, reactionPath)) continue;
+                if (!isItemAvailable(item, reactionPath))
+                    continue;
 
-                if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
+                if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
+                    continue;
 
                 try {
                     const sourceToken = data.triggeringToken;
@@ -217,7 +370,7 @@ async function checkReactions(triggerType, data) {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
                             shouldTrigger = await evalFunc(triggerType, enrichedData, token, item, activationName);
                         } catch (e) {
-                            console.error(`lancer-reactionChecker | Error parsing custom evaluate for ${item.name}:`, e);
+                            console.error(`lancer-automations | Error parsing custom evaluate for ${item.name}:`, e);
                         }
                     } else {
                         shouldTrigger = true;
@@ -235,7 +388,7 @@ async function checkReactions(triggerType, data) {
                         });
                     }
                 } catch (error) {
-                    console.error(`lancer-reactionChecker | Error evaluating reaction ${item.name}:`, error);
+                    console.error(`lancer-automations | Error evaluating reaction ${item.name}:`, error);
                 }
             }
         }
@@ -243,105 +396,22 @@ async function checkReactions(triggerType, data) {
         if (hasValidActionBasedReaction) {
             const reactionName = actionBasedReaction.name;
             const reaction = actionBasedReaction.reaction;
-
-            if (!isInCombat && !reaction.outOfCombat) continue;
-
-            if (isSelf && !reaction.triggerSelf) continue;
-            if (!isSelf && reaction.triggerOther === false) continue;
-
-            if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
-
-            if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
-
-            try {
-                const sourceToken = data.triggeringToken;
-                let distanceToTrigger = null;
-                if (sourceToken && token) {
-                    distanceToTrigger = getTokenDistance(token, sourceToken);
-                }
-
-                const enrichedData = { ...data, distanceToTrigger };
-
-                let shouldTrigger = false;
-
-                if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
-                } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
-                    try {
-                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                        shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
-                    } catch (e) {
-                        console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
-                    }
-                } else {
-                    shouldTrigger = true;
-                }
-
-                if (shouldTrigger) {
-                    reactionQueue.push({
-                        triggerType,
-                        token,
-                        item: null,
-                        reaction,
-                        itemName: reactionName,
-                        reactionName: reactionName,
-                        isGeneral: true,
-                        triggerData: enrichedData
-                    });
-                }
-            } catch (error) {
-                console.error(`lancer-reactionChecker | Error evaluating general reaction ${reactionName}:`, error);
+            const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
+            if (enrichedData) {
+                reactionQueue.push({
+                    triggerType, token, item: null, reaction,
+                    itemName: reactionName, reactionName, isGeneral: true, triggerData: enrichedData
+                });
             }
         }
 
         for (const [reactionName, reaction] of nonActionBasedReactions) {
-            if (!isInCombat && !reaction.outOfCombat) continue;
-
-            if (isSelf && !reaction.triggerSelf) continue;
-            if (!isSelf && reaction.triggerOther === false) continue;
-
-            if (reaction.consumesReaction && !hasReactionAvailable(token)) continue;
-
-            if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) continue;
-
-            try {
-                const sourceToken = data.triggeringToken;
-                let distanceToTrigger = null;
-                if (sourceToken && token) {
-                    distanceToTrigger = getTokenDistance(token, sourceToken);
-                }
-
-                const enrichedData = { ...data, distanceToTrigger };
-
-                let shouldTrigger = false;
-
-                if (typeof reaction.evaluate === 'function') {
-                    shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
-                } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
-                    try {
-                        const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                        shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
-                    } catch (e) {
-                        console.error(`lancer-reactionChecker | Error parsing general evaluate for ${reactionName}:`, e);
-                    }
-                } else {
-                    shouldTrigger = true;
-                }
-
-                if (shouldTrigger) {
-                    reactionQueue.push({
-                        triggerType,
-                        token,
-                        item: null,
-                        reaction,
-                        itemName: reactionName,
-                        reactionName: reactionName,
-                        isGeneral: true,
-                        triggerData: enrichedData
-                    });
-                }
-            } catch (error) {
-                console.error(`lancer-reactionChecker | Error evaluating general reaction ${reactionName}:`, error);
+            const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
+            if (enrichedData) {
+                reactionQueue.push({
+                    triggerType, token, item: null, reaction,
+                    itemName: reactionName, reactionName, isGeneral: true, triggerData: enrichedData
+                });
             }
         }
     }
@@ -368,12 +438,12 @@ async function checkReactions(triggerType, data) {
                     const { activateReaction } = await import('./reactions-ui.js');
                     await activateReaction(r.triggerType, r.triggerData, r.token, r.item, r.reactionName, r.reaction, r.isGeneral);
                 } catch (error) {
-                    console.error(`lancer-reactionChecker | Error auto-activating reaction:`, error);
+                    console.error(`lancer-automations | Error auto-activating reaction:`, error);
                 }
             }
 
             if (manualReactions.length > 0) {
-                const mode = game.settings.get('lancer-reactionChecker', 'reactionNotificationMode');
+                const mode = game.settings.get('lancer-automations', 'reactionNotificationMode');
                 const distribution = new Map();
 
                 const allGMs = game.users.filter(u => u.active && u.isGM);
@@ -391,7 +461,8 @@ async function checkReactions(triggerType, data) {
                     }
 
                     for (const user of recipients) {
-                        if (!distribution.has(user.id)) distribution.set(user.id, []);
+                        if (!distribution.has(user.id))
+                            distribution.set(user.id, []);
                         distribution.get(user.id).push(r);
                     }
                 }
@@ -413,7 +484,7 @@ async function checkReactions(triggerType, data) {
                                 isGeneral: r.isGeneral
                             }))
                         };
-                        game.socket.emit('module.lancer-reactionChecker', {
+                        game.socket.emit('module.lancer-automations', {
                             action: 'showReactionPopup',
                             payload: payload
                         });
@@ -427,9 +498,138 @@ async function checkReactions(triggerType, data) {
     }, REACTION_DEBOUNCE_MS);
 }
 
+/**
+ * Check if the origin token is involved in this trigger event.
+ * The origin can appear as the triggering token, a single target, or in a targets array.
+ */
+function isOriginInvolved(originId, triggerType, data) {
+    if (data.triggeringToken?.id === originId)
+        return true;
+    if (data.target?.id === originId)
+        return true;
+    if (data.targets && Array.isArray(data.targets)) {
+        if (data.targets.some(t => t.id === originId))
+            return true;
+    }
+    return false;
+}
+
+/**
+ * Apply built-in filters from a consumption config against trigger data.
+ * Returns true if all set filters pass.
+ */
+function passesBuiltInFilters(consumption, triggerType, data) {
+    if (consumption.itemLid) {
+        const triggeringItem = data.weapon || data.techItem || data.item;
+        const currentLid = triggeringItem?.system?.lid;
+        if (!currentLid)
+            return false;
+
+        const validLids = consumption.itemLid.split(',').map(s => s.trim()).filter(s => s);
+        if (!validLids.includes(currentLid))
+            return false;
+    }
+    if (consumption.actionName) {
+        if (data.actionName !== consumption.actionName)
+            return false;
+    }
+    if (consumption.isBoost !== undefined && consumption.isBoost !== null) {
+        if (data.moveInfo?.isBoost !== consumption.isBoost)
+            return false;
+    }
+    if (consumption.minDistance !== undefined && consumption.minDistance !== null) {
+        if ((data.distanceMoved || 0) < consumption.minDistance)
+            return false;
+    }
+    if (consumption.checkType) {
+        if (data.statName !== consumption.checkType)
+            return false;
+    }
+    if (consumption.checkAbove !== undefined && consumption.checkAbove !== null) {
+        if ((data.total || 0) < consumption.checkAbove)
+            return false;
+    }
+    if (consumption.checkBelow !== undefined && consumption.checkBelow !== null) {
+        if ((data.total || 0) > consumption.checkBelow)
+            return false;
+    }
+    return true;
+}
+
+/**
+ * Process consumption-based flagged effects for a given trigger.
+ * Scans all scene tokens for effects with matching consumption triggers,
+ * checks origin involvement and filters, then decrements charges.
+ */
+async function processEffectConsumption(triggerType, data) {
+    const allTokens = getAllSceneTokens();
+
+    for (const token of allTokens) {
+        const actor = token.actor;
+        if (!actor)
+            continue;
+
+        const consumableEffects = actor.effects.filter(e => {
+            const consumption = e.flags?.['lancer-automations']?.consumption;
+            return consumption && consumption.trigger === triggerType;
+        });
+
+        if (consumableEffects.length === 0)
+            continue;
+
+        const consumedGroups = new Set();
+
+        for (const effect of consumableEffects) {
+            const consumption = effect.getFlag('lancer-automations', 'consumption');
+            if (!consumption)
+                continue;
+
+            if (consumption.groupId && consumedGroups.has(consumption.groupId))
+                continue;
+
+            const originId = consumption.originId || token.id;
+            if (!isOriginInvolved(originId, triggerType, data))
+                continue;
+
+            if (!passesBuiltInFilters(consumption, triggerType, data))
+                continue;
+
+            if (consumption.evaluate) {
+                try {
+                    let shouldConsume = false;
+                    if (typeof consumption.evaluate === 'function') {
+                        shouldConsume = await consumption.evaluate(triggerType, data, token, effect);
+                    } else if (typeof consumption.evaluate === 'string' && consumption.evaluate.trim() !== '') {
+                        const evalFunc = stringToFunction(consumption.evaluate, ["triggerType", "triggerData", "effectBearerToken", "effect"]);
+                        shouldConsume = await evalFunc(triggerType, data, token, effect);
+                    }
+                    if (!shouldConsume)
+                        continue;
+                } catch (e) {
+                    console.error(`lancer-automations | Error evaluating consumption for ${effect.name}:`, e);
+                    continue;
+                }
+            }
+
+            console.log(`lancer-automations | Consuming charge on ${effect.name} (trigger: ${triggerType})`);
+            if (consumption.groupId)
+                consumedGroups.add(consumption.groupId);
+            await consumeEffectCharge(effect);
+        }
+    }
+}
+
+/**
+ * Handle a trigger event: run reactions AND process consumption-based effects.
+ */
+function handleTrigger(triggerType, data) {
+    checkReactions(triggerType, data);
+    processEffectConsumption(triggerType, data);
+}
+
 function registerReactionHooks() {
-    Hooks.on('lancer-reactionChecker.onAttack', (attacker, weapon, targets, actionData) => {
-        checkReactions('onAttack', {
+    Hooks.on('lancer-automations.onAttack', (attacker, weapon, targets, actionData) => {
+        handleTrigger('onAttack', {
             triggeringToken: attacker,
             weapon, targets,
             attackType: actionData?.attack_type || null,
@@ -439,8 +639,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onHit', (attacker, weapon, hitTargets, actionData) => {
-        checkReactions('onHit', {
+    Hooks.on('lancer-automations.onHit', (attacker, weapon, hitTargets, actionData) => {
+        handleTrigger('onHit', {
             triggeringToken: attacker,
             weapon,
             targets: hitTargets,
@@ -451,8 +651,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onMiss', (attacker, weapon, missTargets, actionData) => {
-        checkReactions('onMiss', {
+    Hooks.on('lancer-automations.onMiss', (attacker, weapon, missTargets, actionData) => {
+        handleTrigger('onMiss', {
             triggeringToken: attacker,
             weapon,
             targets: missTargets,
@@ -463,8 +663,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onDamage', (attacker, weapon, target, damages, types, isCrit, isHit, actionData) => {
-        checkReactions('onDamage', {
+    Hooks.on('lancer-automations.onDamage', (attacker, weapon, target, damages, types, isCrit, isHit, actionData) => {
+        handleTrigger('onDamage', {
             triggeringToken: attacker,
             weapon, target, damages, types, isCrit, isHit,
             attackType: actionData?.attack_type || null,
@@ -474,44 +674,44 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onMove', (mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo) => {
-        checkReactions('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
+    Hooks.on('lancer-automations.onMove', (mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo) => {
+        handleTrigger('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
     });
 
-    Hooks.on('lancer-reactionChecker.onTurnStart', (token) => {
-        checkReactions('onTurnStart', { triggeringToken: token });
+    Hooks.on('lancer-automations.onTurnStart', (token) => {
+        handleTrigger('onTurnStart', { triggeringToken: token });
     });
 
-    Hooks.on('lancer-reactionChecker.onTurnEnd', (token) => {
-        checkReactions('onTurnEnd', { triggeringToken: token });
+    Hooks.on('lancer-automations.onTurnEnd', (token) => {
+        handleTrigger('onTurnEnd', { triggeringToken: token });
     });
 
-    Hooks.on('lancer-reactionChecker.onStatusApplied', (token, statusId, effect) => {
-        checkReactions('onStatusApplied', { triggeringToken: token, statusId, effect });
+    Hooks.on('lancer-automations.onStatusApplied', (token, statusId, effect) => {
+        handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
     });
 
-    Hooks.on('lancer-reactionChecker.onStatusRemoved', (token, statusId, effect) => {
-        checkReactions('onStatusRemoved', { triggeringToken: token, statusId, effect });
+    Hooks.on('lancer-automations.onStatusRemoved', (token, statusId, effect) => {
+        handleTrigger('onStatusRemoved', { triggeringToken: token, statusId, effect });
     });
 
-    Hooks.on('lancer-reactionChecker.onStructure', (token, remainingStructure, rollResult) => {
-        checkReactions('onStructure', { triggeringToken: token, remainingStructure, rollResult });
+    Hooks.on('lancer-automations.onStructure', (token, remainingStructure, rollResult) => {
+        handleTrigger('onStructure', { triggeringToken: token, remainingStructure, rollResult });
     });
 
-    Hooks.on('lancer-reactionChecker.onStress', (token, remainingStress, rollResult) => {
-        checkReactions('onStress', { triggeringToken: token, remainingStress, rollResult });
+    Hooks.on('lancer-automations.onStress', (token, remainingStress, rollResult) => {
+        handleTrigger('onStress', { triggeringToken: token, remainingStress, rollResult });
     });
 
-    Hooks.on('lancer-reactionChecker.onHeat', (token, heatGained, currentHeat, inDangerZone) => {
-        checkReactions('onHeat', { triggeringToken: token, heatGained, currentHeat, inDangerZone });
+    Hooks.on('lancer-automations.onHeat', (token, heatGained, currentHeat, inDangerZone) => {
+        handleTrigger('onHeat', { triggeringToken: token, heatGained, currentHeat, inDangerZone });
     });
 
-    Hooks.on('lancer-reactionChecker.onDestroyed', (token) => {
-        checkReactions('onDestroyed', { triggeringToken: token });
+    Hooks.on('lancer-automations.onDestroyed', (token) => {
+        handleTrigger('onDestroyed', { triggeringToken: token });
     });
 
-    Hooks.on('lancer-reactionChecker.onTechAttack', (attacker, techItem, targets, actionData) => {
-        checkReactions('onTechAttack', {
+    Hooks.on('lancer-automations.onTechAttack', (attacker, techItem, targets, actionData) => {
+        handleTrigger('onTechAttack', {
             triggeringToken: attacker,
             techItem, targets,
             actionName: actionData?.title || actionData?.action?.name || null,
@@ -521,8 +721,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onTechHit', (attacker, techItem, hitTargets, actionData) => {
-        checkReactions('onTechHit', {
+    Hooks.on('lancer-automations.onTechHit', (attacker, techItem, hitTargets, actionData) => {
+        handleTrigger('onTechHit', {
             triggeringToken: attacker,
             techItem,
             targets: hitTargets,
@@ -533,8 +733,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onTechMiss', (attacker, techItem, missTargets, actionData) => {
-        checkReactions('onTechMiss', {
+    Hooks.on('lancer-automations.onTechMiss', (attacker, techItem, missTargets, actionData) => {
+        handleTrigger('onTechMiss', {
             triggeringToken: attacker,
             techItem,
             targets: missTargets,
@@ -545,29 +745,29 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-reactionChecker.onCheck', (token, statName, roll, total, success) => {
-        checkReactions('onCheck', { triggeringToken: token, statName, roll, total, success });
+    Hooks.on('lancer-automations.onCheck', (token, statName, roll, total, success) => {
+        handleTrigger('onCheck', { triggeringToken: token, statName, roll, total, success });
     });
 
-    Hooks.on('lancer-reactionChecker.onActivation', (token, actionType, actionName, item, actionData) => {
-        checkReactions('onActivation', { triggeringToken: token, actionType, actionName, item, actionData });
+    Hooks.on('lancer-automations.onActivation', (token, actionType, actionName, item, actionData) => {
+        handleTrigger('onActivation', { triggeringToken: token, actionType, actionName, item, actionData });
     });
 
-    Hooks.on('lancer-reactionChecker.onHPRestored', (token, hpRestored, currentHP, maxHP) => {
-        checkReactions('onHPRestored', { triggeringToken: token, hpRestored, currentHP, maxHP });
+    Hooks.on('lancer-automations.onHPRestored', (token, hpRestored, currentHP, maxHP) => {
+        handleTrigger('onHPRestored', { triggeringToken: token, hpRestored, currentHP, maxHP });
     });
 
-    Hooks.on('lancer-reactionChecker.onHpLoss', (token, hpLost, currentHP) => {
-        checkReactions('onHpLoss', { triggeringToken: token, hpLost, currentHP });
+    Hooks.on('lancer-automations.onHpLoss', (token, hpLost, currentHP) => {
+        handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
     });
 
-    Hooks.on('lancer-reactionChecker.onClearHeat', (token, heatCleared, currentHeat) => {
-        checkReactions('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
+    Hooks.on('lancer-automations.onClearHeat', (token, heatCleared, currentHeat) => {
+        handleTrigger('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
     });
 }
 
 function registerSettings() {
-    game.settings.register('lancer-reactionChecker', 'reactionNotificationMode', {
+    game.settings.register('lancer-automations', 'reactionNotificationMode', {
         name: 'Notification Mode',
         hint: 'Who should see the activation popup? (GM/Owner)',
         scope: 'world',
@@ -581,7 +781,7 @@ function registerSettings() {
         default: "both"
     });
 
-    game.settings.register('lancer-reactionChecker', 'consumeReaction', {
+    game.settings.register('lancer-automations', 'consumeReaction', {
         name: 'Consume Activation on Activate',
         hint: 'Automatically reduce reaction count by 1 when activating an activation.',
         scope: 'world',
@@ -590,16 +790,16 @@ function registerSettings() {
         default: true
     });
 
-    game.settings.register('lancer-reactionChecker', 'experimentalBoostDetection', {
+    game.settings.register('lancer-automations', 'experimentalBoostDetection', {
         name: 'Experimental Boost Detection (WIP)',
-        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or https://github.com/Agraael/fvtt-lancer-elevation-ruler. Enable "Debug Boost Detection" to test. Use game.modules.get("lancer-reactionChecker").api.clearMoveData(tokenDocId) to manually reset cumulative data.',
+        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or my own fork. Enable "Debug Boost Detection" to test. Use game.modules.get("lancer-automations").api.clearMoveData(tokenDocId) to manually reset cumulative data.',
         scope: 'world',
         config: true,
         type: Boolean,
         default: false
     });
 
-    game.settings.register('lancer-reactionChecker', 'debugBoostDetection', {
+    game.settings.register('lancer-automations', 'debugBoostDetection', {
         name: 'Debug Boost Detection',
         hint: 'Show UI notifications when boost detection triggers (for testing purposes).',
         scope: 'world',
@@ -608,7 +808,16 @@ function registerSettings() {
         default: false
     });
 
-    game.settings.registerMenu('lancer-reactionChecker', 'resetSettings', {
+    game.settings.register('lancer-automations', 'showBonusHudButton', {
+        name: 'Token HUD Bonus Button',
+        hint: 'Show a button on the Token HUD to open the Lancer Effect Manager.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.registerMenu('lancer-automations', 'resetSettings', {
         name: 'Reset Module',
         label: 'Reset to Defaults',
         hint: 'Reset all module settings and activations to their default values.',
@@ -617,7 +826,7 @@ function registerSettings() {
         restricted: true
     });
 
-    game.settings.registerMenu('lancer-reactionChecker', 'exportActivations', {
+    game.settings.registerMenu('lancer-automations', 'exportActivations', {
         name: 'Export Activations',
         label: 'Export to JSON',
         hint: 'Export all custom activations to a JSON file.',
@@ -626,7 +835,7 @@ function registerSettings() {
         restricted: true
     });
 
-    game.settings.registerMenu('lancer-reactionChecker', 'importActivations', {
+    game.settings.registerMenu('lancer-automations', 'importActivations', {
         name: 'Import Activations',
         label: 'Import from JSON',
         hint: 'Import activations from a JSON file.',
@@ -638,14 +847,16 @@ function registerSettings() {
 
 function handleSocketEvent({ action, payload }) {
     if (action === 'showReactionPopup') {
-        if (payload.targetUserId && payload.targetUserId !== game.userId) return;
+        if (payload.targetUserId && payload.targetUserId !== game.userId)
+            return;
 
         const { triggerType, reactions } = payload;
 
         const reconstructed = [];
         for (const r of reactions) {
             const token = canvas.tokens.get(r.tokenId);
-            if (!token) continue;
+            if (!token)
+                continue;
 
             let item = null;
             if (r.itemId) {
@@ -664,6 +875,15 @@ function handleSocketEvent({ action, payload }) {
         if (reconstructed.length > 0) {
             displayReactionPopup(triggerType, reconstructed);
         }
+    } else if (action === 'setFlaggedEffect') {
+        setFlaggedEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
+    } else if (action === 'removeFlaggedEffect') {
+        removeFlaggedEffect(payload.targetID, payload.effect, payload.originID);
+    } else if (action === 'removeEffect') {
+        const target = canvas.tokens.get(payload.targetID);
+        if (target?.actor) {
+            target.actor.deleteEmbeddedDocuments("ActiveEffect", [payload.effectID]);
+        }
     }
 }
 
@@ -673,17 +893,24 @@ function clearMoveData(tokenId) {
     cumulativeMoveData.delete(tokenId);
 }
 
+function getCumulativeMoveData(tokenDocId) {
+    return cumulativeMoveData.get(tokenDocId) || 0;
+}
+
 function handleTokenMove(document, change, options, userId) {
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
     const hasXChange = change.x !== undefined && Math.abs(change.x - document.x) >= threshold;
     const hasYChange = change.y !== undefined && Math.abs(change.y - document.y) >= threshold;
 
-    if (!hasElevationChange && !hasXChange && !hasYChange) return;
-    if (options.isUndo) return;
+    if (!hasElevationChange && !hasXChange && !hasYChange)
+        return;
+    if (options.isUndo)
+        return;
 
     const token = canvas.tokens.get(document.id);
-    if (!token) return;
+    if (!token)
+        return;
 
     const startPos = { x: document.x, y: document.y };
     const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
@@ -709,11 +936,16 @@ function handleTokenMove(document, change, options, userId) {
 
     const moveInfo = { isInvoluntary: !isDrag, isTeleport };
 
-    if (game.settings.get('lancer-reactionChecker', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
-        const speed = token.actor?.system?.speed || 0;
-        const prev = cumulativeMoveData.get(document.id) || 0;
-        const cumulative = prev + distanceMoved;
+    // Always track basic cumulative movement (used by Fall reaction to check if token moved)
+    const prev = cumulativeMoveData.get(document.id) || 0;
+    const cumulative = prev + distanceMoved;
+    if (!isFreeMovement) {
         cumulativeMoveData.set(document.id, cumulative);
+    }
+
+    // Boost detection only when enabled
+    if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
+        const speed = token.actor?.system?.speed || 0;
 
         const boostSet = [];
         if (speed > 0) {
@@ -729,12 +961,12 @@ function handleTokenMove(document, change, options, userId) {
         moveInfo.isBoost = boostSet.length > 0;
 
         // Debug notification for boost detection testing
-        if (game.settings.get('lancer-reactionChecker', 'debugBoostDetection')) {
+        if (game.settings.get('lancer-automations', 'debugBoostDetection')) {
             ui.notifications.info(`${token.name}: moved ${distanceMoved}, cumulative ${cumulative}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
         }
     }
 
-    Hooks.callAll('lancer-reactionChecker.onMove', token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo);
+    Hooks.callAll('lancer-automations.onMove', token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo);
 }
 
 async function onAttackStep(state) {
@@ -756,7 +988,7 @@ async function onAttackStep(state) {
         tags: state.data?.tags || weapon?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-reactionChecker.onAttack', token, weapon, targets, actionData);
+    Hooks.callAll('lancer-automations.onAttack', token, weapon, targets, actionData);
     return true;
 }
 
@@ -787,7 +1019,8 @@ async function onHitMissStep(state) {
         const targetToken = targetInfos[i]?.target;
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
 
-        if (!targetToken) continue;
+        if (!targetToken)
+            continue;
 
         if (hitResult?.hit) {
             hitTargets.push({
@@ -804,10 +1037,10 @@ async function onHitMissStep(state) {
     }
 
     if (hitTargets.length > 0) {
-        Hooks.callAll('lancer-reactionChecker.onHit', token, weapon, hitTargets, actionData);
+        Hooks.callAll('lancer-automations.onHit', token, weapon, hitTargets, actionData);
     }
     if (missTargets.length > 0) {
-        Hooks.callAll('lancer-reactionChecker.onMiss', token, weapon, missTargets, actionData);
+        Hooks.callAll('lancer-automations.onMiss', token, weapon, missTargets, actionData);
     }
 
     return true;
@@ -844,7 +1077,7 @@ async function onDamageStep(state) {
         const targetTypes = targetInfo.damage?.map(d => d.type) || [];
 
         if (targetDamages.length > 0) {
-            Hooks.callAll('lancer-reactionChecker.onDamage', token, weapon, targetToken, targetDamages, targetTypes, isCrit, isHit, actionData);
+            Hooks.callAll('lancer-automations.onDamage', token, weapon, targetToken, targetDamages, targetTypes, isCrit, isHit, actionData);
         }
     }
 
@@ -857,7 +1090,7 @@ async function onStructureStep(state) {
     const remainingStructure = actor?.system?.structure?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
 
-    Hooks.callAll('lancer-reactionChecker.onStructure', token, remainingStructure, rollResult);
+    Hooks.callAll('lancer-automations.onStructure', token, remainingStructure, rollResult);
     return true;
 }
 
@@ -867,7 +1100,7 @@ async function onStressStep(state) {
     const remainingStress = actor?.system?.stress?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
 
-    Hooks.callAll('lancer-reactionChecker.onStress', token, remainingStress, rollResult);
+    Hooks.callAll('lancer-automations.onStress', token, remainingStress, rollResult);
     return true;
 }
 
@@ -890,7 +1123,7 @@ async function onTechAttackStep(state) {
         tags: state.data?.tags || techItem?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-reactionChecker.onTechAttack', token, techItem, targets, actionData);
+    Hooks.callAll('lancer-automations.onTechAttack', token, techItem, targets, actionData);
     return true;
 }
 
@@ -921,7 +1154,8 @@ async function onTechHitMissStep(state) {
         const targetToken = targetInfos[i]?.target;
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
 
-        if (!targetToken) continue;
+        if (!targetToken)
+            continue;
 
         if (hitResult?.hit) {
             hitTargets.push({
@@ -938,10 +1172,10 @@ async function onTechHitMissStep(state) {
     }
 
     if (hitTargets.length > 0) {
-        Hooks.callAll('lancer-reactionChecker.onTechHit', token, techItem, hitTargets, actionData);
+        Hooks.callAll('lancer-automations.onTechHit', token, techItem, hitTargets, actionData);
     }
     if (missTargets.length > 0) {
-        Hooks.callAll('lancer-reactionChecker.onTechMiss', token, techItem, missTargets, actionData);
+        Hooks.callAll('lancer-automations.onTechMiss', token, techItem, missTargets, actionData);
     }
 
     return true;
@@ -955,7 +1189,7 @@ async function onCheckStep(state) {
     const total = roll?.total;
     const success = state.data?.result?.success;
 
-    Hooks.callAll('lancer-reactionChecker.onCheck', token, statName, roll, total, success);
+    Hooks.callAll('lancer-automations.onCheck', token, statName, roll, total, success);
     return true;
 }
 
@@ -996,53 +1230,66 @@ async function onActivationStep(state) {
         tags: tags
     };
 
-    Hooks.callAll('lancer-reactionChecker.onActivation', token, actionType, actionName, item, actionData);
+    Hooks.callAll('lancer-automations.onActivation', token, actionType, actionName, item, actionData);
     return true;
 }
 
 Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
-    flowSteps.set('lancer-reactionChecker:onAttack', onAttackStep);
-    flowSteps.set('lancer-reactionChecker:onHitMiss', onHitMissStep);
-    flowSteps.set('lancer-reactionChecker:onDamage', onDamageStep);
-    flowSteps.set('lancer-reactionChecker:onStructure', onStructureStep);
-    flowSteps.set('lancer-reactionChecker:onStress', onStressStep);
-    flowSteps.set('lancer-reactionChecker:onTechAttack', onTechAttackStep);
-    flowSteps.set('lancer-reactionChecker:onTechHitMiss', onTechHitMissStep);
-    flowSteps.set('lancer-reactionChecker:onCheck', onCheckStep);
-    flowSteps.set('lancer-reactionChecker:onActivation', onActivationStep);
+    flowSteps.set('lancer-automations:onAttack', onAttackStep);
+    flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
+    flowSteps.set('lancer-automations:onDamage', onDamageStep);
+    flowSteps.set('lancer-automations:onStructure', onStructureStep);
+    flowSteps.set('lancer-automations:onStress', onStressStep);
+    flowSteps.set('lancer-automations:onTechAttack', onTechAttackStep);
+    flowSteps.set('lancer-automations:onTechHitMiss', onTechHitMissStep);
+    flowSteps.set('lancer-automations:onCheck', onCheckStep);
+    flowSteps.set('lancer-automations:onActivation', onActivationStep);
 
-    flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-reactionChecker:onAttack');
-    flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-reactionChecker:onHitMiss');
+    // Register generic accuracy steps
+    flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
+    flowSteps.set('lancer-automations:genericAccuracyStepTechAttack', genericAccuracyStepTechAttack);
+    flowSteps.set('lancer-automations:genericAccuracyStepWeaponAttack', genericAccuracyStepWeaponAttack);
+    flowSteps.set('lancer-automations:genericAccuracyStepStatRoll', genericAccuracyStepStatRoll);
+    flowSteps.set('lancer-automations:genericBonusStepDamage', genericBonusStepDamage);
 
-    flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-reactionChecker:onAttack');
-    flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-reactionChecker:onHitMiss');
+    flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepAttack');
+    flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
+    flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
+    flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:genericAccuracyStepStatRoll');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:genericBonusStepDamage');
 
-    flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-reactionChecker:onTechAttack');
-    flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-reactionChecker:onTechHitMiss');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
 
-    flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-reactionChecker:onDamage');
+    flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
+    flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
 
-    flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-reactionChecker:onStructure');
-    flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-reactionChecker:onStress');
+    flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
+    flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
 
-    flows.get('StatRollFlow')?.insertStepAfter('rollCheck', 'lancer-reactionChecker:onCheck');
+    flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-automations:onDamage');
 
-    flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-reactionChecker:onActivation');
-    flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-reactionChecker:onActivation');
+    flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
+    flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
+
+    flows.get('StatRollFlow')?.insertStepAfter('rollCheck', 'lancer-automations:onCheck');
+
+    flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
+    flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
 });
 
 Hooks.on('init', () => {
-    console.log('lancer-reactionChecker | Init');
+    console.log('lancer-automations | Init');
     registerSettings();
 });
 
 Hooks.on('ready', () => {
-    console.log('lancer-reactionChecker | Ready');
+    console.log('lancer-automations | Ready');
 
     ReactionManager.initialize();
     registerReactionHooks();
 
-    game.modules.get('lancer-reactionChecker').api = {
+    game.modules.get('lancer-automations').api = {
         drawThreatDebug,
         drawDistanceDebug,
         getTokenDistance,
@@ -1053,11 +1300,47 @@ Hooks.on('ready', () => {
         getMinGridDistance,
         registerDefaultItemReactions: registerExternalItemReactions,
         registerDefaultGeneralReactions: registerExternalGeneralReactions,
-        clearMoveData
+        clearMoveData,
+        applyFlaggedEffectToTokens,
+        removeFlaggedEffectToTokens,
+        findFlaggedEffectOnToken,
+        consumeEffectCharge,
+        processEffectConsumption,
+        processDurationEffects,
+        addGlobalBonus,
+        removeGlobalBonus,
+        getGlobalBonuses,
+        executeGenericBonusMenu,
+        executeEffectManager,
+        openItemBrowser,
+        getCumulativeMoveData,
+        getTokenCells,
+        getMaxGroundHeightUnderToken,
+        performStatRoll
     };
-    game.socket.on('module.lancer-reactionChecker', handleSocketEvent);
+    game.socket.on('module.lancer-automations', handleSocketEvent);
 
-    Hooks.callAll('lancer-reactionChecker.ready', game.modules.get('lancer-reactionChecker').api);
+    Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
+});
+
+Hooks.on('renderTokenHUD', (hud, html, data) => {
+    if (!game.settings.get('lancer-automations', 'showBonusHudButton'))
+        return;
+
+    const token = hud.object;
+    if (!token?.actor)
+        return;
+
+    const button = $(`<div class="control-icon" data-action="bonus-menu" data-tooltip="Lancer EffectManager">
+        <i class="cci cci-accuracy i--m"></i>
+    </div>`);
+
+    button.on('click', (e) => {
+        e.preventDefault();
+        executeGenericBonusMenu(token.actor);
+    });
+
+    html.find('.col.right').append(button);
 });
 
 Hooks.on('preUpdateToken', handleTokenMove);
@@ -1069,7 +1352,8 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
         const endingCombatant = combat.combatants.get(prior.combatantId);
         const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
         if (endingToken) {
-            Hooks.callAll('lancer-reactionChecker.onTurnEnd', endingToken);
+            Hooks.callAll('lancer-automations.onTurnEnd', endingToken);
+            processDurationEffects('end', endingToken.id);
         }
     }
 
@@ -1078,7 +1362,8 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
         const startingToken = startingCombatant?.token ? canvas.tokens.get(startingCombatant.token.id) : null;
         if (startingToken) {
             clearMoveData(startingToken.document.id);
-            Hooks.callAll('lancer-reactionChecker.onTurnStart', startingToken);
+            Hooks.callAll('lancer-automations.onTurnStart', startingToken);
+            processDurationEffects('start', startingToken.id);
         }
     }
 
@@ -1086,23 +1371,27 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
 });
 
 Hooks.on('updateCombat', (combat, change, options, userId) => {
-    if (change.turn === undefined && change.round === undefined) return;
+    if (change.turn === undefined && change.round === undefined)
+        return;
 
     const currentCombatant = combat.combatant;
-    if (!currentCombatant) return;
+    if (!currentCombatant)
+        return;
 
     if (previousCombatantId && previousCombatantId !== currentCombatant.id) {
         const endingCombatant = combat.combatants.get(previousCombatantId);
         const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
         if (endingToken) {
-            Hooks.callAll('lancer-reactionChecker.onTurnEnd', endingToken);
+            Hooks.callAll('lancer-automations.onTurnEnd', endingToken);
+            processDurationEffects('end', endingToken.id);
         }
     }
 
     const startingToken = currentCombatant.token ? canvas.tokens.get(currentCombatant.token.id) : null;
     if (startingToken && currentCombatant.id !== previousCombatantId) {
         clearMoveData(startingToken.document.id);
-        Hooks.callAll('lancer-reactionChecker.onTurnStart', startingToken);
+        Hooks.callAll('lancer-automations.onTurnStart', startingToken);
+        processDurationEffects('start', startingToken.id);
     }
 
     previousCombatantId = currentCombatant.id;
@@ -1110,30 +1399,42 @@ Hooks.on('updateCombat', (combat, change, options, userId) => {
 
 Hooks.on('createActiveEffect', (effect, options, userId) => {
     const actor = effect.parent;
-    if (!actor) return;
+    if (!actor)
+        return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
 
-    Hooks.callAll('lancer-reactionChecker.onStatusApplied', token, statusId, effect);
+    Hooks.callAll('lancer-automations.onStatusApplied', token, statusId, effect);
 });
 
 Hooks.on('deleteActiveEffect', (effect, options, userId) => {
     const actor = effect.parent;
-    if (!actor) return;
+    if (!actor)
+        return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
 
-    Hooks.callAll('lancer-reactionChecker.onStatusRemoved', token, statusId, effect);
+    Hooks.callAll('lancer-automations.onStatusRemoved', token, statusId, effect);
 });
 
 let previousHeatValues = new Map();
 let previousHPValues = new Map();
 
+Hooks.on('createToken', (tokenDocument, options, userId) => {
+    const token = canvas.tokens.get(tokenDocument.id);
+    if (!token)
+        return;
+    setTimeout(() => {
+        checkOnInitReactions(token);
+    }, 100);
+});
+
 Hooks.on('updateActor', (actor, change, options, userId) => {
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
-    if (!token) return;
+    if (!token)
+        return;
 
     if (change.system?.heat?.value !== undefined) {
         const previousHeat = previousHeatValues.get(actor.id) ?? actor.system.heat.value;
@@ -1143,10 +1444,10 @@ Hooks.on('updateActor', (actor, change, options, userId) => {
         if (heatChange > 0) {
             const heatMax = actor.system.heat.max;
             const inDangerZone = currentHeat >= Math.floor(heatMax / 2);
-            Hooks.callAll('lancer-reactionChecker.onHeat', token, heatChange, currentHeat, inDangerZone);
+            Hooks.callAll('lancer-automations.onHeat', token, heatChange, currentHeat, inDangerZone);
         } else if (heatChange < 0) {
             const heatCleared = Math.abs(heatChange);
-            Hooks.callAll('lancer-reactionChecker.onClearHeat', token, heatCleared, currentHeat);
+            Hooks.callAll('lancer-automations.onClearHeat', token, heatCleared, currentHeat);
         }
 
         previousHeatValues.set(actor.id, currentHeat);
@@ -1159,13 +1460,13 @@ Hooks.on('updateActor', (actor, change, options, userId) => {
 
         if (hpChange > 0) {
             const maxHP = actor.system.hp.max;
-            Hooks.callAll('lancer-reactionChecker.onHPRestored', token, hpChange, currentHP, maxHP);
+            Hooks.callAll('lancer-automations.onHPRestored', token, hpChange, currentHP, maxHP);
         } else if (hpChange < 0) {
             const hpLost = Math.abs(hpChange);
-            Hooks.callAll('lancer-reactionChecker.onHpLoss', token, hpLost, currentHP);
+            Hooks.callAll('lancer-automations.onHpLoss', token, hpLost, currentHP);
 
             if (previousHP > 0 && currentHP <= 0) {
-                Hooks.callAll('lancer-reactionChecker.onDestroyed', token);
+                Hooks.callAll('lancer-automations.onDestroyed', token);
             }
         }
 

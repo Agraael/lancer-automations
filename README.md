@@ -1,154 +1,299 @@
-# Lancer Reaction Checker
+# Lancer Automations
 
-A FoundryVTT module for the LANCER system that automates reactions, scripted reminders for item actions, or just global triggers.
+I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) (and borrows some of its code).
+
+So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. For now both modules work side by side, but some features do overlap.
 
 ## Installation
 
 **Manifest URL:**
 ```
-https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.json
+https://github.com/Agraael/lancer-automations/releases/latest/download/module.json
 ```
 
-### Requirements
+### Required
 
-- FoundryVTT v12+
-- [Lancer System](https://foundryvtt.com/packages/lancer)
-- [Lancer Style Library](https://github.com/Agraael/lancer-style-library)
-- [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) (Optional, for syntax highlighting)
+| Module | Description |
+|--------|-------------|
+| [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT |
+| FoundryVTT v12+ | Current version i'm working on |
+| [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
+| [Temporary Custom Statuses](https://foundryvtt.com/packages/temporary-custom-statuses) | Custom status effects with stacking |
+
+### Optional
+
+| Module | Why |
+|--------|-----|
+| [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Gives you syntax highlighting in the evaluate/activation code editors |
+| [TemplateMacro](https://foundryvtt.com/packages/templatemacro) | Allow scripting on measurement templates, i have added tools for Dangerous Zone and Area of Effect |
+| [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
+| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) | Required for the experimental boost detection feature (you can also try [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)|
+| [Token Factions](https://github.com/Agraael/token-factions) | My Fork of the original module containing a multi-team disposition filtering system |
 
 ## How It Works
 
-The module uses a list of triggers: `onHit`, `onAttack`, `onMove`, etc. When an actor does something that corresponds to a trigger, it fires. Other tokens (including the actor itself) can react to it.
+Everything revolves around **gameplay triggers**. Triggers cover pretty much anything that happens during play: `onMove`, `onAttack`, `onHit`, `onDamage`, `onTurnStart`, and many more. Each trigger carries its own data payload describing what just happened.
 
-You can write an evaluation function that returns `true` to validate the activation. For item-based activations, you can also specify a specific action from an item using the Action Path (useful for reactions provided by a weapon or system).
+![Trigger list](images/trigger-list.png)
 
-By default, a popup appears showing all activations that have been triggered and which actors can respond.
+Each time an actor does something that matches a trigger, it fires. Other tokens (including the actor itself) can then react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
 
 ### Example: Overwatch
 
-Overwatch is a built-in general activation listening to `onMove`. When any token moves, other actors can listen to this trigger. The evaluation checks "did it move within your threat range?" and returns `true` if so, allowing actors with available reactions to respond.
+When any token moves (`onMove`), every other token checks if it should react. The Overwatch activation evaluates whether the mover started within one of the reactor's weapons' threat range. If so, the reactor can Skirmish as a reaction.
 
-### Activation Types
+![Overwatch implementation](images/overwatch-implementation.png)
 
-You can also add Macro or JavaScript code to run either:
-- When clicking "Activate" in the summary popup
-- Automatically (skipping the popup entirely)
+## Activations
 
-This allows you to set up reminders or fully automate macros/code upon item usage.
+These are activations. Let's break them down.
 
-### Example: Item with On-Crit Effect
+Fair warning: the system can be a bit overwhelming at first. Don't hesitate to ask questions on the [Pilot NET Discord](https://discord.gg/pilot-net).
 
-Let's say you have an item with LID `big_gun` that deploys something on a critical hit.
+An activation fires when a trigger occurs. You decide who reacts: the actor itself, other tokens, or both. There are two types:
 
-1. Create an activation with that item's LID, listening to `onHit`
-2. By default, any actor with this item would trigger on any hit. Toggle **React to Self** so only the item owner triggers it
-3. But this still fires on any hit you make while owning the item. Toggle **Only On Source Match** so it only triggers when that specific item is used (note: this limits compatible triggers - things like `onMove` can't be triggered by items)
-4. In the evaluate function, check the data package from `onHit`, look at `hitTarget` for a crit, return `true` if found
-5. The item now appears in the summary popup for `onHit` events
-6. Add activation code to deploy the effect. If you enable **Auto Activate**, the code runs automatically without showing in the summary
+- **Item-based (LID):** Only tokens that possess the item (matched by Lancer Item ID) can react.
+- **Name-based (General):** All tokens can react, no item required.
 
-## Configuration
+### Filters
 
-Access via: **Configure Settings > Module Settings > Lancer Reaction Checker > Reactions Configuration**
+**Only On Source Match** restricts when the activation is valid:
+- For **Item-based** activations: only fires if the triggering token actually possesses the item.
+- For **General** activations: only fires if the triggering action name matches the activation name.
 
-### Trigger Types
+![Action types](images/action-types.png)
 
-| Trigger | Event |
-|---------|-------|
-| `onMove` | Token movement starts |
-| `onAttack` | Attack roll made |
-| `onHit` | Attack roll hits |
-| `onMiss` | Attack roll misses |
-| `onCrit` | Critical hit |
-| `onDamage` | Damage is applied |
-| `onTechAttack` | Tech attack made |
-| `onTechHit` | Tech attack hits |
-| `onTechMiss` | Tech attack misses |
-| `onStructure` | Structure damage taken |
-| `onStress` | Heat stress applied |
-| `onActivation` | Item activated |
-| `onStartOfTurn` | Combat turn starts |
-| `onEndOfTurn` | Combat turn ends |
+**Item LID Finder** is a built-in tool to help you find Lancer Item IDs in your world.
 
-### Activation Properties
+**Action Path** lets you point to a specific action inside an item to associate with the activation. Useful for reactions that come from a weapon or a specific talent rank. Format: `system.actions.0` or `ranks[0].actions[0]`.
 
-| Property | Description |
-|----------|-------------|
-| Item LID | Lancer Item ID (item-based only) |
-| Action Path | Path to action data in item (e.g., `system.actions.0`) |
-| Triggers | Which events to listen for |
-| Trigger Description | Displayed trigger text |
-| Effect Description | Displayed effect text |
-| Action Type | Reaction, Free Action, Quick Action, etc. |
-| Frequency | 1/round, 1/turn, unlimited, etc. |
-| Consumes Reaction | Whether using this consumes the token's reaction |
-| Auto Activate | Skip popup and run activation automatically |
-| React to Self | Allow token to react to its own triggers |
-| React to Others | Allow reacting to other tokens' triggers |
-| Only On Source Match | Only trigger when the source item/action matches |
-| Activation Type | None, Flow (chat card), Macro, or JavaScript |
-| Activation Mode | Run after or instead of the flow |
+![Item finder](images/item-finder.png)
 
-### Evaluate Function
+**Trigger / Effect Description** lets you override the text shown in the activation popup.
 
-The evaluate function determines if an activation should trigger. It receives:
-- `triggerType` - Which trigger fired
-- `data` - Trigger-specific data (targets, damage, positions, etc.)
-- `reactorToken` - The token that might react
-- `item` - The item (for item-based activations)
+**Action Type** controls the formatting (Reaction, Free Action, Quick Action, Full Action, Protocol, Other).
 
-Must return `true` or `false`.
+**Other built-in filters** include disposition (friendly, hostile, neutral), distance checks, stat check type, and more. No coding needed for those.
 
-## Export & Import
+### Evaluate, Activate & Init Functions
 
-You can export and import activations to share with others. Overwatch is provided as a default. The rest depends on what people find useful - the system is flexible enough to automate most things.
+**Evaluate** is a code block (or macro) that validates the activation. It receives the trigger type, trigger data, reactor token, item, and activation name. Return `true` to proceed, `false` to skip.
 
-## Utilities
+**Activation popup (manual mode):** Non-auto activations show up in a summary popup listing all triggered activations and which tokens can respond.
 
-- **LID Item Finder** - Helps you find item LIDs in your world
-- **Debug Mode** - Enable console logging for troubleshooting
+![Activation popup](images/activation-popup.png)
 
-## API
+Click an entry to see its details, then click Activate. In settings you can let players who own the token see and interact with these popups too.
 
-```javascript
-const api = game.modules.get('lancer-reactionChecker').api;
+**Auto mode:** When checked, the code executes directly when the trigger fires. No popup, no confirmation.
 
-api.checkOverwatchCondition(reactorToken, moverToken, startPos)
-api.getActorMaxThreat(actor)
-api.getTokenDistance(token1, token2)
-api.isHostile(token1, token2)
-api.isFriendly(token1, token2)
-```
+By default, activating prints the item/action card to chat and then runs your activation code. You can change the activation mode to run code **instead of** the default flow (skipping the chat card).
 
-## Experimental Boost Detection (WIP)
+**onInit Code** runs when a token is created in the scene. Handy for setting up initial state or effects.
 
-This feature tracks cumulative token movement during a turn to detect when a Boost action is used.
+For the full reference of what data each trigger provides, check the [API Reference](API_REFERENCE.md).
 
-### Requirements
+![Trigger tooltip](images/trigger-tooltip.png)
 
-- [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [Lancer Elevation Ruler Fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)
+### Boost Detection (Experimental)
 
-### How It Works
-
-When enabled, the module tracks cumulative drag movement for each token. When movement exceeds the token's base speed, a boost is detected. The `onMove` trigger data includes:
+When enabled (requires [Elevation Ruler](https://foundryvtt.com/packages/elevationruler)), the module tracks cumulative drag movement for each token during a turn. When movement exceeds the token's base speed, a boost is detected. The `onMove` trigger data then includes:
 
 - `moveInfo.isBoost` - `true` if this move crossed a boost threshold
-- `moveInfo.boostSet` - Array of boost numbers crossed (e.g., `[1]` for first boost, `[1,2]` if a single long move crossed multiple thresholds)
+- `moveInfo.boostSet` - Array of boost numbers crossed (e.g., `[1]` for first boost)
 
-### Testing
+Cumulative movement resets automatically at the start of each token's turn. You can also manually reset it: `api.clearMoveData(tokenDocumentId)`.
 
-1. Enable **Experimental Boost Detection (WIP)** in module settings
-2. Enable **Debug Boost Detection** to see UI notifications showing cumulative movement and boost detection
-3. Drag a token to move it - notifications will show `moved X, cumulative Y/Z | isBoost: true/false, boostSet: [...]`
+This is still experimental.
 
-### API
+### Built-in Activations
+
+The module ships with these defaults:
+
+- **Overwatch** - Reacts to `onMove` when a hostile enters your weapon threat range
+- **Brace** - Reacts to `onDamage` when damage would kill you or deal half your HP
+- **Flight** - Reacts to `onStatusApplied` / `onStructure` / `onStress` to handle flying immunity and fall saves
+- **Fall** - Reacts to `onTurnEnd` to check if an airborne token should fall
+
+### Export / Import
+
+In the module settings, you can export and import your activations as JSON. Makes it easy to share setups with other GMs or just back things up.
+
+### Tips
+
+In code editor blocks, you can write a full function signature like `async function(triggerType, triggerData, reactorToken, item, activationName) { ... }` instead of just the function body. The module strips the wrapper automatically. Looks much nicer with CodeMirror highlighting.
+
+You can also register default activations by code. See the [API Reference](API_REFERENCE.md#how-to-register-default-activations-by-code) for how.
+
+## Effect Manager
+
+Combined with [Temporary Custom Statuses](https://foundryvtt.com/packages/temporary-custom-statuses) and code originally from Lancer QoL, the Effect Manager gives you extended status effects with turn-based duration and stack consumption.
+
+![Effect Manager](images/effect-manager.png)
+
+- Effects can have a **duration** (start/end of turn countdown) AND **consumable stacks**
+- Stack consumption is tied to automation triggers (e.g., Soft Cover consumes a stack when the token boosts)
+- Works with custom statuses: create temporary statuses on the fly, or save them for reuse
+- Supports evaluation lambdas for consumption conditions, same syntax as activation evaluate functions
+
+## Bonuses
+
+The Effect Manager also lets you create **Bonuses and Maluses** tied to custom effects.
+
+Four types:
+- **Accuracy** - Adds accuracy dice to rolls
+- **Difficulty** - Adds difficulty dice to rolls
+- **Damage** - Adds bonus damage (by type)
+- **Stat** - Modifies actor stats directly (HP, Heat Cap, Speed, Evasion, etc.)
+
+Each bonus can have duration and stack consumption, just like effects. By code, you can add evaluation lambdas for fine-grained control over when stacks are consumed.
+
+![Bonus system](images/bonus-system.png)
+
+### NPC Implementation Examples
+
+Here are some real examples from [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) showing how to combine activations, effects, and bonuses for NPC features.
+
+**Dispersal Shield (Priest):**
+
+Rolls 1d3 charges of all-resistance, shared via `groupId` so any damage consumes from the shared pool.
 
 ```javascript
-// Manually reset cumulative movement data for a token
-game.modules.get("lancer-reactionChecker").api.clearMoveData(tokenDocumentId)
+"npcf_dispersal_shield_priest": {
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        actionType: "Quick Action",
+        frequency: "Unlimited",
+        onlyOnSourceMatch: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            const qol = game.modules.get('csm-lancer-qol');
+            const lancerAutomations = game.modules.get('lancer-automations');
+
+            if (!lancerAutomations?.api?.applyFlaggedEffectToTokens) {
+                ui.notifications.error("lancer-automations module required");
+                return;
+            }
+
+            // Select allied target or self
+            const targets = await qol.exposed.chooseToken(reactorToken, {
+                count: 1,
+                range: reactorToken.system.sensors.range,
+                filter: (t) => t.document.disposition >= 0 || t.id === reactorToken.id
+            });
+            const target = targets?.[0] || reactorToken;
+            const roll = await new Roll("1d3").evaluate();
+            await roll.toMessage({
+                speaker: ChatMessage.getSpeaker({ token: reactorToken.document }),
+                flavor: `${activationName} - Resistance charges`
+            });
+            const charges = roll.total;
+            const groupId = foundry.utils.randomID();
+            const resistances = [
+                "lancer.statusIconsNames.resistance_heat",
+                "lancer.statusIconsNames.resistance_kinetic",
+                "lancer.statusIconsNames.resistance_explosive",
+                "lancer.statusIconsNames.resistance_burn",
+                "lancer.statusIconsNames.resistance_energy"
+            ];
+
+            await lancerAutomations.api.applyFlaggedEffectToTokens({
+                tokens: [target],
+                effectNames: resistances,
+                note: `Dispersal Shield (${charges} charges)`,
+                duration: { label: 'indefinite', turns: null, rounds: null },
+                useTokenAsOrigin: false,
+                customOriginId: reactorToken.id
+            }, {
+                stack: charges,
+                consumption: {
+                    trigger: "onDamage",
+                    originId: target.id,
+                    groupId: groupId
+                }
+            });
+        }
+    }]
+}
 ```
 
-Cumulative movement automatically resets when a token's turn starts.
+**Sapper Kit - Smoke Launcher (Strider):**
+
+Places a smoke zone template on activation, then cleans it up at the start of the next turn.
+
+```javascript
+"nrfaw-npc_carrier_SmokeLaunchers": {
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        actionType: "Quick Action",
+        usesPerRound: 1,
+        onlyOnSourceMatch: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            const qol = game.modules.get('csm-lancer-qol');
+            if (!qol?.exposed?.placeZone) {
+                ui.notifications.warn("csm-lancer-qol module required for smoke placement");
+                return;
+            }
+
+            const result = await qol.exposed.placeZone(reactorToken, {
+                range: 5,
+                size: 2,
+                type: "Blast",
+                fillColor: "#808080",
+                borderColor: "#ffffff",
+                statusEffects: ["cover_soft"]
+            }, 2);
+
+            if (result?.template) {
+                const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
+                existing.push(result.template.id);
+                await reactorToken.actor.setFlag("lancer-automations", "smokeTemplates", existing);
+            }
+        }
+    }, {
+        triggers: ["onTurnStart"],
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            const templates = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
+            if (!templates.length)
+                return;
+
+            for (const id of templates) {
+                const template = canvas.scene.templates.get(id);
+                if (template)
+                    await template.delete();
+            }
+
+            await reactorToken.actor.unsetFlag("lancer-automations", "smokeTemplates");
+        }
+    }]
+}
+```
+
+## Useful Tools & API
+
+There are many utility functions exposed for scripting. For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
+
+```javascript
+const api = game.modules.get('lancer-automations').api;
+```
 
 ## Support
 

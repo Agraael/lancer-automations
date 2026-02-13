@@ -5,13 +5,41 @@ let activeReactionDialog = null;
 let activeDetailPanel = null;
 let selectedReactionKey = null;
 
+async function runCustomActivation({ activationType, source, triggerType, triggerData, token, item, activationName }) {
+    if (activationType === "macro") {
+        const macroName = source?.activationMacro;
+        if (macroName) {
+            const macro = game.macros.find(m => m.name === macroName);
+            if (macro) {
+                await macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
+            } else {
+                ui.notifications.warn(`Macro "${macroName}" not found`);
+            }
+        }
+    } else if (activationType === "code") {
+        const code = source?.activationCode;
+        if (code) {
+            try {
+                if (typeof code === 'function') {
+                    await code(triggerType, triggerData, token, item, activationName);
+                } else if (typeof code === 'string') {
+                    const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                    await fn(triggerType, triggerData, token, item, activationName);
+                }
+            } catch (e) {
+                console.error(`lancer-automations | Error executing activation code:`, e);
+            }
+        }
+    }
+}
+
 export async function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
     token.control({ releaseOthers: true });
 
     if (item) {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-        const reactionEntry = reactionConfig?.reactions?.[0] || reaction;
+        const reactionEntry = reaction || reactionConfig?.reactions?.[0];
 
         const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
         const consumesReaction = reactionEntry?.consumesReaction !== false;
@@ -19,33 +47,9 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
         const activationType = reactionEntry?.activationType || "flow";
         const activationMode = reactionEntry?.activationMode || "after";
 
-        const executeCustomActivation = async () => {
-            if (activationType === "macro") {
-                const macroName = reactionEntry?.activationMacro;
-                if (macroName) {
-                    const macro = game.macros.find(m => m.name === macroName);
-                    if (macro) {
-                        await macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
-                    } else {
-                        ui.notifications.warn(`Macro "${macroName}" not found`);
-                    }
-                }
-            } else if (activationType === "code") {
-                const code = reactionEntry?.activationCode;
-                if (code) {
-                    try {
-                        if (typeof code === 'function') {
-                            await code(triggerType, triggerData, token, item, activationName);
-                        } else if (typeof code === 'string') {
-                            const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                            await fn(triggerType, triggerData, token, item, activationName);
-                        }
-                    } catch (e) {
-                        console.error(`lancer-reactionChecker | Error executing activation code:`, e);
-                    }
-                }
-            }
-        };
+        const executeCustomActivation = () => runCustomActivation({
+            activationType, source: reactionEntry, triggerType, triggerData, token, item, activationName
+        });
 
         const itemActivation = async () => {
             const reactionPath = reactionEntry?.reactionPath;
@@ -61,10 +65,47 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                 const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
                 const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
                 await item.beginActivationFlow(path);
-            } else if (item.beginSystemFlow) {
+            } else if (item.beginSystemFlow && item.system.type !== "Weapon") {
                 await item.beginSystemFlow();
-            } else {
-                await item.toChat();
+            } else{
+                const sendUnknownToChatFlow = game.lancer?.flows?.get("SendUnknownToChat");
+                const simpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
+
+                if (sendUnknownToChatFlow) {
+                    new sendUnknownToChatFlow(item.uuid, {
+                        title: item.name,
+                        description: item.system.description,
+                        trigger: item.system.trigger,
+                        effect: item.system.effect,
+                        onHit: item.system.on_hit,
+                        onCrit: item.system.on_crit,
+                        tags: item.system.tags
+                    }).begin();
+                } else if (simpleActivationFlow) {
+                    new simpleActivationFlow(token.actor.uuid, { title: item.name, item: item }).begin();
+                } else {
+                    const template = `systems/${game.system.id}/templates/chat/generic-card.hbs`;
+                    
+                    let fullDescription = item.system.description || "";
+                    if (item.system.trigger) fullDescription += `<br><strong>Trigger:</strong> ${item.system.trigger}`;
+                    if (item.system.effect) fullDescription += `<br><strong>Effect:</strong> ${item.system.effect}`;
+                    if (item.system.on_hit) fullDescription += `<br><strong>On Hit:</strong> ${item.system.on_hit}`;
+                    if (item.system.on_crit) fullDescription += `<br><strong>On Crit:</strong> ${item.system.on_crit}`;
+
+                    const tags = item.system.tags || [];
+                    const content = await renderTemplate(template, {
+                        title: item.name,
+                        description: fullDescription,
+                        tags: tags
+                    });
+                    
+                    ChatMessage.create({
+                        user: game.user.id,
+                        speaker: ChatMessage.getSpeaker({ actor: token.actor }),
+                        content: content,
+                        type: CONST.CHAT_MESSAGE_TYPES.OTHER
+                    });
+                }
             }
         };
 
@@ -90,33 +131,9 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
         const activationType = generalReaction?.activationType || "flow";
         const activationMode = generalReaction?.activationMode || "after";
 
-        const executeCustomActivation = async () => {
-            if (activationType === "macro") {
-                const macroName = generalReaction?.activationMacro;
-                if (macroName) {
-                    const macro = game.macros.find(m => m.name === macroName);
-                    if (macro) {
-                        await macro.execute({ triggerType, triggerData, reactorToken: token, item: null, activationName });
-                    } else {
-                        ui.notifications.warn(`Macro "${macroName}" not found`);
-                    }
-                }
-            } else if (activationType === "code") {
-                const code = generalReaction?.activationCode;
-                if (code) {
-                    try {
-                        if (typeof code === 'function') {
-                            await code(triggerType, triggerData, token, null, activationName);
-                        } else if (typeof code === 'string') {
-                            const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                            await fn(triggerType, triggerData, token, null, activationName);
-                        }
-                    } catch (e) {
-                        console.error(`lancer-reactionChecker | Error executing activation code:`, e);
-                    }
-                }
-            }
-        };
+        const executeCustomActivation = () => runCustomActivation({
+            activationType, source: generalReaction, triggerType, triggerData, token, item: null, activationName
+        });
 
         const showChatActivation = async () => {
             const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
@@ -163,7 +180,7 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
         }
     }
 
-    if (game.settings.get('lancer-reactionChecker', 'consumeReaction')) {
+    if (game.settings.get('lancer-automations', 'consumeReaction')) {
         let shouldConsume = false;
 
         if (item) {
@@ -230,8 +247,8 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 
     selectedReactionKey = reactionKey;
 
-    let triggerText = "No trigger text";
-    let effectText = "No effect info";
+    let triggerText = "";
+    let effectText = "";
     let activationPath = null;
     let panelActivationName = "Unknown";
     let isReactionType = true;
@@ -262,9 +279,12 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     } else if (item) {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-        const reactionEntry = reactionConfig?.reactions?.[0];
+        
+        // prioritizing specific reaction provided in reactionData (from triggeredReactions)
+        const specificReaction = reactionData?.reaction;
+        const reactionEntry = specificReaction || reactionConfig?.reactions?.[0];
 
-        const reactionPath = reactionEntry?.reactionPath || "system.trigger";
+        const reactionPath = reactionEntry?.reactionPath || "system";
         isReactionType = reactionEntry?.actionType ? (reactionEntry.actionType === "Reaction") : (reactionEntry?.isReaction !== false);
         actionType = reactionEntry?.actionType || (isReactionType ? "Reaction" : "Free Action");
         frequency = reactionEntry?.frequency || "1/Round";
@@ -283,22 +303,27 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         };
 
         const resolvedData = resolvePath(item, reactionPath);
+        const rootSystem = item.system;
 
         if (typeof resolvedData === 'string') {
             triggerText = resolvedData;
 
-            if (item.system?.effect) {
-                effectText = item.system.effect;
+            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
+                effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
             }
 
             activationPath = null;
         } else if (typeof resolvedData === 'object' && resolvedData !== null) {
-            triggerText = resolvedData.trigger || resolvedData.description || "No trigger text";
-            effectText = resolvedData.effect || resolvedData.detail || "No effect info";
+            triggerText = resolvedData.trigger || resolvedData.description || "";
+            
+            // Fallback chain: specific effect -> specific on_hit -> specific detail -> root effect -> root on_hit
+            effectText = resolvedData.effect || resolvedData.on_hit || resolvedData.on_crit || resolvedData.detail || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
 
             activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
         } else {
-            triggerText = "Path not found: " + reactionPath;
+             if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
+                effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
+            }
         }
 
         if (reactionEntry?.triggerDescription) {
@@ -409,7 +434,9 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         if (item) {
             const lid = item.system?.lid;
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-            reaction = reactionConfig?.reactions?.[0];
+            
+            const specificReaction = reactionData?.reaction;
+            reaction = specificReaction || reactionConfig?.reactions?.[0];
         } else {
             reaction = ReactionManager.getGeneralReaction(panelActivationName);
         }
@@ -602,10 +629,11 @@ function renderReactionDialog(popupData) {
                     triggerData = reactionData?.triggerData;
                 } else {
                     const reactionEntry = triggeredReactions.find(r =>
-                        r.token.id === tokenId && !r.isGeneral && r.item?.id === itemId
+                        r.token.id === tokenId && !r.isGeneral && r.item?.id === itemId && r.reactionName === reactionName
                     );
                     item = reactionEntry?.item;
                     triggerData = reactionEntry?.triggerData;
+                    reactionData = reactionEntry;
                     if (!item) return;
                 }
 

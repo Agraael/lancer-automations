@@ -1,17 +1,17 @@
 {
-    "id": "lancer-reactionChecker",
-    "title": "Lancer Reaction Checker",
-    "version": "1.2.7",
-    "description": "Port of the Overwatch Reaction Auto-Checker from csm-lancer-qol.",
+    "id": "lancer-automations",
+    "title": "Lancer Automations",
+    "version": "2.0.0",
+    "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
         {
             "name": "Agraael"
         }
     ],
-    "url": "https://github.com/Agraael/lancer-reactionChecker",
-    "manifest": "https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/lancer-reactionChecker/releases/latest/download/module.zip",
+    "url": "https://github.com/Agraael/lancer-automations",
+    "manifest": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.json",
+    "download": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.zip",
     "esmodules": [
         "scripts/overwatch.js",
         "scripts/main.js"
@@ -33,6 +33,10 @@
         "requires": [
             {
                 "id": "lancer-style-library",
+                "type": "module"
+            },
+            {
+                "id": "temporary-custom-statuses",
                 "type": "module"
             }
         ],
