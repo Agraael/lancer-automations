@@ -114,7 +114,7 @@ Add a global bonus to an actor. Creates a linked status effect on the token.
 | `uses` | `number` | Stack count (optional) |
 | `stat` | `string` | For stat bonuses: property path (e.g. `"system.hp.max"`, `"system.evasion"`) |
 | `targetTypes` | `Array<string>` | Flow type filters: `["all"]`, `["attack"]`, `["check"]`, `["damage"]`, etc. |
-| `condition` | `string` | JS condition string: `(state, actor, data, context) => boolean` |
+| `condition` | `string \| function` | JS condition — function reference or string expression. Args: `(state, actor, data, context)`, returns boolean. Supports async. |
 | `itemLids` | `Array<string>` | Item LID filters |
 | `context` | `Object` | Data passed to condition evaluation |
 | `damage` | `Array<Object>` | For damage bonuses: `[{ type: "Kinetic", val: 2 }]` |
@@ -713,9 +713,6 @@ The full structure of an activation config object, used by both item-based and g
     // Item-specific
     reactionPath: "",                    // Path to action in item (e.g., "ranks[0].actions[0]")
     onInit: "",                          // Code to run when token is created
-
-    // Internal
-    isReaction: true                     // Whether this counts as a reaction
 }
 ```
 
@@ -923,7 +920,7 @@ await api.addGlobalBonus(actor, {
 
 **Stat bonus (current resource — e.g., overshield):**
 
-Current resources like HP, Heat, and Overshield use direct `actor.update()` instead of ActiveEffect changes, because AE changes get re-applied on every data refresh (which breaks consumable resources).
+Current resources like HP, Heat, and Overshield use direct `actor.update()`
 
 ```javascript
 await api.addGlobalBonus(actor, {
@@ -946,7 +943,7 @@ await api.addGlobalBonus(actor, {
     val: 1,
     type: "difficulty",
     targetTypes: ["attack"],
-    condition: "(state, actor, data, context) => { return state.data?.title?.includes('Melee'); }"
+    condition: async (state, actor, data, context) => { return state.data?.title?.includes('Melee'); }
 }, {
     duration: "start",
     durationTurns: 2,

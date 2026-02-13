@@ -1,5 +1,6 @@
 import { applyFlaggedEffectToTokens } from "./flagged-effects.js";
 import { executeEffectManager } from "./effectManager.js";
+import { stringToAsyncFunction } from "./reaction-manager.js";
 
 // Current resource stats use direct actor.update() instead of ActiveEffect changes,
 // because AE changes get re-applied on every data refresh (breaking consumable resources like overshield).
@@ -39,7 +40,7 @@ function createGenericBonusStep(flowType) {
                 const tags = getFlowTags(flowType, state);
 
                 for (const bonus of bonuses) {
-                    if (!isBonusApplicable(bonus, tags, state))
+                    if (!await isBonusApplicable(bonus, tags, state))
                         continue;
 
                     if (bonus.type === 'stat')
@@ -157,18 +158,23 @@ function getFlowTags(flowType, state) {
     return tags;
 }
 
-function isBonusApplicable(bonus, flowTags, state) {
+async function isBonusApplicable(bonus, flowTags, state) {
     if (bonus.targetTypes && Array.isArray(bonus.targetTypes) && bonus.targetTypes.length > 0) {
         const hasMatch = bonus.targetTypes.some(t => flowTags.has(t.toLowerCase()));
         if (!hasMatch)
             return false;
     }
 
-    if (bonus.condition && typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
+    if (bonus.condition) {
         try {
             const context = bonus.context || {};
-            const func = new Function('state', 'actor', 'data', 'context', `return (${bonus.condition});`);
-            const result = func(state, state.actor, state.data, context);
+            let result;
+            if (typeof bonus.condition === 'function') {
+                result = await bonus.condition(state, state.actor, state.data, context);
+            } else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
+                const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
+                result = await fn(state, state.actor, state.data, context);
+            }
             if (!result)
                 return false;
         } catch (e) {

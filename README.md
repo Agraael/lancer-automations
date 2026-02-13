@@ -181,7 +181,7 @@ All-resistance for the next 1d3 attacks
                 return;
             }
 
-            // Select allied target or self
+            //custom function  in my own QoL version
             const targets = await qol.exposed.chooseToken(reactorToken, {
                 count: 1,
                 range: reactorToken.system.sensors.range,
@@ -247,7 +247,7 @@ Places a smoke zone that last until the end of next turn.
                 ui.notifications.warn("csm-lancer-qol module required for smoke placement");
                 return;
             }
-
+            //custom function  in my own QoL version
             const result = await qol.exposed.placeZone(reactorToken, {
                 range: 5,
                 size: 2,
