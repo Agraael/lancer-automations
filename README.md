@@ -156,7 +156,7 @@ Here are some real examples from [Lancer QoL](https://github.com/BoltsJ/lancer-w
 
 **Dispersal Shield (Priest):**
 
-Rolls 1d3 charges of all-resistance, shared via `groupId` so any damage consumes from the shared pool.
+All-resistance for the next 1d3 attacks
 
 ```javascript
 "npcf_dispersal_shield_priest": {
@@ -225,7 +225,7 @@ Rolls 1d3 charges of all-resistance, shared via `groupId` so any damage consumes
 
 **Sapper Kit - Smoke Launcher (Strider):**
 
-Places a smoke zone template on activation, then cleans it up at the start of the next turn.
+Places a smoke zone that last until the end of next turn.
 
 ```javascript
 "nrfaw-npc_carrier_SmokeLaunchers": {
