@@ -26,6 +26,7 @@ import {
 } from "./genericBonuses.js";
 import { executeEffectManager, openItemBrowser } from "./effectManager.js";
 import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
+import { chooseToken, placeZone, getGridDistance, drawRangeHighlight } from "./interactive-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -211,11 +212,78 @@ async function performStatRoll(actor, stat, title, target = 10) {
         console.error("lancer-automations | StatRollFlow not found");
         return { completed: false };
     }
+
+    let targetVal = target;
+    let targetToken = null;
+    let rollTitle = title;
     const upperStat = stat.toUpperCase();
+
+    // Handle "token" target selection or object target
+    const useFlowTargeting = game.settings.get('lancer-automations', 'statRollTargeting');
+
+    if (target === "token" && !useFlowTargeting) {
+        const token = actor.token?.object;
+        if (!token) {
+            ui.notifications.warn("No source token found for choosing target.");
+            return { completed: false };
+        }
+
+        const targets = await chooseToken(token, {
+            title: `${upperStat} SAVE TARGET`,
+            description: `Select a target for the ${upperStat} Save.`,
+            count: 1,
+            range: null
+        });
+
+        if (targets && targets.length > 0) {
+            targetToken = targets[0];
+        } else {
+            return { completed: false };
+        }
+    } else if (typeof target === 'object') {
+        if (target instanceof TokenDocument) {
+            targetToken = target.object;
+        } else if (target.actor) {
+            targetToken = target;
+        } else if (target instanceof Actor) {
+            const t = target.getActiveTokens()[0];
+            if (t) {
+                targetToken = t;
+            }
+        }
+    }
+
+    if (targetToken && targetToken.actor) {
+        const targetActor = targetToken.actor;
+
+        if (!rollTitle) {
+            rollTitle = `${upperStat} Save`;
+        }
+
+        // Dynamic Difficulty
+        if (targetActor.type === "npc" || targetActor.type === "deployable") {
+            targetVal = targetActor.system.save || 10;
+        } else if (targetActor.type === "mech") {
+            // Same stat on target (e.g. HULL check vs HULL)
+            const path = STAT_PATHS[upperStat] || stat;
+            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
+        }
+    }
+
+    if (!rollTitle) {
+        rollTitle = `${upperStat} Check`;
+    }
+
     const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
     const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
-    const rollTitle = title || `${upperStat} Check`;
-    const flow = new StatRollFlow(actor, { path: statPath, title: rollTitle });
+
+    // Pass targetToken to flow options
+    const flowOptions = { path: statPath, title: rollTitle };
+    if (targetToken) {
+        flowOptions.targetToken = targetToken;
+    }
+
+    const flow = new StatRollFlow(actor, flowOptions);
     const completed = await flow.begin();
     if (!completed) {
         return { completed: false };
@@ -225,7 +293,7 @@ async function performStatRoll(actor, stat, title, target = 10) {
         completed: true,
         total,
         roll: flow.state.data?.result?.roll ?? null,
-        passed: total !== null ? total >= target : false
+        passed: total !== null ? (targetVal !== undefined ? total >= targetVal : false) : false
     };
 }
 
@@ -399,8 +467,14 @@ async function checkReactions(triggerType, data) {
             const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
                 reactionQueue.push({
-                    triggerType, token, item: null, reaction,
-                    itemName: reactionName, reactionName, isGeneral: true, triggerData: enrichedData
+                    triggerType,
+                    token,
+                    item: null,
+                    reaction,
+                    itemName: reactionName,
+                    reactionName,
+                    isGeneral: true,
+                    triggerData: enrichedData
                 });
             }
         }
@@ -409,8 +483,14 @@ async function checkReactions(triggerType, data) {
             const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
                 reactionQueue.push({
-                    triggerType, token, item: null, reaction,
-                    itemName: reactionName, reactionName, isGeneral: true, triggerData: enrichedData
+                    triggerType,
+                    token,
+                    item: null,
+                    reaction,
+                    itemName: reactionName,
+                    reactionName,
+                    isGeneral: true,
+                    triggerData: enrichedData
                 });
             }
         }
@@ -631,7 +711,8 @@ function registerReactionHooks() {
     Hooks.on('lancer-automations.onAttack', (attacker, weapon, targets, actionData) => {
         handleTrigger('onAttack', {
             triggeringToken: attacker,
-            weapon, targets,
+            weapon,
+            targets,
             attackType: actionData?.attack_type || null,
             actionName: actionData?.title || actionData?.action?.name || null,
             tags: actionData?.tags || [],
@@ -666,7 +747,12 @@ function registerReactionHooks() {
     Hooks.on('lancer-automations.onDamage', (attacker, weapon, target, damages, types, isCrit, isHit, actionData) => {
         handleTrigger('onDamage', {
             triggeringToken: attacker,
-            weapon, target, damages, types, isCrit, isHit,
+            weapon,
+            target,
+            damages,
+            types,
+            isCrit,
+            isHit,
             attackType: actionData?.attack_type || null,
             actionName: actionData?.title || actionData?.action?.name || null,
             tags: actionData?.tags || [],
@@ -713,7 +799,8 @@ function registerReactionHooks() {
     Hooks.on('lancer-automations.onTechAttack', (attacker, techItem, targets, actionData) => {
         handleTrigger('onTechAttack', {
             triggeringToken: attacker,
-            techItem, targets,
+            techItem,
+            targets,
             actionName: actionData?.title || actionData?.action?.name || null,
             isInvade: actionData?.isInvade || false,
             tags: actionData?.tags || [],
@@ -745,8 +832,8 @@ function registerReactionHooks() {
         });
     });
 
-    Hooks.on('lancer-automations.onCheck', (token, statName, roll, total, success) => {
-        handleTrigger('onCheck', { triggeringToken: token, statName, roll, total, success });
+    Hooks.on('lancer-automations.onCheck', (triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal) => {
+        handleTrigger('onCheck', { triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal });
     });
 
     Hooks.on('lancer-automations.onActivation', (token, actionType, actionName, item, actionData) => {
@@ -780,6 +867,17 @@ function registerSettings() {
         },
         default: "both"
     });
+
+    game.settings.register('lancer-automations', 'statRollTargeting', {
+        name: 'Enable Stat Roll Target Selection',
+        hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+
 
     game.settings.register('lancer-automations', 'consumeReaction', {
         name: 'Consume Activation on Activate',
@@ -1187,9 +1285,10 @@ async function onCheckStep(state) {
     const statName = state.data?.title || 'Unknown';
     const roll = state.data?.result?.roll;
     const total = roll?.total;
-    const success = state.data?.result?.success;
+    state.data.targetVal = state.data.targetVal? state.data.targetVal : 10;
+    const success = total >= state.data.targetVal;
 
-    Hooks.callAll('lancer-automations.onCheck', token, statName, roll, total, success);
+    Hooks.callAll('lancer-automations.onCheck', token, statName, roll, total, success, state.data.targetToken, state.data.targetVal);
     return true;
 }
 
@@ -1234,6 +1333,67 @@ async function onActivationStep(state) {
     return true;
 }
 
+async function statRollTargetSelectStep(state) {
+    if (!game.settings.get('lancer-automations', 'statRollTargeting')) {
+        return true;
+    }
+
+    // If target already provided (e.g. via performStatRoll), skip
+    if (state.data.targetToken) {
+        return true;
+    }
+
+    const actor = state.actor;
+    const token = actor.token?.object || canvas.tokens.get(actor.token?.id) || canvas.tokens.controlled[0];
+    if (!token) {
+        return true;
+    }
+
+    // Infer stat from path (e.g. system.hull -> HULL)
+    let statName = "STAT";
+    if (state.data.path) {
+        const parts = state.data.path.split('.');
+        statName = parts[parts.length - 1].toUpperCase();
+    }
+
+    const targets = await chooseToken(token, {
+        title: `${statName} SAVE TARGET`,
+        description: `Select a target to make it a Skill Save (Optional)`,
+        count: 1,
+        range: null,
+        includeSelf: true // Allow self-targeting if needed
+    });
+
+    if (targets && targets.length > 0) {
+        const targetToken = targets[0];
+        state.data.targetToken = targetToken;
+
+        let targetVal = 10;
+        const targetActor = targetToken.actor;
+
+        if (targetActor.type === "npc" || targetActor.type === "deployable") {
+            targetVal = targetActor.system.save || 10;
+        } else if (targetActor.type === "mech") {
+            // Try to map back to a stat path
+            const path = state.data.path;
+            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
+        }
+
+        state.data.targetVal = targetVal;
+
+        // Update title with difficulty
+        const currentTitle = state.data.title || `${statName} Check`;
+        // Replace "Check" with "Save" if present
+        let newTitle = currentTitle.replace("Check", "Save");
+        if (!newTitle.includes("Save"))
+            newTitle += " Save";
+
+        state.data.title = `${newTitle} (>= ${targetVal})`;
+    }
+
+    return true;
+}
+
 Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
@@ -1252,10 +1412,17 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:genericAccuracyStepStatRoll', genericAccuracyStepStatRoll);
     flowSteps.set('lancer-automations:genericBonusStepDamage', genericBonusStepDamage);
 
+    // Register new targeting step
+    flowSteps.set('lancer-automations:statRollTargetSelect', statRollTargetSelectStep);
+
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
+
+    // Insert targeting step BEFORE HUD
+    flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:statRollTargetSelect');
     flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:genericAccuracyStepStatRoll');
+
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:genericBonusStepDamage');
 
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
@@ -1281,6 +1448,21 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
 Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
+});
+
+Hooks.on('lancer.statusesReady', () => {
+    CONFIG.statusEffects.push({
+        id: "resistance_all",
+        name: "Resist All",
+        img: "modules/lancer-automations/icons/resist_all.svg",
+        changes: [
+            { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
+        ]
+    });
 });
 
 Hooks.on('ready', () => {
@@ -1316,7 +1498,11 @@ Hooks.on('ready', () => {
         getCumulativeMoveData,
         getTokenCells,
         getMaxGroundHeightUnderToken,
-        performStatRoll
+        performStatRoll,
+        chooseToken,
+        placeZone,
+        getGridDistance,
+        drawRangeHighlight
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -1417,6 +1603,50 @@ Hooks.on('deleteActiveEffect', (effect, options, userId) => {
     const statusId = effect.statuses?.first() || effect.name;
 
     Hooks.callAll('lancer-automations.onStatusRemoved', token, statusId, effect);
+
+    // Clean up grouped effects: if one effect in a group is removed, remove the rest
+    const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
+    if (groupId && !options?.skipGroupCleanup) {
+        const groupEffects = actor.effects.filter(e =>
+            e.id !== effect.id && e.flags?.['lancer-automations']?.consumption?.groupId === groupId
+        );
+        if (groupEffects.length > 0) {
+            actor.deleteEmbeddedDocuments("ActiveEffect", groupEffects.map(e => e.id), { skipGroupCleanup: true });
+        }
+    }
+});
+
+Hooks.on('updateActiveEffect', (effect, change, options, userId) => {
+    if (options?.skipGroupSync)
+        return;
+    const newStack = change?.flags?.statuscounter?.value;
+    if (newStack === undefined)
+        return;
+
+    const actor = effect.parent;
+    if (!actor)
+        return;
+
+    const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
+    if (!groupId)
+        return;
+
+    const groupEffects = actor.effects.filter(e =>
+        e.id !== effect.id && e.flags?.['lancer-automations']?.consumption?.groupId === groupId
+    );
+    if (groupEffects.length === 0)
+        return;
+
+    const updates = groupEffects
+        .filter(e => (e.flags?.statuscounter?.value ?? 1) !== newStack)
+        .map(e => ({
+            _id: e.id,
+            "flags.statuscounter.value": newStack,
+            "flags.statuscounter.visible": newStack > 1
+        }));
+    if (updates.length > 0) {
+        actor.updateEmbeddedDocuments("ActiveEffect", updates, { skipGroupSync: true });
+    }
 });
 
 let previousHeatValues = new Map();

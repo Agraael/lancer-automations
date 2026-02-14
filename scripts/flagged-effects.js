@@ -165,7 +165,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
 
     } else {
         const effectName = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
-        const statusEffect = CONFIG.statusEffects.find(x => x.name === effectName);
+        const statusEffect = CONFIG.statusEffects.find(x => x.name === effectName || x.id === effectName);
 
         if (!statusEffect) {
             ui.notifications.error(`Effect ${effectName} not found`);
@@ -315,6 +315,11 @@ export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
         customOriginId = null,
         checkEffectCallback = null
     } = options;
+
+    // Auto-generate groupId if grouped is true and no groupId was provided
+    if (extraOptions?.consumption?.grouped && !extraOptions.consumption.groupId) {
+        extraOptions.consumption.groupId = foundry.utils.randomID();
+    }
 
     // Normalize effectNames to always be an array
     const effectsToApply = Array.isArray(effectNames) ? effectNames : [effectNames];

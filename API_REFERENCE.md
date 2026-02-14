@@ -294,6 +294,133 @@ Debug visualization: select 2 tokens and run this to display the grid distance b
 
 ---
 
+### Interactive Tools
+
+#### `chooseToken(casterToken, options)`
+
+Interactive token picker — shows a range highlight around the caster and lets the user click to select tokens. Returns a Promise.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `casterToken` | `Token` | | The origin token (range is measured from here) |
+| `options.range` | `number` | `null` | Max range in grid units (`null` = unlimited) |
+| `options.includeHidden` | `boolean` | `false` | Include hidden tokens |
+| `options.includeSelf` | `boolean` | `false` | If true, the caster token (source) is selectable. |
+| `options.filter` | `Function` | `null` | Filter: `(token) => boolean` |
+| `options.count` | `number` | `1` | Number of targets to select. `-1` for unlimited (right-click to finish) |
+| `options.title` | `string` | `"SELECT TARGETS"` | Info card header text |
+| `options.description` | `string` | `""` | Info card description text |
+| `options.icon` | `string` | `"fas fa-crosshairs"` | Info card header icon (FontAwesome class) |
+| `options.headerClass` | `string` | `""` | Extra CSS class for the info card header |
+
+**Returns:** `Promise<Array<Token>|null>` — selected tokens or `null` if cancelled (ESC / right-click with none selected)
+
+```javascript
+const targets = await api.chooseToken(myToken, {
+    count: 1,
+    range: 10,
+    filter: (t) => api.isFriendly(myToken, t),
+    title: "CHOOSE ALLY",
+    description: "Select a friendly target within range"
+});
+```
+
+---
+
+#### `placeZone(casterToken, options)`
+
+Interactive zone placement — shows a range highlight and lets the user place a Lancer template (Blast, Burst, Cone, Line). Uses `templatemacro`'s placeZone if available, otherwise falls back to Lancer's `WeaponRangeTemplate`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `casterToken` | `Token` | | The origin token (range is measured from here) |
+| `options.range` | `number` | `null` | Max range in grid units (`null` = unlimited) |
+| `options.size` | `number` | `1` | Zone radius (Blast size) |
+| `options.type` | `string` | `"Blast"` | Template type: `"Blast"`, `"Burst"`, `"Cone"`, `"Line"` |
+| `options.fillColor` | `string` | `"#ff6400"` | Fill color |
+| `options.borderColor` | `string` | `"#964611ff"` | Border color |
+| `options.texture` | `string` | `null` | Texture file path |
+| `options.count` | `number` | `1` | Number of zones to place. `-1` for unlimited |
+| `options.hooks` | `Object` | `{}` | Hook callbacks passed to `templatemacro`'s placeZone |
+| `options.title` | `string` | `"PLACE ZONE"` | Info card header text |
+| `options.description` | `string` | `""` | Info card description text |
+| `options.icon` | `string` | `"fas fa-bullseye"` | Info card header icon (FontAwesome class) |
+| `options.headerClass` | `string` | `""` | Extra CSS class for the info card header |
+
+**Returns:** `Promise<Array<{x, y, template}>|null>` — placed zone positions and template documents
+
+```javascript
+const zones = await api.placeZone(myToken, {
+    range: 5,
+    size: 2,
+    type: "Blast",
+    fillColor: "#808080",
+    title: "DEPLOY SMOKE",
+    description: "Place a smoke grenade within range"
+});
+```
+if you have templatemacro module installed, you can use the following options:
+
+**Dangerous zone** (deals damage when entered):
+
+```javascript
+await api.placeZone(reactorToken, {
+    size: 1,
+    type: "Blast",
+    dangerous: {
+        damageType: "burn",
+        damageValue: 5
+    },
+    title: "SCORCHER MISSILE",
+    description: "Place a Blast 1 dangerous zone"
+});
+```
+
+**Soft Cover zone** (applies cover_soft status to tokens inside):
+
+```javascript
+const result = await api.placeZone(reactorToken, {
+    range: 5,
+    size: 1,
+    type: "Blast",
+    fillColor: "#808080",
+    borderColor: "#ffffff",
+    statusEffects: ["cover_soft"],
+    title: "SMOKE GRENADE",
+    description: "Deploy a Blast 1 smoke zone within range"
+});
+```
+
+---
+
+#### `getGridDistance(pos1, pos2)`
+
+Calculate distance between two pixel positions in grid units. Supports both hex and square grids.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pos1` | `{x, y}` | First position in pixels |
+| `pos2` | `{x, y}` | Second position in pixels |
+
+**Returns:** `number` — distance in grid units
+
+---
+
+#### `drawRangeHighlight(casterToken, range, color, alpha)`
+
+Draw a range highlight around a token. Returns the PIXI.Graphics object for cleanup.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `casterToken` | `Token` | | Token to center on |
+| `range` | `number` | | Range in grid units |
+| `color` | `number` | `0x00ff00` | Hex color |
+| `alpha` | `number` | `0.2` | Opacity |
+
+**Returns:** `PIXI.Graphics` — call `canvas.stage.removeChild(result)` to clean up
+
+---
+
 ## Trigger Types & Data
 
 Every trigger passes a data object to evaluate/activation functions. All data objects also receive `distanceToTrigger` (distance from the reactor to the triggering token) when processed by the activation system.
@@ -579,15 +706,17 @@ Fires when heat is cleared.
 
 #### `onCheck`
 
-Fires when a stat check/save is rolled.
+Fires when a stat check (HULL, AGI, SYS, ENG) is performed.
 
 ```javascript
 {
     triggeringToken: Token,
-    statName: string,           // "Hull", "Agility", "Systems", "Engineering", "Grit"
-    roll: Roll,                 // Foundry Roll object
-    total: number,              // Roll total
-    success: boolean
+    statName: string,           // "HULL", "AGI", "SYS", "ENG"
+    roll: Roll,                 // The foundry Roll object
+    total: number,              // The total result
+    success: boolean,           // Whether it met the difficulty
+    checkAgainstToken: Token,   // The token being checked against (if any)
+    targetVal: number           // The difficulty value (e.g. Save Target)
 }
 ```
 
@@ -726,7 +855,8 @@ Used in `extraOptions.consumption` for effects and `options.consumption` for bon
 {
     trigger: "onDamage",        // Which trigger consumes a charge
     originId: "tokenId123",     // Only consume when this token is involved
-    groupId: "sharedGroup",     // Share charge counter with other effects in this group
+    grouped: true,              // Auto-generate a groupId for all effects in this call
+    groupId: "customId",        // Or provide your own groupId to share across separate calls
     evaluate: null,             // Custom consumption check: (triggerType, data, token, effect) => boolean
     itemLid: "weapon_lid",     // Only consume when this item LID is the source (comma-separated for multiple)
     actionName: "Skirmish",     // Only consume when this action name matches
@@ -812,14 +942,14 @@ await api.applyFlaggedEffectToTokens({
 });
 ```
 
-**Shared consumption with `groupId`:**
+**Shared consumption with `grouped`:**
 
-When multiple effects share a `groupId`, consuming a charge from one decrements all of them. When charges hit 0, all effects in the group are removed.
+When multiple effects are grouped, consuming a charge from one decrements all of them. When charges hit 0, all effects in the group are removed.
+
+Use `grouped: true` to auto-generate a groupId for all effects in the same call, or provide your own `groupId`.
 
 ```javascript
-const groupId = foundry.utils.randomID();
-
-// Apply multiple resistances that share the same charge pool
+// grouped: true auto-generates a groupId for all effects in this call
 await api.applyFlaggedEffectToTokens({
     tokens: [target],
     effectNames: [
@@ -834,7 +964,7 @@ await api.applyFlaggedEffectToTokens({
     consumption: {
         trigger: "onDamage",
         originId: target.id,
-        groupId: groupId
+        grouped: true
     }
 });
 ```

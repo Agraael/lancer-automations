@@ -1,13 +1,16 @@
 /*global game, Dialog, ChatMessage, canvas, CONST */
 
+import {
+    isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
+    getHexesInRange, getHexCenter, drawHexAt,
+    getOccupiedOffsets, getOccupiedCenters, getMinGridDistance,
+    measureGridDistance
+} from "./grid-helpers.js";
+
+export { getMinGridDistance };
+
 const THREAT_AURA_NAMES = ["Threat_detail", "Threat"];
 const isThreatAura = (a) => THREAT_AURA_NAMES.includes(a.config.name);
-
-function measureGridDistance(c1, c2) {
-    return canvas.grid.measurePath
-        ? canvas.grid.measurePath([c1, c2]).distance
-        : canvas.grid.measureDistance(c1, c2);
-}
 
 function getDispositionData(t1, t2) {
     const tokenFactions = game.modules.get("token-factions")?.api;
@@ -43,12 +46,15 @@ export function isHostile(reactor, mover) {
 }
 
 export function checkOverwatchCondition(reactor, mover, startPos) {
-    if (reactor.id === mover.id) return false;
+    if (reactor.id === mover.id)
+        return false;
 
-    if (!isHostile(reactor, mover)) return false;
+    if (!isHostile(reactor, mover))
+        return false;
 
     const reaction = reactor.actor?.system?.action_tracker?.reaction;
-    if (!reaction || reaction <= 0) return false;
+    if (!reaction || reaction <= 0)
+        return false;
 
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
@@ -69,22 +75,28 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
 }
 
 export async function checkOverwatch(token, distance, elevation, startPos, endPos) {
-    if (!game.settings.get('lancer-automations', 'overwatchEnabled')) return;
+    if (!game.settings.get('lancer-automations', 'overwatchEnabled'))
+        return;
 
     const movedToken = token;
 
-    if (!movedToken.inCombat) return;
+    if (!movedToken.inCombat)
+        return;
 
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
     const potentialReactors = canvas.tokens.placeables.filter(t => {
-        if (t.id === movedToken.id) return false;
-        if (!t.actor) return false;
-        if (!t.isOwner) return false;
+        if (t.id === movedToken.id)
+            return false;
+        if (!t.actor)
+            return false;
+        if (!t.isOwner)
+            return false;
 
         const reaction = t.actor.system.action_tracker?.reaction;
-        if (!reaction || reaction <= 0) return false;
+        if (!reaction || reaction <= 0)
+            return false;
 
         const tokenFactions = game.modules.get("token-factions")?.api;
         if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
@@ -106,7 +118,8 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
             const isTargetFriendly = movedToken.document.disposition === FRIENDLY || movedToken.document.disposition === NEUTRAL;
             const isReactorFriendly = t.document.disposition === FRIENDLY || t.document.disposition === NEUTRAL;
 
-            if (!((isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly))) return false;
+            if (!((isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly)))
+                return false;
         }
         return true;
     });
@@ -152,7 +165,8 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         for (const reactor of triggeredReactors) {
             const owners = game.users.filter(u => u.active && reactor.document.testUserPermission(u, "OWNER"));
             for (const user of owners) {
-                if (!ownerMap[user.id]) ownerMap[user.id] = [];
+                if (!ownerMap[user.id])
+                    ownerMap[user.id] = [];
                 ownerMap[user.id].push(reactor.id);
             }
         }
@@ -237,9 +251,11 @@ export function displayOverwatch(reactors, target) {
 }
 
 export function getActorMaxThreat(actor) {
-    if (!actor) return 0;
+    if (!actor)
+        return 0;
     const actorType = actor.type;
-    if (!["mech", "npc", "pilot"].includes(actorType)) return 0;
+    if (!["mech", "npc", "pilot"].includes(actorType))
+        return 0;
 
     let maxThreat = 1;
 
@@ -253,11 +269,14 @@ export function getActorMaxThreat(actor) {
 
             if (item.system?.profiles) {
                 for (const profile of item.system.profiles) {
-                    if (profile.range) ranges.push(...profile.range);
+                    if (profile.range)
+                        ranges.push(...profile.range);
                 }
             }
-            if (item.system?.range) ranges.push(...item.system.range);
-            if (item.system?.active_profile?.range) ranges.push(...item.system.active_profile.range);
+            if (item.system?.range)
+                ranges.push(...item.system.range);
+            if (item.system?.active_profile?.range)
+                ranges.push(...item.system.active_profile.range);
 
             for (const range of ranges) {
                 if (range.type === "Threat") {
@@ -272,206 +291,13 @@ export function getActorMaxThreat(actor) {
     return maxThreat;
 }
 
-function isHexGrid() {
-    const gridType = canvas.grid.type;
-    return gridType >= 2 && gridType <= 5;
-}
-
-function isColumnarHex() {
-    const gridType = canvas.grid.type;
-    return gridType === 4 || gridType === 5;
-}
-
-function offsetToCube(col, row) {
-    const gridType = canvas.grid.type;
-    let q, r, s;
-
-    switch (gridType) {
-        case 2:
-            q = col - Math.floor((row - (row & 1)) / 2);
-            r = row;
-            s = -q - r;
-            break;
-        case 3:
-            q = col - Math.floor((row + (row & 1)) / 2);
-            r = row;
-            s = -q - r;
-            break;
-        case 4:
-            q = col;
-            r = row - Math.floor((col - (col & 1)) / 2);
-            s = -q - r;
-            break;
-        case 5:
-            q = col;
-            r = row - Math.floor((col + (col & 1)) / 2);
-            s = -q - r;
-            break;
-        default:
-            q = col;
-            r = row;
-            s = 0;
-    }
-
-    return { q, r, s };
-}
-
-function cubeDistance(a, b) {
-    return Math.max(
-        Math.abs(a.q - b.q),
-        Math.abs(a.r - b.r),
-        Math.abs(a.s - b.s)
-    );
-}
-
-function getHexesInRange(center, range) {
-    const results = [];
-    for (let q = -range; q <= range; q++) {
-        for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++) {
-            const s = -q - r;
-            results.push({
-                q: center.q + q,
-                r: center.r + r,
-                s: center.s + s
-            });
-        }
-    }
-    return results;
-}
-
-function cubeToOffset(cube) {
-    const gridType = canvas.grid.type;
-    let col, row;
-
-    switch (gridType) {
-        case 2:
-            col = cube.q + Math.floor((cube.r - (cube.r & 1)) / 2);
-            row = cube.r;
-            break;
-        case 3:
-            col = cube.q + Math.floor((cube.r + (cube.r & 1)) / 2);
-            row = cube.r;
-            break;
-        case 4:
-            col = cube.q;
-            row = cube.r + Math.floor((cube.q - (cube.q & 1)) / 2);
-            break;
-        case 5:
-            col = cube.q;
-            row = cube.r + Math.floor((cube.q + (cube.q & 1)) / 2);
-            break;
-        default:
-            col = cube.q;
-            row = cube.r;
-    }
-
-    return { col, row };
-}
-
-function getHexCenter(col, row) {
-    if (canvas.grid.getCenterPoint) {
-        const p = canvas.grid.getCenterPoint({ i: row, j: col });
-        return { x: p.x, y: p.y };
-    } else {
-        const [cx, cy] = canvas.grid.grid.getCenter(row, col);
-        return { x: cx, y: cy };
-    }
-}
-
-function pixelToOffset(x, y) {
-    if (canvas.grid.getOffset) {
-        const offset = canvas.grid.getOffset({ x, y });
-        return { col: offset.j, row: offset.i };
-    } else {
-        const pos = canvas.grid.grid.getGridPositionFromPixels(x, y);
-        return { col: pos[1], row: pos[0] };
-    }
-}
-
-function getOccupiedOffsets(token, overridePos = null) {
-    const doc = token.document;
-    const x = overridePos ? overridePos.x : doc.x;
-    const y = overridePos ? overridePos.y : doc.y;
-    const gridSize = canvas.grid.size;
-
-    const centerX = x + (doc.width * gridSize / 2);
-    const centerY = y + (doc.height * gridSize / 2);
-    const centerOffset = pixelToOffset(centerX, centerY);
-
-    if (doc.width <= 1 && doc.height <= 1) {
-        return [centerOffset];
-    }
-
-    const offsets = [];
-    const scanRadius = Math.ceil(Math.max(doc.width, doc.height));
-
-    for (let di = -scanRadius; di <= scanRadius; di++) {
-        for (let dj = -scanRadius; dj <= scanRadius; dj++) {
-            const col = centerOffset.col + di;
-            const row = centerOffset.row + dj;
-
-            const center = getHexCenter(col, row);
-
-            const localX = center.x - x;
-            const localY = center.y - y;
-
-            if (token.shape && token.shape.contains(localX, localY)) {
-                offsets.push({ col, row });
-            }
-        }
-    }
-
-    if (offsets.length === 0) {
-        offsets.push(centerOffset);
-    }
-
-    return offsets;
-}
-
-function getOccupiedCenters(token, overridePos = null) {
-    const offsets = getOccupiedOffsets(token, overridePos);
-    return offsets.map(o => getHexCenter(o.col, o.row));
-}
-
-export function getMinGridDistance(token1, token2, overridePos1 = null) {
-    if (!isHexGrid()) {
-        const centers1 = getOccupiedCenters(token1, overridePos1);
-        const centers2 = getOccupiedCenters(token2);
-
-        let minDist = Infinity;
-        for (const c1 of centers1) {
-            for (const c2 of centers2) {
-                const dPixel = measureGridDistance(c1, c2);
-                if (dPixel < minDist) minDist = dPixel;
-            }
-        }
-        return Math.round(minDist / canvas.scene.grid.distance);
-    }
-
-    const offsets1 = getOccupiedOffsets(token1, overridePos1);
-    const offsets2 = getOccupiedOffsets(token2);
-
-    let minDist = Infinity;
-
-    for (const o1 of offsets1) {
-        const cube1 = offsetToCube(o1.col, o1.row);
-        for (const o2 of offsets2) {
-            const cube2 = offsetToCube(o2.col, o2.row);
-            const dist = cubeDistance(cube1, cube2);
-            if (dist < minDist) minDist = dist;
-        }
-    }
-
-    return minDist;
-}
-
 export async function drawThreatDebug(token) {
-    if (!token) return;
+    if (!token)
+        return;
 
     canvas.controls.debug.clear();
 
     const maxThreat = getActorMaxThreat(token.actor);
-    const gridSize = canvas.grid.size;
 
     ui.notifications.info(`Debug: Token Size ${token.document.width}x${token.document.height}, Max Threat: ${maxThreat}`);
 
@@ -505,10 +331,11 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.beginFill(0x00FF00, 0.15);
 
     for (const key of threatHexSet) {
-        if (footprintSet.has(key)) continue;
+        if (footprintSet.has(key))
+            continue;
 
         const [col, row] = key.split(',').map(Number);
-        drawHexAt(col, row, gridSize);
+        drawHexAt(canvas.controls.debug, col, row);
     }
 
     canvas.controls.debug.endFill();
@@ -517,7 +344,7 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.beginFill(0xFF0000, 0.25);
 
     for (const fp of footprintCubes) {
-        drawHexAt(fp.col, fp.row, gridSize);
+        drawHexAt(canvas.controls.debug, fp.col, fp.row);
     }
 
     canvas.controls.debug.endFill();
@@ -529,25 +356,6 @@ export async function drawThreatDebug(token) {
         canvas.controls.debug.drawCircle(center.x, center.y, 5);
     }
     canvas.controls.debug.endFill();
-}
-
-function drawHexAt(col, row, gridSize) {
-    const center = getHexCenter(col, row);
-
-    if (canvas.grid.getShape) {
-        const shape = canvas.grid.getShape();
-        if (shape && shape.points) {
-            const translatedPoints = [];
-            for (let i = 0; i < shape.points.length; i += 2) {
-                translatedPoints.push(shape.points[i] + center.x);
-                translatedPoints.push(shape.points[i + 1] + center.y);
-            }
-            canvas.controls.debug.drawPolygon(translatedPoints);
-            return;
-        }
-    }
-
-    canvas.controls.debug.drawCircle(center.x, center.y, gridSize / 3);
 }
 
 export function getTokenDistance(token1, token2) {
@@ -608,7 +416,7 @@ export async function drawDistanceDebug() {
     canvas.controls.debug.beginFill(0x0066FF, 0.15);
     for (const o of offsets1) {
         if (isHexGrid()) {
-            drawHexAt(o.col, o.row, gridSize);
+            drawHexAt(canvas.controls.debug, o.col, o.row);
         } else {
             const center = getHexCenter(o.col, o.row);
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
@@ -620,7 +428,7 @@ export async function drawDistanceDebug() {
     canvas.controls.debug.beginFill(0xFF6600, 0.15);
     for (const o of offsets2) {
         if (isHexGrid()) {
-            drawHexAt(o.col, o.row, gridSize);
+            drawHexAt(canvas.controls.debug, o.col, o.row);
         } else {
             const center = getHexCenter(o.col, o.row);
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);

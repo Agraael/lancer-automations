@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.0.2",
+    "version": "2.1.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -17,7 +17,8 @@
         "scripts/main.js"
     ],
     "styles": [
-        "styles/codemirror-dark.css"
+        "styles/codemirror-dark.css",
+        "styles/interactive-tools.css"
     ],
     "compatibility": {
         "minimum": "12",

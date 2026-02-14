@@ -1,0 +1,106 @@
+/* Interactive Tools - Info Card Overlay Styles */
+/* Uses native Lancer classes for container, header, and buttons. */
+/* Only adds styles for card-specific elements that Lancer doesn't provide. */
+
+/* --- Card Wrapper (animation & pointer-events) --- */
+.la-info-card {
+    opacity: 0;
+    pointer-events: auto;
+    transition: transform 0.2s ease;
+    min-width: 300px;
+}
+
+/* --- Body padding --- */
+.la-info-card-body {
+    padding: 0.3em;
+}
+
+/* --- Info Row (Range / Count / Type / Size) --- */
+.la-info-row {
+    display: flex;
+    justify-content: space-evenly;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+/* --- Description Area --- */
+.la-info-description {
+    font-size: 12px;
+    color: #333;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    background: #f5f5f5;
+    border: 2px solid #999;
+    border-radius: 4px;
+}
+
+/* --- Section Header (Selected Targets / Placed Zones) --- */
+.la-section-header {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 6px 0 4px 0;
+    padding-bottom: 2px;
+}
+
+/* --- Selected Targets & Placed Zones List --- */
+.la-selected-targets,
+.la-placed-zones {
+    margin-bottom: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.la-selected-target {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: #f5f5f5;
+    border: 2px solid #999;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.la-selected-target:hover {
+    background: #ffe0e0;
+    border-color: #991e2a;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.la-selected-target img {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    border: 1px solid #999;
+    object-fit: cover;
+}
+
+.la-selected-target-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: #000;
+}
+
+.la-selected-target-remove {
+    font-size: 10px;
+    color: #999;
+}
+
+.la-selected-target:hover .la-selected-target-remove {
+    color: #991e2a;
+}
+
+/* --- Empty State --- */
+.la-empty-state {
+    font-size: 11px;
+    color: #666;
+    font-style: italic;
+    padding: 4px 0;
+}

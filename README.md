@@ -115,6 +115,16 @@ The module ships with these defaults:
 - **Flight** - Reacts to `onStatusApplied` / `onStructure` / `onStress` to handle flying immunity and fall saves
 - **Fall** - Reacts to `onTurnEnd` to check if an airborne token should fall
 
+### Stat Roll Targeting
+
+Go to **Module Settings > Lancer Automations > Enable Stat Roll Target Selection** to enable this feature.
+
+When enabled, any Stat Roll (HULL, AGI, SYS, ENG) will prompt you for an optional target.
+
+-   **Difficulty**: The roll will automatically use the target's Save (for NPCs) or the same Stat (for Mechs) as the difficulty.
+-   **Automation**: The target token is passed into the flow data, allowing other automations (like macros or modifications) to use it.
+-   **Self-Targeting**: You can select yourself if needed.
+
 ### Export / Import
 
 In the module settings, you can export and import your activations as JSON. Makes it easy to share setups with other GMs or just back things up.
@@ -184,7 +194,8 @@ All-resistance for the next 1d3 attacks
             const targets = await api.chooseToken(reactorToken, {
                 count: 1,
                 range: reactorToken.actor.system.sensor_range,
-                filter: (t) => api.isFriendly(reactorToken, t) || t.id === reactorToken.id
+                includeSelf: true,
+                filter: (t) => api.isFriendly(reactorToken, t)
             });
             const target = targets?.[0] || reactorToken;
             const roll = await new Roll("1d3").evaluate();
@@ -286,7 +297,12 @@ Places a smoke zone that last until the end of next turn.
 
 ## Useful Tools & API
 
-There are many utility functions exposed for scripting. For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
+There are many utility functions exposed for scripting. Two notable ones for macros are:
+
+-   `api.chooseToken(token, options)`: Opens a flow-style card to select tokens on the canvas. Supports range, disposition, and self-targeting.
+-   `api.placeZone(token, options)`: Opens a flow-style card to place templates (Blast, Cone, etc.) with preview.
+
+For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
 
 ```javascript
 const api = game.modules.get('lancer-automations').api;
