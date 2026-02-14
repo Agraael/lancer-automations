@@ -48,7 +48,7 @@ When any token moves (`onMove`), every other token checks if it should react. Th
 
 These are activations. Let's break them down.
 
-Fair warning: the system can be a bit overwhelming at first. Don't hesitate to ask questions on the [Pilot NET Discord](https://discord.gg/pilot-net).
+Fair warning: the system can be a bit overwhelming at first. Don't hesitate to ask questions on the [Pilot NET Discord](https://discord.com/invite/lancer).
 
 An activation fires when a trigger occurs. You decide who reacts: the actor itself, other tokens, or both. There are two types:
 
@@ -310,4 +310,4 @@ const api = game.modules.get('lancer-automations').api;
 
 ## Support
 
-For help or questions, ask on the [Pilot NET Discord](https://discord.gg/pilot-net).
+For help or questions, ask on the [Pilot NET Discord](https://discord.com/invite/lancer).
