@@ -192,8 +192,10 @@ export class ReactionConfig extends FormApplication {
         const itemMap = new Map();
 
         for (const pack of game.packs) {
-            if (pack.documentName !== "Item") continue;
-            if (midsToLookup.size === 0) break;
+            if (pack.documentName !== "Item")
+                continue;
+            if (midsToLookup.size === 0)
+                break;
 
             const index = await pack.getIndex({ fields: ["system.lid"] });
             for (const entry of index) {
@@ -211,7 +213,8 @@ export class ReactionConfig extends FormApplication {
         }
 
         const resolveActionName = (itemData, path) => {
-            if (!itemData || !path || path === "system.trigger" || path === "system") return null;
+            if (!itemData || !path || path === "system.trigger" || path === "system")
+                return null;
             try {
                 const pathParts = path.split(/\.|\[|\]/).filter(p => p !== "");
                 let current = itemData;
@@ -229,14 +232,17 @@ export class ReactionConfig extends FormApplication {
         };
 
         const startEnabled = (r) => {
-            if (r.enabled === undefined) r.enabled = true;
+            if (r.enabled === undefined)
+                r.enabled = true;
             return r;
         };
 
         const isPureDefault = (saved, def) => {
-            if (!saved || !def) return false;
+            if (!saved || !def)
+                return false;
             const savedKeys = Object.keys(saved);
-            if (savedKeys.length === 1 && savedKeys[0] === 'enabled') return true;
+            if (savedKeys.length === 1 && savedKeys[0] === 'enabled')
+                return true;
             const s = foundry.utils.deepClone(saved);
             const d = foundry.utils.deepClone(def);
             delete s.enabled;
@@ -251,10 +257,12 @@ export class ReactionConfig extends FormApplication {
 
             data.reactions.forEach((reaction, index) => {
                 const reactionKeys = Object.keys(reaction);
-                if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled') return;
+                if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled')
+                    return;
 
                 const defItem = defaultItemRegistry[lid]?.reactions?.find(r => r.name === reaction.name);
-                if (defItem && isPureDefault(reaction, defItem)) return;
+                if (defItem && isPureDefault(reaction, defItem))
+                    return;
 
                 const itemInfo = itemMap.get(lid);
                 let displayName = reaction.name || rawLid;
@@ -284,7 +292,8 @@ export class ReactionConfig extends FormApplication {
                 }));
             });
 
-            if (validReactions.length === 0) continue;
+            if (validReactions.length === 0)
+                continue;
 
             if (validReactions.length === 1) {
                 allReactions.push(validReactions[0]);
@@ -347,7 +356,8 @@ export class ReactionConfig extends FormApplication {
                 }));
             });
 
-            if (validReactions.length === 0) continue;
+            if (validReactions.length === 0)
+                continue;
 
             if (validReactions.length === 1) {
                 defaultList.push(validReactions[0]);
@@ -374,7 +384,8 @@ export class ReactionConfig extends FormApplication {
         // GROUPING LOGIC FOR GENERAL REACTIONS (CUSTOM)
         for (const [name, reaction] of Object.entries(userGeneralSettings)) {
             const def = defaultGeneralRegistry[name];
-            if (def && isPureDefault(reaction, def)) continue;
+            if (def && isPureDefault(reaction, def))
+                continue;
 
             allReactions.push(startEnabled({
                 name: name,
@@ -409,7 +420,8 @@ export class ReactionConfig extends FormApplication {
         }
 
         const sorter = (a, b) => {
-            if (a.isGeneral !== b.isGeneral) return b.isGeneral - a.isGeneral;
+            if (a.isGeneral !== b.isGeneral)
+                return b.isGeneral - a.isGeneral;
             return a.name.localeCompare(b.name);
         };
 
@@ -493,14 +505,16 @@ export class ReactionConfig extends FormApplication {
             const name = li.data("name");
             const generals = ReactionManager.getGeneralReactions();
             const reaction = generals[name];
-            if (!reaction) return;
+            if (!reaction)
+                return;
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
         } else {
             const lid = li.data("lid");
             const index = li.data("index");
             const all = ReactionManager.getAllReactions();
             const entry = all[lid];
-            if (!entry) return;
+            if (!entry)
+                return;
 
             const reactionIndex = (typeof index !== 'undefined') ? index : 0;
             const reaction = entry.reactions[reactionIndex];
@@ -535,13 +549,15 @@ export class ReactionConfig extends FormApplication {
 
         if (isGeneral) {
             const defaultReaction = getDefaultGeneralReactionRegistry()[name];
-            if (!defaultReaction) return;
+            if (!defaultReaction)
+                return;
             const reaction = foundry.utils.deepClone(defaultReaction);
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
         } else {
             const all = ReactionManager.getAllReactions();
             const entry = all[lid];
-            if (!entry) return;
+            if (!entry)
+                return;
             const reactionIndex = (typeof index !== 'undefined') ? index : 0;
             const reaction = foundry.utils.deepClone(entry.reactions[reactionIndex]);
             new ReactionEditor({ isGeneral: false, lid, reaction }).render(true);
@@ -619,7 +635,8 @@ export class ReactionEditor extends FormApplication {
 
         if (!data.isGeneral && data.lid) {
             for (const pack of game.packs) {
-                if (pack.documentName !== "Item") continue;
+                if (pack.documentName !== "Item")
+                    continue;
 
                 const index = await pack.getIndex({ fields: ["system.lid"] });
                 const entry = index.find(e => e.system?.lid === data.lid);
@@ -811,7 +828,8 @@ export class ReactionEditor extends FormApplication {
             const uuid = $(ev.currentTarget).data('uuid');
             if (uuid) {
                 const item = await fromUuid(uuid);
-                if (item) item.sheet.render(true);
+                if (item)
+                    item.sheet.render(true);
             }
         });
 
@@ -852,7 +870,8 @@ export class ReactionEditor extends FormApplication {
             let foundItemName = null;
 
             for (const pack of game.packs) {
-                if (pack.documentName !== "Item") continue;
+                if (pack.documentName !== "Item")
+                    continue;
                 const index = await pack.getIndex({ fields: ["system.lid"] });
                 const entry = index.find(e => e.system?.lid === lid);
                 if (entry) {
@@ -891,12 +910,18 @@ export class ReactionEditor extends FormApplication {
 
                         const activation = actionData?.activation;
                         if (activation) {
-                            if (activation === "Quick") detectedActionType = "Quick Action";
-                            else if (activation === "Full") detectedActionType = "Full Action";
-                            else if (activation === "Reaction") detectedActionType = "Reaction";
-                            else if (activation === "Free") detectedActionType = "Free Action";
-                            else if (activation === "Protocol") detectedActionType = "Protocol";
-                            else detectedActionType = activation;
+                            if (activation === "Quick")
+                                detectedActionType = "Quick Action";
+                            else if (activation === "Full")
+                                detectedActionType = "Full Action";
+                            else if (activation === "Reaction")
+                                detectedActionType = "Reaction";
+                            else if (activation === "Free")
+                                detectedActionType = "Free Action";
+                            else if (activation === "Protocol")
+                                detectedActionType = "Protocol";
+                            else
+                                detectedActionType = activation;
                         }
 
                         if (actionData?.frequency) {
@@ -905,10 +930,14 @@ export class ReactionEditor extends FormApplication {
                             detectedFrequency = item.system.frequency;
                         } else if (item.system?.uses?.per) {
                             const per = item.system.uses.per;
-                            if (per === "Round") detectedFrequency = "1/Round";
-                            else if (per === "Scene") detectedFrequency = "1/Scene";
-                            else if (per === "Combat") detectedFrequency = "1/Combat";
-                            else if (per === "Mission") detectedFrequency = "1/Mission";
+                            if (per === "Round")
+                                detectedFrequency = "1/Round";
+                            else if (per === "Scene")
+                                detectedFrequency = "1/Scene";
+                            else if (per === "Combat")
+                                detectedFrequency = "1/Combat";
+                            else if (per === "Mission")
+                                detectedFrequency = "1/Mission";
                         } else if (detectedActionType === "Reaction" || detectedActionType === "Free Action") {
                             detectedFrequency = "1/Round";
                         }
@@ -1040,9 +1069,12 @@ export class ReactionEditor extends FormApplication {
             }
 
             const refreshEditors = () => {
-                if (this.evaluateEditor) this.evaluateEditor.refresh();
-                if (this.codeEditor) this.codeEditor.refresh();
-                if (this.onInitEditor) this.onInitEditor.refresh();
+                if (this.evaluateEditor)
+                    this.evaluateEditor.refresh();
+                if (this.codeEditor)
+                    this.codeEditor.refresh();
+                if (this.onInitEditor)
+                    this.onInitEditor.refresh();
             };
 
             activationTypeSelect.on('change', () => {
@@ -1078,7 +1110,8 @@ export class ReactionEditor extends FormApplication {
             title = "onInit Code";
         }
 
-        if (!editorInstance) return;
+        if (!editorInstance)
+            return;
 
         const content = editorInstance.getValue();
 
@@ -1191,7 +1224,8 @@ export class ReactionEditor extends FormApplication {
     async _openItemBrowser(lidInput, pathInput, updatePreview, previewContainer) {
         const items = [];
         for (const pack of game.packs) {
-            if (pack.documentName !== "Item") continue;
+            if (pack.documentName !== "Item")
+                continue;
             const index = await pack.getIndex({ fields: ["system.lid", "type"] });
             for (const entry of index) {
                 if (entry.system?.lid) {
@@ -1252,10 +1286,12 @@ export class ReactionEditor extends FormApplication {
             }, { width: 400 }).render(true);
         });
 
-        if (!selectedItem) return;
+        if (!selectedItem)
+            return;
 
         const item = await fromUuid(selectedItem.uuid);
-        if (!item) return;
+        if (!item)
+            return;
 
         const actions = [];
 
@@ -1336,7 +1372,8 @@ export class ReactionEditor extends FormApplication {
                 }, { width: 350 }).render(true);
             });
 
-            if (selectedPath === null) return;
+            if (selectedPath === null)
+                return;
         }
 
         lidInput.val(selectedItem.lid);
@@ -1373,14 +1410,19 @@ export class ReactionEditor extends FormApplication {
         }
 
         const dispositionFilter = [];
-        if (formData['dispositionFilter.friendly']) dispositionFilter.push('friendly');
-        if (formData['dispositionFilter.neutral']) dispositionFilter.push('neutral');
-        if (formData['dispositionFilter.hostile']) dispositionFilter.push('hostile');
-        if (formData['dispositionFilter.secret']) dispositionFilter.push('secret');
+        if (formData['dispositionFilter.friendly'])
+            dispositionFilter.push('friendly');
+        if (formData['dispositionFilter.neutral'])
+            dispositionFilter.push('neutral');
+        if (formData['dispositionFilter.hostile'])
+            dispositionFilter.push('hostile');
+        if (formData['dispositionFilter.secret'])
+            dispositionFilter.push('secret');
 
         if (isGeneral) {
             const name = formData.name;
-            if (!name) return ui.notifications.error("Activation Name is required for general activations");
+            if (!name)
+                return ui.notifications.error("Activation Name is required for general activations");
 
             const newReaction = {
                 triggers: triggers,
@@ -1406,7 +1448,8 @@ export class ReactionEditor extends FormApplication {
             await ReactionManager.saveGeneralReaction(name, newReaction);
         } else {
             const lid = formData.lid;
-            if (!lid) return ui.notifications.error("Item LID is required");
+            if (!lid)
+                return ui.notifications.error("Item LID is required");
 
             const newReaction = {
                 reactionPath: formData.reactionPath || "",
@@ -1452,7 +1495,8 @@ export class ReactionEditor extends FormApplication {
         }
 
         Object.values(ui.windows).forEach(w => {
-            if (w.id === "reaction-manager-config") w.render();
+            if (w.id === "reaction-manager-config")
+                w.render();
         });
     }
 }
