@@ -18,14 +18,14 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT |
 | FoundryVTT v12+ | Current version i'm working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
-| [Temporary Custom Statuses](https://foundryvtt.com/packages/temporary-custom-statuses) | Custom status effects with stacking |
+| [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 
 ### Optional
 
 | Module | Why |
 |--------|-----|
 | [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Gives you syntax highlighting in the evaluate/activation code editors |
-| [TemplateMacro](https://foundryvtt.com/packages/templatemacro) | Allow scripting on measurement templates, i have added tools for Dangerous Zone and Area of Effect |
+| [TemplateMacro](https://github.com/Agraael/templatemacro) | Allow scripting on measurement templates, i have added tools for Dangerous Zone and Area of Effect |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
 | [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) | Required for the experimental boost detection feature (you can also try [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)|
 | [Token Factions](https://github.com/Agraael/token-factions) | My Fork of the original module containing a multi-team disposition filtering system |
@@ -173,19 +173,18 @@ All-resistance for the next 1d3 attacks
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const qol = game.modules.get('csm-lancer-qol');
             const lancerAutomations = game.modules.get('lancer-automations');
+            const api = lancerAutomations?.api;
 
-            if (!lancerAutomations?.api?.applyFlaggedEffectToTokens) {
+            if (!api?.applyFlaggedEffectToTokens) {
                 ui.notifications.error("lancer-automations module required");
                 return;
             }
 
-            //custom function  in my own QoL version
-            const targets = await qol.exposed.chooseToken(reactorToken, {
+            const targets = await api.chooseToken(reactorToken, {
                 count: 1,
-                range: reactorToken.system.sensors.range,
-                filter: (t) => t.document.disposition >= 0 || t.id === reactorToken.id
+                range: reactorToken.actor.system.sensor_range,
+                filter: (t) => api.isFriendly(reactorToken, t) || t.id === reactorToken.id
             });
             const target = targets?.[0] || reactorToken;
             const roll = await new Roll("1d3").evaluate();
@@ -194,7 +193,6 @@ All-resistance for the next 1d3 attacks
                 flavor: `${activationName} - Resistance charges`
             });
             const charges = roll.total;
-            const groupId = foundry.utils.randomID();
             const resistances = [
                 "lancer.statusIconsNames.resistance_heat",
                 "lancer.statusIconsNames.resistance_kinetic",
@@ -203,7 +201,7 @@ All-resistance for the next 1d3 attacks
                 "lancer.statusIconsNames.resistance_energy"
             ];
 
-            await lancerAutomations.api.applyFlaggedEffectToTokens({
+            await api.applyFlaggedEffectToTokens({
                 tokens: [target],
                 effectNames: resistances,
                 note: `Dispersal Shield (${charges} charges)`,
@@ -215,7 +213,7 @@ All-resistance for the next 1d3 attacks
                 consumption: {
                     trigger: "onDamage",
                     originId: target.id,
-                    groupId: groupId
+                    grouped: true
                 }
             });
         }
@@ -242,13 +240,12 @@ Places a smoke zone that last until the end of next turn.
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const qol = game.modules.get('csm-lancer-qol');
-            if (!qol?.exposed?.placeZone) {
-                ui.notifications.warn("csm-lancer-qol module required for smoke placement");
+            const api = game.modules.get('lancer-automations')?.api;
+            if (!api?.placeZone) {
+                ui.notifications.warn("lancer-automations module required for smoke placement");
                 return;
             }
-            //custom function  in my own QoL version
-            const result = await qol.exposed.placeZone(reactorToken, {
+            const result = await api.placeZone(reactorToken, {
                 range: 5,
                 size: 2,
                 type: "Blast",
