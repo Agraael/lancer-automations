@@ -3,53 +3,98 @@
 import {
     isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
     getHexesInRange, getHexCenter, pixelToOffset,
-    getTokenCenterOffset, drawHexAt, getOccupiedOffsets
+    getTokenCenterOffset, drawHexAt, getOccupiedOffsets,
+    getMinGridDistance, getDistanceTokenToPoint
 } from "./grid-helpers.js";
 
 
-export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2) {
+export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
     const highlight = new PIXI.Graphics();
 
     if (isHexGrid()) {
-        const centerOffset = getTokenCenterOffset(casterToken);
-        const centerCube = offsetToCube(centerOffset.col, centerOffset.row);
-        const hexesInRange = getHexesInRange(centerCube, range);
+        const offsets = getOccupiedOffsets(casterToken);
+        const hexesInRange = new Set();
+        const selfHexes = new Set();
+
+        if (!includeSelf) {
+            for (const o of offsets) {
+                const cube = offsetToCube(o.col, o.row);
+                selfHexes.add(`${cube.q},${cube.r},${cube.s}`);
+            }
+        }
+
+        for (const o of offsets) {
+            const cube = offsetToCube(o.col, o.row);
+            const inRange = getHexesInRange(cube, range);
+            for (const h of inRange) {
+                const key = `${h.q},${h.r},${h.s}`;
+                if (!includeSelf && selfHexes.has(key))
+                    continue;
+                hexesInRange.add(key);
+            }
+        }
+
         highlight.lineStyle(2, color, 0.7);
         highlight.beginFill(color, alpha);
 
-        for (const cube of hexesInRange) {
-            const offset = cubeToOffset(cube);
+        for (const key of hexesInRange) {
+            const [q, r, s] = key.split(',').map(Number);
+            const offset = cubeToOffset({ q, r, s });
             drawHexAt(highlight, offset.col, offset.row);
         }
 
         highlight.endFill();
     } else {
         const gridSize = canvas.grid.size;
-        const centerOffset = getTokenCenterOffset(casterToken);
+        const offsets = getOccupiedOffsets(casterToken);
+        const squaresInRange = new Set();
+        const selfSquares = new Set();
+
+        if (!includeSelf) {
+            for (const o of offsets) {
+                selfSquares.add(`${o.col},${o.row}`);
+            }
+        }
+
+        for (const o of offsets) {
+            for (let dx = -range; dx <= range; dx++) {
+                for (let dy = -range; dy <= range; dy++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
+                        const col = o.col + dx;
+                        const row = o.row + dy;
+                        const key = `${col},${row}`;
+                        if (!includeSelf && selfSquares.has(key))
+                            continue;
+                        squaresInRange.add(key);
+                    }
+                }
+            }
+        }
 
         highlight.lineStyle(2, color, 0.7);
         highlight.beginFill(color, alpha);
 
-        for (let dx = -range; dx <= range; dx++) {
-            for (let dy = -range; dy <= range; dy++) {
-                if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
-                    const col = centerOffset.col + dx;
-                    const row = centerOffset.row + dy;
-                    const center = getHexCenter(col, row);
-                    highlight.drawRect(
-                        center.x - gridSize / 2,
-                        center.y - gridSize / 2,
-                        gridSize,
-                        gridSize
-                    );
-                }
-            }
+        for (const key of squaresInRange) {
+            const [col, row] = key.split(',').map(Number);
+            const center = getHexCenter(col, row);
+            highlight.drawRect(
+                center.x - gridSize / 2,
+                center.y - gridSize / 2,
+                gridSize,
+                gridSize
+            );
         }
 
         highlight.endFill();
     }
 
-    canvas.stage.addChild(highlight);
+
+    // Add to stage below tokens
+    if (canvas.tokens && canvas.tokens.parent) {
+        canvas.tokens.parent.addChildAt(highlight, canvas.tokens.parent.getChildIndex(canvas.tokens));
+    } else {
+        canvas.stage.addChild(highlight);
+    }
     return highlight;
 }
 
@@ -263,7 +308,7 @@ export function chooseToken(casterToken, options = {}) {
         const selectionHighlights = [];
 
         if (range !== null && casterToken) {
-            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.05);
+            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.3, includeSelf);
         }
 
         const cursorPreview = new PIXI.Graphics();
@@ -287,8 +332,12 @@ export function chooseToken(casterToken, options = {}) {
             canvas.stage.off('rightdown', abortHandler);
             canvas.stage.off('pointermove', moveHandler);
             document.removeEventListener('keydown', keyHandler);
-            if (rangeHighlight)
-                canvas.stage.removeChild(rangeHighlight);
+            if (rangeHighlight) {
+                if (rangeHighlight.parent) {
+                    rangeHighlight.parent.removeChild(rangeHighlight);
+                }
+                rangeHighlight.destroy();
+            }
             canvas.stage.removeChild(cursorPreview);
             selectionHighlights.forEach(h => canvas.stage.removeChild(h.graphics));
 
@@ -377,7 +426,7 @@ export function chooseToken(casterToken, options = {}) {
             cursorPreview.clear();
             let isInRange = true;
             if (range !== null && casterToken) {
-                const dist = getGridDistance(casterToken.center, { x: tx, y: ty });
+                const dist = getDistanceTokenToPoint({ x: tx, y: ty }, casterToken);
                 isInRange = dist <= range;
             }
 
@@ -387,7 +436,7 @@ export function chooseToken(casterToken, options = {}) {
                     const bounds = token.bounds;
                     if (tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom) {
                         if (range !== null && casterToken) {
-                            const dist = getGridDistance(casterToken.center, token.center);
+                            const dist = getMinGridDistance(casterToken, token);
                             return dist <= range;
                         }
                         return true;
@@ -454,7 +503,7 @@ export function chooseToken(casterToken, options = {}) {
 
             // Check range first
             if (range !== null && casterToken) {
-                const dist = getGridDistance(casterToken.center, { x: tx, y: ty });
+                const dist = getDistanceTokenToPoint({ x: tx, y: ty }, casterToken);
                 if (dist > range)
                     return; // Ignore clicks out of range
             }
@@ -469,7 +518,7 @@ export function chooseToken(casterToken, options = {}) {
             if (clickedToken) {
                 // Verify the clicked token is in range
                 if (range !== null && casterToken) {
-                    const dist = getGridDistance(casterToken.center, clickedToken.center);
+                    const dist = getMinGridDistance(casterToken, clickedToken);
                     if (dist > range)
                         return;
                 }
@@ -556,12 +605,16 @@ export function placeZone(casterToken, options = {}) {
 
         // Draw range highlight if range is specified (low grey, very transparent)
         if (range !== null && casterToken) {
-            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.05);
+            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.3, false);
         }
 
         const doCleanup = () => {
-            if (rangeHighlight)
-                canvas.stage.removeChild(rangeHighlight);
+            if (rangeHighlight) {
+                if (rangeHighlight.parent) {
+                    rangeHighlight.parent.removeChild(rangeHighlight);
+                }
+                rangeHighlight.destroy();
+            }
             _removeInfoCard(cardEl);
         };
 
@@ -664,7 +717,7 @@ export function placeZone(casterToken, options = {}) {
                 if (result?.template) {
                     // Check if final position is in range
                     if (range !== null && casterToken) {
-                        const dist = getGridDistance(casterToken.center, { x: result.x, y: result.y });
+                        const dist = getDistanceTokenToPoint({ x: result.x, y: result.y }, casterToken);
                         if (dist > range) {
                             await result.template.delete();
                             ui.notifications.warn("Target is out of range!");

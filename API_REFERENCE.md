@@ -232,7 +232,7 @@ Check if two tokens are friendly to each other.
 
 ### Utilities
 
-#### `performStatRoll(actor, stat, title, target)`
+#### `executeStatRoll(actor, stat, title, target, extraData)`
 
 Trigger a stat roll and get the result back. For NPCs, it uses Tier for Grit.
 
@@ -242,14 +242,54 @@ Trigger a stat roll and get the result back. For NPCs, it uses Tier for Grit.
 | `stat` | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` (or a full path) |
 | `title` | `string` | auto | Roll title |
 | `target` | `number` | `10` | Pass threshold |
+| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
 
 **Returns:** `{ completed, total, roll, passed }`
 
 ```javascript
-const result = await api.performStatRoll(actor, "AGI", "AGILITY Save");
+const result = await api.executeStatRoll(actor, "AGI", "AGILITY Save");
 if (result.completed && !result.passed) {
     // failed
 }
+```
+
+---
+
+#### `executeDamageRoll(attacker, targets, damageValue, damageType, title, options, extraData)`
+
+Trigger a damage roll.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `attacker` | `Token\|Actor` | *required* | The attacker |
+| `targets` | `Array<Token>` | *required* | The targets |
+| `damageValue` | `number` | *required* | Damage amount |
+| `damageType` | `string` | *required* | "kinetic", "energy", "explosive", "burn", "heat", "variable" |
+| `title` | `string` | "Damage Roll" | Roll title |
+| `options` | `Object` | `{}` | Options object (see below) |
+| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
+
+**Options Object Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ap` | `boolean` | `false` | Armor Piercing |
+| `paracausal` | `boolean` | `false` | Paracausal Damage |
+| `overkill` | `boolean` | `false` | Overkill |
+| `reliable` | `boolean` | `false` | Reliable |
+| `half_damage` | `boolean` | `false` | Half Damage |
+| `add_burn` | `boolean` | `true` | Add Burn (if type is Burn) |
+| `invade` | `boolean` | `false` | Is Invasion |
+| `has_normal_hit` | `boolean` | `true` | Has normal hit result |
+| `has_crit_hit` | `boolean` | `false` | Has critical hit result |
+| `tags` | `Array` | `[]` | Damage tags |
+| `bonus_damage` | `Array` | `[]` | Bonus damage array |
+| `hit_results` | `Array` | `[]` | Pre-calculated hit results (for UI display) |
+
+**Returns:** `{ completed, flow }`
+
+```javascript
+await api.executeDamageRoll(attacker, targets, 5, "kinetic", "Test Roll", { ap: true });
 ```
 
 ---
@@ -440,6 +480,21 @@ Every trigger passes a data object to evaluate/activation functions. All data ob
 
 ### Attack Triggers
 
+#### `onInitAttack`
+
+Fires when an attack is initiated (before the Attack HUD is shown).
+
+```javascript
+{
+    triggeringToken: Token,
+    weapon: Item,
+    targets: Array<Token>,      // Initial targets
+    actionName: string,
+    tags: Array,
+    actionData: Object
+}
+```
+
 #### `onAttack`
 
 Fires when an attack roll is made (before hit/miss is determined).
@@ -509,6 +564,22 @@ Fires when damage is applied.
 ```
 
 ### Tech Triggers
+
+#### `onInitTechAttack`
+
+Fires when a tech attack is initiated (before the Attack HUD is shown).
+
+```javascript
+{
+    triggeringToken: Token,
+    techItem: Item,
+    targets: Array<Token>,      // Initial targets
+    actionName: string,
+    isInvade: boolean,
+    tags: Array,
+    actionData: Object
+}
+```
 
 #### `onTechAttack`
 

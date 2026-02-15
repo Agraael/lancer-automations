@@ -16,7 +16,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | Module | Description |
 |--------|-------------|
 | [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT |
-| FoundryVTT v12+ | Current version i'm working on |
+| FoundryVTT v12 | Current version i'm working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 

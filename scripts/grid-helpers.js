@@ -144,7 +144,24 @@ export function drawHexAt(graphics, col, row) {
         }
     }
     const gridSize = canvas.grid.size;
-    graphics.drawCircle(center.x, center.y, gridSize / 3);
+
+    if (isHexGrid()) {
+        const points = [];
+        for (let i = 0; i < 6; i++) {
+            const angle_deg = 60 * i + 30;
+            const angle_rad = Math.PI / 180 * angle_deg;
+            // Radius is usually gridSize / sqrt(3) for flat-topped or similar,
+            // but in Foundry hex grids, size usually refers to width/height.
+            // Using gridSize / 2 * 1.15 approx for outer radius often works well for visualization
+            const radius = (gridSize / 2) * 1.15;
+
+            points.push(center.x + radius * Math.cos(angle_rad));
+            points.push(center.y + radius * Math.sin(angle_rad));
+        }
+        graphics.drawPolygon(points);
+    } else {
+        graphics.drawCircle(center.x, center.y, gridSize / 3);
+    }
 }
 
 export function measureGridDistance(c1, c2) {
@@ -227,6 +244,37 @@ export function getMinGridDistance(token1, token2, overridePos1 = null) {
             if (dist < minDist)
                 minDist = dist;
         }
+    }
+
+
+
+    return minDist;
+}
+
+export function getDistanceTokenToPoint(point, token) {
+    if (!isHexGrid()) {
+        const centers = getOccupiedCenters(token);
+        let minDist = Infinity;
+        for (const c of centers) {
+            const dPixel = measureGridDistance(c, point);
+            if (dPixel < minDist)
+                minDist = dPixel;
+        }
+        return Math.round(minDist / canvas.scene.grid.distance);
+    }
+
+    // For hex grids, convert point to offset/cube coordinates
+    const pointOffset = pixelToOffset(point.x, point.y);
+    const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
+
+    const offsets = getOccupiedOffsets(token);
+
+    let minDist = Infinity;
+    for (const o of offsets) {
+        const cube = offsetToCube(o.col, o.row);
+        const dist = cubeDistance(cube, pointCube);
+        if (dist < minDist)
+            minDist = dist;
     }
 
     return minDist;

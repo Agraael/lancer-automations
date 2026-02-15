@@ -704,6 +704,8 @@ export class ReactionEditor extends FormApplication {
             onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, distanceToTrigger }",
             onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, distanceToTrigger }",
+            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, distanceToTrigger }",
+            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger }",
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
@@ -780,16 +782,17 @@ export class ReactionEditor extends FormApplication {
         generalCheckbox.on('change', toggleFields);
         toggleFields();
 
-        const onlyOnSourceMatchCheckbox = html.find('#onlyOnSourceMatch');
+        const onlyOnSourceMatchCheckbox = html.find('input[name="onlyOnSourceMatch"]');
         const triggerCheckboxes = html.find('input[name^="trigger."]');
 
         const sourceMatchTriggers = [
             'onAttack', 'onHit', 'onMiss', 'onDamage',
-            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation'
+            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation',
+            'onInitAttack', 'onInitTechAttack'
         ];
 
         const toggleSourceMatchTriggers = () => {
-            const isSourceMatch = onlyOnSourceMatchCheckbox.prop('checked');
+            const isSourceMatch = onlyOnSourceMatchCheckbox.filter(':checked').length > 0;
 
             triggerCheckboxes.each(function () {
                 const triggerName = $(this).attr('name').replace('trigger.', '');
@@ -1385,14 +1388,15 @@ export class ReactionEditor extends FormApplication {
 
     _getTriggerOptions(selected) {
         const options = [
-            "onAttack", "onHit", "onMiss", "onDamage",
-            "onMove",
             "onTurnStart", "onTurnEnd",
+            "onMove",
+            "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
+            "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
+            "onActivation",
+            "onInitCheck", "onCheck",
             "onStatusApplied", "onStatusRemoved",
-            "onStructure", "onStress", "onHeat", "onDestroyed",
-            "onTechAttack", "onTechHit", "onTechMiss",
-            "onCheck", "onInitCheck",
-            "onActivation", "onHPRestored", "onHpLoss", "onClearHeat"
+            "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
+            "onStructure", "onStress", "onDestroyed",
         ];
         return options.reduce((obj, trigger) => {
             obj[trigger] = selected.includes(trigger);
@@ -1440,6 +1444,7 @@ export class ReactionEditor extends FormApplication {
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
+                onInit: formData.onInit || "",
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 outOfCombat: formData.outOfCombat === true,

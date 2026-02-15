@@ -369,7 +369,15 @@ export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
                     e.flags?.['csm-lancer-qol']?.effect === effectNameToCheck
                 );
 
-                // If it exists, we will update it (stack), so we DON'T block it.
+                // If it exists, check if stacking is allowed
+                if (existingEffect) {
+                    const allowStack = extraOptions?.allowStack;
+                    const hasConsumption = extraOptions?.consumption;
+
+                    if (!allowStack && !hasConsumption) {
+                        hasEffect = true; // Block stacking
+                    }
+                }
             }
 
             if (checkEffectCallback && hasEffect) {
@@ -378,6 +386,9 @@ export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
             } else if ((extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) && hasEffect) {
                 // Groups/Bonuses check blocking
                 ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()} (Group/Bonus conflict)!`);
+            } else if (hasEffect) {
+                // Standard blocking (no stack allowed)
+                ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
             } else {
                 // Add this effect to the list to apply (or stack)
                 effectsToApplyToToken.push(effect);

@@ -1,5 +1,5 @@
 import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance } from "./overwatch.js";
-import { ReactionManager, stringToFunction } from "./reaction-manager.js";
+import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup } from "./reactions-ui.js";
@@ -163,6 +163,7 @@ function getAllSceneTokens() {
 }
 
 async function checkOnInitReactions(token) {
+    // 1. Check Item-based onInit
     const items = getReactionItems(token);
 
     for (const item of items) {
@@ -191,10 +192,29 @@ async function checkOnInitReactions(token) {
                     const onInitFunc = stringToFunction(reaction.onInit, ["token", "item"]);
                     await onInitFunc(token, item);
                 }
-                console.log(`lancer-automations | onInit executed for ${item.name} on token ${token.name}`);
             } catch (error) {
                 console.error(`lancer-automations | Error executing onInit for ${item.name}:`, error);
             }
+        }
+    }
+
+    // 2. Check General onInit
+    const generalReactions = ReactionManager.getGeneralReactions();
+    for (const [name, reaction] of Object.entries(generalReactions)) {
+        if (reaction.enabled === false)
+            continue;
+        if (!reaction.onInit)
+            continue;
+
+        try {
+            if (typeof reaction.onInit === 'function') {
+                await reaction.onInit(token, null);
+            } else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '') {
+                const onInitFunc = stringToFunction(reaction.onInit, ["token", "item"]);
+                await onInitFunc(token, null);
+            }
+        } catch (error) {
+            console.error(`lancer-automations | Error executing onInit for General Activation ${name}:`, error);
         }
     }
 }
@@ -207,7 +227,7 @@ const STAT_PATHS = {
     GRIT: "system.grit"
 };
 
-async function performStatRoll(actor, stat, title, target = 10) {
+async function executeStatRoll(actor, stat, title, target = 10, extraData = {}) {
     const StatRollFlow = game.lancer.flows.get("StatRollFlow");
     if (!StatRollFlow) {
         console.error("lancer-automations | StatRollFlow not found");
@@ -246,12 +266,10 @@ async function performStatRoll(actor, stat, title, target = 10) {
             targetToken = target.object;
         } else if (target.actor) {
             targetToken = target;
-        } else if (target instanceof Actor) {
-            const t = target.getActiveTokens()[0];
-            if (t) {
-                targetToken = t;
-            }
+        } else {
+            console.error("lancer-automations | executeStatRoll | Invalid target type");
         }
+
     }
 
     if (targetToken && targetToken.actor) {
@@ -280,11 +298,14 @@ async function performStatRoll(actor, stat, title, target = 10) {
 
     // Pass targetToken to flow options
     const flowOptions = { path: statPath, title: rollTitle };
-    if (targetToken) {
-        flowOptions.targetToken = targetToken;
-    }
-
     const flow = new StatRollFlow(actor, flowOptions);
+    if (targetToken)
+        flow.state.data.targetToken = targetToken;
+    flow.state.data.targetVal = targetVal;
+
+    if (extraData && typeof extraData === 'object')
+        foundry.utils.mergeObject(flow.state.data, extraData);
+
     const completed = await flow.begin();
     if (!completed) {
         return { completed: false };
@@ -296,6 +317,54 @@ async function performStatRoll(actor, stat, title, target = 10) {
         roll: flow.state.data?.result?.roll ?? null,
         passed: total !== null ? (targetVal !== undefined ? total >= targetVal : false) : false
     };
+}
+
+async function executeDamageRoll(attacker, targets, damageValue, damageType, title = "Damage Roll", options = {}, extraData = {}) {
+    const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
+    if (!DamageRollFlow)
+        return { completed: false };
+
+    const actor = attacker.actor || attacker;
+    if (!actor)
+        return { completed: false };
+
+    if (targets && Array.isArray(targets)) {
+        targets.forEach((t, i) => {
+            const token = t.object || t;
+            if (token?.setTarget)
+                token.setTarget(true, { releaseOthers: i === 0, groupSelection: true });
+        });
+    }
+
+    const typeMap = {kinetic: "Kinetic",energy: "Energy",explosive: "Explosive",burn: "Burn",heat: "Heat",variable: "Variable"};
+    const resolvedType = typeMap[damageType.toLowerCase()] || "Kinetic";
+
+    const flowData = {
+        title: title,
+        damage: [{
+            val: String(damageValue),
+            type: resolvedType
+        }],
+        tags: options.tags || [],
+        hit_results: options.hit_results || [],
+        has_normal_hit: options.has_normal_hit !== undefined ? options.has_normal_hit : true,
+        has_crit_hit: options.has_crit_hit || false,
+        ap: options.ap || false,
+        paracausal: options.paracausal || false,
+        half_damage: options.half_damage || false,
+        overkill: options.overkill || false,
+        reliable: options.reliable || false,
+        add_burn: options.add_burn !== undefined ? options.add_burn : true,
+        invade: options.invade || false,
+        bonus_damage: options.bonus_damage || []
+    };
+
+    foundry.utils.mergeObject(flowData, options);
+    const flow = new DamageRollFlow(actor.uuid, flowData);
+    if (extraData && typeof extraData === 'object')
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    const completed = await flow.begin();
+    return {completed, flow};
 }
 
 async function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
@@ -1306,6 +1375,50 @@ async function onInitCheckStep(state) {
     return true;
 }
 
+async function onInitAttackStep(state) {
+    const actor = state.actor;
+    const item = state.item;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const weapon = item;
+    const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+
+    const actionData = {
+        type: state.data?.type || "attack",
+        title: state.data?.title || weapon?.name || "Attack",
+        action: {
+            name: state.data?.title || weapon?.name || "Attack"
+        },
+        detail: state.data?.effect || weapon?.system?.effect || "",
+        attack_type: state.data?.attack_type || "Ranged",
+        tags: state.data?.tags || weapon?.system?.tags || []
+    };
+
+    Hooks.callAll('lancer-automations.onInitAttack', token, weapon, targets, actionData);
+    return true;
+}
+
+async function onInitTechAttackStep(state) {
+    const actor = state.actor;
+    const item = state.item;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const techItem = item;
+    const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+
+    const actionData = {
+        type: state.data?.type || "tech",
+        title: state.data?.title || techItem?.name || "Tech Attack",
+        action: {
+            name: state.data?.title || techItem?.name || "Tech Attack"
+        },
+        detail: state.data?.effect || techItem?.system?.effect || "",
+        isInvade: state.data?.invade || false,
+        tags: state.data?.tags || techItem?.system?.tags || []
+    };
+
+    Hooks.callAll('lancer-automations.onInitTechAttack', token, techItem, targets, actionData);
+    return true;
+}
+
 async function onActivationStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1352,7 +1465,7 @@ async function statRollTargetSelectStep(state) {
         return true;
     }
 
-    // If target already provided (e.g. via performStatRoll), skip
+    // If target already provided (e.g. via executeStatRoll), skip
     if (state.data.targetToken) {
         return true;
     }
@@ -1419,6 +1532,8 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onCheck', onCheckStep);
     flowSteps.set('lancer-automations:onActivation', onActivationStep);
     flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
+    flowSteps.set('lancer-automations:onInitAttack', onInitAttackStep);
+    flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
 
     // Register generic accuracy steps
     flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
@@ -1433,6 +1548,11 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
+
+    // Insert onInitAttack/TechAttack steps
+    flows.get('BasicAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepAttack', 'lancer-automations:onInitAttack');
+    flows.get('WeaponAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepWeaponAttack', 'lancer-automations:onInitAttack');
+    flows.get('TechAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepTechAttack', 'lancer-automations:onInitTechAttack');
 
     // Insert targeting step BEFORE HUD
     flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:statRollTargetSelect');
@@ -1515,7 +1635,8 @@ Hooks.on('ready', () => {
         getCumulativeMoveData,
         getTokenCells,
         getMaxGroundHeightUnderToken,
-        performStatRoll,
+        executeStatRoll,
+        executeDamageRoll,
         chooseToken,
         placeZone,
         getGridDistance,
@@ -1718,5 +1839,38 @@ Hooks.on('updateActor', (actor, change, options, userId) => {
         }
 
         previousHPValues.set(actor.id, currentHP);
+    }
+});
+
+Hooks.on('renderSettings', (app, html) => {
+    const lancerHeader = html.find('#settings-lancer');
+    if (lancerHeader.length === 0) {
+        return;
+    }
+
+    const managerButton = $(`<button id="lancer-automations-manager" data-action="lancer-automations-manager">
+        <i class="fas fa-tasks"></i> Activation Manager
+    </button>`);
+
+    const helpButton = lancerHeader.find('button#triggler-form');
+    if (helpButton.length > 0) {
+        helpButton.after(managerButton);
+    } else {
+        lancerHeader.append(managerButton);
+    }
+
+    managerButton.on('click', async (ev) => {
+        ev.preventDefault();
+        new ReactionConfig().render(true);
+    });
+});
+
+Hooks.once('ready', () => {
+    const module = game.modules.get('lancer-automations');
+    if (module) {
+        module.api = module.api || {};
+        module.api.executeDamageRoll = executeDamageRoll;
+        module.api.executeStatRoll = executeStatRoll; // Ensure this is exposed too as it was missing from my search
+        console.log("lancer-automations | API exposed");
     }
 });

@@ -24,10 +24,9 @@
     <div class="form-group general-only"
         style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode."
+            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onInitAttack, onInitTechAttack) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if
-                onlyOnSourceMatch}}checked{{/if}}>
+            <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
         <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches action name from trigger
@@ -75,11 +74,11 @@
         <label class="checkbox ps-tooltip"
             title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
-            <input type="checkbox" name="onlyOnSourceMatch" id="onlyOnSourceMatch" {{#if
-                onlyOnSourceMatch}}checked{{/if}}>
+            <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
-        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches item LID from trigger</p>
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches item LID from trigger.
+            Reversing the logic, making it a general reaction.</p>
     </div>
 
     <!-- Custom Trigger Description -->
@@ -106,124 +105,110 @@
     <!-- Action Type & Consumption -->
     <!-- Action Type, Frequency & Consumption -->
     <!-- Action Type, Frequency, Consumption & Trigger Options -->
-    <div class="form-group"
-        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
-        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-            <!-- Action Type -->
-            <div style="flex: 1; min-width: 110px;">
-                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Action
-                    Type</label>
-                <select name="actionType" id="actionType" style="width: 100%;">
-                    {{#each actionTypeOptions}}
-                    <option value="{{this}}" {{#if (eq ../actionType this)}}selected{{/if}}>{{this}}</option>
-                    {{/each}}
-                </select>
-            </div>
+    <!-- 2-Column Layout for Configuration & Triggers -->
+    <div class="reaction-columns">
+        <!-- Left Column: Configuration -->
+        <div class="column-left">
+            <div class="panel-section">
+                <h3 class="panel-header">Configuration</h3>
 
-            <!-- Frequency -->
-            <div style="flex: 1; min-width: 110px;">
-                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Frequency</label>
-                <select name="frequency" id="frequency" style="width: 100%;">
-                    {{#each frequencyOptions}}
-                    <option value="{{this}}" {{#if (eq ../frequency this)}}selected{{/if}}>{{this}}</option>
-                    {{/each}}
-                </select>
-            </div>
+                <div class="form-grid-2col">
+                    <!-- Action Type -->
+                    <div>
+                        <label>Action Type</label>
+                        <select name="actionType" id="actionType">
+                            {{#each actionTypeOptions}}
+                            <option value="{{this}}" {{#if (eq ../actionType this)}}selected{{/if}}>{{this}}</option>
+                            {{/each}}
+                        </select>
+                    </div>
 
-            <!-- Options Group -->
-            <div style="min-width: 220px;">
-                <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 3px;">Options</label>
-                <div style="display: flex; gap: 15px; align-items: center; height: 26px;">
+                    <!-- Frequency -->
+                    <div>
+                        <label>Frequency</label>
+                        <select name="frequency" id="frequency">
+                            {{#each frequencyOptions}}
+                            <option value="{{this}}" {{#if (eq ../frequency this)}}selected{{/if}}>{{this}}</option>
+                            {{/each}}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="options-grid">
                     <!-- Consumes Reaction -->
-                    <label class="checkbox" id="consumesReactionContainer" title="Consumes Reaction"
-                        style="display: flex; align-items: center; gap: 5px; font-weight: bold; white-space: nowrap; {{#unless (eq actionType 'Reaction')}}display:none !important;{{/unless}}">
+                    <label class="checkbox {{#unless (eq actionType 'Reaction')}}hidden{{/unless}}"
+                        id="consumesReactionContainer">
                         <input type="checkbox" name="consumesReaction" id="consumesReaction" {{#if
                             consumesReaction}}checked{{/if}}>
                         <span>Consumes</span>
                     </label>
 
-                    <!-- Vertical Divider -->
-                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
-
                     <!-- Auto Activate -->
-                    <label class="checkbox ps-tooltip" title="Auto-activate without showing popup (default: false)"
-                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                    <label class="checkbox" title="Auto-activate without showing popup">
                         <input type="checkbox" name="autoActivate" {{#if autoActivate}}checked{{/if}}>
-                        <span>Auto</span>
+                        <span>Auto Activate</span>
                     </label>
 
-                    <!-- Vertical Divider -->
-                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
-
-                    <!-- Self/Others -->
-                    <label class="checkbox ps-tooltip" title="Allow token to react to its own trigger (default: false)"
-                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                    <!-- React to Self -->
+                    <label class="checkbox" title="Allow token to react to its own trigger">
                         <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
                         <span>React to Self</span>
                     </label>
 
-                    <label class="checkbox ps-tooltip"
-                        title="Allow other tokens to react to this trigger (default: true)"
-                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                    <!-- React to Others -->
+                    <label class="checkbox" title="Allow other tokens to react to this trigger">
                         <input type="checkbox" name="triggerOther" {{#if triggerOther}}checked{{/if}}>
                         <span>React to Others</span>
                     </label>
 
-                    <!-- Vertical Divider -->
-                    <div style="width: 1px; height: 16px; background: #999; opacity: 0.5;"></div>
-
                     <!-- Out of Combat -->
-                    <label class="checkbox ps-tooltip" title="Allow tokens not in combat to react (default: false)"
-                        style="display: flex; align-items: center; gap: 5px; white-space: nowrap;">
+                    <label class="checkbox" title="Allow tokens not in combat to react">
                         <input type="checkbox" name="outOfCombat" {{#if outOfCombat}}checked{{/if}}>
                         <span>Out of Combat</span>
                     </label>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Disposition Filter -->
-    <div class="form-group"
-        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
-        <label style="display:block; font-weight: bold; font-size: 0.9em; margin-bottom: 8px;">Disposition Filter <span
-                class="optional">(optional)</span></label>
-        <p class="notes" style="margin-bottom: 8px;">Filter which tokens can react based on their disposition relative
-            to the triggering token. If none selected, no filtering is applied.</p>
-        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Friendly"
-                style="display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" name="dispositionFilter.friendly" {{#if
-                    dispositionFilter.friendly}}checked{{/if}}>
-                <span style="color: #2a9d2a;">Friendly</span>
-            </label>
-            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Neutral"
-                style="display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" name="dispositionFilter.neutral" {{#if dispositionFilter.neutral}}checked{{/if}}>
-                <span style="color: #d4a017;">Neutral</span>
-            </label>
-            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Hostile"
-                style="display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" name="dispositionFilter.hostile" {{#if dispositionFilter.hostile}}checked{{/if}}>
-                <span style="color: #cc3333;">Hostile</span>
-            </label>
-            <label class="checkbox ps-tooltip" title="React when reactor sees trigger as Secret"
-                style="display: flex; align-items: center; gap: 5px;">
-                <input type="checkbox" name="dispositionFilter.secret" {{#if dispositionFilter.secret}}checked{{/if}}>
-                <span style="color: #9933cc;">Secret</span>
-            </label>
+            <div class="panel-section">
+                <h3 class="panel-header">Disposition Filter <span class="optional">(Optional)</span></h3>
+                <div class="disposition-grid">
+                    <label class="checkbox">
+                        <input type="checkbox" name="dispositionFilter.friendly" {{#if
+                            dispositionFilter.friendly}}checked{{/if}}>
+                        <span style="color: #2a9d2a;">Friendly</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" name="dispositionFilter.neutral" {{#if
+                            dispositionFilter.neutral}}checked{{/if}}>
+                        <span style="color: #d4a017;">Neutral</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" name="dispositionFilter.hostile" {{#if
+                            dispositionFilter.hostile}}checked{{/if}}>
+                        <span style="color: #cc3333;">Hostile</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" name="dispositionFilter.secret" {{#if
+                            dispositionFilter.secret}}checked{{/if}}>
+                        <span style="color: #9933cc;">Secret</span>
+                    </label>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <!-- Triggers -->
-    <div class="form-group stacked">
-        <label>Triggers</label>
-        <div class="trigger-grid">
-            {{#each triggers}}
-            <label class="checkbox" title="{{lookup ../triggerHelp @key}}">
-                <input type="checkbox" name="trigger.{{@key}}" {{#if (eq this true)}}checked{{/if}}> {{@key}}
-            </label>
-            {{/each}}
+        <!-- Right Column: Triggers -->
+        <div class="column-right">
+            <div class="panel-section full-height">
+                <h3 class="panel-header">Triggers</h3>
+                <div class="trigger-grid-container">
+                    {{#each triggers}}
+                    <label class="checkbox trigger-item" title="{{lookup ../triggerHelp @key}}">
+                        <input type="checkbox" name="trigger.{{@key}}" {{#if (eq this true)}}checked{{/if}}>
+                        <span class="trigger-label">{{@key}}</span>
+                    </label>
+                    {{/each}}
+                </div>
+            </div>
         </div>
     </div>
 
@@ -302,19 +287,19 @@
         </p>
     </div>
 
-    <!-- onInit Code (Item-based only) -->
-    <div class="form-group stacked item-only" style="{{#if isGeneral}}display:none{{/if}}">
+    <!-- onInit Code -->
+    <div class="form-group stacked">
         <label>onInit Code <span class="optional">(optional)</span> <a class="expand-editor" data-target="onInit"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></label>
         <div class="form-fields">
             <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
         </div>
         <p class="notes">
-            JavaScript code executed when a token with this item is created on the scene.<br>
+            JavaScript code executed when a token is created on the scene.<br>
             Useful for applying passive effects or setting up initial state.
         </p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>token</code>, <code>item</code>
+            <strong>Available variables:</strong> <code>token</code>, <code>item</code> (null for general)
         </p>
     </div>
 
@@ -326,27 +311,114 @@
 </form>
 
 <style>
-    .trigger-grid {
+    .reaction-columns {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        padding: 5px;
+        gap: 15px;
+        margin-bottom: 10px;
+    }
+
+    .column-left {
+        flex: 0 0 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .column-right {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel-section {
         background: rgba(0, 0, 0, 0.03);
         border: 1px solid #ccc;
         border-radius: 4px;
+        padding: 8px;
     }
 
-    .trigger-grid .checkbox {
-        white-space: nowrap;
-        font-size: 0.85em;
+    .panel-section.full-height {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel-header {
+        margin: 0 0 8px 0;
+        padding-bottom: 4px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #444;
+    }
+
+    .form-grid-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .form-grid-2col label {
+        display: block;
+        font-weight: bold;
+        font-size: 0.9em;
+        margin-bottom: 3px;
+    }
+
+    .options-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+
+    .disposition-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+
+    .trigger-grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 4px;
+        overflow-y: auto;
+        flex: 1;
+        /* max-height: 250px; Optional: limit height if needed */
+    }
+
+    .trigger-item {
         display: flex;
         align-items: center;
-        gap: 4px;
+        white-space: nowrap;
+        font-size: 0.85em;
+        padding: 2px;
+        border-radius: 3px;
+    }
+
+    .trigger-item:hover {
+        background: rgba(0, 0, 0, 0.05);
+    }
+
+    .trigger-item input {
+        margin-right: 4px;
     }
 
     .optional {
         font-weight: normal;
-        font-size: 0.85em;
+        font-size: 0.8em;
         color: #666;
+        margin-left: 4px;
+    }
+
+    .hidden {
+        display: none !important;
+    }
+
+    /* Override checkbox margins */
+    label.checkbox {
+        margin: 0;
+        padding: 0;
+        align-items: center;
     }
 </style>

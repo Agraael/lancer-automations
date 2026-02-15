@@ -112,7 +112,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                 if (triggerType === 'onStructure' || triggerType === 'onStress') {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
-                    const result = await api.performStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
+                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
                     if (result.completed && !result.passed) {
                         await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"] });
                         ui.notifications.warn(`${reactorToken.name} failed the AGILITY save and is no longer flying!`);
