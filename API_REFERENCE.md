@@ -154,6 +154,19 @@ Get all global bonuses for an actor.
 
 ---
 
+#### `injectBonusToNextRoll(actor, bonus)`
+
+Inject a one-time bonus (ephemeral) into the next applicable roll the actor makes. The bonus is automatically consumed upon opening the roll dialog.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to inject the bonus into |
+| `bonus` | `Object` | The bonus object (see `addGlobalBonus` for structure) |
+
+**Returns:** `Promise<void>`
+
+---
+
 ### Activation Registration
 
 #### `registerDefaultItemReactions(reactions)`
@@ -703,6 +716,19 @@ Fires when heat is cleared.
 ```
 
 ### Other
+
+#### `onInitCheck`
+
+Fires before a stat check (HULL, AGI, SYS, ENG) is rolled. Allows modifying the check (e.g. adding bonuses) before the result is determined.
+
+```javascript
+{
+    triggeringToken: Token,
+    statName: string,           // "HULL", "AGI", "SYS", "ENG"
+    checkAgainstToken: Token,   // The token being checked against (if any)
+    targetVal: number           // The difficulty value (e.g. Save Target)
+}
+```
 
 #### `onCheck`
 

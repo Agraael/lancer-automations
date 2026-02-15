@@ -18,6 +18,7 @@ import {
     removeGlobalBonus,
     getGlobalBonuses,
     executeGenericBonusMenu,
+    injectBonusToNextRoll,
     genericAccuracyStepAttack,
     genericAccuracyStepTechAttack,
     genericAccuracyStepWeaponAttack,
@@ -836,6 +837,10 @@ function registerReactionHooks() {
         handleTrigger('onCheck', { triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal });
     });
 
+    Hooks.on('lancer-automations.onInitCheck', (triggeringToken, statName, checkAgainstToken, targetVal) => {
+        handleTrigger('onInitCheck', { triggeringToken, statName, checkAgainstToken, targetVal });
+    });
+
     Hooks.on('lancer-automations.onActivation', (token, actionType, actionName, item, actionData) => {
         handleTrigger('onActivation', { triggeringToken: token, actionType, actionName, item, actionData });
     });
@@ -1292,6 +1297,15 @@ async function onCheckStep(state) {
     return true;
 }
 
+async function onInitCheckStep(state) {
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const statName = state.data?.title || 'Unknown';
+    state.data.targetVal = state.data.targetVal ? state.data.targetVal : 10;
+    Hooks.callAll('lancer-automations.onInitCheck', token, statName, state.data.targetToken, state.data.targetVal);
+    return true;
+}
+
 async function onActivationStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1404,6 +1418,7 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onTechHitMiss', onTechHitMissStep);
     flowSteps.set('lancer-automations:onCheck', onCheckStep);
     flowSteps.set('lancer-automations:onActivation', onActivationStep);
+    flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
 
     // Register generic accuracy steps
     flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
@@ -1439,6 +1454,7 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
 
+    flows.get('StatRollFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepStatRoll', 'lancer-automations:onInitCheck');
     flows.get('StatRollFlow')?.insertStepAfter('rollCheck', 'lancer-automations:onCheck');
 
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
@@ -1493,6 +1509,7 @@ Hooks.on('ready', () => {
         removeGlobalBonus,
         getGlobalBonuses,
         executeGenericBonusMenu,
+        injectBonusToNextRoll,
         executeEffectManager,
         openItemBrowser,
         getCumulativeMoveData,

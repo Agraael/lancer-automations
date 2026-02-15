@@ -61,6 +61,49 @@ function createGenericBonusStep(flowType) {
                 }
             }
 
+            // Process ephemeral bonuses
+            let ephemeralBonuses = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+            let ephemeralChanged = false;
+            const remainingEphemeral = [];
+            const consumedEphemeralNames = [];
+
+            if (ephemeralBonuses.length > 0) {
+                const tags = getFlowTags(flowType, state);
+
+                for (const bonus of ephemeralBonuses) {
+                    if (await isBonusApplicable(bonus, tags, state)) {
+
+                        if (bonus.type === 'damage') {
+                            if (flowType === 'damage') {
+                                damageBonuses.push({ ...bonus });
+                                if (bonus.name)
+                                    consumedEphemeralNames.push(bonus.name);
+                                ephemeralChanged = true;
+                            } else {
+                                remainingEphemeral.push(bonus);
+                            }
+                            continue;
+                        }
+
+                        let val = parseInt(bonus.val) || 0;
+                        if (bonus.type === 'difficulty')
+                            val = -val;
+
+                        netBonus += val;
+                        activeBonuses.push({ ...bonus });
+                        if (bonus.name)
+                            consumedEphemeralNames.push(bonus.name);
+                        ephemeralChanged = true;
+                    } else {
+                        remainingEphemeral.push(bonus);
+                    }
+                }
+            }
+
+            if (ephemeralChanged) {
+                await actor.setFlag("lancer-automations", "ephemeral_bonuses", remainingEphemeral);
+            }
+
             if (netBonus === 0 && activeBonuses.length === 0 && damageBonuses.length === 0)
                 return true;
 
@@ -759,6 +802,17 @@ Hooks.on("deleteActiveEffect", (effect) => {
         }, 200);
     }
 });
+
+export async function injectBonusToNextRoll(actor, bonus) {
+    if (!actor)
+        return;
+    const bonuses = duplicate(actor.getFlag("lancer-automations", "ephemeral_bonuses") || []);
+    if (!bonus.id)
+        bonus.id = foundry.utils.randomID();
+    bonuses.push(bonus);
+    await actor.setFlag("lancer-automations", "ephemeral_bonuses", bonuses);
+    ui.notifications.info(`Bonus injected for next roll: ${bonus.name}`);
+}
 
 export function executeGenericBonusMenu() {
     executeEffectManager({ initialTab: 'bonus' });

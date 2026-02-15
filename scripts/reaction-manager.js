@@ -702,7 +702,8 @@ export class ReactionEditor extends FormApplication {
             onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
-            onCheck: "{ triggeringToken, statName, roll, total, success, targetToken, targetVal, distanceToTrigger }",
+            onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, distanceToTrigger }",
+            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, distanceToTrigger }",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger }",
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
@@ -1390,7 +1391,7 @@ export class ReactionEditor extends FormApplication {
             "onStatusApplied", "onStatusRemoved",
             "onStructure", "onStress", "onHeat", "onDestroyed",
             "onTechAttack", "onTechHit", "onTechMiss",
-            "onCheck",
+            "onCheck", "onInitCheck",
             "onActivation", "onHPRestored", "onHpLoss", "onClearHeat"
         ];
         return options.reduce((obj, trigger) => {
