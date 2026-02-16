@@ -709,7 +709,8 @@ export class ReactionEditor extends FormApplication {
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger }",
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
-            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }"
+            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
+            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], distanceToTrigger }"
         };
 
         const result = {
@@ -1389,7 +1390,7 @@ export class ReactionEditor extends FormApplication {
     _getTriggerOptions(selected) {
         const options = [
             "onTurnStart", "onTurnEnd",
-            "onMove",
+            "onMove", "onKnockback",
             "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
             "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
             "onActivation",

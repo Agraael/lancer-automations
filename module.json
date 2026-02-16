@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.1.3",
+    "version": "2.1.4",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [

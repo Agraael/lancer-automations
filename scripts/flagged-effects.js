@@ -4,6 +4,81 @@ function log(...args) {
     console.log("lancer-automations |", ...args);
 }
 
+let notificationQueue = [];
+let notificationTimer = null;
+
+/**
+ * Queue an effect notification to be aggregated.
+ * @param {Token|TokenDocument} token - The token involved
+ * @param {string} effectName - Name of the effect
+ * @param {Object|boolean} notifyOptions - Notification options { source, prefixText }
+ * @param {string} defaultPrefix - Default prefix if notifyOptions.text is missing
+ * @param {string} icon - Icon path
+ */
+function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix, icon) {
+    if (!notifyOptions)
+        return;
+    // Normalize token
+    const tokenObj = token.object || token;
+    notificationQueue.push({
+        token: tokenObj,
+        effectName,
+        prefix: notifyOptions.prefixText || defaultPrefix,
+        source: notifyOptions.source,
+        icon
+    });
+
+    if (notificationTimer)
+        clearTimeout(notificationTimer);
+    notificationTimer = setTimeout(dispatchNotifications, 100);
+}
+
+async function dispatchNotifications() {
+    if (notificationQueue.length === 0)
+        return;
+
+    const data = [...notificationQueue];
+    notificationQueue = [];
+    notificationTimer = null;
+
+    // Group by token
+    const tokenGroups = new Map();
+    for (const item of data) {
+        if (!tokenGroups.has(item.token.id)) {
+            tokenGroups.set(item.token.id, { token: item.token, updates: [] });
+        }
+        tokenGroups.get(item.token.id).updates.push(item);
+    }
+
+    let fullContent = "";
+    for (const [tokenId, group] of tokenGroups) {
+        const token = group.token;
+        const updates = group.updates;
+        const lines = updates.map(u => {
+            let iconHtml = u.icon ? `<img src="${u.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
+            let actionText = `${iconHtml}${u.prefix} <strong>${u.effectName}</strong>`;
+
+            let sourceText = "";
+            if (u.source) {
+                const name = typeof u.source === 'object' ? u.source.name : u.source;
+                if (name)
+                    sourceText = ` with ${name}`;
+            }
+
+            return `<li>${actionText}${sourceText}</li>`;
+        });
+
+        fullContent += `<div><strong>${token.name}:</strong><ul>${lines.join("")}</ul></div>`;
+    }
+
+    if (fullContent) {
+        await ChatMessage.create({
+            content: `<div class="lancer-automations-notification">${fullContent}</div>`,
+            speaker: ChatMessage.getSpeaker({ token: data[0].token.document || data[0].token })
+        });
+    }
+}
+
 export function pushFlaggedEffect(targetID, effect, duration, note, originID) {
     if (game.users.filter(x => x.role === 4 && x.active).length < 1) {
         log('There is no active GM.');
@@ -303,9 +378,10 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null)
  * @param {boolean} [options.useTokenAsOrigin=true] - If true, uses targetID as originID in payload
  * @param {string} [options.customOriginId] - Optional custom origin ID (ignored if useTokenAsOrigin is true)
  * @param {Function} [options.checkEffectCallback] - Optional custom function to check if effect already exists
+ * @param {Object} [options.notify] - Optional notification options
  * @returns {Array} Array of valid tokens that received the effect(s)
  */
-export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
+export async function applyFlaggedEffectToTokens(options = {notify: true}, extraOptions = {}) {
     const {
         tokens,
         effectNames,
@@ -421,6 +497,12 @@ export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
                     payload: { targetID: tokenID, effect: effect, duration: adjustedDuration, note, originID, extraOptions }
                 });
             }
+
+            if (options.notify) {
+                const effectName = typeof effect === 'string' ? effect : effect.name;
+                const icon = typeof effect === 'object' ? effect.icon : CONFIG.statusEffects.find(e => e.id === effect)?.icon;
+                queueEffectNotification(token, effectName, options.notify, 'Gained', icon);
+            }
         }
     }
 
@@ -433,13 +515,14 @@ export async function applyFlaggedEffectToTokens(options, extraOptions = {}) {
  * @param {Array} options.tokens - Array of tokens to remove effect from
  * @param {Array<string>|string} options.effectNames - Effect name(s) to remove (single string or array)
  * @param {string} [options.originId] - Optional origin ID to filter removal
+ * @param {Object} [options.notify] - Optional notification options
  * @returns {Array} Array of tokens processed
  */
-export async function removeFlaggedEffectToTokens(options) {
+export async function removeFlaggedEffectToTokens(options = {notify: true}) {
     const {
         tokens,
         effectNames,
-        originId = null
+        originId = null,
     } = options;
 
     const effectsToRemove = Array.isArray(effectNames) ? effectNames : [effectNames];
@@ -458,6 +541,12 @@ export async function removeFlaggedEffectToTokens(options) {
         for (const effect of effectsToRemove) {
             let effectNameVal = typeof effect === 'object' ? effect.name : effect;
 
+            let icon = "";
+            if (options.notify) {
+                const existing = findFlaggedEffectOnToken(token, effectNameVal);
+                icon = existing?.img || existing?.icon || "";
+            }
+
             if (game.user.isGM) {
                 removeFlaggedEffect(tokenID, effectNameVal, originId);
             } else {
@@ -465,6 +554,10 @@ export async function removeFlaggedEffectToTokens(options) {
                     action: "removeFlaggedEffect",
                     payload: { targetID: tokenID, effect: effectNameVal, originID: originId }
                 });
+            }
+
+            if (options.notify) {
+                queueEffectNotification(token, effectNameVal, options.notify, 'Loss', icon);
             }
         }
     }
@@ -695,5 +788,49 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
                 }
             }
         }
+    }
+}
+/**
+ * Check if the token has any of the specified effects, remove them,
+ * and trigger a chat message mentioning the token's immunity.
+ * @param {Token|TokenDocument} token - The token to check
+ * @param {Array<string>|string} effectNames - List of effects to check for
+ * @param {Item|string} source - The item or text describing the source of immunity
+ * @param {boolean} [notify=true] - Whether to show a chat notification
+ */
+export async function triggerFlaggedEffectImmunity(token, effectNames, source = "", notify = true) {
+    const actor = token?.actor;
+    if (!actor)
+        return;
+    const targets = Array.isArray(effectNames) ? effectNames : [effectNames];
+    if (targets.length === 0)
+        return;
+
+    const foundEffects = actor.effects.filter(e => {
+        const flagName = e.getFlag('lancer-automations', 'effect');
+        const legacyFlagName = e.getFlag('csm-lancer-qol', 'effect');
+
+        return targets.some(name => {
+            const lowerName = name.toLowerCase().split('.').pop();
+            return (
+                e.name?.toLowerCase().includes(lowerName) ||
+                e.statuses?.has(lowerName) ||
+                (flagName && flagName.toLowerCase().includes(lowerName)) ||
+                (legacyFlagName && legacyFlagName.toLowerCase().includes(lowerName))
+            );
+        });
+    });
+
+    if (foundEffects.length > 0) {
+        const notifyOptions = notify ? {
+            source: source,
+            prefixText: 'Immunity to'
+        } : false;
+
+        await removeFlaggedEffectToTokens({
+            tokens: [token],
+            effectNames: targets,
+            notify: notifyOptions
+        });
     }
 }

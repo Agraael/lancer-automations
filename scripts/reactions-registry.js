@@ -102,8 +102,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                 if (triggerType === 'onStatusApplied') {
                     if (triggerData.statusId === 'prone') {
-                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Prone"] });
-                        ui.notifications.info(`${reactorToken.name} is flying and immune to Prone!`);
+                        await api.triggerFlaggedEffectImmunity(reactorToken, ["Prone"], "Flying");
                     } else {
                         await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"] });
                         ui.notifications.warn(`${reactorToken.name} became ${triggerData.statusId} and is no longer flying!`);

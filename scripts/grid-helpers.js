@@ -128,38 +128,47 @@ export function getTokenCenterOffset(token) {
     return pixelToOffset(centerX, centerY);
 }
 
-export function drawHexAt(graphics, col, row) {
+export function getHexVertices(col, row) {
     const center = getHexCenter(col, row);
+    const points = [];
+    const gridSize = canvas.grid.size;
 
     if (canvas.grid.getShape) {
         const shape = canvas.grid.getShape();
-        if (shape && shape.points) {
-            const translatedPoints = [];
+        if (shape && shape.points && shape.points.length > 0) {
             for (let i = 0; i < shape.points.length; i += 2) {
-                translatedPoints.push(shape.points[i] + center.x);
-                translatedPoints.push(shape.points[i + 1] + center.y);
+                points.push({ x: shape.points[i] + center.x, y: shape.points[i + 1] + center.y });
             }
-            graphics.drawPolygon(translatedPoints);
-            return;
+            return points;
         }
     }
-    const gridSize = canvas.grid.size;
 
+    const isFlat = (canvas.grid.type === 4 || canvas.grid.type === 5);
+    const startAngle = isFlat ? 0 : 30;
+    const radius = (gridSize / 2) * 1.1547;
+
+    for (let i = 0; i < 6; i++) {
+        const angle_deg = 60 * i + startAngle;
+        const angle_rad = Math.PI / 180 * angle_deg;
+        points.push({
+            x: center.x + radius * Math.cos(angle_rad),
+            y: center.y + radius * Math.sin(angle_rad)
+        });
+    }
+    return points;
+}
+
+export function drawHexAt(graphics, col, row) {
     if (isHexGrid()) {
+        const vertices = getHexVertices(col, row);
         const points = [];
-        for (let i = 0; i < 6; i++) {
-            const angle_deg = 60 * i + 30;
-            const angle_rad = Math.PI / 180 * angle_deg;
-            // Radius is usually gridSize / sqrt(3) for flat-topped or similar,
-            // but in Foundry hex grids, size usually refers to width/height.
-            // Using gridSize / 2 * 1.15 approx for outer radius often works well for visualization
-            const radius = (gridSize / 2) * 1.15;
-
-            points.push(center.x + radius * Math.cos(angle_rad));
-            points.push(center.y + radius * Math.sin(angle_rad));
+        for (const v of vertices) {
+            points.push(v.x, v.y);
         }
         graphics.drawPolygon(points);
     } else {
+        const center = getHexCenter(col, row);
+        const gridSize = canvas.grid.size;
         graphics.drawCircle(center.x, center.y, gridSize / 3);
     }
 }
@@ -251,31 +260,58 @@ export function getMinGridDistance(token1, token2, overridePos1 = null) {
     return minDist;
 }
 
-export function getDistanceTokenToPoint(point, token) {
-    if (!isHexGrid()) {
-        const centers = getOccupiedCenters(token);
-        let minDist = Infinity;
-        for (const c of centers) {
-            const dPixel = measureGridDistance(c, point);
-            if (dPixel < minDist)
-                minDist = dPixel;
+/**
+ * Snaps a token's center to the grid, accounting for its size and grid type.
+ * @param {Token} token - The token to snap
+ * @param {Object} centerPoint - The desired center point {x, y}
+ * @returns {Object} The snapped top-left position {x, y}
+ */
+export function snapTokenCenter(token, centerPoint) {
+    const topLeftX = centerPoint.x - (token.w / 2);
+    const topLeftY = centerPoint.y - (token.h / 2);
+    return token.getSnappedPosition({ x: topLeftX, y: topLeftY });
+}
+
+/**
+ * Returns a Set of occupied grid references ("col,row") for all tokens on the canvas,
+ * excluding specific token IDs.
+ * @param {Array<string>} excludeIds - Array of token IDs to exclude
+ * @returns {Set<string>} Set of "col,row" strings
+ */
+export function getOccupiedGridSpaces(excludeIds = []) {
+    const occupied = new Set();
+    const excludeSet = new Set(excludeIds);
+
+    for (const t of canvas.tokens.placeables) {
+        if (excludeSet.has(t.id))
+            continue;
+        if (!t.actor)
+            continue;
+        if (t.document.hidden)
+            continue;
+
+        const tOffsets = getOccupiedOffsets(t);
+        for (const o of tOffsets) {
+            occupied.add(`${o.col},${o.row}`);
         }
-        return Math.round(minDist / canvas.scene.grid.distance);
     }
+    return occupied;
+}
 
-    // For hex grids, convert point to offset/cube coordinates
-    const pointOffset = pixelToOffset(point.x, point.y);
-    const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
+export function getDistanceTokenToPoint(point, token) {
+    // Calculate center of the token
+    const tokenCenterOffset = getTokenCenterOffset(token);
 
-    const offsets = getOccupiedOffsets(token);
+    // For hex grids, use cube distance between centers
+    if (isHexGrid()) {
+        const tokenCenterCube = offsetToCube(tokenCenterOffset.col, tokenCenterOffset.row);
+        const pointOffset = pixelToOffset(point.x, point.y);
+        const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
 
-    let minDist = Infinity;
-    for (const o of offsets) {
-        const cube = offsetToCube(o.col, o.row);
-        const dist = cubeDistance(cube, pointCube);
-        if (dist < minDist)
-            minDist = dist;
+        return cubeDistance(tokenCenterCube, pointCube);
+    } else {
+        // For square grids, use grid distance between centers
+        const tokenCenter = getHexCenter(tokenCenterOffset.col, tokenCenterOffset.row);
+        return Math.round(measureGridDistance(tokenCenter, point) / canvas.scene.grid.distance);
     }
-
-    return minDist;
 }

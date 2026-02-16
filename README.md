@@ -137,7 +137,7 @@ You can also register default activations by code. See the [API Reference](API_R
 
 ## Effect Manager
 
-Combined with [Temporary Custom Statuses](https://foundryvtt.com/packages/temporary-custom-statuses) and code originally from Lancer QoL, the Effect Manager gives you extended status effects with turn-based duration and stack consumption.
+Combined with [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) and code originally from Lancer QoL, the Effect Manager gives you extended status effects with turn-based duration and stack consumption.
 
 ![Effect Manager](images/effect-manager.png)
 
@@ -162,7 +162,7 @@ Each bonus can have duration and stack consumption, just like effects. By code, 
 
 ### NPC Implementation Examples
 
-Here are some real examples from [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) showing how to combine activations, effects, and bonuses for NPC features.
+Here are some real examples
 
 **Dispersal Shield (Priest):**
 

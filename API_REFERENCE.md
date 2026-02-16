@@ -37,6 +37,7 @@ Apply one or more status effects to a list of tokens. Supports stacking, duratio
 | `useTokenAsOrigin` | `boolean` | `true` | Use the target token's ID as origin for duration tracking |
 | `customOriginId` | `string` | `null` | Override origin ID (ignored if `useTokenAsOrigin` is true) |
 | `checkEffectCallback` | `Function` | `null` | Custom predicate `(token, effect) => boolean` to check duplicates |
+| `notify` | `Object\|boolean` | `true by default` | Unified notification: `{ source: Item\|string, prefixText: string }`. `prefixText` (default: "Gained") |
 
 `extraOptions` object:
 
@@ -61,6 +62,7 @@ Remove effect(s) from a list of tokens.
 | `options.tokens` | `Array<Token>` | Tokens to remove from |
 | `options.effectNames` | `string \| Array<string>` | Effect name(s) to remove |
 | `options.originId` | `string` | Optional origin ID to filter which effects to remove |
+| `options.notify` | `Object\|boolean` | `true by default` Unified notification: `{ source: Item\|string, prefixText: string }`. `prefixText` (default: "Loss") |
 
 **Returns:** `Array<Token>` — processed tokens.
 
@@ -652,6 +654,18 @@ Fires when a token moves.
 }
 ```
 
+#### `onKnockback`
+
+Fires when a token is pushed or pulled via the interactive tool or `knockbackStep`.
+
+```javascript
+{
+    triggeringToken: Token,    // The actor who initiated the push/pull
+    range: number,             // Max distance of the push/pull
+    pushedActors: Array<Actor> // List of actors that were moved
+}
+```
+
 ### Turn Events
 
 #### `onTurnStart`
@@ -1186,3 +1200,43 @@ const bonusId = await api.addGlobalBonus(actor, { ... }, { ... });
 // Later:
 await api.removeGlobalBonus(actor, bonusId);
 ```
+
+---
+
+#### `knockBackToken(tokens, distance, options)`
+
+Knock back a list of tokens by a specified distance in grid units.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tokens` | `Array<Token>` | *required* | The tokens to knock back |
+| `distance` | `number` | *required* | Distance in grid spaces |
+| `options`   | `Object` | `{}` | Optional parameters |
+| `options.title` | `string` | `"Knockback"` | Undo card title |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `revertMovement(token, destination)`
+
+Revert a token's movement to a specific position. Typically used in `onMove` triggers to cancel movement.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token` | `Token` | *required* | The token to revert |
+| `destination` | `{x, y}` | `null` | Position `{x, y}` to revert to. If null, does nothing. |
+
+**Returns:** `Promise<void>`
+
+#### `triggerFlaggedEffectImmunity(token, effectNames, source, notify)`
+
+Check if a token has any of the specified effects, remove them, and trigger a chat message mentioning the token's immunity.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token` | `Token\|TokenDocument` | *required* | The token to check |
+| `effectNames` | `Array<string>\|string` | *required* | List of effect names (can be partial matches) |
+| `source` | `Item\|string` | `""` | Optional item or text for "with [Source]" mention |
+| `notify` | `boolean` | `true` | Show a chat notification ("Immunity to" format) |
+
+**Returns:** `Promise<void>`

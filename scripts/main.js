@@ -11,7 +11,8 @@ import {
     removeFlaggedEffectToTokens,
     findFlaggedEffectOnToken,
     consumeEffectCharge,
-    processDurationEffects
+    processDurationEffects,
+    triggerFlaggedEffectImmunity
 } from "./flagged-effects.js";
 import {
     addGlobalBonus,
@@ -27,7 +28,7 @@ import {
 } from "./genericBonuses.js";
 import { executeEffectManager, openItemBrowser } from "./effectManager.js";
 import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, placeZone, getGridDistance, drawRangeHighlight } from "./interactive-tools.js";
+import { chooseToken, placeZone, knockBackToken, getGridDistance, drawRangeHighlight, revertMovement } from "./interactive-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -925,6 +926,10 @@ function registerReactionHooks() {
     Hooks.on('lancer-automations.onClearHeat', (token, heatCleared, currentHeat) => {
         handleTrigger('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
     });
+
+    Hooks.on('lancer-automations.onKnockback', (triggeringToken, range, pushedActors) => {
+        handleTrigger('onKnockback', { triggeringToken, range, pushedActors });
+    });
 }
 
 function registerSettings() {
@@ -945,6 +950,15 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'statRollTargeting', {
         name: 'Enable Stat Roll Target Selection',
         hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'enableKnockbackFlow', {
+        name: 'Automate Knockback on Hit',
+        hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
         scope: 'client',
         config: true,
         type: Boolean,
@@ -1521,6 +1535,46 @@ async function statRollTargetSelectStep(state) {
     return true;
 }
 
+async function knockbackStep(state) {
+    if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
+        return true;
+
+    const item = state.item; // Weapon or Tech
+    if (!item)
+        return true;
+    const tags = state.data?.tags || item.system?.tags || [];
+    const kbTag = tags.find(t => t.id === "knockback");
+    if (!kbTag)
+        return true;
+
+    let distance = parseInt(kbTag.val);
+    if (isNaN(distance) || distance <= 0)
+        distance = 1;
+    const hitResults = state.data?.hit_results || [];
+    const targetInfos = state.data?.acc_diff?.targets || [];
+    const hitTokens = [];
+
+    for (let i = 0; i < hitResults.length; i++) {
+        if (hitResults[i]?.hit) {
+            const tDoc = targetInfos[i]?.target;
+            const t = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
+            if (t) {
+                hitTokens.push(t);
+            }
+        }
+    }
+
+    const attackerToken = state.actor?.token?.object || canvas.tokens.get(state.actor?.token?.id) || state.actor?.getActiveTokens()?.[0];
+    if (hitTokens.length > 0) {
+        await knockBackToken(hitTokens, distance, {
+            title: `${item.name} Knockback`,
+            triggeringToken: attackerToken
+        });
+    }
+
+    return true;
+}
+
 Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
@@ -1534,6 +1588,8 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
     flowSteps.set('lancer-automations:onInitAttack', onInitAttackStep);
     flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
+    // Register Knockback step
+    flowSteps.set('lancer-automations:knockback', knockbackStep);
 
     // Register generic accuracy steps
     flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
@@ -1562,12 +1618,15 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
 
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:knockback');
 
     flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:knockback');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
     flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
+    flows.get('TechAttackFlow')?.insertStepAfter('lancer-automations:onTechHitMiss', 'lancer-automations:knockback');
 
     flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-automations:onDamage');
 
@@ -1640,7 +1699,8 @@ Hooks.on('ready', () => {
         chooseToken,
         placeZone,
         getGridDistance,
-        drawRangeHighlight
+        drawRangeHighlight,
+        revertMovement
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -1870,7 +1930,9 @@ Hooks.once('ready', () => {
     if (module) {
         module.api = module.api || {};
         module.api.executeDamageRoll = executeDamageRoll;
-        module.api.executeStatRoll = executeStatRoll; // Ensure this is exposed too as it was missing from my search
+        module.api.executeStatRoll = executeStatRoll;
+        module.api.knockBackToken = knockBackToken;
+        module.api.triggerFlaggedEffectImmunity = triggerFlaggedEffectImmunity;
         console.log("lancer-automations | API exposed");
     }
 });

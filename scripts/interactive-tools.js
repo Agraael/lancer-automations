@@ -4,7 +4,8 @@ import {
     isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
     getHexesInRange, getHexCenter, pixelToOffset,
     getTokenCenterOffset, drawHexAt, getOccupiedOffsets,
-    getMinGridDistance, getDistanceTokenToPoint
+    getMinGridDistance, getDistanceTokenToPoint, isColumnarHex, getHexVertices,
+    snapTokenCenter, getOccupiedGridSpaces
 } from "./grid-helpers.js";
 
 
@@ -122,8 +123,8 @@ export function getGridDistance(pos1, pos2) {
 
 function _createInfoCard(type, opts) {
     const {
-        title = type === "chooseToken" ? "SELECT TARGETS" : "PLACE ZONE",
-        icon = type === "chooseToken" ? "fas fa-crosshairs" : "fas fa-bullseye",
+        title = type === "chooseToken" ? "SELECT TARGETS" : (type === "knockBack" ? "KNOCKBACK" : "PLACE ZONE"),
+        icon = type === "chooseToken" ? "fas fa-crosshairs" : (type === "knockBack" ? "fas fa-arrow-right" : "fas fa-bullseye"),
         headerClass = "",
         description = "",
         range = null,
@@ -168,6 +169,12 @@ function _createInfoCard(type, opts) {
             <h3 class="la-section-header lancer-border-primary">Selected Targets</h3>
             <div class="la-selected-targets" data-role="target-list">
                 <div class="la-empty-state">No targets selected</div>
+            </div>`;
+    } else if (type === "knockBack") {
+        dynamicHtml = `
+            <h3 class="la-section-header lancer-border-primary">Tokens to Move</h3>
+            <div class="la-knockback-list" data-role="knockback-list">
+                <!-- Populated dynamically -->
             </div>`;
     } else {
         dynamicHtml = `
@@ -271,6 +278,31 @@ function _updateInfoCard(cardEl, type, data) {
                     data.onDeleteZone(zoneIdx);
             });
         }
+    } else if (type === "knockBack") {
+        const listEl = cardEl.find('[data-role="knockback-list"]');
+        listEl.empty();
+
+        data.tokens.forEach((token, idx) => {
+            const isMoved = data.moves.has(token.id);
+            const isActive = idx === data.activeIndex;
+            const statusClass = isMoved ? "la-kb-moved" : "la-kb-pending";
+            const activeClass = isActive ? "la-kb-active" : "";
+            const statusIcon = isMoved ? '<i class="fas fa-check" style="color:var(--lancer-color-green)"></i>' : '<i class="fas fa-arrow-right"></i>';
+
+            const itemHtml = `
+                <div class="la-knockback-item ${statusClass} ${activeClass}" data-token-index="${idx}">
+                    <img src="${token.document.texture.src}" class="la-kb-img" style="width:24px; height:24px; object-fit:contain;">
+                    <span class="la-kb-name">${token.name}</span>
+                    <span class="la-kb-status">${statusIcon}</span>
+                </div>`;
+            listEl.append(itemHtml);
+        });
+
+        listEl.find('.la-knockback-item').on('click', function () {
+            const idx = $(this).data('token-index');
+            if (data.onSelectToken)
+                data.onSelectToken(idx);
+        });
     }
 }
 
@@ -384,28 +416,22 @@ export function chooseToken(casterToken, options = {}) {
             onCancel: doCancel
         });
 
-
-
         const drawSelectionHighlight = (token) => {
             const highlight = new PIXI.Graphics();
-            const gridSize = canvas.grid.size;
             highlight.lineStyle(4, 0x00ffff, 0.8);
             highlight.beginFill(0x00ffff, 0.2);
 
-            if (isHexGrid() && token.document.width > 1) {
+            if (isHexGrid()) {
                 const offsets = getOccupiedOffsets(token);
                 for (const off of offsets) {
                     drawHexAt(highlight, off.col, off.row);
                 }
-            } else if (isHexGrid()) {
-                const centerOffset = getTokenCenterOffset(token);
-                drawHexAt(highlight, centerOffset.col, centerOffset.row);
             } else {
                 highlight.drawRect(
                     token.document.x,
                     token.document.y,
-                    token.document.width * gridSize,
-                    token.document.height * gridSize
+                    token.document.width * canvas.grid.size,
+                    token.document.height * canvas.grid.size
                 );
             }
 
@@ -455,14 +481,11 @@ export function chooseToken(casterToken, options = {}) {
 
             if (hoveredToken) {
 
-                if (isHexGrid() && hoveredToken.document.width > 1) {
+                if (isHexGrid()) {
                     const offsets = getOccupiedOffsets(hoveredToken);
                     for (const off of offsets) {
                         drawHexAt(cursorPreview, off.col, off.row);
                     }
-                } else if (isHexGrid()) {
-                    const centerOffset = getTokenCenterOffset(hoveredToken);
-                    drawHexAt(cursorPreview, centerOffset.col, centerOffset.row);
                 } else {
                     cursorPreview.drawRect(
                         hoveredToken.document.x,
@@ -788,4 +811,417 @@ export function placeZone(casterToken, options = {}) {
             resolve(placedZones.length > 0 ? placedZones : null);
         }
     });
+}
+
+/**
+ * Interactive tool to apply knockback to tokens.
+ * @param {Array<Token>} tokens - List of tokens to knock back
+ * @param {number} distance - Max knockback distance in grid units
+ * @param {Object} options - UI options
+ * @returns {Promise<Array<{token: Token, x: number, y: number}>|null>} List of moves or null if cancelled
+ */
+export function knockBackToken(tokens, distance, options = {}) {
+    return new Promise((resolve) => {
+        const {
+            title = "KNOCKBACK",
+            description = "Select destination for each token.",
+            icon,
+            headerClass = "",
+            triggeringToken = null
+        } = options;
+
+        if (!tokens || (Array.isArray(tokens) && tokens.length === 0)) {
+            resolve([]);
+            return;
+        }
+
+        // State
+        const tokenList = Array.isArray(tokens) ? tokens : [tokens];
+        let activeIndex = 0;
+        const moves = new Map();
+
+        // Visuals
+        let rangeHighlight = null;
+        const traces = new Map(); // tokenId -> Graphics
+        const cursorPreview = new PIXI.Graphics();
+
+        canvas.stage.addChild(cursorPreview);
+
+        const doCleanup = () => {
+            canvas.stage.off('click', clickHandler);
+            canvas.stage.off('rightdown', abortHandler);
+            canvas.stage.off('pointermove', moveHandler);
+            document.removeEventListener('keydown', keyHandler);
+
+            if (rangeHighlight) {
+                if (rangeHighlight.parent)
+                    rangeHighlight.parent.removeChild(rangeHighlight);
+                rangeHighlight.destroy();
+            }
+            if (cursorPreview.parent)
+                cursorPreview.parent.removeChild(cursorPreview);
+            cursorPreview.destroy();
+
+            for (const g of traces.values()) {
+                if (g.parent)
+                    g.parent.removeChild(g);
+                g.destroy();
+            }
+
+            _removeInfoCard(cardEl);
+            $(`head style#la-kb-styles`).remove();
+        };
+
+        // UI Card
+        const cardEl = _createInfoCard("knockBack", {
+            title,
+            icon,
+            headerClass,
+            description,
+            range: distance,
+            count: tokenList.length,
+            onConfirm: async () => {
+                const result = [];
+                const updates = [];
+                const pushedActors = [];
+                for (const [id, move] of moves.entries()) {
+                    const t = tokenList.find(t => t.id === id);
+                    if (t) {
+                        const updateData = { x: move.x, y: move.y };
+                        let startCenter, endCenterX, endCenterY;
+
+                        if (game.modules.get("elevationruler")?.active) {
+                            // Bypass elevationruler movement tracking by setting the flag manually
+                            const history = t.document.getFlag("elevationruler", "movementHistory") || {};
+                            const newHistory = { ...history, _freeMovementTrigger: foundry.utils.randomID() };
+                            updateData["flags.elevationruler.movementHistory"] = newHistory;
+
+                            // Capture start position (Center) before update
+                            startCenter = { x: t.center.x, y: t.center.y, z: 0 };
+                            // Calculate expected end position (Center)
+                            endCenterX = move.x + (t.w / 2);
+                            endCenterY = move.y + (t.h / 2);
+                        }
+
+                        updates.push(t.document.update(updateData).then(doc => {
+                            if (game.modules.get("elevationruler")?.active) {
+                                const tokenObj = doc.object;
+                                if (tokenObj.elevationruler) {
+                                    let history = tokenObj.elevationruler.measurementHistory;
+                                    if (!history)
+                                        history = tokenObj.elevationruler.measurementHistory = [];
+                                    const last = history.at(-1);
+                                    const lastIsCurrent = last && Math.abs(last.x - endCenterX) < 2 && Math.abs(last.y - endCenterY) < 2;
+
+                                    if (!lastIsCurrent) {
+                                        startCenter.cost = 0;
+                                        const endCenter = { x: endCenterX, y: endCenterY, z: 0, cost: 0, freeMovement: true };
+                                        history.push(startCenter, endCenter);
+                                    } else {
+                                        last.freeMovement = true;
+                                        last.cost = 0;
+                                    }
+                                }
+                            }
+                            return doc;
+                        }));
+                        pushedActors.push(t.actor);
+                    }
+                }
+
+                await Promise.all(updates);
+
+                Hooks.callAll('lancer-automations.onKnockback', triggeringToken, distance, pushedActors);
+
+                doCleanup();
+                resolve(result);
+            },
+
+            onCancel: () => {
+                doCleanup();
+                resolve(null);
+            }
+        });
+
+        if ($('head style#la-kb-styles').length === 0) {
+            $('head').append(`
+                <style id="la-kb-styles">
+                    .la-knockback-list {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                        max-height: 200px;
+                        overflow-y: auto;
+                    }
+                    .la-knockback-item {
+                        display: flex;
+                        align-items: center;
+                        padding: 4px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        background: rgba(0,0,0,0.1);
+                        border: 1px solid transparent;
+                    }
+                    .la-knockback-item:hover {
+                        background: rgba(0,0,0,0.2);
+                    }
+                    .la-knockback-item.la-kb-active {
+                        border-color: var(--lancer-color-orange, #ff6400);
+                        background: rgba(255, 100, 0, 0.1);
+                    }
+                    .la-knockback-item.la-kb-moved .la-kb-name {
+                        text-decoration: line-through;
+                        opacity: 0.7;
+                    }
+                    .la-kb-img {
+                        width: 24px;
+                        height: 24px;
+                        margin-right: 8px;
+                        border: 1px solid #000;
+                    }
+                    .la-kb-name {
+                        flex: 1;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+                    .la-kb-status {
+                        width: 20px;
+                        text-align: center;
+                    }
+                </style>
+            `);
+        }
+
+        const drawTrace = (token, targetX, targetY) => {
+            if (traces.has(token.id)) {
+                const oldG = traces.get(token.id);
+                if (oldG.parent)
+                    oldG.parent.removeChild(oldG);
+                oldG.destroy();
+            }
+
+            const trace = new PIXI.Graphics();
+            const gridSize = canvas.grid.size;
+
+            // Draw Original Position (Yellow)
+            trace.lineStyle(2, 0xffff00, 0.8);
+            trace.beginFill(0xffff00, 0.3);
+            if (isHexGrid()) {
+                const offsets = getOccupiedOffsets(token);
+                for (const o of offsets)
+                    drawHexAt(trace, o.col, o.row);
+            } else {
+                trace.drawRect(token.document.x, token.document.y, token.document.width * gridSize, token.document.height * gridSize);
+            }
+            trace.endFill();
+
+            // Draw Target Position (Orange)
+            trace.lineStyle(2, 0xff6400, 0.8);
+            trace.beginFill(0xff6400, 0.3);
+
+            if (isHexGrid()) {
+                const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
+                for (const o of offsets)
+                    drawHexAt(trace, o.col, o.row);
+            } else {
+                trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+            }
+            trace.endFill();
+
+            // Draw Line
+            const centerStart = token.center;
+            const centerEnd = { x: targetX + token.w/2, y: targetY + token.h/2 };
+            trace.lineStyle(3, 0xffffff, 1);
+            trace.moveTo(centerStart.x, centerStart.y);
+            trace.lineTo(centerEnd.x, centerEnd.y);
+
+            // Add to stage below tokens
+            if (canvas.tokens && canvas.tokens.parent) {
+                canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
+            } else {
+                canvas.stage.addChild(trace);
+            }
+            traces.set(token.id, trace);
+        };
+
+        const updateVisuals = () => {
+            // 1. Range Highlight for ACTIVE token
+            const activeToken = tokenList[activeIndex];
+            if (activeToken) {
+                if (rangeHighlight) {
+                    if (rangeHighlight.parent)
+                        rangeHighlight.parent.removeChild(rangeHighlight);
+                    rangeHighlight.destroy();
+                }
+                // Range is from the token's current position
+                rangeHighlight = drawRangeHighlight(activeToken, distance, 0x888888, 0.3, true);
+            }
+        };
+
+        const updateCard = () => {
+            _updateInfoCard(cardEl, "knockBack", {
+                tokens: tokenList,
+                moves,
+                activeIndex,
+                onSelectToken: (idx) => {
+                    activeIndex = idx;
+                    updateCard();
+                    updateVisuals();
+                }
+            });
+        };
+
+
+        // Handlers
+        const moveHandler = (event) => {
+            const t = canvas.stage.worldTransform;
+            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
+            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+
+            const activeToken = tokenList[activeIndex];
+            if (!activeToken)
+                return;
+
+            const snapped = snapTokenCenter(activeToken, {x: tx, y: ty});
+            const snappedX = snapped.x;
+            const snappedY = snapped.y;
+            const gridSize = canvas.grid.size;
+
+            // Check validity (distance)
+            const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
+            const inRange = dist <= distance;
+
+            // Check overlap
+            const otherOccupied = getOccupiedGridSpaces([activeToken.id]);
+            const offsets = getOccupiedOffsets(activeToken, { x: snappedX, y: snappedY });
+
+            // Draw Cursor
+            cursorPreview.clear();
+
+            for (const o of offsets) {
+                const key = `${o.col},${o.row}`;
+                const isOverlapping = otherOccupied.has(key);
+
+                // Color logic
+                let color, alpha;
+                if (!inRange) {
+                    color = 0x555555; // Greyish for out of range
+                    alpha = 0.5;
+                } else if (isOverlapping) {
+                    color = 0xff0000;
+                    alpha = 0.6;
+                } else {
+                    color = 0x0088ff; // Blue valid
+                    alpha = 0.4;
+                }
+
+                if (!inRange) {
+                    color = 0xff0000;
+                } else if (isOverlapping) {
+                    color = 0xff0000;
+                }
+
+                cursorPreview.lineStyle(2, color, 0.8);
+                cursorPreview.beginFill(color, alpha);
+                if (isHexGrid()) {
+                    drawHexAt(cursorPreview, o.col, o.row);
+                } else {
+                    const center = getHexCenter(o.col, o.row);
+                    cursorPreview.drawRect(center.x - gridSize/2, center.y - gridSize/2, gridSize, gridSize);
+                }
+                cursorPreview.endFill();
+            }
+        };
+
+        const clickHandler = (event) => {
+            const t = canvas.stage.worldTransform;
+            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
+            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+
+            const activeToken = tokenList[activeIndex];
+            if (!activeToken)
+                return;
+
+            const snapped = snapTokenCenter(activeToken, {x: tx, y: ty});
+            const snappedX = snapped.x;
+            const snappedY = snapped.y;
+
+            const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
+            if (dist > distance) {
+                ui.notifications.warn("Destination is out of range!");
+                return;
+            }
+
+            moves.set(activeToken.id, { x: snappedX, y: snappedY });
+            drawTrace(activeToken, snappedX, snappedY);
+
+            let nextIndex = -1;
+            for (let i = 1; i <= tokenList.length; i++) {
+                const idx = (activeIndex + i) % tokenList.length;
+                if (!moves.has(tokenList[idx].id)) {
+                    nextIndex = idx;
+                    break;
+                }
+            }
+
+            if (nextIndex !== -1) {
+                activeIndex = nextIndex;
+            } else {
+                activeIndex = (activeIndex + 1) % tokenList.length;
+            }
+
+            updateCard();
+            updateVisuals();
+        };
+
+        const abortHandler = (event) => {
+            if (event.data.button === 2) {
+
+                if (moves.has(tokenList[activeIndex].id)) {
+                    moves.delete(tokenList[activeIndex].id);
+                    if (traces.has(tokenList[activeIndex].id)) {
+                        const t = traces.get(tokenList[activeIndex].id);
+                        t.destroy();
+                        traces.delete(tokenList[activeIndex].id);
+                    }
+                    updateCard();
+                    updateVisuals();
+                } else {
+
+                }
+            }
+        };
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape") {
+                doCleanup(); // Cancel
+                resolve(null);
+            }
+        };
+
+        // Initialize
+        updateVisuals();
+        updateCard();
+
+        canvas.stage.on('pointermove', moveHandler);
+        canvas.stage.on('click', clickHandler);
+        canvas.stage.on('rightdown', abortHandler);
+        document.addEventListener('keydown', keyHandler);
+    });
+}
+
+
+/**
+ * Revert a token's movement to a specific position.
+ * @param {Token} token - The token to revert
+ * @param {Object} destination - {x, y} position to revert to. If null, does nothing.
+ * @returns {Promise<void>}
+ */
+export async function revertMovement(token, destination = null) {
+    if (!token)
+        return;
+    if (!destination)
+        return;
+    ui.error("Reverting movement not implemented yet.");
 }
