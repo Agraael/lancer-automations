@@ -123,8 +123,8 @@ export function getGridDistance(pos1, pos2) {
 
 function _createInfoCard(type, opts) {
     const {
-        title = type === "chooseToken" ? "SELECT TARGETS" : (type === "knockBack" ? "KNOCKBACK" : "PLACE ZONE"),
-        icon = type === "chooseToken" ? "fas fa-crosshairs" : (type === "knockBack" ? "fas fa-arrow-right" : "fas fa-bullseye"),
+        title = type === "chooseToken" ? "SELECT TARGETS" : (type === "knockBack" ? "KNOCKBACK" : (type === "placeToken" ? "PLACE TOKEN" : "PLACE ZONE")),
+        icon = type === "chooseToken" ? "fas fa-crosshairs" : (type === "knockBack" ? "fas fa-arrow-right" : (type === "placeToken" ? "fas fa-user-plus" : "fas fa-bullseye")),
         headerClass = "",
         description = "",
         range = null,
@@ -175,6 +175,12 @@ function _createInfoCard(type, opts) {
             <h3 class="la-section-header lancer-border-primary">Tokens to Move</h3>
             <div class="la-knockback-list" data-role="knockback-list">
                 <!-- Populated dynamically -->
+            </div>`;
+    } else if (type === "placeToken") {
+        dynamicHtml = `
+            <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
+            <div class="la-placed-tokens" data-role="token-list">
+                <div class="la-empty-state">No tokens placed</div>
             </div>`;
     } else {
         dynamicHtml = `
@@ -276,6 +282,32 @@ function _updateInfoCard(cardEl, type, data) {
                 const zoneIdx = $(this).data('zone-index');
                 if (data.onDeleteZone)
                     data.onDeleteZone(zoneIdx);
+            });
+        }
+    } else if (type === "placeToken") {
+        const listEl = cardEl.find('[data-role="token-list"]');
+        listEl.empty();
+
+        if (data.placements.length === 0) {
+            listEl.html('<div class="la-empty-state">No tokens placed</div>');
+        } else {
+            data.placements.forEach((placement, idx) => {
+                const imgSrc = data.prototypeTexture || "";
+                const imgHtml = imgSrc
+                    ? `<img src="${imgSrc}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
+                    : `<i class="fas fa-user" style="color:#ff6400; font-size:16px; margin-right:8px;"></i>`;
+                listEl.append(`
+                    <div class="la-selected-target" data-placement-index="${idx}">
+                        ${imgHtml}
+                        <span class="la-selected-target-name">Token ${idx + 1}</span>
+                        <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
+                    </div>`);
+            });
+
+            listEl.find('.la-selected-target').on('click', function () {
+                const idx = $(this).data('placement-index');
+                if (data.onDeletePlacement)
+                    data.onDeletePlacement(idx);
             });
         }
     } else if (type === "knockBack") {
@@ -684,8 +716,6 @@ export function placeZone(casterToken, options = {}) {
                 }
 
                 let result = null;
-
-                // Use templatemacro's placeZone if available
                 const templateMacroApi = game.modules.get('templatemacro')?.api;
                 if (templateMacroApi?.placeZone) {
                     result = await templateMacroApi.placeZone(
@@ -693,7 +723,6 @@ export function placeZone(casterToken, options = {}) {
                         hooks
                     );
                 } else {
-                    // Fallback to Lancer's WeaponRangeTemplate
                     const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({
                         type: type,
                         val: size
@@ -711,7 +740,6 @@ export function placeZone(casterToken, options = {}) {
                     }
                 }
 
-                // Re-check flags after blocking placeTemplate/placeZone call
                 if (cancelled) {
                     if (result?.template) {
                         try {
@@ -738,7 +766,6 @@ export function placeZone(casterToken, options = {}) {
                 }
 
                 if (result?.template) {
-                    // Check if final position is in range
                     if (range !== null && casterToken) {
                         const dist = getDistanceTokenToPoint({ x: result.x, y: result.y }, casterToken);
                         if (dist > range) {
@@ -749,7 +776,6 @@ export function placeZone(casterToken, options = {}) {
                     }
                     placedZones.push(result);
 
-                    // Build delete handler for zone list
                     const refreshZoneCard = () => {
                         _updateInfoCard(cardEl, "placeZone", {
                             placedZones,
@@ -888,38 +914,56 @@ export function knockBackToken(tokens, distance, options = {}) {
                     const t = tokenList.find(t => t.id === id);
                     if (t) {
                         const updateData = { x: move.x, y: move.y };
-                        let startCenter, endCenterX, endCenterY;
+                        let startCenter, endCenter, cost = 0;
 
                         if (game.modules.get("elevationruler")?.active) {
-                            // Bypass elevationruler movement tracking by setting the flag manually
-                            const history = t.document.getFlag("elevationruler", "movementHistory") || {};
-                            const newHistory = { ...history, _freeMovementTrigger: foundry.utils.randomID() };
-                            updateData["flags.elevationruler.movementHistory"] = newHistory;
-
-                            // Capture start position (Center) before update
-                            startCenter = { x: t.center.x, y: t.center.y, z: 0 };
-                            // Calculate expected end position (Center)
-                            endCenterX = move.x + (t.w / 2);
-                            endCenterY = move.y + (t.h / 2);
+                            startCenter = t.getCenterPoint({ x: t.document.x, y: t.document.y });
+                            // Use canvas.grid.getCenterPoint to match the ruler's destination format.
+                            // On hex grids, this returns the hex geometric center which differs slightly
+                            // from token.getCenterPoint (bounding box center). This difference is what
+                            // allows the ruler to create a teleport bridge segment on the next drag.
+                            const bboxCenter = t.getCenterPoint({ x: move.x, y: move.y });
+                            endCenter = canvas.grid.getCenterPoint(bboxCenter);
+                            cost = getDistanceTokenToPoint(bboxCenter, t);
                         }
 
-                        updates.push(t.document.update(updateData).then(doc => {
+                        updates.push(t.document.update(updateData).then(async (doc) => {
                             if (game.modules.get("elevationruler")?.active) {
                                 const tokenObj = doc.object;
+                                if (!tokenObj.elevationruler) {
+                                    tokenObj.elevationruler = {};
+                                }
+
                                 if (tokenObj.elevationruler) {
                                     let history = tokenObj.elevationruler.measurementHistory;
-                                    if (!history)
+                                    if (!history) {
                                         history = tokenObj.elevationruler.measurementHistory = [];
-                                    const last = history.at(-1);
-                                    const lastIsCurrent = last && Math.abs(last.x - endCenterX) < 2 && Math.abs(last.y - endCenterY) < 2;
+                                    }
 
-                                    if (!lastIsCurrent) {
-                                        startCenter.cost = 0;
-                                        const endCenter = { x: endCenterX, y: endCenterY, z: 0, cost: 0, freeMovement: true };
-                                        history.push(startCenter, endCenter);
-                                    } else {
+                                    const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
+                                    const elevation = t.document.elevation ?? 0;
+                                    const zValue = gridUnitsToPixels(elevation);
+
+                                    const last = history.at(-1);
+                                    let addedNative = false;
+
+                                    if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
+                                        addedNative = true;
+                                        // Update coordinates to grid center to match ruler format
+                                        last.x = endCenter.x;
+                                        last.y = endCenter.y;
                                         last.freeMovement = true;
-                                        last.cost = 0;
+                                        last.cost = cost;
+                                        if (last.z === undefined)
+                                            last.z = zValue;
+                                        if (last.teleport === undefined)
+                                            last.teleport = false;
+                                    }
+
+                                    if (!addedNative) {
+                                        const startPt = { ...startCenter, z: zValue, teleport: false, cost: 0 };
+                                        const endPt = { ...endCenter, z: zValue, teleport: false, cost: cost, freeMovement: true };
+                                        history.push(startPt, endPt);
                                     }
                                 }
                             }
@@ -1213,15 +1257,422 @@ export function knockBackToken(tokens, distance, options = {}) {
 
 
 /**
- * Revert a token's movement to a specific position.
+ * Interactive tool to place tokens on the map with visual preview.
+ * @param {Object} options - Configuration options
+ * @param {Actor} [options.actor=null] - The actor to link spawned tokens to
+ * @param {Object} options.prototypeToken - Prototype token data (e.g. from actor.prototypeToken.toObject())
+ * @param {number} [options.range=null] - Maximum placement range in grid units (null = unlimited)
+ * @param {number} [options.count=1] - Number of tokens to place (-1 for infinite)
+ * @param {Object} [options.extraData={}] - Extra data to inject into each spawned token document
+ * @param {Token|{x:number,y:number}} [options.origin=null] - Origin point: a Token, or a pixel position (snapped to nearest hex, treated as size 1)
+ * @param {Function} [options.onSpawn=null] - Async callback(newTokenDoc, originToken) called after each spawn
+ * @param {string} [options.title] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @param {string} [options.icon] - Card icon class
+ * @param {string} [options.headerClass=""] - Card header CSS class
+ * @returns {Promise<Array<TokenDocument>|null>} Array of spawned token documents, or null if cancelled
+ */
+export function placeToken(options = {}) {
+    return new Promise((resolve) => {
+        const {
+            actor = null,
+            prototypeToken,
+            range = null,
+            count = 1,
+            extraData = {},
+            origin = null,
+            onSpawn = null,
+            title,
+            description = "",
+            icon,
+            headerClass = ""
+        } = options;
+
+        const originToken = (origin && origin.document) ? origin : null;
+        const originOffset = (!originToken && origin)
+            ? pixelToOffset(origin.x, origin.y)
+            : null;
+
+        const protoWidth = prototypeToken.width ?? 1;
+        const protoHeight = prototypeToken.height ?? 1;
+        const gridSize = canvas.grid.size;
+        const protoTexture = prototypeToken.texture?.src || "";
+
+        // Reference token with matching dimensions for pixel-perfect hex shapes
+        const refToken = (originToken && originToken.document.width === protoWidth && originToken.document.height === protoHeight)
+            ? originToken
+            : canvas.tokens.placeables.find(t => t.document.width === protoWidth && t.document.height === protoHeight) || null;
+
+        const placements = [];
+        let rangeHighlight = null;
+
+        if (range !== null && origin) {
+            if (originToken) {
+                rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.3, false);
+            } else if (originOffset) {
+                const hl = new PIXI.Graphics();
+                hl.lineStyle(2, 0x888888, 0.7);
+                hl.beginFill(0x888888, 0.3);
+
+                if (isHexGrid()) {
+                    const originCube = offsetToCube(originOffset.col, originOffset.row);
+                    for (const h of getHexesInRange(originCube, range)) {
+                        const offset = cubeToOffset(h);
+                        drawHexAt(hl, offset.col, offset.row);
+                    }
+                } else {
+                    for (let dx = -range; dx <= range; dx++) {
+                        for (let dy = -range; dy <= range; dy++) {
+                            if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
+                                const center = getHexCenter(originOffset.col + dx, originOffset.row + dy);
+                                hl.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
+                            }
+                        }
+                    }
+                }
+
+                hl.endFill();
+
+                if (canvas.tokens && canvas.tokens.parent) {
+                    canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
+                } else {
+                    canvas.stage.addChild(hl);
+                }
+                rangeHighlight = hl;
+            }
+        }
+
+        const cursorPreview = new PIXI.Graphics();
+        canvas.stage.addChild(cursorPreview);
+
+        const prevInteractive = canvas.tokens.interactiveChildren;
+        canvas.tokens.interactiveChildren = false;
+
+        const getProtoOffsets = (centerCol, centerRow) => {
+            if (protoWidth <= 1 && protoHeight <= 1)
+                return [{ col: centerCol, row: centerRow }];
+
+            const center = getHexCenter(centerCol, centerRow);
+            const overridePos = {
+                x: center.x - (protoWidth * gridSize / 2),
+                y: center.y - (protoHeight * gridSize / 2)
+            };
+            if (refToken)
+                return getOccupiedOffsets(refToken, overridePos);
+            return [{ col: centerCol, row: centerRow }];
+        };
+
+        const checkInRange = (col, row) => {
+            if (range === null || !origin)
+                return true;
+            if (originToken)
+                return getDistanceTokenToPoint(getHexCenter(col, row), originToken) <= range;
+            if (isHexGrid()) {
+                return cubeDistance(
+                    offsetToCube(originOffset.col, originOffset.row),
+                    offsetToCube(col, row)
+                ) <= range;
+            }
+            return Math.max(Math.abs(col - originOffset.col), Math.abs(row - originOffset.row)) <= range;
+        };
+
+        const getSpawnPosition = (centerCol, centerRow) => {
+            const center = getHexCenter(centerCol, centerRow);
+            if (refToken)
+                return snapTokenCenter(refToken, center);
+            return {
+                x: center.x - (protoWidth * gridSize / 2),
+                y: center.y - (protoHeight * gridSize / 2)
+            };
+        };
+
+        const snapCursor = (tx, ty) => {
+            if (refToken) {
+                const snapped = snapTokenCenter(refToken, { x: tx, y: ty });
+                return pixelToOffset(snapped.x + refToken.w / 2, snapped.y + refToken.h / 2);
+            }
+            return pixelToOffset(tx, ty);
+        };
+
+        const drawOffsets = (graphics, offsets) => {
+            for (const o of offsets) {
+                if (isHexGrid()) {
+                    drawHexAt(graphics, o.col, o.row);
+                } else {
+                    const center = getHexCenter(o.col, o.row);
+                    graphics.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
+                }
+            }
+        };
+
+        const doCleanup = () => {
+            canvas.stage.off('click', clickHandler);
+            canvas.stage.off('rightdown', rightHandler);
+            canvas.stage.off('pointermove', moveHandler);
+            document.removeEventListener('keydown', keyHandler);
+
+            if (rangeHighlight) {
+                if (rangeHighlight.parent)
+                    rangeHighlight.parent.removeChild(rangeHighlight);
+                rangeHighlight.destroy();
+            }
+            if (cursorPreview.parent)
+                cursorPreview.parent.removeChild(cursorPreview);
+            cursorPreview.destroy();
+
+            for (const p of placements) {
+                if (p.graphics?.parent)
+                    p.graphics.parent.removeChild(p.graphics);
+                p.graphics?.destroy();
+            }
+
+            canvas.tokens.interactiveChildren = prevInteractive;
+            _removeInfoCard(cardEl);
+        };
+
+        const refreshCard = () => {
+            _updateInfoCard(cardEl, "placeToken", {
+                placements,
+                prototypeTexture: protoTexture,
+                onDeletePlacement: (idx) => {
+                    const removed = placements.splice(idx, 1);
+                    if (removed[0]?.graphics) {
+                        if (removed[0].graphics.parent)
+                            removed[0].graphics.parent.removeChild(removed[0].graphics);
+                        removed[0].graphics.destroy();
+                    }
+                    refreshCard();
+                }
+            });
+        };
+
+        const cardEl = _createInfoCard("placeToken", {
+            title,
+            icon,
+            headerClass,
+            description,
+            range,
+            count,
+            onConfirm: async () => {
+                const spawnedTokens = [];
+                for (const p of placements) {
+                    const pos = getSpawnPosition(p.col, p.row);
+                    const tokenData = {
+                        ...prototypeToken,
+                        ...extraData,
+                        x: pos.x,
+                        y: pos.y
+                    };
+                    if (actor)
+                        tokenData.actorId = actor.id;
+
+                    const created = await canvas.scene.createEmbeddedDocuments("Token", [tokenData]);
+                    if (created[0]) {
+                        spawnedTokens.push(created[0]);
+
+                        if (window.Sequencer) {
+                            const tokenObj = canvas.tokens.get(created[0].id);
+                            if (tokenObj) {
+                                new Sequence()
+                                    .effect()
+                                    .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
+                                    .atLocation(tokenObj)
+                                    .scale(protoWidth / 2)
+                                    .play();
+                            }
+                        }
+
+                        if (onSpawn)
+                            await onSpawn(created[0], originToken);
+                    }
+                }
+
+                doCleanup();
+                resolve(spawnedTokens);
+            },
+            onCancel: () => {
+                doCleanup();
+                resolve(null);
+            }
+        });
+
+        const drawPlacementMarker = (centerCol, centerRow) => {
+            const graphics = new PIXI.Graphics();
+            graphics.lineStyle(2, 0xff6400, 0.8);
+            graphics.beginFill(0xff6400, 0.3);
+            drawOffsets(graphics, getProtoOffsets(centerCol, centerRow));
+            graphics.endFill();
+
+            if (canvas.tokens && canvas.tokens.parent) {
+                canvas.tokens.parent.addChildAt(graphics, canvas.tokens.parent.getChildIndex(canvas.tokens));
+            } else {
+                canvas.stage.addChild(graphics);
+            }
+            return graphics;
+        };
+
+        const moveHandler = (event) => {
+            const t = canvas.stage.worldTransform;
+            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
+            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+
+            const cursorOffset = snapCursor(tx, ty);
+            const inRange = checkInRange(cursorOffset.col, cursorOffset.row);
+            const color = inRange ? 0x0088ff : 0xff0000;
+
+            cursorPreview.clear();
+            cursorPreview.lineStyle(2, color, 0.8);
+            cursorPreview.beginFill(color, 0.4);
+            drawOffsets(cursorPreview, getProtoOffsets(cursorOffset.col, cursorOffset.row));
+            cursorPreview.endFill();
+        };
+
+        const clickHandler = (event) => {
+            const t = canvas.stage.worldTransform;
+            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
+            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+
+            const cursorOffset = snapCursor(tx, ty);
+
+            if (!checkInRange(cursorOffset.col, cursorOffset.row)) {
+                ui.notifications.warn("Target is out of range!");
+                return;
+            }
+            if (count !== -1 && placements.length >= count) {
+                ui.notifications.warn(`Maximum of ${count} tokens already placed.`);
+                return;
+            }
+
+            const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row);
+            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics });
+            refreshCard();
+        };
+
+        const rightHandler = (event) => {
+            if (event.data.button === 2 && placements.length > 0) {
+                const removed = placements.pop();
+                if (removed.graphics?.parent)
+                    removed.graphics.parent.removeChild(removed.graphics);
+                removed.graphics?.destroy();
+                refreshCard();
+            }
+        };
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape") {
+                doCleanup();
+                resolve(null);
+            }
+        };
+
+        refreshCard();
+
+        canvas.stage.on('pointermove', moveHandler);
+        canvas.stage.on('click', clickHandler);
+        canvas.stage.on('rightdown', rightHandler);
+        document.addEventListener('keydown', keyHandler);
+    });
+}
+
+
+/**
+ * Revert a token's movement to the previous position in history or a specific destination.
  * @param {Token} token - The token to revert
- * @param {Object} destination - {x, y} position to revert to. If null, does nothing.
- * @returns {Promise<void>}
+ * @param {Object} [destination=null] - Optional destination to move to if elevationruler is not active.
+ * @returns {Promise<boolean>} - True if history is clean (0 or 1 point remain), false otherwise.
  */
 export async function revertMovement(token, destination = null) {
     if (!token)
+        return true;
+
+    // Helper to calculate distance
+    const getDist = (p1, p2) => {
+        let d = 0;
+        if (canvas.grid.measurePath) {
+            d = canvas.grid.measurePath([p1, p2]).distance;
+        } else {
+            d = canvas.grid.measureDistance(p1, p2);
+        }
+        return Math.round(d / canvas.scene.grid.distance);
+    };
+
+    if (game.modules.get("elevationruler")?.active) {
+        const history = token.elevationruler?.measurementHistory;
+        if (history && history.length >= 2) {
+            const currentPos = { x: token.document.x, y: token.document.y };
+            const newLastPoint = history[history.length - 2];
+            const updates = {};
+
+            const topLeft = {
+                x: newLastPoint.x - (token.w * 0.5),
+                y: newLastPoint.y - (token.h * 0.5)
+            };
+            const snappedPos = token.getSnappedPosition(topLeft);
+            updates.x = snappedPos.x;
+            updates.y = snappedPos.y;
+            updates.elevation = CONFIG.GeometryLib.utils.pixelsToGridUnits(newLastPoint.z);
+
+            const dist = getDist(currentPos, {x: updates.x, y: updates.y});
+            await token.document.update(updates, { isUndo: true });
+            game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
+
+            const newHistory = token.elevationruler?.measurementHistory;
+            return !newHistory || newHistory.length < 2;
+        } else {
+            await token.document.unsetFlag("elevationruler", "movementHistory");
+            if (token.elevationruler) {
+                token.elevationruler.measurementHistory = [];
+            }
+            ui.notifications.info("Movement history cleared.");
+            return true;
+        }
+    } else if (destination) {
+        const currentPos = { x: token.document.x, y: token.document.y };
+        const dist = getDist(currentPos, destination);
+
+        await token.document.update(destination, { isUndo: true });
+        game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
+        return true;
+    }
+    return true;
+}
+
+/**
+ * Clear movement history for tokens.
+ * @param {Token|Token[]} tokens - Token or list of tokens to clear
+ * @param {boolean} [revert=false] - Whether to also revert movement visually
+ */
+export async function clearMovementHistory(tokens, revert = false) {
+    const tokenList = Array.isArray(tokens) ? tokens : [tokens];
+    if (tokenList.length === 0)
         return;
-    if (!destination)
+
+    const elevationRulerActive = game.modules.get("elevationruler")?.active;
+    if (!elevationRulerActive) {
+        ui.notifications.warn("Elevation Ruler module is not active. Movement history cannot be cleared.");
         return;
-    ui.error("Reverting movement not implemented yet.");
+    }
+
+    for (const token of tokenList) {
+        if (revert) {
+            while (true) {
+                const isClean = await revertMovement(token);
+                if (isClean)
+                    break;
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+
+        await token.document.unsetFlag("elevationruler", "movementHistory");
+        if (token.elevationruler) {
+            token.elevationruler.measurementHistory = [];
+        }
+        const lancerAutomations = game.modules.get('lancer-automations');
+        if (lancerAutomations?.api?.clearMoveData) {
+            lancerAutomations.api.clearMoveData(token.document.id);
+        }
+    }
+
+    const tokenNames = tokenList.map(t => t.name).join(", ");
+    ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
 }

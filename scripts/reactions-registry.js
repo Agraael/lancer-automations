@@ -104,8 +104,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (triggerData.statusId === 'prone') {
                         await api.triggerFlaggedEffectImmunity(reactorToken, ["Prone"], "Flying");
                     } else {
-                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"] });
-                        ui.notifications.warn(`${reactorToken.name} became ${triggerData.statusId} and is no longer flying!`);
+                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                     }
                 }
 
@@ -113,8 +112,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
                     const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
                     if (result.completed && !result.passed) {
-                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"] });
-                        ui.notifications.warn(`${reactorToken.name} failed the AGILITY save and is no longer flying!`);
+                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                     }
                 }
             }

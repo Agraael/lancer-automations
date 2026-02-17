@@ -448,6 +448,65 @@ const result = await api.placeZone(reactorToken, {
 
 ---
 
+#### `placeToken(options)`
+
+Interactive token placement tool — shows a range highlight around the origin, lets the user click to mark placement positions (orange markers), then spawns all tokens on confirm. Plays a Sequencer impulse effect on each spawn.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.actor` | `Actor` | `null` | The actor to link spawned tokens to |
+| `options.prototypeToken` | `Object` | *required* | Prototype token data (e.g. `actor.prototypeToken.toObject()`) |
+| `options.range` | `number` | `null` | Max placement range in grid units (`null` = unlimited) |
+| `options.count` | `number` | `1` | Number of tokens to place. `-1` for unlimited |
+| `options.extraData` | `Object` | `{}` | Extra data merged into each spawned token document |
+| `options.origin` | `Token\|{x,y}` | `null` | Origin point: a Token (range from token), or a pixel position (snapped to nearest hex, treated as size 1) |
+| `options.onSpawn` | `Function` | `null` | Async callback `(newTokenDoc, originToken) => {}` called after each spawn |
+| `options.title` | `string` | `"PLACE TOKEN"` | Info card header text |
+| `options.description` | `string` | `""` | Info card description text |
+| `options.icon` | `string` | `"fas fa-user-plus"` | Info card header icon (FontAwesome class) |
+| `options.headerClass` | `string` | `""` | Extra CSS class for the info card header |
+
+**Returns:** `Promise<Array<TokenDocument>|null>` — spawned token documents, or `null` if cancelled
+
+**Controls:**
+- **Left-click:** Place an orange marker (no spawn yet)
+- **Right-click:** Undo last placed marker
+- **Confirm button:** Spawn all placed tokens
+- **Cancel / ESC:** Cancel without spawning
+
+```javascript
+const actor = game.actors.getName("Grunt");
+const spawned = await api.placeToken({
+    actor,
+    prototypeToken: actor.prototypeToken.toObject(),
+    range: 5,
+    count: 3,
+    origin: myToken,
+    title: "DEPLOY DRONES",
+    description: "Place up to 3 drones within range 5"
+});
+```
+
+**With onSpawn callback (apply effect after each spawn):**
+
+```javascript
+await api.placeToken({
+    actor,
+    prototypeToken: actor.prototypeToken.toObject(),
+    origin: myToken,
+    count: 1,
+    onSpawn: async (tokenDoc, originToken) => {
+        await api.applyFlaggedEffectToTokens({
+            tokens: [tokenDoc.object],
+            effectNames: ["Exposed"],
+            duration: { label: 'end', turns: 1 }
+        });
+    }
+});
+```
+
+---
+
 #### `getGridDistance(pos1, pos2)`
 
 Calculate distance between two pixel positions in grid units. Supports both hex and square grids.

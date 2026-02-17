@@ -28,7 +28,7 @@ import {
 } from "./genericBonuses.js";
 import { executeEffectManager, openItemBrowser } from "./effectManager.js";
 import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, placeZone, knockBackToken, getGridDistance, drawRangeHighlight, revertMovement } from "./interactive-tools.js";
+import { chooseToken, placeZone, knockBackToken, placeToken, getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory  } from "./interactive-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -1074,13 +1074,29 @@ function handleSocketEvent({ action, payload }) {
 }
 
 const cumulativeMoveData = new Map();
+const intentionalMoveData = new Map();
 
 function clearMoveData(tokenId) {
     cumulativeMoveData.delete(tokenId);
+    intentionalMoveData.delete(tokenId);
+}
+
+function undoMoveData(tokenId, distance) {
+    const current = cumulativeMoveData.get(tokenId) || 0;
+    const newVal = Math.max(0, current - distance);
+    cumulativeMoveData.set(tokenId, newVal);
+
+    const currentIntentional = intentionalMoveData.get(tokenId) || 0;
+    const newIntentional = Math.max(0, currentIntentional - distance);
+    intentionalMoveData.set(tokenId, newIntentional);
 }
 
 function getCumulativeMoveData(tokenDocId) {
     return cumulativeMoveData.get(tokenDocId) || 0;
+}
+
+function getIntentionalMoveData(tokenDocId) {
+    return intentionalMoveData.get(tokenDocId) || 0;
 }
 
 function handleTokenMove(document, change, options, userId) {
@@ -1122,23 +1138,30 @@ function handleTokenMove(document, change, options, userId) {
 
     const moveInfo = { isInvoluntary: !isDrag, isTeleport };
 
-    // Always track basic cumulative movement (used by Fall reaction to check if token moved)
+    // Update Cumulative (Total) Movement
     const prev = cumulativeMoveData.get(document.id) || 0;
     const cumulative = prev + distanceMoved;
     if (!isFreeMovement) {
         cumulativeMoveData.set(document.id, cumulative);
+        // Intentional: Only if Voluntary (isDrag) AND not Free
+        if (isDrag) {
+            const prevIntentional = intentionalMoveData.get(document.id) || 0;
+            intentionalMoveData.set(document.id, prevIntentional + distanceMoved);
+        }
     }
 
     // Boost detection only when enabled
     if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
         const speed = token.actor?.system?.speed || 0;
+        const currentIntentional = intentionalMoveData.get(document.id) || 0;
+        const prevIntentional = (currentIntentional - distanceMoved);
 
         const boostSet = [];
         if (speed > 0) {
             // Standard move is 1-speed, boost 1 is speed+1 to 2*speed, boost 2 is 2*speed+1 to 3*speed, etc.
-            // Boost N is used when cumulative > N * speed
-            const prevBoostCount = prev > 0 ? Math.floor((prev - 1) / speed) : 0;
-            const newBoostCount = cumulative > 0 ? Math.floor((cumulative - 1) / speed) : 0;
+            // Boost N is used when intentional > N * speed
+            const prevBoostCount = prevIntentional > 0 ? Math.floor((prevIntentional - 1) / speed) : 0;
+            const newBoostCount = currentIntentional > 0 ? Math.floor((currentIntentional - 1) / speed) : 0;
             for (let n = prevBoostCount + 1; n <= newBoostCount; n++) {
                 boostSet.push(n);
             }
@@ -1148,7 +1171,7 @@ function handleTokenMove(document, change, options, userId) {
 
         // Debug notification for boost detection testing
         if (game.settings.get('lancer-automations', 'debugBoostDetection')) {
-            ui.notifications.info(`${token.name}: moved ${distanceMoved}, cumulative ${cumulative}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
+            ui.notifications.info(`${token.name}: moved ${distanceMoved}, intentional ${currentIntentional}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
         }
     }
 
@@ -1698,9 +1721,13 @@ Hooks.on('ready', () => {
         executeDamageRoll,
         chooseToken,
         placeZone,
+        placeToken,
         getGridDistance,
         drawRangeHighlight,
-        revertMovement
+        revertMovement,
+        clearMovementHistory,
+        undoMoveData,
+        getIntentionalMoveData
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -1708,23 +1735,93 @@ Hooks.on('ready', () => {
 });
 
 Hooks.on('renderTokenHUD', (hud, html, data) => {
-    if (!game.settings.get('lancer-automations', 'showBonusHudButton'))
+    // Existing Bonus Menu Button
+    if (game.settings.get('lancer-automations', 'showBonusHudButton')) {
+        const token = hud.object;
+        if (token?.actor) {
+            const button = $(`<div class="control-icon" data-action="bonus-menu" data-tooltip="Lancer EffectManager">
+                <i class="cci cci-accuracy i--m"></i>
+            </div>`);
+            button.on('click', (e) => {
+                e.preventDefault();
+                executeGenericBonusMenu(token.actor);
+            });
+            html.find('.col.right').append(button);
+        }
+    }
+
+    // Revert Last Movement Button
+    const leftColumn = html.find(".col.left");
+    if (leftColumn.length === 0)
+        return;
+    if (html.find('.lancer-ruler-reset-button').length)
         return;
 
-    const token = hud.object;
-    if (!token?.actor)
+    if (!game.modules.get("elevationruler")?.active || !game.combat?.started) {
         return;
+    }
 
-    const button = $(`<div class="control-icon" data-action="bonus-menu" data-tooltip="Lancer EffectManager">
-        <i class="cci cci-accuracy i--m"></i>
-    </div>`);
+    const resetButtonHtml = `
+    <div class="control-icon lancer-ruler-reset-button" title="Revert Last Movement">
+        <i class="fas fa-undo"></i>
+    </div>
+  `;
 
-    button.on('click', (e) => {
-        e.preventDefault();
-        executeGenericBonusMenu(token.actor);
+    leftColumn.append(resetButtonHtml);
+    const btn = html.find('.lancer-ruler-reset-button');
+    btn.on('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const token = hud.object;
+        if (!token)
+            return;
+
+        await revertMovement(token);
     });
 
-    html.find('.col.right').append(button);
+    btn.on('contextmenu', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const token = hud.object;
+        if (!token)
+            return;
+
+        new Dialog({
+            title: `Movement History: ${token.name}`,
+            content: `
+                <div class="lancer-dialog-header">
+                    <h2 class="lancer-dialog-title">Movement History</h2>
+                    <p class="lancer-dialog-subtitle">${token.name}</p>
+                </div>
+                <div class="form-group">
+                    <p>What would you like to do with the movement history?</p>
+                </div>
+            `,
+            buttons: {
+                clear: {
+                    icon: '<i class="fas fa-trash"></i>',
+                    label: "Reset History",
+                    callback: () => clearMovementHistory(token, false)
+                },
+                revert: {
+                    icon: '<i class="fas fa-undo-alt"></i>',
+                    label: "Reset & Revert Movement",
+                    callback: () => clearMovementHistory(token, true)
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Cancel"
+                }
+            },
+            default: "revert"
+        }, {
+            classes: ["lancer-dialog-base"],
+            width: 400,
+            height: 250
+        }).render(true);
+    });
 });
 
 Hooks.on('preUpdateToken', handleTokenMove);
@@ -1932,7 +2029,9 @@ Hooks.once('ready', () => {
         module.api.executeDamageRoll = executeDamageRoll;
         module.api.executeStatRoll = executeStatRoll;
         module.api.knockBackToken = knockBackToken;
+        module.api.placeToken = placeToken;
         module.api.triggerFlaggedEffectImmunity = triggerFlaggedEffectImmunity;
         console.log("lancer-automations | API exposed");
     }
 });
+
