@@ -2,7 +2,7 @@
 
 I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) (and borrows some of its code).
 
-So what is Lancer Automations? It's a framework to automate and script gameplay for the Lancer. It's scalable: add activations, effects, and bonuses without touching the core code. The goal is replacing Lancer QoL eventually; for now, they work side-by-side.
+So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. For now both modules work side by side, but some features do overlap.
 
 ## Installation
 
@@ -32,11 +32,11 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## How It Works
 
-The module uses **gameplay triggers** to detect events like `onMove`, `onAttack`, `onHit`, `onDamage`, or `onTurnStart`. Each trigger carries a data object describing the event.
+Everything revolves around **gameplay triggers**. Triggers cover pretty much anything that happens during play: `onMove`, `onAttack`, `onHit`, `onDamage`, `onTurnStart`, and many more. Each trigger carries its own data payload describing what just happened.
 
 ![Trigger list](images/trigger-list.png)
 
-When an actor hits a trigger, it fires. Other tokens (or the actor itself) react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
+Each time an actor does something that matches a trigger, it fires. Other tokens (including the actor itself) can then react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
 
 ### Example: Overwatch
 
@@ -304,6 +304,14 @@ There are many utility functions exposed for scripting. Two notable ones for mac
 -   `api.placeToken(options)`: Interactive token placement with visual preview and spawn effects.
 -   `api.startChoiceCard(options)`: Interactive choice card. Supports "OR" (pick one) and "AND" (pick all) modes.
 -   `api.knockBackToken(tokens, distance, options)`: Interactive tool to push/pull tokens on the grid.
+-   `api.deployWeaponToken(weapon, actor, token, options)`: Deploy a weapon as a ground token (for Thrown weapons).
+-   `api.pickupWeaponToken(ownerToken)`: Pick up a thrown weapon token from the scene.
+-   `api.beginThrowWeaponFlow(weapon)`: Start a weapon attack flow with throw pre-set.
+-   `api.resolveDeployable(deployableOrLid, ownerActor)`: Resolve a deployable actor from LID or direct reference.
+-   `api.placeDeployable(options)`: Place a deployable token with interactive placement, use consumption, and compendium support.
+-   `api.beginDeploymentCard(options)`: Show a deployment card for an item's deployables with per-deployable options.
+-   `api.openDeployableMenu(actor)`: Open a dialog listing all of an actor's deployables for deployment.
+-   `api.recallDeployable(ownerToken)`: Recall a deployed token from the scene.
 
 For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
 

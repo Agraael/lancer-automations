@@ -465,6 +465,7 @@ Interactive token placement. Marks positions with orange highlights before spawn
 | `options.description` | `string` | `""` | Info card description text |
 | `options.icon` | `string` | `"fas fa-user-plus"` | Info card header icon (FontAwesome class) |
 | `options.headerClass` | `string` | `""` | Extra CSS class for the info card header |
+| `options.noCard` | `boolean` | `false` | Skip the info card; auto-confirm after placing the required count |
 
 **Returns:** `Promise<Array<TokenDocument>|null>` — spawned token documents, or `null` if cancelled
 
@@ -559,6 +560,146 @@ await api.startChoiceCard({
     ]
 });
 ```
+
+---
+
+#### `deployWeaponToken(weapon, ownerActor, originToken, options)`
+
+Deploy a weapon as a token on the ground with interactive placement. Creates a "Template Throw" deployable actor if needed, then uses `placeToken` for placement. The weapon is disabled on spawn.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `weapon` | `Item` | *required* | The weapon item to deploy |
+| `ownerActor` | `Actor` | *required* | The actor who owns the weapon |
+| `originToken` | `Token` | `null` | The token to measure range from |
+| `options.range` | `number` | `1` | Placement range |
+| `options.title` | `string` | `"DEPLOY WEAPON"` | Card title |
+| `options.description` | `string` | `""` | Card description |
+| `options.at` | `Token\|{x,y}` | `null` | Origin override for range measurement |
+
+**Returns:** `Promise<Array<TokenDocument>|null>`
+
+---
+
+#### `pickupWeaponToken(ownerToken)`
+
+Pick up a thrown weapon token. Shows a `chooseToken` card restricted to the owner's thrown weapons (green highlighted). Re-enables the weapon and deletes the deployed token.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ownerToken` | `Token` | The token whose actor owns the thrown weapons |
+
+**Returns:** `Promise<{weaponName, weaponId}|null>`
+
+---
+
+#### `resolveDeployable(deployableOrLid, ownerActor)`
+
+Resolve a deployable actor from either a direct Actor reference or a LID string. Searches the actor folder (owned by the given actor) first, then compendiums.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `deployableOrLid` | `Actor\|string` | A deployable Actor or a LID string (e.g. `"dep_turret_drone"`) |
+| `ownerActor` | `Actor` | The actor that owns the deployable |
+
+**Returns:** `Promise<{deployable: Actor|null, source: string|null}>` — source is `'actor'`, `'compendium'`, or `null`
+
+---
+
+#### `placeDeployable(options)`
+
+Place a deployable token on the scene with interactive placement. Handles compendium actor creation, use consumption, and token flagging.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.deployable` | `Actor\|string` | *required* | A deployable Actor or LID string (resolved via `resolveDeployable`) |
+| `options.ownerActor` | `Actor` | *required* | The actor that owns the deployable |
+| `options.systemItem` | `Item` | `null` | The system/item that grants the deployable (for use consumption) |
+| `options.consumeUse` | `boolean` | `false` | Whether to consume a use from systemItem |
+| `options.fromCompendium` | `boolean` | `false` | Whether the deployable is from a compendium (creates a new actor with owner metadata) |
+| `options.width` | `number` | `null` | Token width override (defaults to `deployable.prototypeToken.width`) |
+| `options.height` | `number` | `null` | Token height override (defaults to `deployable.prototypeToken.height`) |
+| `options.range` | `number` | `1` | Placement range (`null` for unlimited) |
+| `options.count` | `number` | `1` | Number of tokens to place (`-1` for unlimited) |
+| `options.at` | `Token\|{x,y}` | `null` | Origin override for range measurement. When `null`, uses ownerActor's active token |
+| `options.title` | `string` | `"DEPLOY"` | Card title |
+| `options.description` | `string` | `""` | Card description |
+| `options.noCard` | `boolean` | `false` | Skip the info card; auto-confirm after placing |
+
+**Returns:** `Promise<Array<TokenDocument>|null>`
+
+```javascript
+await api.placeDeployable({
+    deployable: "dep_turret_drone",
+    ownerActor: actor,
+    systemItem: turretDronesSystem,
+    consumeUse: true,
+    range: 3,
+    count: 2,
+    title: "DEPLOY TURRET DRONE"
+});
+```
+
+---
+
+#### `beginDeploymentCard(options)`
+
+Show a deployment card for a specific item's deployables. Each deployable is listed as a clickable row. Clicking one triggers `placeDeployable` with `noCard: true`. The card stays open until the user clicks Confirm or Cancel. Shows uses and charges if present.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.actor` | `Actor` | *required* | The owner actor |
+| `options.item` | `Item` | *required* | The system/frame item that has deployables |
+| `options.deployableOptions` | `Array<Object>` | `[]` | Per-index options overrides for `placeDeployable`. Each entry corresponds to a deployable LID in the item's array. e.g. `[{ range: 3, count: 2 }, { range: 1 }]` |
+
+**Returns:** `Promise<true|null>` — `true` if confirmed, `null` if cancelled
+
+```javascript
+await api.beginDeploymentCard({
+    actor,
+    item: turretDronesSystem,
+    deployableOptions: [
+        { range: 3, count: 2 },  // first deployable LID
+        { range: 1, count: 1 }   // second deployable LID
+    ]
+});
+```
+
+---
+
+#### `openDeployableMenu(actor)`
+
+Open a dialog menu showing all deployables available to an actor (scans all systems and frame core_system). Allows selecting and deploying them with unlimited range. Supports compendium deployables with a "Generate" button for GMs.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor whose deployables to show |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `recallDeployable(ownerToken)`
+
+Recall (pick up) a deployed deployable from the scene. Shows a `chooseToken` card restricted to tokens deployed by the owner. Deployables **without** `system.recall` are highlighted in red as a warning. Deletes the token on recall.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ownerToken` | `Token` | The token whose actor owns the deployables |
+
+**Returns:** `Promise<{deployableName, deployableId}|null>`
+
+---
+
+#### `beginThrowWeaponFlow(weapon)`
+
+Begin a weapon attack flow with `is_throw` pre-set to `true`, skipping the throw choice card.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `weapon` | `Item` | The weapon item to throw |
+
+**Returns:** `Promise<void>`
 
 ---
 

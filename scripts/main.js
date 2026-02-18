@@ -28,7 +28,12 @@ import {
 } from "./genericBonuses.js";
 import { executeEffectManager, openItemBrowser } from "./effectManager.js";
 import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, placeZone, knockBackToken, placeToken, startChoiceCard, getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory  } from "./interactive-tools.js";
+import {
+    chooseToken, placeZone, knockBackToken, applyKnockbackMoves,
+    placeToken, startChoiceCard, deployWeaponToken, pickupWeaponToken,
+    resolveDeployable, placeDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
+    getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
+} from "./interactive-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -965,6 +970,14 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'enableThrowFlow', {
+        name: 'Automate Throw Choice for Thrown Weapons',
+        hint: 'If enabled, weapons with the "Thrown" tag will show a choice card asking to Attack or Throw at the start of the attack flow.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false
+    });
 
 
     game.settings.register('lancer-automations', 'consumeReaction', {
@@ -1003,6 +1016,15 @@ function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
+        name: 'Treat Generic Prints as Activations',
+        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.registerMenu('lancer-automations', 'resetSettings', {
         name: 'Reset Module',
         label: 'Reset to Defaults',
@@ -1031,7 +1053,7 @@ function registerSettings() {
     });
 }
 
-function handleSocketEvent({ action, payload }) {
+async function handleSocketEvent({ action, payload }) {
     if (action === 'showReactionPopup') {
         if (payload.targetUserId && payload.targetUserId !== game.userId)
             return;
@@ -1070,6 +1092,45 @@ function handleSocketEvent({ action, payload }) {
         if (target?.actor) {
             target.actor.deleteEmbeddedDocuments("ActiveEffect", [payload.effectID]);
         }
+    } else if (action === 'moveTokens') {
+        if (!game.user.isGM)
+            return;
+        const trigToken = payload.triggeringTokenId ? canvas.tokens.get(payload.triggeringTokenId) : null;
+        applyKnockbackMoves(payload.moves, trigToken, payload.distance);
+    } else if (action === 'createTokens') {
+        if (!game.user.isGM)
+            return;
+        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
+        const created = await scene.createEmbeddedDocuments("Token", payload.tokenDataArray);
+        const tokenIds = created.map(d => d.id);
+        game.socket.emit('module.lancer-automations', {
+            action: "createTokensResponse",
+            payload: { requestId: payload.requestId, tokenIds }
+        });
+    } else if (action === 'pickupWeapon') {
+        if (!game.user.isGM)
+            return;
+        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
+        if (!scene)
+            return;
+        const token = scene.tokens.get(payload.tokenId);
+        if (token)
+            await token.delete();
+        const ownerActor = await fromUuid(payload.ownerActorUuid);
+        if (ownerActor) {
+            const weapon = ownerActor.items.get(payload.weaponId);
+            if (weapon)
+                await weapon.update({ 'system.disabled': false });
+        }
+    } else if (action === 'recallDeployable') {
+        if (!game.user.isGM)
+            return;
+        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
+        if (!scene)
+            return;
+        const token = scene.tokens.get(payload.tokenId);
+        if (token)
+            await token.delete();
     }
 }
 
@@ -1461,7 +1522,7 @@ async function onActivationStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const item = state.item;
 
-    let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Unknown';
+    let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
 
     const tags = state.data?.tags || item?.system?.tags || [];
@@ -1558,6 +1619,102 @@ async function statRollTargetSelectStep(state) {
     return true;
 }
 
+async function throwChoiceStep(state) {
+    if (!game.settings.get('lancer-automations', 'enableThrowFlow'))
+        return true;
+    if (state.data?.is_throw)
+        return true;
+
+    const item = state.item;
+    if (!item)
+        return true;
+
+    const profile = item.system?.active_profile;
+    const tags = profile?.all_tags || item.system?.tags || [];
+    const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+    if (!thrownTag)
+        return true;
+
+    const throwRange = thrownTag.val || thrownTag.num_val || "?";
+    const weaponRanges = (profile?.range || item.system?.range || [])
+        .filter(r => r.type !== "Thrown")
+        .map(r => `${r.type} ${r.val}`)
+        .join(", ") || "—";
+
+    let isThrow = false;
+    const result = await startChoiceCard({
+        mode: "or",
+        title: item.name,
+        icon: "cci cci-melee",
+        description: "This weapon can be thrown.",
+        choices: [
+            { text: `Attack (${weaponRanges})`,
+                icon: "cci cci-melee",
+                callback: () => {
+                    isThrow = false;
+                } },
+            { text: `Throw (${throwRange})`,
+                icon: "fas fa-hammer",
+                callback: () => {
+                    isThrow = true;
+                } }
+        ]
+    });
+
+    if (result === null)
+        return false;
+    state.data.is_throw = isThrow;
+    return true;
+}
+
+async function throwDeployStep(state) {
+    if (!state.data?.is_throw)
+        return true;
+
+    const item = state.item;
+    if (!item)
+        return true;
+
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const hitResults = state.data?.hit_results || [];
+    const targetInfos = state.data?.acc_diff?.targets || [];
+
+    let deployTarget = null;
+    for (let i = 0; i < hitResults.length; i++) {
+        if (hitResults[i]?.hit) {
+            const tDoc = targetInfos[i]?.target;
+            deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
+            if (deployTarget)
+                break;
+        }
+    }
+    if (!deployTarget && targetInfos.length > 0) {
+        const tDoc = targetInfos[0]?.target;
+        deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
+    }
+
+    const multipleTargets = targetInfos.length > 1;
+    await deployWeaponToken(item, actor, token, {
+        range: multipleTargets ? null : 1,
+        at: multipleTargets ? null : deployTarget,
+        title: `THROW ${item.name}`
+    });
+
+    return true;
+}
+
+async function beginThrowWeaponFlow(weapon) {
+    const WeaponAttackFlow = CONFIG.lancer?.flowClasses?.WeaponAttackFlow;
+    if (WeaponAttackFlow) {
+        const flow = new WeaponAttackFlow(weapon);
+        flow.state.data.is_throw = true;
+        await flow.begin();
+    } else {
+        await weapon.beginWeaponAttackFlow(true);
+    }
+}
+
 async function knockbackStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
@@ -1613,6 +1770,9 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
     // Register Knockback step
     flowSteps.set('lancer-automations:knockback', knockbackStep);
+    // Register Throw steps
+    flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
+    flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
 
     // Register generic accuracy steps
     flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
@@ -1639,9 +1799,11 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
 
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:genericBonusStepDamage');
 
+    flows.get('WeaponAttackFlow')?.insertStepBefore('initAttackData', 'lancer-automations:throwChoice');
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
     flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:knockback');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:knockback', 'lancer-automations:throwDeploy');
 
     flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
@@ -1661,6 +1823,10 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
 
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
+
+    if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
+        flows.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
+    }
 });
 
 Hooks.on('init', () => {
@@ -1723,12 +1889,21 @@ Hooks.on('ready', () => {
         placeZone,
         placeToken,
         startChoiceCard,
+        deployWeaponToken,
+        pickupWeaponToken,
+        resolveDeployable,
+        placeDeployable,
+        beginDeploymentCard,
+        openDeployableMenu,
+        recallDeployable,
+        beginThrowWeaponFlow,
         getGridDistance,
         drawRangeHighlight,
         revertMovement,
         clearMovementHistory,
         undoMoveData,
-        getIntentionalMoveData
+        getIntentionalMoveData,
+        triggerFlaggedEffectImmunity
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -2023,17 +2198,4 @@ Hooks.on('renderSettings', (app, html) => {
     });
 });
 
-Hooks.once('ready', () => {
-    const module = game.modules.get('lancer-automations');
-    if (module) {
-        module.api = module.api || {};
-        module.api.executeDamageRoll = executeDamageRoll;
-        module.api.executeStatRoll = executeStatRoll;
-        module.api.knockBackToken = knockBackToken;
-        module.api.placeToken = placeToken;
-        module.api.startChoiceCard = startChoiceCard;
-        module.api.triggerFlaggedEffectImmunity = triggerFlaggedEffectImmunity;
-        console.log("lancer-automations | API exposed");
-    }
-});
 

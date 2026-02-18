@@ -126,7 +126,8 @@ const _cardDefaults = {
     knockBack:   { title: "KNOCKBACK",       icon: "fas fa-arrow-right" },
     placeToken:  { title: "PLACE TOKEN",     icon: "fas fa-user-plus" },
     placeZone:   { title: "PLACE ZONE",      icon: "fas fa-bullseye" },
-    choiceCard:  { title: "CHOICE",          icon: "fas fa-list" }
+    choiceCard:  { title: "CHOICE",          icon: "fas fa-list" },
+    deploymentCard: { title: "DEPLOY",      icon: "cci cci-deployable" }
 };
 
 function _createInfoCard(type, opts) {
@@ -148,7 +149,7 @@ function _createInfoCard(type, opts) {
     $('.la-info-card').remove();
 
     let infoRowHtml = '';
-    if (type !== "choiceCard") {
+    if (type !== "choiceCard" && type !== "deploymentCard") {
         let infoItems = [];
         if (range !== null) {
             infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${range}</span>`);
@@ -175,7 +176,13 @@ function _createInfoCard(type, opts) {
 
     let dynamicHtml = "";
     if (type === "chooseToken") {
+        const selectionCheckbox = opts.hasSelection ? `
+            <label class="flexrow" style="gap:6px; align-items:center; margin-bottom:6px; cursor:pointer; font-size:12px;">
+                <input type="checkbox" data-role="selection-toggle" checked style="margin:0;" />
+                <span>Restrict to selection</span>
+            </label>` : '';
         dynamicHtml = `
+            ${selectionCheckbox}
             <h3 class="la-section-header lancer-border-primary">Selected Targets</h3>
             <div class="la-selected-targets" data-role="target-list">
                 <div class="la-empty-state">No targets selected</div>
@@ -197,6 +204,10 @@ function _createInfoCard(type, opts) {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">${modeLabel}</h3>
             <div class="la-choice-list" data-role="choice-list"></div>`;
+    } else if (type === "deploymentCard") {
+        dynamicHtml = `
+            <h3 class="la-section-header lancer-border-primary">Deployables</h3>
+            <div class="la-deployment-list" data-role="deployment-list"></div>`;
     } else {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Placed Zones</h3>
@@ -211,7 +222,7 @@ function _createInfoCard(type, opts) {
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
         <div class="lancer lancer-hud window-content">
             <div class="lancer-header ${headerClass} medium">
-                <i class="${icon} i--m i--light"></i>
+                <i class="${icon} i--m" style="color:#000;"></i>
                 <span>${title}</span>
             </div>
             <div class="la-info-card-body">
@@ -377,6 +388,43 @@ function _updateInfoCard(cardEl, type, data) {
             if (data.onChoose)
                 data.onChoose(idx);
         });
+    } else if (type === "deploymentCard") {
+        const listEl = cardEl.find('[data-role="deployment-list"]');
+        listEl.empty();
+
+        if (!data.deployables || data.deployables.length === 0) {
+            listEl.html('<div class="la-empty-state">No deployables available</div>');
+        } else {
+            data.deployables.forEach((dep, idx) => {
+                const disabledClass = dep.disabled ? "la-choice-done" : "";
+                const imgHtml = dep.img
+                    ? `<img src="${dep.img}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
+                    : `<i class="cci cci-deployable" style="font-size:16px; margin-right:8px;"></i>`;
+                const usesHtml = dep.usesText
+                    ? `<span style="font-size:0.8em; color:#ff6400; margin-left:auto; white-space:nowrap;"><i class="fas fa-battery-three-quarters"></i> ${dep.usesText}</span>`
+                    : '';
+                const chargesHtml = dep.chargesText
+                    ? `<span style="font-size:0.8em; color:#4488ff; margin-left:${dep.usesText ? '6px' : 'auto'}; white-space:nowrap;"><i class="fas fa-bolt"></i> ${dep.chargesText}</span>`
+                    : '';
+                const badgeHtml = dep.fromCompendium
+                    ? `<span style="font-size:0.65em; background:#ff6400; color:white; padding:1px 4px; border-radius:2px; margin-left:6px;">COMP</span>`
+                    : '';
+
+                listEl.append(`
+                    <div class="la-choice-item ${disabledClass}" data-dep-index="${idx}" style="display:flex; align-items:center; gap:4px; cursor:${dep.disabled ? 'not-allowed' : 'pointer'};">
+                        ${imgHtml}
+                        <span class="la-choice-text" style="flex:1;">${dep.name}${badgeHtml}</span>
+                        ${usesHtml}
+                        ${chargesHtml}
+                    </div>`);
+            });
+
+            listEl.find('.la-choice-item:not(.la-choice-done)').on('click', function () {
+                const idx = $(this).data('dep-index');
+                if (data.onDeploy)
+                    data.onDeploy(idx);
+            });
+        }
     }
 }
 
@@ -402,12 +450,15 @@ export function chooseToken(casterToken, options = {}) {
             includeHidden = false,
             includeSelf = false,
             filter = null,
+            selection = null,
             count = 1,
             title,
             description = "",
             icon,
             headerClass = ""
         } = options;
+
+        let selectionOnly = !!selection;
 
         let rangeHighlight = null;
         const selectedTokens = new Set();
@@ -420,7 +471,27 @@ export function chooseToken(casterToken, options = {}) {
         const cursorPreview = new PIXI.Graphics();
         canvas.stage.addChild(cursorPreview);
 
-        const allTokens = canvas.tokens.placeables.filter(t => {
+        const selectionIds = selection ? new Set(selection.map(t => t.id)) : null;
+        const selectionHighlightGraphics = [];
+        if (selection) {
+            for (const t of selection) {
+                const hl = new PIXI.Graphics();
+                hl.lineStyle(4, 0x00ff00, 0.8);
+                hl.beginFill(0x00ff00, 0.2);
+                if (isHexGrid()) {
+                    const offsets = getOccupiedOffsets(t);
+                    for (const off of offsets)
+                        drawHexAt(hl, off.col, off.row);
+                } else {
+                    hl.drawRect(t.document.x, t.document.y, t.document.width * canvas.grid.size, t.document.height * canvas.grid.size);
+                }
+                hl.endFill();
+                canvas.stage.addChild(hl);
+                selectionHighlightGraphics.push(hl);
+            }
+        }
+
+        const baseTokens = canvas.tokens.placeables.filter(t => {
             if (!includeSelf && t.id === casterToken?.id)
                 return false;
             if (!includeHidden && t.document.hidden)
@@ -429,6 +500,13 @@ export function chooseToken(casterToken, options = {}) {
                 return false;
             return true;
         });
+
+        const getActiveTokens = () => {
+            if (selectionOnly && selectionIds)
+                return baseTokens.filter(t => selectionIds.has(t.id));
+            return baseTokens;
+        };
+        let allTokens = getActiveTokens();
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
@@ -445,6 +523,9 @@ export function chooseToken(casterToken, options = {}) {
                 rangeHighlight.destroy();
             }
             canvas.stage.removeChild(cursorPreview);
+            selectionHighlightGraphics.forEach(hl => {
+                canvas.stage.removeChild(hl); hl.destroy();
+            });
             selectionHighlights.forEach(h => canvas.stage.removeChild(h.graphics));
 
             canvas.tokens.interactiveChildren = prevInteractive;
@@ -486,9 +567,17 @@ export function chooseToken(casterToken, options = {}) {
             description,
             range,
             count,
+            hasSelection: !!selection,
             onConfirm: doConfirm,
             onCancel: doCancel
         });
+
+        if (selection) {
+            cardEl.find('[data-role="selection-toggle"]').on('change', function () {
+                selectionOnly = this.checked;
+                allTokens = getActiveTokens();
+            });
+        }
 
         const drawSelectionHighlight = (token) => {
             const highlight = new PIXI.Graphics();
@@ -888,6 +977,78 @@ export function placeZone(casterToken, options = {}) {
  * @param {Object} options - UI options
  * @returns {Promise<Array<{token: Token, x: number, y: number}>|null>} List of moves or null if cancelled
  */
+/**
+ * Apply token moves with elevationruler integration. Used by knockBackToken and socket handler.
+ * @param {Array<{tokenId: string, updateData: {x: number, y: number}}>} moveList
+ * @param {Token|null} triggeringToken
+ * @param {number} distance
+ */
+export async function applyKnockbackMoves(moveList, triggeringToken, distance) {
+    const updates = [];
+    const pushedActors = [];
+
+    for (const { tokenId, updateData } of moveList) {
+        const t = canvas.tokens.get(tokenId);
+        if (!t)
+            continue;
+
+        let startCenter, endCenter, cost = 0;
+
+        if (game.modules.get("elevationruler")?.active) {
+            startCenter = t.getCenterPoint({ x: t.document.x, y: t.document.y });
+            const bboxCenter = t.getCenterPoint({ x: updateData.x, y: updateData.y });
+            endCenter = canvas.grid.getCenterPoint(bboxCenter);
+            cost = getDistanceTokenToPoint(bboxCenter, t);
+        }
+
+        updates.push(t.document.update(updateData).then(async (doc) => {
+            if (game.modules.get("elevationruler")?.active) {
+                const tokenObj = doc.object;
+                if (!tokenObj.elevationruler) {
+                    tokenObj.elevationruler = {};
+                }
+
+                if (tokenObj.elevationruler) {
+                    let history = tokenObj.elevationruler.measurementHistory;
+                    if (!history) {
+                        history = tokenObj.elevationruler.measurementHistory = [];
+                    }
+
+                    const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
+                    const elevation = t.document.elevation ?? 0;
+                    const zValue = gridUnitsToPixels(elevation);
+
+                    const last = history.at(-1);
+                    let addedNative = false;
+
+                    if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
+                        addedNative = true;
+                        last.x = endCenter.x;
+                        last.y = endCenter.y;
+                        last.freeMovement = true;
+                        last.cost = cost;
+                        if (last.z === undefined)
+                            last.z = zValue;
+                        if (last.teleport === undefined)
+                            last.teleport = false;
+                    }
+
+                    if (!addedNative) {
+                        const startPt = { ...startCenter, z: zValue, teleport: false, cost: 0 };
+                        const endPt = { ...endCenter, z: zValue, teleport: false, cost: cost, freeMovement: true };
+                        history.push(startPt, endPt);
+                    }
+                }
+            }
+            return doc;
+        }));
+        pushedActors.push(t.actor);
+    }
+
+    await Promise.all(updates);
+    Hooks.callAll('lancer-automations.onKnockback', triggeringToken, distance, pushedActors);
+}
+
 export function knockBackToken(tokens, distance, options = {}) {
     return new Promise((resolve) => {
         const {
@@ -949,78 +1110,29 @@ export function knockBackToken(tokens, distance, options = {}) {
             range: distance,
             count: tokenList.length,
             onConfirm: async () => {
-                const result = [];
-                const updates = [];
-                const pushedActors = [];
+                const moveList = [];
                 for (const [id, move] of moves.entries()) {
                     const t = tokenList.find(t => t.id === id);
                     if (t) {
-                        const updateData = { x: move.x, y: move.y };
-                        let startCenter, endCenter, cost = 0;
-
-                        if (game.modules.get("elevationruler")?.active) {
-                            startCenter = t.getCenterPoint({ x: t.document.x, y: t.document.y });
-                            // Use canvas.grid.getCenterPoint to match the ruler's destination format.
-                            // On hex grids, this returns the hex geometric center which differs slightly
-                            // from token.getCenterPoint (bounding box center). This difference is what
-                            // allows the ruler to create a teleport bridge segment on the next drag.
-                            const bboxCenter = t.getCenterPoint({ x: move.x, y: move.y });
-                            endCenter = canvas.grid.getCenterPoint(bboxCenter);
-                            cost = getDistanceTokenToPoint(bboxCenter, t);
-                        }
-
-                        updates.push(t.document.update(updateData).then(async (doc) => {
-                            if (game.modules.get("elevationruler")?.active) {
-                                const tokenObj = doc.object;
-                                if (!tokenObj.elevationruler) {
-                                    tokenObj.elevationruler = {};
-                                }
-
-                                if (tokenObj.elevationruler) {
-                                    let history = tokenObj.elevationruler.measurementHistory;
-                                    if (!history) {
-                                        history = tokenObj.elevationruler.measurementHistory = [];
-                                    }
-
-                                    const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
-                                    const elevation = t.document.elevation ?? 0;
-                                    const zValue = gridUnitsToPixels(elevation);
-
-                                    const last = history.at(-1);
-                                    let addedNative = false;
-
-                                    if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
-                                        addedNative = true;
-                                        // Update coordinates to grid center to match ruler format
-                                        last.x = endCenter.x;
-                                        last.y = endCenter.y;
-                                        last.freeMovement = true;
-                                        last.cost = cost;
-                                        if (last.z === undefined)
-                                            last.z = zValue;
-                                        if (last.teleport === undefined)
-                                            last.teleport = false;
-                                    }
-
-                                    if (!addedNative) {
-                                        const startPt = { ...startCenter, z: zValue, teleport: false, cost: 0 };
-                                        const endPt = { ...endCenter, z: zValue, teleport: false, cost: cost, freeMovement: true };
-                                        history.push(startPt, endPt);
-                                    }
-                                }
-                            }
-                            return doc;
-                        }));
-                        pushedActors.push(t.actor);
+                        moveList.push({ tokenId: id, updateData: { x: move.x, y: move.y } });
                     }
                 }
 
-                await Promise.all(updates);
-
-                Hooks.callAll('lancer-automations.onKnockback', triggeringToken, distance, pushedActors);
+                if (game.user.isGM) {
+                    await applyKnockbackMoves(moveList, triggeringToken, distance);
+                } else {
+                    game.socket.emit('module.lancer-automations', {
+                        action: "moveTokens",
+                        payload: {
+                            moves: moveList,
+                            triggeringTokenId: triggeringToken?.id || null,
+                            distance
+                        }
+                    });
+                }
 
                 doCleanup();
-                resolve(result);
+                resolve([]);
             },
 
             onCancel: () => {
@@ -1312,6 +1424,7 @@ export function knockBackToken(tokens, distance, options = {}) {
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
+ * @param {boolean} [options.noCard=false] - Whether to skip rendering the card
  * @returns {Promise<Array<TokenDocument>|null>} Array of spawned token documents, or null if cancelled
  */
 export function placeToken(options = {}) {
@@ -1327,7 +1440,8 @@ export function placeToken(options = {}) {
             title,
             description = "",
             icon,
-            headerClass = ""
+            headerClass = "",
+            noCard = false
         } = options;
 
         const originToken = (origin && origin.document) ? origin : null;
@@ -1469,10 +1583,13 @@ export function placeToken(options = {}) {
             }
 
             canvas.tokens.interactiveChildren = prevInteractive;
-            _removeInfoCard(cardEl);
+            if (cardEl)
+                _removeInfoCard(cardEl);
         };
 
         const refreshCard = () => {
+            if (!cardEl)
+                return;
             _updateInfoCard(cardEl, "placeToken", {
                 placements,
                 prototypeTexture: protoTexture,
@@ -1488,50 +1605,77 @@ export function placeToken(options = {}) {
             });
         };
 
-        const cardEl = _createInfoCard("placeToken", {
+        const doConfirm = async () => {
+            const spawnedTokens = [];
+            const allTokenData = [];
+            for (const p of placements) {
+                const pos = getSpawnPosition(p.col, p.row);
+                const tokenData = {
+                    ...prototypeToken,
+                    ...extraData,
+                    x: pos.x,
+                    y: pos.y
+                };
+                if (actor)
+                    tokenData.actorId = actor.id;
+                allTokenData.push(tokenData);
+            }
+
+            let createdIds;
+            if (game.user.isGM) {
+                const created = await canvas.scene.createEmbeddedDocuments("Token", allTokenData);
+                createdIds = created.map(d => d.id);
+            } else {
+                const requestId = foundry.utils.randomID();
+                game.socket.emit('module.lancer-automations', {
+                    action: "createTokens",
+                    payload: { tokenDataArray: allTokenData, sceneId: canvas.scene.id, requestId }
+                });
+                createdIds = await new Promise((res) => {
+                    const handler = (data) => {
+                        if (data.action === 'createTokensResponse' && data.payload.requestId === requestId) {
+                            game.socket.off('module.lancer-automations', handler);
+                            res(data.payload.tokenIds);
+                        }
+                    };
+                    game.socket.on('module.lancer-automations', handler);
+                });
+            }
+
+            for (const id of createdIds) {
+                const doc = canvas.scene.tokens.get(id);
+                if (doc) {
+                    spawnedTokens.push(doc);
+
+                    if (window.Sequencer) {
+                        const tokenObj = canvas.tokens.get(id);
+                        if (tokenObj) {
+                            new Sequence()
+                                .effect()
+                                .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
+                                .atLocation(tokenObj)
+                                .scale(protoWidth / 2)
+                                .play();
+                        }
+                    }
+
+                    if (onSpawn)
+                        await onSpawn(doc, originToken);
+                }
+            }
+
+            doCleanup();
+            resolve(spawnedTokens);
+        };
+
+        const cardEl = noCard ? null : _createInfoCard("placeToken", {
             title,
             icon,
             headerClass,
             description,
             range,
             count,
-            onConfirm: async () => {
-                const spawnedTokens = [];
-                for (const p of placements) {
-                    const pos = getSpawnPosition(p.col, p.row);
-                    const tokenData = {
-                        ...prototypeToken,
-                        ...extraData,
-                        x: pos.x,
-                        y: pos.y
-                    };
-                    if (actor)
-                        tokenData.actorId = actor.id;
-
-                    const created = await canvas.scene.createEmbeddedDocuments("Token", [tokenData]);
-                    if (created[0]) {
-                        spawnedTokens.push(created[0]);
-
-                        if (window.Sequencer) {
-                            const tokenObj = canvas.tokens.get(created[0].id);
-                            if (tokenObj) {
-                                new Sequence()
-                                    .effect()
-                                    .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
-                                    .atLocation(tokenObj)
-                                    .scale(protoWidth / 2)
-                                    .play();
-                            }
-                        }
-
-                        if (onSpawn)
-                            await onSpawn(created[0], originToken);
-                    }
-                }
-
-                doCleanup();
-                resolve(spawnedTokens);
-            },
+            onConfirm: doConfirm,
             onCancel: () => {
                 doCleanup();
                 resolve(null);
@@ -1588,6 +1732,10 @@ export function placeToken(options = {}) {
             const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row);
             placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics });
             refreshCard();
+
+            if (noCard && (count === -1 || placements.length >= count)) {
+                doConfirm();
+            }
         };
 
         const rightHandler = (event) => {
@@ -1657,20 +1805,18 @@ export function startChoiceCard(options = {}) {
                 choices,
                 chosenSet,
                 onChoose: async (idx) => {
-                    if (cancelled) return;
+                    if (cancelled)
+                        return;
 
                     const choice = choices[idx];
                     chosenSet.add(idx);
 
-                    if (mode === "and") {
+                    if (mode === "and")
                         cardEl.hide();
-                    }
-
-                    if (choice.callback) {
+                    if (choice.callback)
                         await choice.callback(choice.data);
-                    }
-
-                    if (cancelled) return;
+                    if (cancelled)
+                        return;
 
                     if (mode === "or") {
                         doCleanup();
@@ -1715,6 +1861,938 @@ export function startChoiceCard(options = {}) {
         document.addEventListener('keydown', keyHandler);
         refreshCard();
     });
+}
+
+/**
+ * Deploy a weapon as a token on the ground using interactive placement.
+ * Creates a "Template Throw" deployable actor if it doesn't exist, then uses placeToken for placement.
+ * @param {Item} weapon - The weapon item to deploy
+ * @param {Actor} ownerActor - The actor who owns the weapon
+ * @param {Token} [originToken=null] - The token placing the weapon (used for range origin)
+ * @param {Object} [options={}] - Extra options
+ * @param {number} [options.range=1] - Placement range in grid units
+ * @param {string} [options.title] - Card title override
+ * @param {string} [options.description] - Card description override
+ * @returns {Promise<Array<TokenDocument>|null>} Spawned token documents, or null if cancelled
+ */
+export async function deployWeaponToken(weapon, ownerActor, originToken = null, options = {}) {
+    const {
+        range = 1,
+        title = "DEPLOY WEAPON",
+        description = "",
+        at = null
+    } = options;
+
+    const templateName = "Template Throw";
+    let templateActor = game.actors.contents.find(a =>
+        a.name === templateName && a.type === 'deployable'
+    );
+
+    if (!templateActor) {
+        const LancerActor = game.lancer?.LancerActor || Actor;
+        templateActor = await LancerActor.create({
+            name: templateName,
+            type: 'deployable',
+            img: 'systems/lancer/assets/icons/white/melee.svg',
+            system: {
+                hp: { value: 5, max: 5, min: 0 },
+                evasion: 5,
+                edef: 5,
+                armor: 0,
+                size: 0.5,
+                activations: 0
+            },
+            folder: null,
+            ownership: { default: 0 },
+            prototypeToken: {
+                name: templateName,
+                img: 'systems/lancer/assets/icons/white/melee.svg',
+                width: 1,
+                height: 1,
+                displayName: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
+                displayBars: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
+                disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
+                bar1: { attribute: 'hp' }
+            }
+        });
+
+        if (!templateActor) {
+            ui.notifications.error("Failed to create Template Throw actor.");
+            return null;
+        }
+    }
+
+    let ownerName = ownerActor.name;
+    if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
+        ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
+    }
+
+    const protoToken = templateActor.prototypeToken.toObject();
+    protoToken.name = weapon.name;
+
+    const extraData = {
+        actorData: { name: `${weapon.name} [${ownerName}]` },
+        flags: {
+            ...protoToken.flags,
+            'lancer-automations': {
+                thrownWeapon: true,
+                weaponName: weapon.name,
+                weaponId: weapon.id,
+                ownerActorUuid: ownerActor.uuid,
+                ownerName: ownerName
+            }
+        }
+    };
+    const result = await placeToken({
+        actor: templateActor,
+        prototypeToken: protoToken,
+        range,
+        count: 1,
+        origin: at || originToken,
+        title,
+        description,
+        icon: "fas fa-hammer",
+        extraData,
+        onSpawn: async () => {
+            await weapon.update({ 'system.disabled': true });
+        }
+    });
+
+    return result;
+}
+
+/**
+ * Pick up a thrown weapon token from the scene. Shows a chooseToken card restricted
+ * to the owner's thrown weapons. Re-enables the weapon and deletes the deployed token.
+ * @param {Token} ownerToken - The token whose actor owns the thrown weapons
+ * @returns {Promise<Object|null>} { weaponName, weaponId } or null if cancelled/none found
+ */
+export async function pickupWeaponToken(ownerToken) {
+    if (!ownerToken?.actor) {
+        ui.notifications.warn("No valid token selected.");
+        return null;
+    }
+
+    const ownerActor = ownerToken.actor;
+    const thrownTokens = canvas.tokens.placeables.filter(t => {
+        const flags = t.document.flags?.['lancer-automations'];
+        return flags?.thrownWeapon && flags?.ownerActorUuid === ownerActor.uuid;
+    });
+
+    if (thrownTokens.length === 0) {
+        ui.notifications.warn("No thrown weapons found for this character.");
+        return null;
+    }
+
+    const selected = await chooseToken(ownerToken, {
+        count: 1,
+        includeSelf: false,
+        selection: thrownTokens,
+        title: "PICK UP WEAPON",
+        description: `${thrownTokens.length} thrown weapon(s) available.`,
+        icon: "fas fa-hand"
+    });
+
+    if (!selected || selected.length === 0)
+        return null;
+
+    const pickedToken = selected[0];
+    const flags = pickedToken.document?.flags?.['lancer-automations'] || pickedToken.flags?.['lancer-automations'];
+    const weaponId = flags?.weaponId;
+    const weaponName = flags?.weaponName || "Weapon";
+
+    if (game.user.isGM) {
+        const weapon = ownerActor.items.get(weaponId);
+        if (weapon)
+            await weapon.update({ 'system.disabled': false });
+        await pickedToken.document.delete();
+    } else {
+        game.socket.emit('module.lancer-automations', {
+            action: "pickupWeapon",
+            payload: {
+                sceneId: canvas.scene.id,
+                tokenId: pickedToken.document?.id || pickedToken.id,
+                weaponId,
+                ownerActorUuid: ownerActor.uuid,
+                weaponName
+            }
+        });
+    }
+
+    ui.notifications.info(`Picked up ${weaponName}.`);
+    return { weaponName, weaponId };
+}
+
+/**
+ * Resolve a deployable actor from either a direct reference or a LID string.
+ * Searches actor folder (owned by the given actor) first, then compendiums.
+ * @param {Actor|string} deployableOrLid - A deployable Actor or a LID string (e.g. "dep_turret")
+ * @param {Actor} ownerActor - The actor that owns the deployable (used for folder search)
+ * @returns {Promise<{deployable: Actor|null, source: string|null}>} The deployable and its source ('actor', 'compendium', or null)
+ */
+export async function resolveDeployable(deployableOrLid, ownerActor) {
+    // If it's already an Actor, return directly
+    if (deployableOrLid && typeof deployableOrLid !== 'string') {
+        return { deployable: deployableOrLid, source: 'actor' };
+    }
+
+    const lid = deployableOrLid;
+    if (!lid)
+        return { deployable: null, source: null };
+
+    // First, look in actor folder owned by this actor
+    let deployable = game.actors.contents.find(a =>
+        a.type === 'deployable' &&
+        a.system?.lid === lid &&
+        a.system?.owner?.id === ownerActor?.uuid
+    );
+
+    if (deployable) {
+        return { deployable, source: 'actor' };
+    }
+
+    // If not found, search in compendiums
+    for (const pack of game.packs.filter(p => p.documentName === 'Actor')) {
+        const index = await pack.getIndex();
+        const entry = index.find(e => e.system?.lid === lid);
+
+        if (entry) {
+            deployable = await pack.getDocument(entry._id);
+            if (deployable && deployable.type === 'deployable') {
+                return { deployable, source: 'compendium' };
+            }
+        }
+    }
+
+    return { deployable: null, source: null };
+}
+
+/**
+ * Place a deployable token on the scene with interactive placement.
+ * @param {Object} options
+ * @param {Actor|string} options.deployable - A deployable Actor or LID string
+ * @param {Actor} options.ownerActor - The actor that owns the deployable
+ * @param {Object|null} [options.systemItem=null] - The system/item that grants the deployable (for use consumption)
+ * @param {boolean} [options.consumeUse=false] - Whether to consume a use from systemItem
+ * @param {boolean} [options.fromCompendium=false] - Whether the deployable is from a compendium (creates a new actor)
+ * @param {number|null} [options.width=null] - Token width override (defaults to deployable.prototypeToken.width)
+ * @param {number|null} [options.height=null] - Token height override (defaults to deployable.prototypeToken.height)
+ * @param {number} [options.range=1] - Placement range (null for unlimited)
+ * @param {number} [options.count=1] - Number of tokens to place (-1 for unlimited)
+ * @param {Token|Object|null} [options.at=null] - Origin override for range measurement (token or {x,y} position). When null, uses ownerActor's active token.
+ * @param {string} [options.title="DEPLOY"] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @param {boolean} [options.noCard=false] - Whether to skip rendering the card
+ * @returns {Promise<Object|null>} Placement result or null
+ */
+export async function placeDeployable(options = {}) {
+    const {
+        deployable: deployableOrLid,
+        ownerActor,
+        systemItem = null,
+        consumeUse = false,
+        fromCompendium = false,
+        width = null,
+        height = null,
+        range = 1,
+        at = null,
+        count = 1,
+        title = "DEPLOY",
+        description = "",
+        noCard = false
+    } = options;
+
+    if (!ownerActor) {
+        ui.notifications.error("No owner actor specified.");
+        return null;
+    }
+
+    // Resolve deployable
+    const resolved = await resolveDeployable(deployableOrLid, ownerActor);
+    let actualDeployable = resolved.deployable;
+    const isFromCompendium = fromCompendium || resolved.source === 'compendium';
+
+    if (!actualDeployable) {
+        ui.notifications.error(`Deployable not found: ${deployableOrLid}`);
+        return null;
+    }
+
+    // If from compendium, create a new actor first
+    if (isFromCompendium) {
+        const actorData = actualDeployable.toObject();
+
+        let ownerName = ownerActor.name;
+        if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
+            ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
+        }
+
+        actorData.system.owner = ownerActor.uuid;
+        actorData.name = `${actualDeployable.name} [${ownerName}]`;
+        actorData.folder = ownerActor.folder?.id;
+        actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
+
+        const LancerActor = game.lancer?.LancerActor || Actor;
+        actualDeployable = await LancerActor.create(actorData);
+        if (!actualDeployable) {
+            ui.notifications.error("Failed to create deployable actor.");
+            return null;
+        }
+        ui.notifications.info(`Created ${actorData.name}`);
+    }
+
+    // Determine token dimensions
+    const tokenWidth = width ?? actualDeployable.prototypeToken?.width ?? 1;
+    const tokenHeight = height ?? actualDeployable.prototypeToken?.height ?? 1;
+
+    // Build prototype token data
+    const protoToken = actualDeployable.prototypeToken.toObject();
+    protoToken.width = tokenWidth;
+    protoToken.height = tokenHeight;
+
+    // Determine origin
+    const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
+
+    let ownerName = ownerActor.name;
+    if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
+        ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
+    }
+
+    const extraData = {
+        actorData: { name: `${actualDeployable.name}` },
+        flags: {
+            ...protoToken.flags,
+            'lancer-automations': {
+                deployedItem: true,
+                deployableName: actualDeployable.name,
+                deployableId: actualDeployable.id,
+                ownerActorUuid: ownerActor.uuid,
+                ownerName: ownerName,
+                systemItemId: systemItem?.id || null
+            }
+        }
+    };
+
+    const result = await placeToken({
+        actor: actualDeployable,
+        prototypeToken: protoToken,
+        range,
+        count,
+        origin: originToken,
+        title,
+        description,
+        icon: "cci cci-deployable",
+        extraData,
+        noCard: noCard,
+        onSpawn: async () => {
+            if (consumeUse && systemItem) {
+                const uses = systemItem.system?.uses;
+                if (uses && typeof uses.value === 'number') {
+                    const minUses = uses.min ?? 0;
+                    const newUses = Math.max(uses.value - 1, minUses);
+                    await systemItem.update({ "system.uses.value": newUses });
+                    ui.notifications.info(`${systemItem.name} used. ${newUses} uses remaining.`);
+                }
+            }
+        }
+    });
+
+    return result;
+}
+
+/**
+ * Show a deployment card for a specific item's deployables. Clicking a deployable
+ * triggers placeDeployable with noCard. The card stays open until the user confirms or cancels.
+ * @param {Object} options
+ * @param {Actor} options.actor - The owner actor
+ * @param {Object} options.item - The system/frame item that has deployables
+ * @param {Array} [options.deployableOptions=[]] - Per-index options overrides for placeDeployable. e.g. [{ range: 3, count: 2 }, { range: 1 }]
+ * @returns {Promise<boolean>} true if confirmed, null if cancelled
+ */
+export function beginDeploymentCard(options = {}) {
+    return new Promise(async (resolve) => {
+        const {
+            actor,
+            item,
+            deployableOptions = []
+        } = options;
+
+        if (!actor || !item) {
+            ui.notifications.warn("Actor and item are required.");
+            resolve(null);
+            return;
+        }
+
+        // Determine deployable LIDs from the item
+        const isFrameCore = item.type === 'frame';
+        const deployablesArray = isFrameCore
+            ? item.system?.core_system?.deployables || []
+            : item.system?.deployables || [];
+
+        if (deployablesArray.length === 0) {
+            ui.notifications.warn(`No deployables found on ${item.name}.`);
+            resolve(null);
+            return;
+        }
+
+        // Resolve all deployables (each array entry is separate, duplicates allowed)
+        const deployables = [];
+        for (let i = 0; i < deployablesArray.length; i++) {
+            const lid = deployablesArray[i];
+            const { deployable, source } = await resolveDeployable(lid, actor);
+            const idxOpts = deployableOptions[i] || {};
+            const depCount = idxOpts.count || 1;
+
+            if (deployable) {
+                deployables.push({
+                    lid,
+                    index: i,
+                    deployable,
+                    source,
+                    name: deployable.name,
+                    displayName: depCount > 1 ? `${deployable.name} (x${depCount})` : deployable.name,
+                    img: deployable.img,
+                    fromCompendium: source === 'compendium',
+                    opts: idxOpts
+                });
+            } else {
+                deployables.push({
+                    lid,
+                    index: i,
+                    deployable: null,
+                    source: null,
+                    name: `Not found: ${lid}`,
+                    displayName: `Not found: ${lid}`,
+                    img: 'icons/svg/hazard.svg',
+                    fromCompendium: false,
+                    notFound: true,
+                    opts: idxOpts
+                });
+            }
+        }
+
+        // Compute uses and charges info
+        let uses, hasUses, noUsesLeft;
+        if (isFrameCore) {
+            uses = null;
+            hasUses = false;
+            noUsesLeft = false;
+        } else {
+            uses = item.system?.uses;
+            hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
+            noUsesLeft = hasUses && uses.value <= 0;
+        }
+
+        const charges = item.system?.derived?.mm_charges || item.system?.charges;
+        const hasCharges = charges && typeof charges.max === 'number' && charges.max > 0;
+
+        const buildCardData = () => {
+            const currentUses = hasUses ? item.system.uses : null;
+            const currentNoUsesLeft = hasUses && currentUses.value <= 0;
+            const currentCharges = hasCharges ? (item.system?.derived?.mm_charges || item.system?.charges) : null;
+
+            return deployables.map(dep => ({
+                name: dep.displayName,
+                img: dep.img,
+                fromCompendium: dep.fromCompendium,
+                disabled: dep.notFound || currentNoUsesLeft,
+                usesText: hasUses ? `${currentUses.value}/${currentUses.max}` : '',
+                chargesText: hasCharges ? `${currentCharges.value}/${currentCharges.max}` : ''
+            }));
+        };
+
+        let cancelled = false;
+
+        const doCleanup = () => {
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
+
+        const refreshCard = () => {
+            _updateInfoCard(cardEl, "deploymentCard", {
+                deployables: buildCardData(),
+                onDeploy: async (idx) => {
+                    if (cancelled)
+                        return;
+                    const dep = deployables[idx];
+                    if (!dep || dep.notFound || !dep.deployable)
+                        return;
+
+                    cardEl.hide();
+                    await placeDeployable({
+                        deployable: dep.deployable,
+                        ownerActor: actor,
+                        systemItem: item,
+                        consumeUse: hasUses,
+                        fromCompendium: dep.fromCompendium,
+                        range: 1,
+                        noCard: true,
+                        title: `DEPLOY ${dep.name}`,
+                        description: "",
+                        ...dep.opts
+                    });
+                    if (cancelled)
+                        return;
+                    cardEl.show();
+                    refreshCard();
+                }
+            });
+        };
+
+        const cardEl = _createInfoCard("deploymentCard", {
+            title: item.name,
+            icon: "cci cci-deployable",
+            headerClass: "",
+            description: "",
+            onConfirm: () => {
+                doCleanup();
+                resolve(true);
+            },
+            onCancel: () => {
+                cancelled = true;
+                doCleanup();
+                resolve(null);
+            }
+        });
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape") {
+                cancelled = true;
+                doCleanup();
+                resolve(null);
+            }
+        };
+
+        document.addEventListener('keydown', keyHandler);
+        refreshCard();
+    });
+}
+
+/**
+ * Open a dialog menu showing all deployables available to an actor.
+ * Allows selecting and deploying them with unlimited range.
+ * @param {Actor} actor - The actor whose deployables to show
+ * @returns {Promise<void>}
+ */
+export async function openDeployableMenu(actor) {
+    if (!actor) {
+        ui.notifications.warn("No actor specified.");
+        return;
+    }
+
+    // Get all systems with deployables from the mech
+    const systemsWithDeployables = actor.items.filter(item =>
+        item.system?.deployables &&
+        Array.isArray(item.system.deployables) &&
+        item.system.deployables.length > 0
+    );
+
+    // Also check for deployables in frame core_system
+    const framesWithCoreDeployables = actor.items.filter(item =>
+        item.type === 'frame' &&
+        item.system?.core_system?.deployables &&
+        Array.isArray(item.system.core_system.deployables) &&
+        item.system.core_system.deployables.length > 0
+    );
+
+    const allSystemsWithDeployables = [...systemsWithDeployables, ...framesWithCoreDeployables];
+
+    if (allSystemsWithDeployables.length === 0) {
+        ui.notifications.warn(`No systems with deployables found for ${actor.name}.`);
+        return;
+    }
+
+    // Build deployable items list
+    const items = [];
+
+    for (const system of allSystemsWithDeployables) {
+        const isFrameCore = system.type === 'frame';
+        const deployablesArray = isFrameCore ? system.system.core_system.deployables : system.system.deployables;
+
+        let uses, hasUses, noUsesLeft;
+        if (isFrameCore) {
+            uses = null;
+            hasUses = false;
+            noUsesLeft = false;
+        } else {
+            uses = system.system.uses;
+            hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
+            noUsesLeft = hasUses && uses.value <= 0;
+        }
+
+        for (const lid of deployablesArray) {
+            const { deployable, source } = await resolveDeployable(lid, actor);
+
+            if (deployable) {
+                const usesText = hasUses ? `${uses.value}/${uses.max}` : '';
+                const isFromCompendium = source === 'compendium';
+                const systemDisplayName = isFrameCore ? `${system.name} - Core System` : system.name;
+                items.push({
+                    id: `${system.id}_${lid}`,
+                    systemId: system.id,
+                    deployableId: deployable.id,
+                    deployableLid: lid,
+                    systemName: systemDisplayName,
+                    deployableName: deployable.name,
+                    deployableImg: deployable.img,
+                    deployableData: deployable,
+                    usesText: usesText,
+                    disabled: noUsesLeft,
+                    hasUses: hasUses,
+                    fromCompendium: isFromCompendium,
+                    tokenWidth: deployable.prototypeToken?.width || 1,
+                    tokenHeight: deployable.prototypeToken?.height || 1
+                });
+            } else {
+                const systemDisplayName = isFrameCore ? `${system.name} - Core System` : system.name;
+                items.push({
+                    id: `${system.id}_${lid}`,
+                    systemId: system.id,
+                    deployableId: null,
+                    deployableLid: lid,
+                    systemName: systemDisplayName,
+                    deployableName: `Not found: ${lid}`,
+                    deployableImg: 'icons/svg/hazard.svg',
+                    usesText: '',
+                    disabled: true,
+                    hasUses: false,
+                    notFound: true,
+                    fromCompendium: false,
+                    tokenWidth: 1,
+                    tokenHeight: 1
+                });
+            }
+        }
+    }
+
+    if (items.length === 0) {
+        ui.notifications.warn(`No deployables available for ${actor.name}.`);
+        return;
+    }
+
+    let selectedId = items.find(i => !i.disabled)?.id;
+    const isGM = game.user.isGM;
+    const content = `
+        <style>
+            .lancer-items-grid {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 10px;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+            .lancer-item-card {
+                min-height: 50px;
+                padding: 8px 10px;
+                padding-top: 20px;
+                position: relative;
+                overflow: hidden;
+            }
+            .lancer-item-card.disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                border-color: #888;
+                background-color: #00000030;
+            }
+            .lancer-item-card.disabled:hover {
+                border-color: #888;
+                box-shadow: none;
+            }
+            .lancer-item-header {
+                display: flex;
+                align-items: flex-start;
+                gap: 6px;
+                margin-bottom: 4px;
+            }
+            .lancer-item-icon {
+                width: 32px;
+                height: 32px;
+                min-width: 32px;
+                object-fit: cover;
+                border-radius: 3px;
+                flex-shrink: 0;
+            }
+            .lancer-item-name {
+                flex: 1;
+                font-weight: bold;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                line-height: 1.1;
+                font-size: 0.95em;
+            }
+            .lancer-item-system {
+                font-size: 0.8em;
+                opacity: 0.7;
+                margin-top: 1px;
+                font-style: italic;
+                display: flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .lancer-item-uses {
+                font-size: 0.8em;
+                color: #ff6400;
+                margin-top: 1px;
+                display: flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .lancer-item-not-found {
+                color: #ff4444;
+                font-style: italic;
+            }
+            .lancer-item-badge {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                background: #ff6400;
+                color: white;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 0.7em;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            .lancer-item-generate {
+                margin-top: 3px;
+                padding: 2px 6px;
+                background: #991e2a;
+                color: white;
+                border: none;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 0.7em;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 2px;
+            }
+            .lancer-item-generate:hover:not(:disabled) {
+                background: #b5242f;
+            }
+            .lancer-item-generate:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                background: #555;
+            }
+            .lancer-item-note {
+                font-size: 0.65em;
+                color: #aaa;
+                font-style: italic;
+                margin-top: 1px;
+            }
+        </style>
+        <div class="lancer-dialog-base">
+            <div class="lancer-dialog-header">
+                <div class="lancer-dialog-title">DEPLOY SYSTEM ITEMS</div>
+                <div class="lancer-dialog-subtitle">Select a deployable to place on the battlefield.</div>
+            </div>
+            <div class="lancer-items-grid">
+                ${items.map(item => `
+                    <div class="lancer-item-card ${item.disabled ? 'disabled' : ''} ${item.id === selectedId ? 'selected' : ''}"
+                         data-item-id="${item.id}"
+                         title="${item.disabled ? (item.notFound ? 'Deployable not found' : 'No uses remaining') : item.deployableName}">
+                        ${item.fromCompendium ? '<div class="lancer-item-badge">Compendium</div>' : ''}
+                        <div class="lancer-item-header">
+                            <img src="${item.deployableImg}" class="lancer-item-icon" />
+                            <div class="lancer-item-name ${item.notFound ? 'lancer-item-not-found' : ''}">
+                                ${item.deployableName}
+                            </div>
+                        </div>
+                        <div class="lancer-item-system">
+                            <i class="cci cci-system i--sm"></i> ${item.systemName}
+                        </div>
+                        ${item.usesText ? `<div class="lancer-item-uses"><i class="fas fa-battery-three-quarters"></i> ${item.usesText}</div>` : ''}
+                        ${item.fromCompendium ? `
+                            <button class="lancer-item-generate" data-item-id="${item.id}" ${!isGM ? 'disabled' : ''}>
+                                ${isGM ? '<i class="fas fa-plus"></i> Generate' : '<i class="fas fa-lock"></i> GM Only'}
+                            </button>
+                            ${!isGM ? '<div class="lancer-item-note">GM must create</div>' : ''}
+                        ` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    const dialog = new Dialog({
+        title: "Deploy System Items",
+        content: content,
+        buttons: {
+            deploy: {
+                icon: '<i class="cci cci-deployable"></i>',
+                label: "Deploy",
+                callback: async () => {
+                    const item = items.find(i => i.id === selectedId);
+                    if (!item || item.disabled || !item.deployableId) {
+                        return;
+                    }
+                    const system = actor.items.get(item.systemId);
+
+                    await placeDeployable({
+                        deployable: item.fromCompendium ? item.deployableData : game.actors.get(item.deployableId),
+                        ownerActor: actor,
+                        systemItem: system,
+                        consumeUse: item.hasUses,
+                        fromCompendium: item.fromCompendium,
+                        width: item.tokenWidth,
+                        height: item.tokenHeight,
+                        range: null,
+                        at: null,
+                        title: `DEPLOY ${item.deployableName}`,
+                        description: ""
+                    });
+                }
+            },
+            cancel: {
+                icon: '<i class="fas fa-times"></i>',
+                label: "Cancel"
+            }
+        },
+        default: "deploy",
+        render: (html) => {
+            html.find('.lancer-item-card:not(.disabled)').on('click', function () {
+                html.find('.lancer-item-card').removeClass('selected');
+                $(this).addClass('selected');
+                selectedId = $(this).data('item-id');
+            });
+            html.find('.lancer-item-card:not(.disabled)').on('dblclick', function () {
+                selectedId = $(this).data('item-id');
+                html.closest('.dialog').find('.dialog-button.deploy').click();
+            });
+
+            // Handle Generate button
+            html.find('.lancer-item-generate').on('click', async function (e) {
+                e.stopPropagation();
+                const itemId = $(this).data('item-id');
+                const item = items.find(i => i.id === itemId);
+
+                if (!item || !item.deployableData || !game.user.isGM) {
+                    return;
+                }
+
+                const actorData = item.deployableData.toObject();
+
+                let ownerName = actor.name;
+                if (actor.is_mech?.() && actor.system.pilot?.status === "resolved") {
+                    ownerName = actor.system.pilot.value.system.callsign || actor.system.pilot.value.name;
+                }
+
+                actorData.system.owner = actor.uuid;
+                actorData.name = `${item.deployableName} [${ownerName}]`;
+                actorData.folder = actor.folder?.id;
+                actorData.ownership = foundry.utils.duplicate(actor.ownership);
+
+                const LancerActor = game.lancer?.LancerActor || Actor;
+                const newActor = await LancerActor.create(actorData);
+                if (newActor) {
+                    ui.notifications.info(`Created ${actorData.name}`);
+                    item.deployableId = newActor.id;
+                    item.deployableData = newActor;
+                    item.fromCompendium = false;
+
+                    const card = html.find(`.lancer-item-card[data-item-id="${itemId}"]`);
+                    card.find('.lancer-item-badge').remove();
+                    card.find('.lancer-item-generate').remove();
+                    card.find('.lancer-item-note').remove();
+                }
+            });
+        }
+    }, {
+        width: 680,
+        height: "auto"
+    });
+
+    dialog.render(true);
+}
+
+/**
+ * Recall (pick up) a deployed deployable from the scene. Shows a chooseToken card
+ * restricted to tokens deployed by the owner. Deployables WITHOUT system.recall are
+ * highlighted in red as a warning. Deletes the token on recall.
+ * @param {Token} ownerToken - The token whose actor owns the deployables
+ * @returns {Promise<Object|null>} { deployableName, deployableId } or null if cancelled/none found
+ */
+export async function recallDeployable(ownerToken) {
+    if (!ownerToken?.actor) {
+        ui.notifications.warn("No valid token selected.");
+        return null;
+    }
+
+    const ownerActor = ownerToken.actor;
+    const deployedTokens = canvas.tokens.placeables.filter(t => {
+        const flags = t.document.flags?.['lancer-automations'];
+        return flags?.deployedItem && flags?.ownerActorUuid === ownerActor.uuid;
+    });
+
+    if (deployedTokens.length === 0) {
+        ui.notifications.warn("No deployed items found for this character.");
+        return null;
+    }
+
+    // Check which tokens have system.recall on their actor and apply red highlights
+    const recallHighlights = [];
+    for (const token of deployedTokens) {
+        const tokenActor = token.actor;
+        if (!tokenActor?.system?.recall) {
+            const hl = new PIXI.Graphics();
+            hl.lineStyle(2, 0xff4444, 0.8);
+            hl.beginFill(0xff4444, 0.25);
+            if (isHexGrid()) {
+                const offsets = getOccupiedOffsets(token);
+                for (const o of offsets) {
+                    drawHexAt(hl, o.col, o.row);
+                }
+            } else {
+                const gridSize = canvas.grid.size;
+                hl.drawRect(token.document.x, token.document.y,
+                    token.document.width * gridSize, token.document.height * gridSize);
+            }
+            hl.endFill();
+            if (canvas.tokens?.parent) {
+                canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
+            } else {
+                canvas.stage.addChild(hl);
+            }
+            recallHighlights.push(hl);
+        }
+    }
+
+    const selected = await chooseToken(ownerToken, {
+        count: 1,
+        includeSelf: false,
+        selection: deployedTokens,
+        title: "RECALL DEPLOYABLE",
+        description: `${deployedTokens.length} deployed item(s) available. Red highlights indicate deployables with Recall.`,
+        icon: "fas fa-hand"
+    });
+
+    // Clean up recall highlights
+    for (const hl of recallHighlights) {
+        hl.destroy({ children: true });
+    }
+
+    if (!selected || selected.length === 0)
+        return null;
+
+    const pickedToken = selected[0];
+    const flags = pickedToken.document?.flags?.['lancer-automations'] || pickedToken.flags?.['lancer-automations'];
+    const deployableName = flags?.deployableName || "Deployable";
+    const deployableId = flags?.deployableId;
+
+    if (game.user.isGM) {
+        await pickedToken.document.delete();
+    } else {
+        game.socket.emit('module.lancer-automations', {
+            action: "recallDeployable",
+            payload: {
+                sceneId: canvas.scene.id,
+                tokenId: pickedToken.document?.id || pickedToken.id
+            }
+        });
+    }
+
+    ui.notifications.info(`Recalled ${deployableName}.`);
+    return { deployableName, deployableId };
 }
 
 /**
