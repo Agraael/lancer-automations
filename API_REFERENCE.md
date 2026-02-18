@@ -22,7 +22,7 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 #### `applyFlaggedEffectToTokens(options, extraOptions)`
 
-Apply one or more status effects to a list of tokens. Supports stacking, duration, consumption triggers, stat bonuses, and ActiveEffect changes.
+Apply status effects to tokens. Supports stacking, duration, consumption, and stat bonuses/changes.
 
 **Parameters:**
 
@@ -55,7 +55,7 @@ Apply one or more status effects to a list of tokens. Supports stacking, duratio
 
 #### `removeFlaggedEffectToTokens(options)`
 
-Remove effect(s) from a list of tokens.
+Remove effects from tokens.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -236,7 +236,7 @@ Check if two tokens are friendly to each other.
 
 #### `executeStatRoll(actor, stat, title, target, extraData)`
 
-Trigger a stat roll and get the result back. For NPCs, it uses Tier for Grit.
+Perform a stat roll. NPCs use Tier for Grit.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -259,7 +259,7 @@ if (result.completed && !result.passed) {
 
 #### `executeDamageRoll(attacker, targets, damageValue, damageType, title, options, extraData)`
 
-Trigger a damage roll.
+Perform a damage roll.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -353,7 +353,7 @@ Debug visualization: select 2 tokens and run this to display the grid distance b
 
 #### `chooseToken(casterToken, options)`
 
-Interactive token picker — shows a range highlight around the caster and lets the user click to select tokens. Returns a Promise.
+Interactive token picker. Range highlights, disposition filters, and multi-select support. Prompts user to click tokens on the canvas.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -384,7 +384,7 @@ const targets = await api.chooseToken(myToken, {
 
 #### `placeZone(casterToken, options)`
 
-Interactive zone placement — shows a range highlight and lets the user place a Lancer template (Blast, Burst, Cone, Line). Uses `templatemacro`'s placeZone if available, otherwise falls back to Lancer's `WeaponRangeTemplate`.
+Interactive zone placement. Shows range highlights and places Lancer templates (Blast, Burst, Cone, Line) with preview.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -450,7 +450,7 @@ const result = await api.placeZone(reactorToken, {
 
 #### `placeToken(options)`
 
-Interactive token placement tool — shows a range highlight around the origin, lets the user click to mark placement positions (orange markers), then spawns all tokens on confirm. Plays a Sequencer impulse effect on each spawn.
+Interactive token placement. Marks positions with orange highlights before spawning. Includes spawn effects and onSpawn callbacks.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -502,6 +502,61 @@ await api.placeToken({
             duration: { label: 'end', turns: 1 }
         });
     }
+});
+```
+
+---
+
+#### `startChoiceCard(options)`
+
+Interactive choice card. Supports "OR" (pick one) and "AND" (pick all sequentially) modes.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `options.mode` | `string` | `"or"` | `"or"` (pick one, done) or `"and"` (must complete all) |
+| `options.choices` | `Array<Object>` | *required* | Array of choice objects (see below) |
+| `options.title` | `string` | `"CHOICE"` | Info card header text |
+| `options.description` | `string` | `""` | Info card description text |
+| `options.icon` | `string` | `"fas fa-list"` | Info card header icon (FontAwesome class) |
+| `options.headerClass` | `string` | `""` | Extra CSS class for the info card header |
+
+**Choice object:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `text` | `string` | Display text for the choice |
+| `icon` | `string` | Optional FontAwesome icon class (e.g. `"fas fa-shield"`) |
+| `callback` | `Function` | Async function called when this choice is selected |
+| `data` | `any` | Optional data passed to the callback |
+
+**Returns:** `Promise<true|null>` — `true` on completion, `null` if cancelled
+
+**OR mode** — pick one and done:
+
+```javascript
+await api.startChoiceCard({
+    mode: "or",
+    title: "CHOOSE DAMAGE TYPE",
+    description: "Select the damage type for this attack",
+    choices: [
+        { text: "Kinetic", icon: "fas fa-crosshairs", callback: async (d) => { /* apply kinetic */ }, data: "kinetic" },
+        { text: "Energy", icon: "fas fa-bolt", callback: async (d) => { /* apply energy */ }, data: "energy" },
+        { text: "Explosive", icon: "fas fa-bomb", callback: async (d) => { /* apply explosive */ }, data: "explosive" }
+    ]
+});
+```
+
+**AND mode** — complete all sequentially (card hides during each callback, reopens with completed items greyed out):
+
+```javascript
+await api.startChoiceCard({
+    mode: "and",
+    title: "DEPLOY SYSTEMS",
+    description: "Activate all systems",
+    choices: [
+        { text: "Deploy Shield", icon: "fas fa-shield", callback: async () => { /* deploy shield logic */ } },
+        { text: "Launch Drone", icon: "fas fa-paper-plane", callback: async () => { /* launch drone logic */ } }
+    ]
 });
 ```
 
@@ -1264,7 +1319,7 @@ await api.removeGlobalBonus(actor, bonusId);
 
 #### `knockBackToken(tokens, distance, options)`
 
-Knock back a list of tokens by a specified distance in grid units.
+Push/pull tokens on the grid. Opens interactive destination selection for each token.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `tokens` | `Array<Token>` | *required* | The tokens to knock back |

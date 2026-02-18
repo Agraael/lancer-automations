@@ -2,7 +2,7 @@
 
 I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) (and borrows some of its code).
 
-So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. For now both modules work side by side, but some features do overlap.
+So what is Lancer Automations? It's a framework to automate and script gameplay for the Lancer. It's scalable: add activations, effects, and bonuses without touching the core code. The goal is replacing Lancer QoL eventually; for now, they work side-by-side.
 
 ## Installation
 
@@ -32,11 +32,11 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## How It Works
 
-Everything revolves around **gameplay triggers**. Triggers cover pretty much anything that happens during play: `onMove`, `onAttack`, `onHit`, `onDamage`, `onTurnStart`, and many more. Each trigger carries its own data payload describing what just happened.
+The module uses **gameplay triggers** to detect events like `onMove`, `onAttack`, `onHit`, `onDamage`, or `onTurnStart`. Each trigger carries a data object describing the event.
 
 ![Trigger list](images/trigger-list.png)
 
-Each time an actor does something that matches a trigger, it fires. Other tokens (including the actor itself) can then react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
+When an actor hits a trigger, it fires. Other tokens (or the actor itself) react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
 
 ### Example: Overwatch
 
@@ -299,8 +299,11 @@ Places a smoke zone that last until the end of next turn.
 
 There are many utility functions exposed for scripting. Two notable ones for macros are:
 
--   `api.chooseToken(token, options)`: Opens a flow-style card to select tokens on the canvas. Supports range, disposition, and self-targeting.
--   `api.placeZone(token, options)`: Opens a flow-style card to place templates (Blast, Cone, etc.) with preview.
+-   `api.chooseToken(token, options)`: Interactive token picker. Range highlights, disposition filters, and multi-select support.
+-   `api.placeZone(token, options)`: Interactive zone placement (Blast, Cone, Line, etc.) with preview.
+-   `api.placeToken(options)`: Interactive token placement with visual preview and spawn effects.
+-   `api.startChoiceCard(options)`: Interactive choice card. Supports "OR" (pick one) and "AND" (pick all) modes.
+-   `api.knockBackToken(tokens, distance, options)`: Interactive tool to push/pull tokens on the grid.
 
 For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
 

@@ -97,6 +97,58 @@
     color: #991e2a;
 }
 
+/* --- Choice Card List --- */
+.la-choice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.la-choice-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #f5f5f5;
+    border: 2px solid #999;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.la-choice-item:hover {
+    background: #e0f0ff;
+    border-color: #0066cc;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.la-choice-text {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: #000;
+}
+
+.la-choice-item.la-choice-done {
+    opacity: 0.5;
+    cursor: default;
+    pointer-events: none;
+    background: #e8e8e8;
+    border-color: #aaa;
+}
+
+.la-choice-item.la-choice-done .la-choice-text {
+    text-decoration: line-through;
+}
+
+.la-choice-status {
+    color: var(--lancer-color-green, #2e7d32);
+    font-size: 14px;
+}
+
 /* --- Empty State --- */
 .la-empty-state {
     font-size: 11px;

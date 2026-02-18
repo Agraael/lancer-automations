@@ -28,7 +28,7 @@ import {
 } from "./genericBonuses.js";
 import { executeEffectManager, openItemBrowser } from "./effectManager.js";
 import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, placeZone, knockBackToken, placeToken, getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory  } from "./interactive-tools.js";
+import { chooseToken, placeZone, knockBackToken, placeToken, startChoiceCard, getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory  } from "./interactive-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -1722,6 +1722,7 @@ Hooks.on('ready', () => {
         chooseToken,
         placeZone,
         placeToken,
+        startChoiceCard,
         getGridDistance,
         drawRangeHighlight,
         revertMovement,
@@ -2030,6 +2031,7 @@ Hooks.once('ready', () => {
         module.api.executeStatRoll = executeStatRoll;
         module.api.knockBackToken = knockBackToken;
         module.api.placeToken = placeToken;
+        module.api.startChoiceCard = startChoiceCard;
         module.api.triggerFlaggedEffectImmunity = triggerFlaggedEffectImmunity;
         console.log("lancer-automations | API exposed");
     }

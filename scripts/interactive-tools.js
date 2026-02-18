@@ -121,10 +121,19 @@ export function getGridDistance(pos1, pos2) {
 
 // --- Info Card Helpers (internal) ---
 
+const _cardDefaults = {
+    chooseToken: { title: "SELECT TARGETS", icon: "fas fa-crosshairs" },
+    knockBack:   { title: "KNOCKBACK",       icon: "fas fa-arrow-right" },
+    placeToken:  { title: "PLACE TOKEN",     icon: "fas fa-user-plus" },
+    placeZone:   { title: "PLACE ZONE",      icon: "fas fa-bullseye" },
+    choiceCard:  { title: "CHOICE",          icon: "fas fa-list" }
+};
+
 function _createInfoCard(type, opts) {
+    const defaults = _cardDefaults[type] || { title: "INFO", icon: "fas fa-info" };
     const {
-        title = type === "chooseToken" ? "SELECT TARGETS" : (type === "knockBack" ? "KNOCKBACK" : (type === "placeToken" ? "PLACE TOKEN" : "PLACE ZONE")),
-        icon = type === "chooseToken" ? "fas fa-crosshairs" : (type === "knockBack" ? "fas fa-arrow-right" : (type === "placeToken" ? "fas fa-user-plus" : "fas fa-bullseye")),
+        title = defaults.title,
+        icon = defaults.icon,
         headerClass = "",
         description = "",
         range = null,
@@ -138,26 +147,27 @@ function _createInfoCard(type, opts) {
     // Remove any existing info card
     $('.la-info-card').remove();
 
-    // Build info row — Lancer-style labeled grid (like "Tier: +1 / Total: +1")
-    let infoItems = [];
-    if (range !== null) {
-        infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${range}</span>`);
-    }
-    if (count !== -1) {
-        infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> ${count}</span>`);
-    } else {
-        infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> &infin;</span>`);
-    }
-    if (type === "placeZone") {
-        if (zoneType) {
-            infoItems.push(`<span style="white-space:nowrap"><b>Type:</b> ${zoneType}</span>`);
+    let infoRowHtml = '';
+    if (type !== "choiceCard") {
+        let infoItems = [];
+        if (range !== null) {
+            infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${range}</span>`);
         }
-        infoItems.push(`<span style="white-space:nowrap"><b>Size:</b> ${zoneSize}</span>`);
+        if (count !== -1) {
+            infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> ${count}</span>`);
+        } else {
+            infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> &infin;</span>`);
+        }
+        if (type === "placeZone") {
+            if (zoneType) {
+                infoItems.push(`<span style="white-space:nowrap"><b>Type:</b> ${zoneType}</span>`);
+            }
+            infoItems.push(`<span style="white-space:nowrap"><b>Size:</b> ${zoneSize}</span>`);
+        }
+        if (infoItems.length > 0) {
+            infoRowHtml = `<label class="flexrow la-info-row lancer-border-primary">${infoItems.join('  ')}</label>`;
+        }
     }
-
-    const infoRowHtml = infoItems.length > 0
-        ? `<label class="flexrow la-info-row lancer-border-primary">${infoItems.join('  ')}</label>`
-        : '';
 
     const descHtml = description
         ? `<div class="la-info-description">${description}</div>`
@@ -182,6 +192,11 @@ function _createInfoCard(type, opts) {
             <div class="la-placed-tokens" data-role="token-list">
                 <div class="la-empty-state">No tokens placed</div>
             </div>`;
+    } else if (type === "choiceCard") {
+        const modeLabel = opts.mode === "and" ? "Complete All" : "Choose One";
+        dynamicHtml = `
+            <h3 class="la-section-header lancer-border-primary">${modeLabel}</h3>
+            <div class="la-choice-list" data-role="choice-list"></div>`;
     } else {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Placed Zones</h3>
@@ -190,7 +205,7 @@ function _createInfoCard(type, opts) {
             </div>`;
     }
 
-    const showConfirm = true;
+    const showConfirm = type !== "choiceCard";
 
     const html = `
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
@@ -334,6 +349,33 @@ function _updateInfoCard(cardEl, type, data) {
             const idx = $(this).data('token-index');
             if (data.onSelectToken)
                 data.onSelectToken(idx);
+        });
+    } else if (type === "choiceCard") {
+        const listEl = cardEl.find('[data-role="choice-list"]');
+        listEl.empty();
+
+        data.choices.forEach((choice, idx) => {
+            const isDone = data.chosenSet.has(idx);
+            const doneClass = isDone ? "la-choice-done" : "";
+            const iconHtml = choice.icon
+                ? `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`
+                : '';
+            const statusHtml = isDone
+                ? '<span class="la-choice-status"><i class="fas fa-check"></i></span>'
+                : '';
+
+            listEl.append(`
+                <div class="la-choice-item ${doneClass}" data-choice-index="${idx}">
+                    ${iconHtml}
+                    <span class="la-choice-text">${choice.text}</span>
+                    ${statusHtml}
+                </div>`);
+        });
+
+        listEl.find('.la-choice-item:not(.la-choice-done)').on('click', function () {
+            const idx = $(this).data('choice-index');
+            if (data.onChoose)
+                data.onChoose(idx);
         });
     }
 }
@@ -1574,6 +1616,106 @@ export function placeToken(options = {}) {
     });
 }
 
+
+/**
+ * Interactive choice card — presents a list of choices with callbacks.
+ * @param {Object} options - Configuration options
+ * @param {string} [options.mode="or"] - "or" (pick one, done) or "and" (pick all sequentially)
+ * @param {Array<Object>} options.choices - Array of { text, icon?, callback, data? }
+ * @param {string} [options.title] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @param {string} [options.icon] - Card icon class
+ * @param {string} [options.headerClass=""] - Card header CSS class
+ * @returns {Promise<true|null>} true on completion, null if cancelled
+ */
+export function startChoiceCard(options = {}) {
+    return new Promise((resolve) => {
+        const {
+            mode = "or",
+            choices = [],
+            title,
+            description = "",
+            icon,
+            headerClass = ""
+        } = options;
+
+        if (choices.length === 0) {
+            resolve(true);
+            return;
+        }
+
+        const chosenSet = new Set();
+        let cancelled = false;
+
+        const doCleanup = () => {
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
+
+        const refreshCard = () => {
+            _updateInfoCard(cardEl, "choiceCard", {
+                choices,
+                chosenSet,
+                onChoose: async (idx) => {
+                    if (cancelled) return;
+
+                    const choice = choices[idx];
+                    chosenSet.add(idx);
+
+                    if (mode === "and") {
+                        cardEl.hide();
+                    }
+
+                    if (choice.callback) {
+                        await choice.callback(choice.data);
+                    }
+
+                    if (cancelled) return;
+
+                    if (mode === "or") {
+                        doCleanup();
+                        resolve(true);
+                        return;
+                    }
+
+                    if (chosenSet.size >= choices.length) {
+                        doCleanup();
+                        resolve(true);
+                        return;
+                    }
+
+                    cardEl.show();
+                    refreshCard();
+                }
+            });
+        };
+
+        const cardEl = _createInfoCard("choiceCard", {
+            title,
+            icon,
+            headerClass,
+            description,
+            mode,
+            onConfirm: () => {},
+            onCancel: () => {
+                cancelled = true;
+                doCleanup();
+                resolve(null);
+            }
+        });
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape") {
+                cancelled = true;
+                doCleanup();
+                resolve(null);
+            }
+        };
+
+        document.addEventListener('keydown', keyHandler);
+        refreshCard();
+    });
+}
 
 /**
  * Revert a token's movement to the previous position in history or a specific destination.
