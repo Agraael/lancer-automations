@@ -34,7 +34,11 @@ async function runCustomActivation({ activationType, source, triggerType, trigge
 }
 
 export async function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
-    token.control({ releaseOthers: true });
+    // Skip controlling the token for silent code auto-activations — no UI is shown so there's no
+    // reason to steal focus from the currently controlled token.
+    const isSilentCode = reaction?.autoActivate && reaction?.activationType === 'code';
+    if (!isSilentCode)
+        token.control({ releaseOthers: true });
 
     if (item) {
         const lid = item.system?.lid;

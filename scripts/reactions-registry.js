@@ -116,9 +116,10 @@ export function getDefaultGeneralReactionRegistry() {
                     const ephemeralBonuses = attacker.getFlag("lancer-automations", "ephemeral_bonuses") || [];
                     ephemeralBonuses.push({
                         name: "Brace",
-                        type: "difficulty",
-                        val: 1,
-                        targetTypes: ["attack"]
+                        type: "damage",
+                        targetTypes: ["all"],
+                        applyTo: [reactorToken.id],
+                        damage: [{ type: "Kinetic", val: "1d6" }]
                     });
                     await attacker.setFlag("lancer-automations", "ephemeral_bonuses", ephemeralBonuses);
                 }
