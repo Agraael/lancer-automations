@@ -1,5 +1,22 @@
 # Lancer Automations — API Reference
 
+## Summary
+
+- [Accessing the API](#accessing-the-api)
+- [Exposed Functions](#exposed-functions)
+  - **Effect Management**: [`applyFlaggedEffectToTokens`](#applyflaggedeffecttotokensoptions-extraoptions), [`removeFlaggedEffectToTokens`](#removeflaggedeffecttotokensoptions), [`findFlaggedEffectOnToken`](#findflaggedeffectontokentoken-identifier), [`consumeEffectCharge`](#consumeeffectchargeeffect), [`executeEffectManager`](#executeeffectmanageroptions)
+  - **Global Bonuses**: [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options), [`removeGlobalBonus`](#removeglobalbonusactor-bonusid-skipeffectremoval), [`getGlobalBonuses`](#getglobalbonusesactor), [`injectBonusToNextRoll`](#injectbonustonextrollactor-bonus)
+  - **Activation Registration**: [`registerDefaultItemReactions`](#registerdefaultitemreactionsreactions), [`registerDefaultGeneralReactions`](#registerdefaultgeneralreactionsreactions)
+  - **Spatial / Distance**: [`getActorMaxThreat`](#getactormaxthreatactor), [`getTokenDistance`](#gettokendistancetoken1-token2), [`isHostile`](#ishostiletoken1-token2), [`isFriendly`](#isfriendlytoken1-token2)
+  - **Utilities**: [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata), [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata), [`clearMoveData`](#clearmovedatatokendocid), [`getCumulativeMoveData`](#getcumulativemovedatatokendocid), [`getTokenCells`](#gettokencellstoken), [`getMaxGroundHeightUnderToken`](#getmaxgroundheightundertokentoken-terrainapi), [`openItemBrowser`](#openitembrowsertargetinput), [`drawThreatDebug`](#drawthreatdebugtoken), [`drawDistanceDebug`](#drawdistancedebug), [`knockBackToken`](#knockbacktokentokens-distance-options), [`revertMovement`](#revertmovementtoken-destination), [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
+  - **Interactive Tools**: [`chooseToken`](#choosetokencastertoken-options), [`placeZone`](#placezonecastertoken-options), [`placeToken`](#placetokenoptions), [`startChoiceCard`](#startchoicecardoptions), [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options), [`pickupWeaponToken`](#pickupweapontokenownertoken), [`resolveDeployable`](#resolvedeployabledeployableorlid-owneractor), [`placeDeployable`](#placedeployableoptions), [`beginDeploymentCard`](#begindeploymentcardoptions), [`openDeployableMenu`](#opendeployablemenuactor), [`recallDeployable`](#recalldeployableownertoken), [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon), [`getGridDistance`](#getgriddistancepos1-pos2), [`drawRangeHighlight`](#drawrangehighlightcastertoken-range-color-alpha)
+- [Trigger Types & Data](#trigger-types--data)
+- [Evaluate Function](#evaluate-function)
+- [Activation Function](#activation-function)
+- [Activation Object Structure](#activation-object-structure)
+- [Consumption Object](#consumption-object)
+- [How To...](#how-to-register-default-activations-by-code)
+
 ## Accessing the API
 
 ```javascript

@@ -411,11 +411,25 @@ async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const generalReactions = ReactionManager.getGeneralReactions();
 
-    const actionBasedReaction = data.actionName && generalReactions[data.actionName]?.onlyOnSourceMatch ?
-        { name: data.actionName, reaction: generalReactions[data.actionName] } : null;
+    // Flatten general reactions: entries with a "reactions" array are expanded into individual sub-reactions
+    const flatGeneralReactions = [];
+    for (const [reactionName, entry] of Object.entries(generalReactions)) {
+        if (Array.isArray(entry.reactions)) {
+            for (const subReaction of entry.reactions) {
+                flatGeneralReactions.push([reactionName, { ...subReaction, enabled: subReaction.enabled ?? entry.enabled }]);
+            }
+        } else {
+            flatGeneralReactions.push([reactionName, entry]);
+        }
+    }
+
+    const actionBasedReaction = data.actionName ?
+        flatGeneralReactions.find(([name, r]) => name === data.actionName && r.onlyOnSourceMatch)?.[1] ?
+            { name: data.actionName, reaction: flatGeneralReactions.find(([name, r]) => name === data.actionName && r.onlyOnSourceMatch)[1] } : null
+        : null;
 
     const nonActionBasedReactions = [];
-    for (const [reactionName, reaction] of Object.entries(generalReactions)) {
+    for (const [reactionName, reaction] of flatGeneralReactions) {
         if (reaction.onlyOnSourceMatch)
             continue;
         if (!reaction.triggers?.includes(triggerType))
@@ -784,6 +798,18 @@ function handleTrigger(triggerType, data) {
 }
 
 function registerReactionHooks() {
+
+    Hooks.on('lancer-automations.onInitAttack', (attacker, weapon, targets, actionData) => {
+        handleTrigger('onInitAttack', {
+            triggeringToken: attacker,
+            weapon,
+            targets,
+            actionName: actionData?.action?.name || weapon?.name || "Attack",
+            tags: actionData?.tags || [],
+            actionData
+        });
+    });
+
     Hooks.on('lancer-automations.onAttack', (attacker, weapon, targets, actionData) => {
         handleTrigger('onAttack', {
             triggeringToken: attacker,
@@ -870,6 +896,19 @@ function registerReactionHooks() {
 
     Hooks.on('lancer-automations.onDestroyed', (token) => {
         handleTrigger('onDestroyed', { triggeringToken: token });
+    });
+
+
+    Hooks.on('lancer-automations.onInitTechAttack', (attacker, techItem, targets, actionData) => {
+        handleTrigger('onInitTechAttack', {
+            triggeringToken: attacker,
+            techItem,
+            targets,
+            actionName: actionData?.action?.name || techItem?.name || "Tech Attack",
+            isInvade: actionData?.isInvade || false,
+            tags: actionData?.tags || [],
+            actionData
+        });
     });
 
     Hooks.on('lancer-automations.onTechAttack', (attacker, techItem, targets, actionData) => {
@@ -1018,7 +1057,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
         name: 'Treat Generic Prints as Activations',
-        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows.',
+        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows. This might cause issues idk.',
         scope: 'world',
         config: true,
         type: Boolean,
@@ -1824,9 +1863,6 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
 
-    if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
-        flows.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
-    }
 });
 
 Hooks.on('init', () => {
@@ -1834,11 +1870,37 @@ Hooks.on('init', () => {
     registerSettings();
 });
 
+Hooks.once('ready', () => {
+    if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
+        const flows = game.lancer?.flows;
+        flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
+    }
+});
+
 Hooks.on('lancer.statusesReady', () => {
     CONFIG.statusEffects.push({
         id: "resistance_all",
         name: "Resist All",
         img: "modules/lancer-automations/icons/resist_all.svg",
+        changes: [
+            { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
+        ]
+    });
+
+    CONFIG.statusEffects.push({
+        id: "immovable",
+        name: "Immovable",
+        img: "modules/lancer-automations/icons/immovable.svg",
+    });
+
+    CONFIG.statusEffects.push({
+        id: "brace",
+        name: "Brace",
+        img: "modules/lancer-automations/icons/brace.svg",
         changes: [
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },

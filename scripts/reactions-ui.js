@@ -122,7 +122,8 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
         }
     } else {
         const actor = token.actor;
-        const generalReaction = ReactionManager.getGeneralReaction(activationName) || reaction;
+        const registryEntry = ReactionManager.getGeneralReaction(activationName);
+        const generalReaction = (registryEntry && !Array.isArray(registryEntry.reactions)) ? registryEntry : (reaction || registryEntry);
 
         const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
@@ -192,9 +193,10 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
 
             shouldConsume = (type === "Reaction" && consumes);
         } else {
-            const generalReaction = ReactionManager.getGeneralReaction(activationName) || reaction;
-            const type = generalReaction?.actionType || (generalReaction?.isReaction !== false ? "Reaction" : "Free Action");
-            const consumes = generalReaction?.consumesReaction !== false;
+            const registryEntryConsume = ReactionManager.getGeneralReaction(activationName);
+            const generalReactionConsume = (registryEntryConsume && !Array.isArray(registryEntryConsume.reactions)) ? registryEntryConsume : (reaction || registryEntryConsume);
+            const type = generalReactionConsume?.actionType || (generalReactionConsume?.isReaction !== false ? "Reaction" : "Free Action");
+            const consumes = generalReactionConsume?.consumesReaction !== false;
 
             shouldConsume = (type === "Reaction" && consumes);
         }

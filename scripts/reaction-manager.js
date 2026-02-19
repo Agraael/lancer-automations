@@ -402,21 +402,56 @@ export class ReactionConfig extends FormApplication {
         // GROUPING LOGIC FOR GENERAL REACTIONS (DEFAULTS)
         for (const [name, reaction] of Object.entries(defaultGeneralRegistry)) {
             const userSaved = userGeneralSettings[name];
-            const isPure = isPureDefault(userSaved, reaction);
-            const isOverridden = !!userSaved && !isPure;
-            const enabledState = isPure ? userSaved.enabled : reaction.enabled;
 
-            defaultList.push(startEnabled({
-                name: name,
-                lid: null,
-                triggers: reaction.triggers?.join(", ") || "",
-                isGeneral: true,
-                isDefault: true,
-                isOverridden: isOverridden,
-                onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
-                original: reaction,
-                enabled: enabledState
-            }));
+            if (Array.isArray(reaction.reactions)) {
+                const validReactions = reaction.reactions.map((subReaction, index) => {
+                    const enabledState = subReaction.enabled ?? reaction.enabled;
+                    return startEnabled({
+                        name: name,
+                        lid: null,
+                        triggers: subReaction.triggers?.join(", ") || "",
+                        isGeneral: true,
+                        isDefault: true,
+                        isOverridden: false,
+                        onlyOnSourceMatch: subReaction.onlyOnSourceMatch || false,
+                        reactionIndex: index,
+                        original: subReaction,
+                        enabled: enabledState
+                    });
+                });
+
+                if (validReactions.length === 1) {
+                    defaultList.push(validReactions[0]);
+                } else {
+                    const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                    defaultList.push({
+                        name: name,
+                        lid: null,
+                        triggers: uniqueTriggers,
+                        isGeneral: true,
+                        isDefault: true,
+                        isGroup: true,
+                        reactions: validReactions,
+                        enabled: validReactions.every(r => r.enabled)
+                    });
+                }
+            } else {
+                const isPure = isPureDefault(userSaved, reaction);
+                const isOverridden = !!userSaved && !isPure;
+                const enabledState = isPure ? userSaved.enabled : reaction.enabled;
+
+                defaultList.push(startEnabled({
+                    name: name,
+                    lid: null,
+                    triggers: reaction.triggers?.join(", ") || "",
+                    isGeneral: true,
+                    isDefault: true,
+                    isOverridden: isOverridden,
+                    onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
+                    original: reaction,
+                    enabled: enabledState
+                }));
+            }
         }
 
         const sorter = (a, b) => {
@@ -503,8 +538,14 @@ export class ReactionConfig extends FormApplication {
 
         if (isGeneral) {
             const name = li.data("name");
+            const index = li.data("index");
             const generals = ReactionManager.getGeneralReactions();
-            const reaction = generals[name];
+            const entry = generals[name];
+            if (!entry)
+                return;
+            const reaction = (Array.isArray(entry.reactions) && typeof index !== 'undefined')
+                ? entry.reactions[index]
+                : entry;
             if (!reaction)
                 return;
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
@@ -548,10 +589,14 @@ export class ReactionConfig extends FormApplication {
         const index = li.data("index");
 
         if (isGeneral) {
-            const defaultReaction = getDefaultGeneralReactionRegistry()[name];
-            if (!defaultReaction)
+            const defaultEntry = getDefaultGeneralReactionRegistry()[name];
+            if (!defaultEntry)
                 return;
-            const reaction = foundry.utils.deepClone(defaultReaction);
+            const reaction = (Array.isArray(defaultEntry.reactions) && typeof index !== 'undefined')
+                ? foundry.utils.deepClone(defaultEntry.reactions[index])
+                : foundry.utils.deepClone(defaultEntry);
+            if (!reaction)
+                return;
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
         } else {
             const all = ReactionManager.getAllReactions();
