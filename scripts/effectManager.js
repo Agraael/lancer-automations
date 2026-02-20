@@ -5,7 +5,8 @@ import {
 } from "./flagged-effects.js";
 import {
     addGlobalBonus,
-    removeGlobalBonus
+    removeGlobalBonus,
+    removeConstantBonus
 } from "./genericBonuses.js";
 
 /**
@@ -926,8 +927,9 @@ export async function executeEffectManager(options = {}) {
                     return;
                 const actor = target.actor;
                 const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
+                const constantBonusesCheck = actor.getFlag("lancer-automations", "constant_bonuses") || [];
 
-                if (bonuses.length === 0) {
+                if (bonuses.length === 0 && constantBonusesCheck.length === 0) {
                     list.html('<p style="text-align:center; color:#666; font-style:italic; padding:8px;">No active bonuses.</p>');
                     return;
                 }
@@ -967,6 +969,38 @@ export async function executeEffectManager(options = {}) {
 
                     list.append(item);
                 });
+
+                if (constantBonusesCheck.length > 0) {
+                    const constantBonuses = constantBonusesCheck;
+                    list.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid #555; padding-top:6px;">Constant Bonuses</p>'));
+                    constantBonuses.forEach(b => {
+                        let details = "";
+                        if (b.type === 'accuracy')
+                            details = `(Accuracy +${b.val})`;
+                        else if (b.type === 'difficulty')
+                            details = `(Difficulty +${b.val})`;
+                        else if (b.type === 'stat') {
+                            const statLabel = b.stat?.split('.').pop() || b.stat;
+                            details = `(${statLabel} ${parseInt(b.val) >= 0 ? '+' : ''}${b.val})`;
+                        } else if (b.type === 'damage') {
+                            details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
+                        }
+
+                        const item = $(`
+                            <div class="te-bonus-item">
+                                <span><strong>${b.name}</strong> ${details}</span>
+                                <div class="te-delete-btn constant-remove-btn" data-id="${b.id}" title="Remove"><i class="fas fa-trash"></i></div>
+                            </div>
+                        `);
+
+                        item.find('.constant-remove-btn').click(async () => {
+                            await removeConstantBonus(actor, b.id);
+                            setTimeout(updateBonusList, 200);
+                        });
+
+                        list.append(item);
+                    });
+                }
             };
 
             html.find('#bonus-target').change(updateBonusList);

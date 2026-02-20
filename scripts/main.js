@@ -18,6 +18,9 @@ import {
     addGlobalBonus,
     removeGlobalBonus,
     getGlobalBonuses,
+    addConstantBonus,
+    removeConstantBonus,
+    getConstantBonuses,
     executeGenericBonusMenu,
     injectBonusToNextRoll,
     genericAccuracyStepAttack,
@@ -374,8 +377,11 @@ async function executeDamageRoll(attacker, targets, damageValue, damageType, tit
 }
 
 async function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
-    if (!isInCombat && !reaction.outOfCombat)
+    if (!isInCombat && !reaction.outOfCombat) {
+        if (token?.isOwner || game.user.isGM)
+            ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered — out of combat.`);
         return null;
+    }
     if (isSelf && !reaction.triggerSelf)
         return null;
     if (!isSelf && reaction.triggerOther === false)
@@ -470,8 +476,11 @@ async function checkReactions(triggerType, data) {
                         continue;
                 }
 
-                if (!isInCombat && !reaction.outOfCombat)
+                if (!isInCombat && !reaction.outOfCombat) {
+                    if (token.isOwner || game.user.isGM)
+                        ui.notifications.warn(`${item.name} (${token.name}): not triggered — out of combat.`);
                     continue;
+                }
 
                 if (isSelf) {
                     if (!reaction.triggerSelf)
@@ -1122,6 +1131,12 @@ async function handleSocketEvent({ action, payload }) {
         if (reconstructed.length > 0) {
             displayReactionPopup(triggerType, reconstructed);
         }
+    } else if (action === 'setActorFlag') {
+        if (!game.user.isGM)
+            return;
+        const actor = game.actors.get(payload.actorId);
+        if (actor)
+            await actor.setFlag(payload.ns, payload.key, payload.value);
     } else if (action === 'setFlaggedEffect') {
         setFlaggedEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
     } else if (action === 'removeFlaggedEffect') {
@@ -1870,10 +1885,19 @@ Hooks.on('init', () => {
     registerSettings();
 });
 
-Hooks.once('ready', () => {
+Hooks.once('ready', async () => {
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
         const flows = game.lancer?.flows;
         flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
+    }
+
+    if (game.user.isGM) {
+        for (const tokenDoc of game.scenes.active?.tokens ?? []) {
+            const actor = tokenDoc.actor;
+            if (!actor) continue;
+            if (actor.getFlag("lancer-automations", "ephemeral_bonuses")?.length)
+                await actor.setFlag("lancer-automations", "ephemeral_bonuses", []);
+        }
     }
 });
 
@@ -1938,6 +1962,9 @@ Hooks.on('ready', () => {
         addGlobalBonus,
         removeGlobalBonus,
         getGlobalBonuses,
+        addConstantBonus,
+        removeConstantBonus,
+        getConstantBonuses,
         executeGenericBonusMenu,
         injectBonusToNextRoll,
         executeEffectManager,

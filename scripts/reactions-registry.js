@@ -89,41 +89,6 @@ export function getDefaultGeneralReactionRegistry() {
                     await flow.begin();
                 }
             }, {
-                triggers: ["onInitAttack"],
-                triggerDescription: "When an attack is initiated against a braced target, +1 difficulty is applied.",
-                effectDescription: "All attacks against a braced character are made at +1 difficulty until the end of their next turn.",
-                isReaction: false,
-                consumesReaction: false,
-                autoActivate: true,
-                triggerSelf: false,
-                triggerOther: true,
-                evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
-                    const braceEffect = api.findFlaggedEffectOnToken(reactorToken, "Brace");
-                    if (!braceEffect)
-                        return false;
-
-                    const targets = triggerData.targets || [];
-                    return targets.some(t => t?.id === reactorToken.id);
-                },
-                activationType: "code",
-                activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const attacker = triggerData.triggeringToken?.actor;
-                    if (!attacker)
-                        return;
-
-                    const ephemeralBonuses = attacker.getFlag("lancer-automations", "ephemeral_bonuses") || [];
-                    ephemeralBonuses.push({
-                        name: "Brace",
-                        type: "damage",
-                        targetTypes: ["all"],
-                        applyTo: [reactorToken.id],
-                        damage: [{ type: "Kinetic", val: "1d6" }]
-                    });
-                    await attacker.setFlag("lancer-automations", "ephemeral_bonuses", ephemeralBonuses);
-                }
-            }, {
                 triggers: ["onActivation"],
                 onlyOnSourceMatch: true,
                 autoActivate: true,
@@ -168,6 +133,44 @@ export function getDefaultGeneralReactionRegistry() {
                         sequence.play();
                     });
                 }
+            }, {
+                triggers: ["onStatusApplied", "onStatusRemoved"],
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: true,
+                evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    return triggerData.statusId === 'brace';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    const BRACE_BONUS_ID = 'brace-difficulty-applyToTargetter';
+
+                    if (triggerType === 'onStatusApplied') {
+                        await api.addConstantBonus(reactorToken.actor, {
+                            id: BRACE_BONUS_ID,
+                            name: "Brace",
+                            type: "difficulty",
+                            val: 1,
+                            targetTypes: ["attack"],
+                            applyToTargetter: true
+                        });
+                    } else if (triggerType === 'onStatusRemoved') {
+                        await api.removeConstantBonus(reactorToken.actor, BRACE_BONUS_ID);
+
+                        const throttleStatus = CONFIG.statusEffects.find(s => s.id === 'throttled');
+                        if (throttleStatus) {
+                            await api.applyFlaggedEffectToTokens({
+                                tokens: [reactorToken],
+                                effectNames: throttleStatus.id,
+                                duration: { label: 'start', turns: 1, rounds: 0 },
+                                useTokenAsOrigin: true
+                            });
+                        }
+                    }
+                }
             }],
         },
         "Flight": {
@@ -179,6 +182,7 @@ export function getDefaultGeneralReactionRegistry() {
             autoActivate: false,
             triggerSelf: true,
             triggerOther: false,
+            outOfCombat: true,
             evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
                 const isFlying = reactorToken.actor?.effects.some(e =>
                     e.statuses?.has('flying') && !e.disabled
