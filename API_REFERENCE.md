@@ -905,23 +905,50 @@ Fires when a tech attack misses.
 
 ### Movement
 
+#### `onPreMove`
+
+Fires *before* a token's movement drag is finalized, allowing macros to intercept, modify, or cancel the movement cleanly. Also provides the exact grid path the token is travelling.
+
+```javascript
+{
+    token: Token,
+    distanceToMove: number,     // Grid distance intended for this drag
+    elevationToMove: number,    // Intended new elevation value
+    startPos: { x, y },         // Position before the move starts
+    endPos: { x, y },           // Intended position after the move
+    isDrag: boolean,
+    moveInfo: {
+        isInvoluntary: boolean,
+        isTeleport: boolean,
+        pathHexes: Array<Object> // Array of hex data describing the dragged path `[{x, y, cx, cy, isHistory, hexes}]`.
+                                 // - `pathHexes.historyStartIndex` : index of the first step that was not previously confirmed.
+                                 // - `pathHexes.getPathPositionAt(index)` : Returns the proper snap-adjusted `{x, y}` for interception.
+    },
+    cancelTriggeredMove: Function(reasonText?: string, showCard?: boolean), // Aborts the drag. If showCard is true, prompts the user to confirm the cancellation.
+    changeTriggeredMove: Function(position: {x, y}, extraData?: Object, reasonText?: string, showCard?: boolean) // Reroutes the token. If showCard is true, prompts the user to confirm the reroute.
+}
+```
+
 #### `onMove`
 
-Fires when a token moves.
+Fires when a token successfully completes a movement.
 
 ```javascript
 {
     triggeringToken: Token,
     distanceMoved: number,      // Grid distance moved this drag
     elevationMoved: number,     // New elevation value
-    startPos: { x, y },        // Position before the move
-    endPos: { x, y },          // Position after the move
+    startPos: { x, y },         // Position before the move
+    endPos: { x, y },           // Position after the move
     isDrag: boolean,
     moveInfo: {
         isInvoluntary: boolean,
         isTeleport: boolean,
+        pathHexes: Array<Object>, // Array of hex data describing the dragged path
         isBoost: boolean,       // Only with experimental boost detection
-        boostSet: Array<number> // Boost numbers crossed (1-based)
+        boostSet: Array<number>,// Boost numbers crossed (1-based)
+        isModified: boolean,    // True if an `onPreMove` interceptor modified this move
+        extraData: Object       // Any custom data injected by `changeTriggeredMove`
     }
 }
 ```
@@ -1073,6 +1100,22 @@ Fires when heat is cleared.
 ```
 
 ### Other
+
+#### `onUpdate`
+
+> [!WARNING]
+> This trigger fires incredibly frequently (every time any token is updated or moved on the grid). Use extreme caution when creating activations hooked to `onUpdate`, as heavy calculations will severely degrade canvas performance.
+
+Fires on any generic token update (position, elevation, stats, statuses, etc).
+
+```javascript
+{
+    triggeringToken: Token,
+    document: TokenDocument,
+    change: Object,             // The update data object
+    options: Object             // Foundry update options context
+}
+```
 
 #### `onInitCheck`
 

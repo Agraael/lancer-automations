@@ -115,7 +115,9 @@
                 <div class="form-grid-2col">
                     <!-- Action Type -->
                     <div>
-                        <label>Action Type</label>
+                        <label>Action Type <a
+                                title="For UI display only. Exception: 'Reaction' enables the 'Consumes' checkbox, which will spend the token's reaction on activation."
+                                style="color: #888; cursor: help;"><i class="fas fa-question-circle"></i></a></label>
                         <select name="actionType" id="actionType">
                             {{#each actionTypeOptions}}
                             <option value="{{this}}" {{#if (eq ../actionType this)}}selected{{/if}}>{{this}}</option>
@@ -125,7 +127,9 @@
 
                     <!-- Frequency -->
                     <div>
-                        <label>Frequency</label>
+                        <label>Frequency <a
+                                title="For UI display only. Not currently enforced by the automation system."
+                                style="color: #888; cursor: help;"><i class="fas fa-question-circle"></i></a></label>
                         <select name="frequency" id="frequency">
                             {{#each frequencyOptions}}
                             <option value="{{this}}" {{#if (eq ../frequency this)}}selected{{/if}}>{{this}}</option>
@@ -147,6 +151,14 @@
                     <label class="checkbox" title="Auto-activate without showing popup">
                         <input type="checkbox" name="autoActivate" {{#if autoActivate}}checked{{/if}}>
                         <span>Auto Activate</span>
+                    </label>
+
+                    <!-- Force Synchronous (only when Auto Activate is checked) -->
+                    <label class="checkbox force-sync-option"
+                        title="Run activation code synchronously (required for cancel() to work in onPreMove)" {{#unless
+                        autoActivate}}style="display:none" {{/unless}}>
+                        <input type="checkbox" name="forceSynchronous" {{#if forceSynchronous}}checked{{/if}}>
+                        <span>Force Sync</span>
                     </label>
 
                     <!-- React to Self -->

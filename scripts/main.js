@@ -1,9 +1,10 @@
-import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance } from "./overwatch.js";
+import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance, canEngage, updateAllEngagements } from "./overwatch.js";
 import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
-import { displayReactionPopup } from "./reactions-ui.js";
+import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { registerExternalItemReactions, registerExternalGeneralReactions } from "./reactions-registry.js";
+import { cancelRulerDrag } from './interactive-tools.js';
 import {
     setFlaggedEffect,
     removeFlaggedEffect,
@@ -14,6 +15,11 @@ import {
     processDurationEffects,
     triggerFlaggedEffectImmunity
 } from "./flagged-effects.js";
+import { getOccupiedCenters,    getMovementPathHexes,
+    drawDebugPath,
+    snapTokenCenter,
+    isHexGrid, getOccupiedOffsets, drawHexAt
+} from "./grid-helpers.js";
 import {
     addGlobalBonus,
     removeGlobalBonus,
@@ -376,7 +382,46 @@ async function executeDamageRoll(attacker, targets, damageValue, damageType, tit
     return {completed, flow};
 }
 
-async function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
+async function executeBasicAttack(actor, options = {}, extraData = {}) {
+    const BasicAttackFlow = game.lancer?.flows?.get("BasicAttackFlow");
+    if (!BasicAttackFlow) {
+        console.error("lancer-automations | BasicAttackFlow not found");
+        return { completed: false };
+    }
+    const flow = new BasicAttackFlow(actor, options);
+    if (extraData && typeof extraData === 'object')
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+async function executeTechAttack(actor, options = {}, extraData = {}) {
+    const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
+    if (!TechAttackFlow) {
+        console.error("lancer-automations | TechAttackFlow not found");
+        return { completed: false };
+    }
+    const flow = new TechAttackFlow(actor, options);
+    if (extraData && typeof extraData === 'object')
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+async function executeSimpleActivation(actor, options = {}, extraData = {}) {
+    const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
+    if (!SimpleActivationFlow) {
+        console.error("lancer-automations | SimpleActivationFlow not found");
+        return { completed: false };
+    }
+    const flow = new SimpleActivationFlow(actor, options);
+    if (extraData && typeof extraData === 'object')
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
     if (!isInCombat && !reaction.outOfCombat) {
         if (token?.isOwner || game.user.isGM)
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered — out of combat.`);
@@ -398,10 +443,23 @@ async function evaluateGeneralReaction(reactionName, reaction, triggerType, data
 
         let shouldTrigger = false;
         if (typeof reaction.evaluate === 'function') {
-            shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
+            const result = reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
+            if (result instanceof Promise) {
+                console.warn(`lancer-automations | evaluate for "${reactionName}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
+                result.then(val => { /* fire-and-forget async evaluate */ });
+                shouldTrigger = false;
+            } else {
+                shouldTrigger = result;
+            }
         } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-            shouldTrigger = await evalFunc(triggerType, enrichedData, token, null, reactionName);
+            const result = evalFunc(triggerType, enrichedData, token, null, reactionName);
+            if (result instanceof Promise) {
+                console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancel().`);
+                shouldTrigger = false;
+            } else {
+                shouldTrigger = result;
+            }
         } else {
             shouldTrigger = true;
         }
@@ -413,7 +471,7 @@ async function evaluateGeneralReaction(reactionName, reaction, triggerType, data
     }
 }
 
-async function checkReactions(triggerType, data) {
+function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const generalReactions = ReactionManager.getGeneralReactions();
 
@@ -531,11 +589,24 @@ async function checkReactions(triggerType, data) {
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
-                        shouldTrigger = await reaction.evaluate(triggerType, enrichedData, token, item, activationName);
+                        const result = reaction.evaluate(triggerType, enrichedData, token, item, activationName);
+                        if (result instanceof Promise) {
+                            console.warn(`lancer-automations | evaluate for "${item.name}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
+                            result.then(val => { /* fire-and-forget */ });
+                            shouldTrigger = false;
+                        } else {
+                            shouldTrigger = result;
+                        }
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                            shouldTrigger = await evalFunc(triggerType, enrichedData, token, item, activationName);
+                            const result = evalFunc(triggerType, enrichedData, token, item, activationName);
+                            if (result instanceof Promise) {
+                                console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancel().`);
+                                shouldTrigger = false;
+                            } else {
+                                shouldTrigger = result;
+                            }
                         } catch (e) {
                             console.error(`lancer-automations | Error parsing custom evaluate for ${item.name}:`, e);
                         }
@@ -544,15 +615,33 @@ async function checkReactions(triggerType, data) {
                     }
 
                     if (shouldTrigger) {
-                        reactionQueue.push({
-                            triggerType,
-                            token,
-                            item,
-                            reaction,
-                            itemName: item.name,
-                            reactionName: activationName,
-                            triggerData: enrichedData
-                        });
+                        if (reaction.autoActivate) {
+                            try {
+                                if (reaction.forceSynchronous) {
+                                    activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
+                                } else {
+                                    (async () => {
+                                        try {
+                                            await activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
+                                        } catch (err) {
+                                            console.error(`lancer-automations | Error in async auto-activation:`, err);
+                                        }
+                                    })();
+                                }
+                            } catch (error) {
+                                console.error(`lancer-automations | Error auto-activating reaction:`, error);
+                            }
+                        } else {
+                            reactionQueue.push({
+                                triggerType,
+                                token,
+                                item,
+                                reaction,
+                                itemName: item.name,
+                                reactionName: activationName,
+                                triggerData: enrichedData
+                            });
+                        }
                     }
                 } catch (error) {
                     console.error(`lancer-automations | Error evaluating reaction ${item.name}:`, error);
@@ -563,34 +652,70 @@ async function checkReactions(triggerType, data) {
         if (hasValidActionBasedReaction) {
             const reactionName = actionBasedReaction.name;
             const reaction = actionBasedReaction.reaction;
-            const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
+            const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
-                reactionQueue.push({
-                    triggerType,
-                    token,
-                    item: null,
-                    reaction,
-                    itemName: reactionName,
-                    reactionName,
-                    isGeneral: true,
-                    triggerData: enrichedData
-                });
+                if (reaction.autoActivate) {
+                    try {
+                        if (reaction.forceSynchronous) {
+                            activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        } else {
+                            (async () => {
+                                try {
+                                    await activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                                } catch (err) {
+                                    console.error(`lancer-automations | Error in async auto-activation:`, err);
+                                }
+                            })();
+                        }
+                    } catch (error) {
+                        console.error(`lancer-automations | Error auto-activating general reaction:`, error);
+                    }
+                } else {
+                    reactionQueue.push({
+                        triggerType,
+                        token,
+                        item: null,
+                        reaction,
+                        itemName: reactionName,
+                        reactionName,
+                        isGeneral: true,
+                        triggerData: enrichedData
+                    });
+                }
             }
         }
 
         for (const [reactionName, reaction] of nonActionBasedReactions) {
-            const enrichedData = await evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
+            const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
-                reactionQueue.push({
-                    triggerType,
-                    token,
-                    item: null,
-                    reaction,
-                    itemName: reactionName,
-                    reactionName,
-                    isGeneral: true,
-                    triggerData: enrichedData
-                });
+                if (reaction.autoActivate) {
+                    try {
+                        if (reaction.forceSynchronous) {
+                            activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        } else {
+                            (async () => {
+                                try {
+                                    await activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                                } catch (err) {
+                                    console.error(`lancer-automations | Error in async auto-activation:`, err);
+                                }
+                            })();
+                        }
+                    } catch (error) {
+                        console.error(`lancer-automations | Error auto-activating general reaction:`, error);
+                    }
+                } else {
+                    reactionQueue.push({
+                        triggerType,
+                        token,
+                        item: null,
+                        reaction,
+                        itemName: reactionName,
+                        reactionName,
+                        isGeneral: true,
+                        triggerData: enrichedData
+                    });
+                }
             }
         }
     }
@@ -601,25 +726,8 @@ async function checkReactions(triggerType, data) {
 
     reactionDebounceTimer = setTimeout(async () => {
         if (reactionQueue.length > 0) {
-            const autoReactions = [];
-            const manualReactions = [];
-
-            for (const r of reactionQueue) {
-                if (r.reaction.autoActivate) {
-                    autoReactions.push(r);
-                } else {
-                    manualReactions.push(r);
-                }
-            }
-
-            for (const r of autoReactions) {
-                try {
-                    const { activateReaction } = await import('./reactions-ui.js');
-                    await activateReaction(r.triggerType, r.triggerData, r.token, r.item, r.reactionName, r.reaction, r.isGeneral);
-                } catch (error) {
-                    console.error(`lancer-automations | Error auto-activating reaction:`, error);
-                }
-            }
+            const manualReactions = [...reactionQueue];
+            reactionQueue.length = 0; // Clear the queue
 
             if (manualReactions.length > 0) {
                 const mode = game.settings.get('lancer-automations', 'reactionNotificationMode');
@@ -875,6 +983,14 @@ function registerReactionHooks() {
         handleTrigger('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
     });
 
+    Hooks.on('lancer-automations.onPreMove', (mover, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel, cancelTriggeredMove, changeTriggeredMove) => {
+        handleTrigger('onPreMove', { triggeringToken: mover, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel, cancelTriggeredMove, changeTriggeredMove });
+    });
+
+    Hooks.on('lancer-automations.onUpdate', (mover, document, change, options) => {
+        handleTrigger('onUpdate', { triggeringToken: mover, document, change, options });
+    });
+
     Hooks.on('lancer-automations.onTurnStart', (token) => {
         handleTrigger('onTurnStart', { triggeringToken: token });
     });
@@ -1099,6 +1215,24 @@ function registerSettings() {
         type: ReactionImport,
         restricted: true
     });
+
+    game.settings.register('lancer-automations', 'enablePathHexCalculation', {
+        name: 'Enable Path Hex Calculation',
+        hint: 'Calculates the token\'s exact path hexes during movement. Essential for accurate onPreMove and onMove interception. Works best with the custom elevationruler fork.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'debugPathHexCalculation', {
+        name: 'Debug Path Hex Calculation',
+        hint: 'Enable visual debugging of the extracted path hexes. Draws temporary circles on the map highlighting the calculated steps.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
 }
 
 async function handleSocketEvent({ action, payload }) {
@@ -1221,9 +1355,9 @@ function handleTokenMove(document, change, options, userId) {
     const hasYChange = change.y !== undefined && Math.abs(change.y - document.y) >= threshold;
 
     if (!hasElevationChange && !hasXChange && !hasYChange)
-        return;
+        return true;
     if (options.isUndo)
-        return;
+        return true;
 
     const token = canvas.tokens.get(document.id);
     if (!token)
@@ -1241,7 +1375,7 @@ function handleTokenMove(document, change, options, userId) {
     }
     distanceMoved = Math.round(distanceMoved / canvas.scene.grid.distance);
 
-    const isDrag = 'rulerSegment' in options;
+    const isDrag = 'rulerSegment' in options || options.isDrag;
     const isTeleport = !!options.teleport;
 
     // Check for Elevation Ruler free movement (not counted in cumulative boost tracking)
@@ -1251,7 +1385,18 @@ function handleTokenMove(document, change, options, userId) {
         isFreeMovement = true;
     }
 
-    const moveInfo = { isInvoluntary: !isDrag, isTeleport };
+    const moveInfo = {
+        isInvoluntary: !isDrag,
+        isTeleport,
+        pathHexes: options.lancerPathHexes || [],
+        isModified: options.isModified || false,
+        extraData: Object.keys(options).reduce((acc, key) => {
+            if (!['isDrag', 'isUndo', 'isModified', 'rulerSegment', 'teleport', 'animation'].includes(key)) {
+                acc[key] = options[key];
+            }
+            return acc;
+        }, {})
+    };
 
     // Update Cumulative (Total) Movement
     const prev = cumulativeMoveData.get(document.id) || 0;
@@ -1894,7 +2039,8 @@ Hooks.once('ready', async () => {
     if (game.user.isGM) {
         for (const tokenDoc of game.scenes.active?.tokens ?? []) {
             const actor = tokenDoc.actor;
-            if (!actor) continue;
+            if (!actor)
+                continue;
             if (actor.getFlag("lancer-automations", "ephemeral_bonuses")?.length)
                 await actor.setFlag("lancer-automations", "ephemeral_bonuses", []);
         }
@@ -1919,6 +2065,13 @@ Hooks.on('lancer.statusesReady', () => {
         id: "immovable",
         name: "Immovable",
         img: "modules/lancer-automations/icons/immovable.svg",
+    });
+
+
+    CONFIG.statusEffects.push({
+        id: "disengage",
+        name: "Disengage",
+        img: "modules/lancer-automations/icons/disengage.svg",
     });
 
     CONFIG.statusEffects.push({
@@ -1950,6 +2103,8 @@ Hooks.on('ready', () => {
         isFriendly,
         getActorMaxThreat,
         getMinGridDistance,
+        canEngage,
+        updateAllEngagements,
         registerDefaultItemReactions: registerExternalItemReactions,
         registerDefaultGeneralReactions: registerExternalGeneralReactions,
         clearMoveData,
@@ -1974,6 +2129,10 @@ Hooks.on('ready', () => {
         getMaxGroundHeightUnderToken,
         executeStatRoll,
         executeDamageRoll,
+        executeBasicAttack,
+        executeTechAttack,
+        executeSimpleActivation,
+        knockBackToken,
         chooseToken,
         placeZone,
         placeToken,
@@ -2088,9 +2247,6 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         }).render(true);
     });
 });
-
-Hooks.on('preUpdateToken', handleTokenMove);
-
 let previousCombatantId = null;
 
 Hooks.on('combatTurnChange', (combat, prior, current) => {
@@ -2287,4 +2443,253 @@ Hooks.on('renderSettings', (app, html) => {
     });
 });
 
+function drawMovementTrace(token, originalEndPos, newEndPos = null) {
+    const trace = new PIXI.Graphics();
+    const centerStart = token.center;
+    const gridSize = canvas.grid.size;
 
+    const drawFootprint = (targetX, targetY, lineColor, fillColor) => {
+        trace.lineStyle(3, lineColor, 0.8);
+        trace.beginFill(fillColor, 0.3);
+        if (isHexGrid()) {
+            const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
+            for (const o of offsets) {
+                drawHexAt(trace, o.col, o.row);
+            }
+        } else {
+            trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+        }
+        trace.endFill();
+    };
+
+    // Start Position
+    drawFootprint(token.document.x, token.document.y, 0xffff00, 0xffff00);
+
+    // Original End Position
+    const originalColor = newEndPos ? 0xff0000 : 0xff6400;
+    const centerOriginal = { x: originalEndPos.x + token.w/2, y: originalEndPos.y + token.h/2 };
+    drawFootprint(originalEndPos.x, originalEndPos.y, originalColor, originalColor);
+
+    // Line to Original End
+    trace.lineStyle(4, 0xffffff, 0.5); // white fading line
+    trace.moveTo(centerStart.x, centerStart.y);
+    trace.lineTo(centerOriginal.x, centerOriginal.y);
+
+    if (newEndPos) {
+        // New End Position
+        const centerNew = { x: newEndPos.x + token.w/2, y: newEndPos.y + token.h/2 };
+        drawFootprint(newEndPos.x, newEndPos.y, 0xff6400, 0xff6400);
+
+        // Line to New End
+        trace.lineStyle(4, 0xffffff, 1);
+        trace.moveTo(centerStart.x, centerStart.y);
+        trace.lineTo(centerNew.x, centerNew.y);
+    }
+
+    if (canvas.tokens && canvas.tokens.parent) {
+        canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
+    } else {
+        canvas.stage.addChild(trace);
+    }
+
+    return trace;
+}
+
+Hooks.on('preUpdateToken', (document, change, options, userId) => {
+    if (options.IgnorePreMove)
+        return true;
+
+    const threshold = canvas.grid.size / 2;
+    const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
+    const hasXChange = change.x !== undefined && Math.abs(change.x - document.x) >= threshold;
+    const hasYChange = change.y !== undefined && Math.abs(change.y - document.y) >= threshold;
+
+    if (!hasElevationChange && !hasXChange && !hasYChange)
+        return;
+    if (options.isUndo)
+        return;
+
+    const isDrag = 'rulerSegment' in options || options.isDrag;
+    if (isDrag) {
+        let cancelUpdate = false;
+        const token = canvas.tokens.get(document.id);
+
+        const startPos = { x: document.x, y: document.y };
+        const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
+        const elevationToMove = change.elevation ?? document.elevation;
+
+        let distanceToMove = 0;
+        if (canvas.grid.measurePath) {
+            distanceToMove = canvas.grid.measurePath([startPos, endPos]).distance;
+        } else {
+            distanceToMove = canvas.grid.measureDistance(startPos, endPos);
+        }
+        distanceToMove = Math.round(distanceToMove / canvas.scene.grid.distance);
+
+        const isTeleport = !!options.teleport;
+        const shouldCalculatePath = game.settings.get('lancer-automations', 'enablePathHexCalculation');
+        const moveInfo = {
+            isInvoluntary: !isDrag,
+            isTeleport,
+            isUndo: options.isUndo,
+            isModified: options.isModified,
+            pathHexes: shouldCalculatePath ? getMovementPathHexes(token, change) : []
+        };
+        options.lancerPathHexes = moveInfo.pathHexes;
+
+        const triggerData = {
+            token: token,
+            distanceToMove,
+            elevationToMove,
+            startPos,
+            endPos,
+            isDrag,
+            moveInfo,
+            cancel: () => {
+                cancelUpdate = true;
+            }
+        };
+
+        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true) => {
+            if (showCard) {
+                // Cancel immediately because we cannot block Foundry synchronously
+                triggerData.cancel();
+                cancelRulerDrag(token);
+
+                const trace = drawMovementTrace(token, endPos);
+
+                await startChoiceCard({
+                    mode: "or",
+                    title: "MOVEMENT CANCELED",
+                    description: reasonText,
+                    choices: [
+                        { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
+                        { text: "Ignore",
+                            icon: "fas fa-times",
+                            callback: async () => {
+                            // Re-submit the original movement with a flag to bypass preUpdateToken
+                                const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
+                                if (change.elevation !== undefined)
+                                    originalUpdate.elevation = change.elevation;
+                                token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+                            }}
+                    ]
+                });
+
+                if (trace.parent)
+                    trace.parent.removeChild(trace);
+                trace.destroy();
+            } else {
+                triggerData.cancel();
+                cancelRulerDrag(token);
+            }
+        };
+
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true) => {
+            const executeChange = () => {
+                setTimeout(() => {
+                    const updateData = { x: position.x, y: position.y };
+                    if (extraData.elevation !== undefined) {
+                        updateData.elevation = extraData.elevation;
+                    }
+                    const contextData = { isDrag: true, isUndo: false, isModified: true, ...extraData };
+                    token.document.update(updateData, contextData);
+                }, 50);
+            };
+
+            if (showCard) {
+                // Cancel immediately because we cannot block Foundry synchronously
+                triggerData.cancel();
+                cancelRulerDrag(token);
+
+                const trace = drawMovementTrace(token, endPos, position);
+
+                await startChoiceCard({
+                    mode: "or",
+                    title: "MOVEMENT REROUTED",
+                    description: reasonText,
+                    choices: [
+                        { text: "Confirm",
+                            icon: "fas fa-check",
+                            callback: async () => {
+                                executeChange();
+                            } },
+                        { text: "Ignore",
+                            icon: "fas fa-times",
+                            callback: async () => {
+                            // Re-submit the original movement with a flag to bypass preUpdateToken
+                                const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
+                                if (change.elevation !== undefined)
+                                    originalUpdate.elevation = change.elevation;
+                                token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+                            }}
+                    ]
+                });
+
+                if (trace.parent)
+                    trace.parent.removeChild(trace);
+                trace.destroy();
+            } else {
+                triggerData.cancel();
+                cancelRulerDrag(token);
+                executeChange();
+            }
+        };
+
+        Hooks.callAll('lancer-automations.onPreMove', token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, triggerData.cancel, triggerData.cancelTriggeredMove, triggerData.changeTriggeredMove);
+        if (cancelUpdate) {
+            return false;
+        }
+        handleTokenMove(token, change, options, userId);
+
+
+        // TEST CODE:
+        /* if (!options.isModified && moveInfo.pathHexes && moveInfo.pathHexes.length > 2) {
+            const historyStart = moveInfo.pathHexes.historyStartIndex || 1;
+            const validLen = moveInfo.pathHexes.length - historyStart;
+
+            if (validLen > 0) {
+                const randomIndex = historyStart + Math.floor(Math.random() * validLen);
+                const interceptPoint = moveInfo.pathHexes.getPathPositionAt(randomIndex);
+
+                if (interceptPoint) {
+                    triggerData.changeTriggeredMove(interceptPoint, { interceptIndex: randomIndex }, "Intercepted mid-movement!", true);
+                } else {
+                }
+            }
+        }*/
+
+        if (game.settings.get('lancer-automations', 'debugPathHexCalculation') && moveInfo.pathHexes.length > 0) {
+            try {
+                drawDebugPath(moveInfo.pathHexes);
+                setTimeout(() => {
+                    if (canvas.lancerDebugPath && !canvas.lancerDebugPath.destroyed) {
+                        canvas.lancerDebugPath.clear();
+                    }
+                }, 3000);
+            } catch (err) {
+                console.error("lancer-automations | Error drawing visual path debug:", err);
+            }
+        }
+    }
+    return true;
+});
+
+Hooks.on('updateToken', async function(document, change, options, userId) {
+    if (game.user.id !== userId)
+        return;
+    if (options.IgnorePreMove)
+        return;
+
+    const token = canvas.tokens.get(document.id);
+    if (!token)
+        return;
+
+    // Await the physical canvas animation to complete so distance
+    // evaluations on `onUpdate` use the token's final rendered position.
+    if ((change.x !== undefined || change.y !== undefined || change.elevation !== undefined) && document.object?.animationName) {
+        await CanvasAnimation.getAnimation(document.object.animationName)?.promise;
+    }
+
+    Hooks.callAll("lancer-automations.onUpdate", token, document, change, options);
+});

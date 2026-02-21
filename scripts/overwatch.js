@@ -452,3 +452,107 @@ export async function drawDistanceDebug() {
 
     return distance;
 }
+
+export function canEngage(token1, token2) {
+    if (!token1 || !token2)
+        return false;
+
+    if (token1.id === token2.id)
+        return false;
+
+    if (!token1.actor || !token2.actor)
+        return false;
+
+    // Must be hostile
+    if (!isHostile(token1, token2))
+        return false;
+
+    // Deployables cannot engage or be engaged
+    if (token1.actor.type === 'deployable' || token2.actor.type === 'deployable')
+        return false;
+
+    // Dead mechs cannot engage or be engaged
+    if (token1.actor.system.structure?.value === 0 || token2.actor.system.structure?.value === 0)
+        return false;
+
+    const api = game.modules.get('lancer-automations')?.api;
+
+    // Check statuses
+    const checkStatus = (token, statusName) => {
+        if (statusName === "hidden" && token.document.hidden)
+            return true;
+
+        if (api && api.findFlaggedEffectOnToken) {
+            if (api.findFlaggedEffectOnToken(token, statusName))
+                return true;
+        }
+
+        return token.actor.effects.some(e => e.statuses?.has(statusName) && !e.disabled);
+    };
+
+    const invalidStatuses = ["hidden", "disengage", "intangible"];
+
+    for (const status of invalidStatuses) {
+        if (checkStatus(token1, status) || checkStatus(token2, status))
+            return false;
+    }
+
+    return true;
+}
+
+export async function updateAllEngagements() {
+    if (!game.user.isGM)
+        return;
+
+    const api = game.modules.get('lancer-automations')?.api;
+
+    if (!api)
+        return;
+
+    const allTokens = canvas.tokens.placeables;
+
+    // Check who is currently flagged as engaged
+    const currentlyEngaged = new Set(
+        allTokens.filter(t => !!api.findFlaggedEffectOnToken(t, "lancer.statusIconsNames.engaged")).map(t => t.id)
+    );
+
+    const shouldBeEngaged = new Set();
+
+    for (let i = 0; i < allTokens.length; i++) {
+        const t1 = allTokens[i];
+
+        for (let j = i + 1; j < allTokens.length; j++) {
+            const t2 = allTokens[j];
+
+            if (shouldBeEngaged.has(t1.id) && shouldBeEngaged.has(t2.id))
+                continue;
+
+            if (canEngage(t1, t2)) {
+                if (getMinGridDistance(t1, t2) <= 1) {
+                    shouldBeEngaged.add(t1.id);
+                    shouldBeEngaged.add(t2.id);
+                }
+            }
+        }
+    }
+
+    for (const token of allTokens) {
+        const hasStatus = currentlyEngaged.has(token.id);
+        const needsStatus = shouldBeEngaged.has(token.id);
+
+        if (needsStatus && !hasStatus) {
+            await api.applyFlaggedEffectToTokens({
+                tokens: [token],
+                effectNames: ["lancer.statusIconsNames.engaged"],
+                notify: false,
+                useTokenAsOrigin: false
+            });
+        } else if (!needsStatus && hasStatus) {
+            await api.removeFlaggedEffectToTokens({
+                tokens: [token],
+                effectNames: ["lancer.statusIconsNames.engaged"],
+                notify: false
+            });
+        }
+    }
+}

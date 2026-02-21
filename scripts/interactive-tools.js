@@ -971,6 +971,21 @@ export function placeZone(casterToken, options = {}) {
 }
 
 /**
+ * Safely cancels a ruler drag in progress by removing the aborted destination from elevationruler measurement history.
+ * Should be called synchronously within a preUpdateToken hook.
+ * @param {Token} token
+ */
+export function cancelRulerDrag(token) {
+    if (!game.modules.get("elevationruler")?.active)
+        return;
+    const history = token.elevationruler?.measurementHistory;
+
+    if (history && history.length >= 1) {
+        history.pop();
+    }
+}
+
+/**
  * Interactive tool to apply knockback to tokens.
  * @param {Array<Token>} tokens - List of tokens to knock back
  * @param {number} distance - Max knockback distance in grid units

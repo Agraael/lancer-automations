@@ -4,10 +4,16 @@ import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } fro
 
 export function stringToFunction(str, args = []) {
     const trimmed = str.trim();
+    let fn;
     if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
-        return eval(`(${trimmed})`);
+        fn = eval(`(${trimmed})`);
+    } else {
+        fn = new Function(...args, trimmed);
     }
-    return new Function(...args, trimmed);
+    if (fn.constructor.name === 'AsyncFunction') {
+        console.warn(`lancer-automations | stringToFunction created an async function. Async evaluate functions cannot use cancel(). Consider making it synchronous.`);
+    }
+    return fn;
 }
 
 export function stringToAsyncFunction(str, args = []) {
@@ -75,7 +81,31 @@ export class ReactionManager {
     static getGeneralReactions() {
         const defaults = getDefaultGeneralReactionRegistry();
         const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
-        return { ...defaults, ...userSaved };
+
+        const result = {};
+        for (const [name, def] of Object.entries(defaults)) {
+            const saved = userSaved[name];
+            if (!saved) {
+                result[name] = def;
+            } else if (Array.isArray(def.reactions) && Array.isArray(saved.reactions)) {
+                // Group: apply per-sub enabled states without overriding function code
+                result[name] = {
+                    ...def,
+                    reactions: def.reactions.map((r, i) => {
+                        const savedSub = saved.reactions[i];
+                        return savedSub?.enabled !== undefined ? { ...r, enabled: savedSub.enabled } : r;
+                    })
+                };
+            } else {
+                result[name] = { ...def, ...saved };
+            }
+        }
+        // User-created general reactions not in defaults
+        for (const [name, saved] of Object.entries(userSaved)) {
+            if (!(name in defaults))
+                result[name] = saved;
+        }
+        return result;
     }
 
     static getGeneralReaction(name) {
@@ -405,7 +435,7 @@ export class ReactionConfig extends FormApplication {
 
             if (Array.isArray(reaction.reactions)) {
                 const validReactions = reaction.reactions.map((subReaction, index) => {
-                    const enabledState = subReaction.enabled ?? reaction.enabled;
+                    const enabledState = userSaved?.reactions?.[index]?.enabled ?? subReaction.enabled ?? reaction.enabled;
                     return startEnabled({
                         name: name,
                         lid: null,
@@ -618,12 +648,21 @@ export class ReactionConfig extends FormApplication {
 
         if (isGeneral) {
             const name = li.data("name");
+            const index = li.data("index");
             const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
-            if (userSaved[name]) {
-                userSaved[name].enabled = checked;
+            if (!userSaved[name])
+                userSaved[name] = {};
+
+            if (index !== undefined && index !== null && index !== '') {
+                if (!Array.isArray(userSaved[name].reactions))
+                    userSaved[name].reactions = [];
+                const i = parseInt(index);
+                if (!userSaved[name].reactions[i])
+                    userSaved[name].reactions[i] = {};
+                userSaved[name].reactions[i].enabled = checked;
             } else {
-                userSaved[name] = { enabled: checked };
+                userSaved[name].enabled = checked;
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
         } else {
@@ -735,7 +774,8 @@ export class ReactionEditor extends FormApplication {
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger }",
-            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: {isInvoluntary, isTeleport, isBoost, boostSet}, distanceToTrigger }",
+            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(), changeTriggeredMove(pos, extraData), distanceToTrigger }",
+            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger }",
             onTurnStart: "{ triggeringToken, distanceToTrigger }",
             onTurnEnd: "{ triggeringToken, distanceToTrigger }",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
@@ -755,7 +795,8 @@ export class ReactionEditor extends FormApplication {
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
             onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
-            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], distanceToTrigger }"
+            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], distanceToTrigger }",
+            onUpdate: "{ triggeringToken, document, change, options }"
         };
 
         const result = {
@@ -774,6 +815,7 @@ export class ReactionEditor extends FormApplication {
             triggerOther: reaction.triggerOther !== false,
             outOfCombat: reaction.outOfCombat === true,
             autoActivate: reaction.autoActivate || false,
+            forceSynchronous: reaction.forceSynchronous || false,
             onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
@@ -784,9 +826,10 @@ export class ReactionEditor extends FormApplication {
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
             onInit: typeof reaction.onInit === 'function' ? reaction.onInit.toString() : (reaction.onInit || ""),
-            actionType: reaction.actionType || (reaction.isReaction !== false ? "Reaction" : "Free Action"),
+            actionType: reaction.actionType || "Automation",
             consumesReaction: reaction.consumesReaction !== false,
             actionTypeOptions: {
+                "Automation": "Automation",
                 "Reaction": "Reaction",
                 "Free Action": "Free Action",
                 "Quick Action": "Quick Action",
@@ -794,7 +837,7 @@ export class ReactionEditor extends FormApplication {
                 "Protocol": "Protocol",
                 "Other": "Other"
             },
-            frequency: reaction.frequency || "1/Round",
+            frequency: reaction.frequency || "Unlimited",
             frequencyOptions: {
                 "1/Round": "1/Round",
                 "Unlimited": "Unlimited",
@@ -897,15 +940,29 @@ export class ReactionEditor extends FormApplication {
         const toggleConsumesReaction = () => {
             const type = actionTypeSelect.val();
             if (type === 'Reaction') {
-                consumesReactionContainer.show();
+                consumesReactionContainer.removeClass('hidden');
             } else {
-                consumesReactionContainer.hide();
+                consumesReactionContainer.addClass('hidden');
                 consumesReactionContainer.find('input[type="checkbox"]').prop('checked', false);
             }
         };
 
         actionTypeSelect.on('change', toggleConsumesReaction);
         toggleConsumesReaction();
+
+        const autoActivateCheckbox = html.find('input[name="autoActivate"]');
+        const forceSyncOption = html.find('.force-sync-option');
+        const syncAutoActivateLock = () => {
+            const checked = autoActivateCheckbox.prop('checked');
+            if (checked) {
+                actionTypeSelect.val('Automation');
+                actionTypeSelect.trigger('change');
+            }
+            actionTypeSelect.prop('disabled', checked);
+            forceSyncOption.toggle(checked);
+        };
+        autoActivateCheckbox.on('change', syncAutoActivateLock);
+        syncAutoActivateLock();
 
         const updatePreview = async (autoSelect = true) => {
             const lid = lidInput.val()?.trim();
@@ -1435,14 +1492,14 @@ export class ReactionEditor extends FormApplication {
     _getTriggerOptions(selected) {
         const options = [
             "onTurnStart", "onTurnEnd",
-            "onMove", "onKnockback",
+            "onPreMove", "onMove", "onKnockback",
             "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
             "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
             "onActivation",
             "onInitCheck", "onCheck",
             "onStatusApplied", "onStatusRemoved",
             "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
-            "onStructure", "onStress", "onDestroyed",
+            "onStructure", "onStress", "onDestroyed", "onUpdate",
         ];
         return options.reduce((obj, trigger) => {
             obj[trigger] = selected.includes(trigger);
@@ -1481,10 +1538,11 @@ export class ReactionEditor extends FormApplication {
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",
-                actionType: formData.actionType || "Reaction",
+                actionType: formData.actionType || "Automation",
                 frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true,
                 autoActivate: formData.autoActivate === true,
+                forceSynchronous: formData.forceSynchronous === true,
                 onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
@@ -1510,10 +1568,11 @@ export class ReactionEditor extends FormApplication {
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",
-                actionType: formData.actionType || "Reaction",
+                actionType: formData.actionType || "Automation",
                 frequency: formData.frequency || "1/Round",
                 consumesReaction: formData.consumesReaction === true,
                 autoActivate: formData.autoActivate === true,
+                forceSynchronous: formData.forceSynchronous === true,
                 onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",

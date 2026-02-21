@@ -25,7 +25,10 @@ export function getDefaultGeneralReactionRegistry() {
             triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
             effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
-            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            actionType: "Reaction",
+            outOfCombat: true,
+            frequency: "Other",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                 const api = game.modules.get('lancer-automations').api;
                 const mover = triggerData.triggeringToken;
                 if (!mover)
@@ -53,12 +56,12 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerDescription: "You are hit by an attack and damage has been rolled.",
                 effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 actionType: "Reaction",
-                frequency: "1/Round",
+                frequency: "Other",
                 isReaction: true,
                 consumesReaction: true,
                 triggerOther: true,
                 triggerSelf: false,
-                evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                     if (reactorToken.actor?.type !== 'mech')
                         return false;
                     if (triggerData.target?.id !== reactorToken.id)
@@ -95,7 +98,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationType: "code",
                 activationMode: "instead",
                 actionType: "Reaction",
-                frequency: "1/Round",
+                frequency: "Other",
                 isReaction: true,
                 consumesReaction: true,
                 triggerSelf: true,
@@ -141,7 +144,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerSelf: true,
                 triggerOther: false,
                 outOfCombat: true,
-                evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                     return triggerData.statusId === 'brace';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
@@ -183,7 +186,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,
-            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                 const isFlying = reactorToken.actor?.effects.some(e =>
                     e.statuses?.has('flying') && !e.disabled
                 );
@@ -273,58 +276,91 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Bolster": {
-            triggers: ["onActivation"],
-            onlyOnSourceMatch: true,
-            activationType: "code",
-            activationMode: "instead",
-            actionType: "Quick Action",
-            triggerSelf: true,
-            triggerOther: false,
-            autoActivate: true,
-            outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const targets = Array.from(game.user.targets);
-                if (targets.length === 0) {
-                    return ui.notifications.warn('No targets selected!');
+            reactions: [{
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                actionType: "Quick Action",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    const chosen = await api.chooseToken(reactorToken, {
+                        count: 1,
+                        range: reactorToken.actor.system.sensor_range,
+                        filter: (t) => !api.findFlaggedEffectOnToken(t, "lancer.statusIconsNames.bolster")
+                    });
+                    if (!chosen || chosen.length === 0)
+                        return;
+                    const targets = chosen;
+
+                    const validTargets = await api.applyFlaggedEffectToTokens({
+                        tokens: targets,
+                        effectNames: "lancer.statusIconsNames.bolster",
+                        note: "Bolster",
+                        duration: { label: 'end', turns: 1, rounds: 0 },
+                        useTokenAsOrigin: true
+                    });
+
+                    if (!validTargets || validTargets.length === 0)
+                        return;
+
+                    const weaponFx = game.modules.get("lancer-weapon-fx");
+                    if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                        return;
+
+                    await Sequencer.Preloader.preloadForClients([
+                        "modules/lancer-weapon-fx/soundfx/TechPrepare.ogg",
+                        "jb2a.zoning.inward.circle.once.bluegreen.01.01",
+                    ]);
+
+                    validTargets.forEach(target => {
+                        let sequence = new Sequence()
+                            .sound()
+                            .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
+                            .volume(weaponFx.api.getEffectVolume(0.7))
+                            .effect()
+                            .file("jb2a.zoning.inward.circle.once.bluegreen.01.01")
+                            .scaleToObject(1.5)
+                            .filter("Glow", { color: 0x36c11a })
+                            .playbackRate(1.3)
+                            .atLocation(target)
+                            .waitUntilFinished(-400);
+
+                        sequence.play();
+                    });
                 }
-
-                const api = game.modules.get('lancer-automations').api;
-                const validTargets = await api.applyFlaggedEffectToTokens({
-                    tokens: targets,
-                    effectNames: "lancer.statusIconsNames.bolster",
-                    note: "Bolster",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                    useTokenAsOrigin: true
-                });
-
-                if (!validTargets || validTargets.length === 0)
-                    return;
-
-                const weaponFx = game.modules.get("lancer-weapon-fx");
-                if (!weaponFx?.active || typeof Sequencer === 'undefined')
-                    return;
-
-                await Sequencer.Preloader.preloadForClients([
-                    "modules/lancer-weapon-fx/soundfx/TechPrepare.ogg",
-                    "jb2a.zoning.inward.circle.once.bluegreen.01.01",
-                ]);
-
-                validTargets.forEach(target => {
-                    let sequence = new Sequence()
-                        .sound()
-                        .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
-                        .volume(weaponFx.api.getEffectVolume(0.7))
-                        .effect()
-                        .file("jb2a.zoning.inward.circle.once.bluegreen.01.01")
-                        .scaleToObject(1.5)
-                        .filter("Glow", { color: 0x36c11a })
-                        .playbackRate(1.3)
-                        .atLocation(target)
-                        .waitUntilFinished(-400);
-
-                    sequence.play();
-                });
-            }
+            }, {
+                triggers: ["onInitCheck", "onCheck"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    return !!api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.bolster");
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    if (triggerType === 'onInitCheck') {
+                        await api.injectBonusToNextRoll(reactorToken.actor, {
+                            name: "Bolster",
+                            type: "accuracy",
+                            val: 2
+                        });
+                    } else if (triggerType === 'onCheck') {
+                        await api.removeFlaggedEffectToTokens({
+                            tokens: [reactorToken],
+                            effectNames: ["lancer.statusIconsNames.bolster"]
+                        });
+                    }
+                }
+            }]
         },
         "Fragment Signal": {
             triggers: ["onTechHit"],
@@ -357,30 +393,58 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Ram": {
-            triggers: ["onHit"],
-            onlyOnSourceMatch: true,
-            activationType: "code",
-            activationMode: "instead",
-            actionType: "Quick Action",
-            triggerSelf: true,
-            triggerOther: false,
-            autoActivate: true,
-            outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
-                const targets = triggerData.targets;
-                if (!targets || targets.length === 0)
-                    return;
-                const targetTokens = targets.map(t => t.target);
+            reactions: [{
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                actionType: "Quick Action",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    const chosen = await api.chooseToken(reactorToken, {
+                        count: 1,
+                        range: 1,
+                        filter: (t) => t.actor.system.size <= reactorToken.actor.system.size
+                    });
+                    if (!chosen || chosen.length === 0)
+                        return;
+                    chosen[0].setTarget(true, { releaseOthers: true, groupSelection: false });
+                    await api.executeBasicAttack(reactorToken.actor, {
+                        title: "Ram",
+                        attack_type: "Melee"
+                    });
+                }
+            }, {
+                triggers: ["onHit"],
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    const targets = triggerData.targets;
+                    if (!targets || targets.length === 0)
+                        return;
+                    const targetTokens = targets.map(t => t.target);
 
-                await api.applyFlaggedEffectToTokens({
-                    tokens: targetTokens,
-                    effectNames: ["prone"],
-                    note: "Ram by " + reactorToken.name,
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                    customOriginId: reactorToken.id
-                });
-            }
+                    await api.knockBackToken(targetTokens, 1, { triggeringToken: reactorToken });
+
+                    await api.applyFlaggedEffectToTokens({
+                        tokens: targetTokens,
+                        effectNames: ["prone"],
+                        note: "Ram by " + reactorToken.name,
+                        duration: { label: 'end', turns: 1, rounds: 0 },
+                        customOriginId: reactorToken.id
+                    });
+                }
+            }]
         },
         "Fall": {
             triggers: ["onTurnEnd"],
@@ -391,7 +455,7 @@ export function getDefaultGeneralReactionRegistry() {
             autoActivate: false,
             triggerSelf: true,
             triggerOther: false,
-            evaluate: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                 const terrainAPI = globalThis.terrainHeightTools;
                 if (!terrainAPI)
                     return false;
@@ -420,6 +484,96 @@ export function getDefaultGeneralReactionRegistry() {
                 const qol = game.modules.get('csm-lancer-qol');
                 await qol.exposed.executeFall(reactorToken);
             } : ""
+        },
+        "Engagement": {
+            triggers: ["onUpdate", "onPreMove"],
+            triggerDescription: "When a character moves",
+            effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",
+            isReaction: false,
+            consumesReaction: false,
+            autoActivate: true,
+            forceSynchronous: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                if (triggerType === "onUpdate") {
+                    const c = triggerData.change || {};
+                    if (c.x !== undefined || c.y !== undefined || c.elevation !== undefined) {
+                        return true;
+                    }
+                    return false;
+                }
+
+                if (triggerType === "onPreMove") {
+                    const moveInfo = triggerData.moveInfo;
+                    if (!moveInfo || !moveInfo.pathHexes || moveInfo.pathHexes.length === 0)
+                        return false;
+                    if (moveInfo.isTeleport || moveInfo.isModified)
+                        return false;
+
+                    const api = game.modules.get('lancer-automations')?.api;
+                    if (api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.hidden") ||
+                        api.findFlaggedEffectOnToken(reactorToken, "disengage") ||
+                        api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.intangible") ||
+                        reactorToken.actor?.effects.some(e => e.statuses?.has("hidden") || e.statuses?.has("disengage") || e.statuses?.has("intangible"))) {
+                        return false;
+                    }
+
+                    const isAlreadyEngaged = api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.engaged") ||
+                        reactorToken.actor?.effects.some(e => e.statuses?.has("engaged"));
+                    if (isAlreadyEngaged)
+                        return false;
+
+                    return true;
+                }
+                return false;
+            },
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: function (triggerType, triggerData, reactorToken, item, activationName) {
+                if (triggerType === "onUpdate") {
+                    const api = game.modules.get('lancer-automations')?.api;
+                    api.updateAllEngagements();
+                    return;
+                }
+
+                if (triggerType === "onPreMove") {
+                    const api = game.modules.get('lancer-automations')?.api;
+                    const moveInfo = triggerData.moveInfo;
+                    const allTokens = canvas.tokens.placeables;
+                    const mover = reactorToken;
+
+                    const historyStart = moveInfo.pathHexes.historyStartIndex || 0;
+                    let stoppedBy = null;
+                    let interceptIndex = -1;
+
+                    for (let i = historyStart + 1; i < moveInfo.pathHexes.length; i++) {
+                        const stepPos = moveInfo.pathHexes[i];
+
+                        for (const other of allTokens) {
+                            if (!api.canEngage(mover, other))
+                                continue;
+
+                            if (api.getMinGridDistance(mover, other, stepPos) <= 1) {
+                                if (other.actor?.system?.size >= mover.actor?.system?.size) {
+                                    stoppedBy = other;
+                                    interceptIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        if (stoppedBy)
+                            break;
+                    }
+
+                    if (stoppedBy && interceptIndex < moveInfo.pathHexes.length - 1) {
+                        const pt = moveInfo.pathHexes.getPathPositionAt(interceptIndex);
+                        const interceptPoint = pt || moveInfo.pathHexes[interceptIndex];
+                        triggerData.changeTriggeredMove(interceptPoint, { stopTokenId: stoppedBy.id }, `Stopped by Engagement (${stoppedBy.name})`, true);
+                    }
+                }
+            }
         }
     };
     return { ...builtInDefaults, ...externalGeneralReactions };

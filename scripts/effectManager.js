@@ -100,6 +100,7 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onTechAttack">On Tech Attack</option>
     <option value="onTechHit">On Tech Hit</option>
     <option value="onMove">On Move</option>
+    <option value="onPreMove">On Pre Move</option>
     <option value="onActivation">On Activation</option>
     <option value="onCheck">On Check</option>
     <option value="onHeat">On Heat</option>
@@ -116,6 +117,7 @@ const CONSUMPTION_FILTER_MAP = {
     onTechAttack: ['cfilter-itemLid'],
     onTechHit: ['cfilter-itemLid'],
     onMove: ['cfilter-boost'],
+    onPreMove: ['cfilter-boost'],
     onActivation: ['cfilter-actionName'],
     onCheck: ['cfilter-check']
 };
@@ -344,6 +346,9 @@ export async function executeEffectManager(options = {}) {
     {
         value: "onMove",
         label: "On Move"
+    }, {
+        value: "onPreMove",
+        label: "On Pre Move"
     }, {
         value: "onActivation",
         label: "On Activation"
@@ -1026,6 +1031,7 @@ export async function executeEffectManager(options = {}) {
                 onTechAttack: ['bonus-filter-itemLid'],
                 onTechHit: ['bonus-filter-itemLid'],
                 onMove: ['bonus-filter-boost', 'bonus-filter-distance'],
+                onPreMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onActivation: ['bonus-filter-actionName'],
                 onCheck: ['bonus-filter-check', 'bonus-filter-checkValues']
             };

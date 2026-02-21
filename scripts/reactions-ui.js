@@ -21,10 +21,18 @@ async function runCustomActivation({ activationType, source, triggerType, trigge
         if (code) {
             try {
                 if (typeof code === 'function') {
-                    await code(triggerType, triggerData, token, item, activationName);
+                    if (source.forceSynchronous) {
+                        code(triggerType, triggerData, token, item, activationName);
+                    } else {
+                        await code(triggerType, triggerData, token, item, activationName);
+                    }
                 } else if (typeof code === 'string') {
                     const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                    await fn(triggerType, triggerData, token, item, activationName);
+                    if (source.forceSynchronous) {
+                        fn(triggerType, triggerData, token, item, activationName);
+                    } else {
+                        await fn(triggerType, triggerData, token, item, activationName);
+                    }
                 }
             } catch (e) {
                 console.error(`lancer-automations | Error executing activation code:`, e);

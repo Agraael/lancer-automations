@@ -298,6 +298,168 @@ export function getOccupiedGridSpaces(excludeIds = []) {
     return occupied;
 }
 
+/**
+ * Extracts the full, continuous sequence of hex centers a Token passes through during a movement.
+ * Uses native getDirectPath and accounts for even-sized token alignment.
+ * @param {Token} token - The moving token
+ * @param {Object} change - The proposed coordinate change {x, y}
+ * @returns {Array<Array<Object>>} Array of steps, each containing an array of {x, y} hex centers occupied.
+ */
+export function getMovementPathHexes(token, change) {
+    let rawPoints = [];
+
+    const getCenterFromTopLeft = (x, y) => ({
+        x: x + (token.document.width * canvas.grid.size / 2),
+        y: y + (token.document.height * canvas.grid.size / 2)
+    });
+
+    // Try different ways Foundry stores path data during preUpdateToken
+    let rulerSegments = null;
+    let newMoveStartRayIndex = 0;
+    if (game.modules.get("elevationruler")?.active) {
+        const ruler = canvas.controls.ruler;
+        if (ruler && ruler.segments && ruler.segments.length > 0) {
+            rulerSegments = ruler.segments;
+            newMoveStartRayIndex = ruler.history ? ruler.history.length : 0;
+            rawPoints.push(rulerSegments[0].ray.A);
+            for (const seg of rulerSegments) {
+                rawPoints.push(seg.ray.B);
+            }
+        }
+    }
+
+    // Fallback to token._movement.points
+    if (rawPoints.length === 0 && token._movement && token._movement.points) {
+        const movePoints = token._movement.points;
+        rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y));
+        for (let i = 0; i < movePoints.length; i+=2) {
+            rawPoints.push(getCenterFromTopLeft(movePoints[i], movePoints[i+1]));
+        }
+    }
+
+    // Fallback 2: just A to B
+    if (rawPoints.length === 0) {
+        rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y));
+        rawPoints.push(getCenterFromTopLeft(change.x ?? token.document.x, change.y ?? token.document.y));
+    }
+
+    let pathHexes = [];
+    let seenHexes = new Set();
+
+    const getOffsetFromPx = (px, py) => {
+        if (canvas.grid.getOffset) {
+            const offset = canvas.grid.getOffset({ x: px, y: py });
+            return { col: offset.j, row: offset.i };
+        } else {
+            const pos = canvas.grid.grid.getGridPositionFromPixels(px, py);
+            return { col: pos[1], row: pos[0] };
+        }
+    };
+
+    for (let i = 0; i < rawPoints.length - 1; i++) {
+        const p1 = rawPoints[i];
+        const p2 = rawPoints[i + 1];
+
+        const alignOffset = { x: 0, y: 0 };
+        if (canvas.grid.isHexagonal && token.document.width % 2 === 0) {
+            if (canvas.grid.grid.columnar) {
+                alignOffset.x = canvas.grid.sizeX / 2;
+            } else {
+                alignOffset.y = canvas.grid.sizeY / 2;
+            }
+        }
+
+        const adjustedP1 = { x: p1.x + alignOffset.x, y: p1.y + alignOffset.y };
+        const adjustedP2 = { x: p2.x + alignOffset.x, y: p2.y + alignOffset.y };
+
+        let pathOffsets = null;
+        if (rulerSegments && rulerSegments[i] && rulerSegments[i]._calculatedPath && rulerSegments[i]._calculatedPath.length > 0) {
+            pathOffsets = rulerSegments[i]._calculatedPath;
+        } else {
+            pathOffsets = canvas.grid.getDirectPath([adjustedP1, adjustedP2]);
+        }
+
+        for (const step of pathOffsets) {
+            const stepHexCenter = getHexCenter(step.j, step.i);
+            const trueTokenCenter = { x: stepHexCenter.x - alignOffset.x, y: stepHexCenter.y - alignOffset.y };
+
+            const topLeft = {
+                x: trueTokenCenter.x - (token.document.width * canvas.grid.size / 2),
+                y: trueTokenCenter.y - (token.document.height * canvas.grid.size / 2)
+            };
+
+            const occupiedHexCenters = getOccupiedCenters(token, topLeft);
+
+            let newHexesInThisStep = [];
+            for (const center of occupiedHexCenters) {
+                const offset = getOffsetFromPx(center.x, center.y);
+                const hexKey = `${offset.row},${offset.col}`;
+
+                if (!seenHexes.has(hexKey)) {
+                    seenHexes.add(hexKey);
+                    newHexesInThisStep.push({ x: center.x, y: center.y });
+                }
+            }
+
+            if (newHexesInThisStep.length > 0) {
+                pathHexes.push({
+                    x: topLeft.x,
+                    y: topLeft.y,
+                    cx: trueTokenCenter.x,
+                    cy: trueTokenCenter.y,
+                    hexes: newHexesInThisStep,
+                    isHistory: i < newMoveStartRayIndex
+                });
+            }
+        }
+    }
+
+    // Find the first index that is NOT history
+    pathHexes.historyStartIndex = pathHexes.findIndex(step => !step.isHistory);
+    if (pathHexes.historyStartIndex === -1)
+        pathHexes.historyStartIndex = 0;
+
+    pathHexes.getPathPositionAt = (index) => {
+        if (index < 0 || index >= pathHexes.length)
+            return null;
+        const step = pathHexes[index];
+        return snapTokenCenter(token, { x: step.cx, y: step.cy });
+    };
+
+    return pathHexes;
+}
+
+/**
+ * Draws a visual debug layout of a token's movement path using PIXI Graphics.
+ * @param {Array<Array<Object>>} pathHexes - The extracted path data
+ */
+export function drawDebugPath(pathHexes) {
+    if (!canvas.lancerDebugPath) {
+        canvas.lancerDebugPath = new PIXI.Graphics();
+        canvas.stage.addChild(canvas.lancerDebugPath);
+    } else {
+        canvas.lancerDebugPath.clear();
+    }
+
+    const g = canvas.lancerDebugPath;
+
+    for (let i = 0; i < pathHexes.length; i++) {
+        const stepData = pathHexes[i];
+        const stepColor = Math.floor(Math.random() * 0xFFFFFF);
+
+        g.lineStyle(4, stepColor);
+
+        for (let center of stepData.hexes) {
+            let fillAlpha = stepData.isHistory ? 0.2 : 0.4;
+            let radius = stepData.isHistory ? canvas.grid.size / 6 : canvas.grid.size / 3;
+
+            g.beginFill(stepColor, fillAlpha);
+            g.drawCircle(center.x, center.y, radius);
+            g.endFill();
+        }
+    }
+}
+
 export function getDistanceTokenToPoint(point, token) {
     // Calculate center of the token
     const tokenCenterOffset = getTokenCenterOffset(token);
