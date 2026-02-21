@@ -5,10 +5,10 @@
 - [Accessing the API](#accessing-the-api)
 - [Exposed Functions](#exposed-functions)
   - **Effect Management**: [`applyFlaggedEffectToTokens`](#applyflaggedeffecttotokensoptions-extraoptions), [`removeFlaggedEffectToTokens`](#removeflaggedeffecttotokensoptions), [`findFlaggedEffectOnToken`](#findflaggedeffectontokentoken-identifier), [`consumeEffectCharge`](#consumeeffectchargeeffect), [`executeEffectManager`](#executeeffectmanageroptions)
-  - **Global Bonuses**: [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options), [`removeGlobalBonus`](#removeglobalbonusactor-bonusid-skipeffectremoval), [`getGlobalBonuses`](#getglobalbonusesactor), [`injectBonusToNextRoll`](#injectbonustonextrollactor-bonus)
+  - **Global Bonuses**: [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options), [`removeGlobalBonus`](#removeglobalbonusactor-bonusid-skipeffectremoval), [`getGlobalBonuses`](#getglobalbonusesactor), [`addConstantBonus`](#addconstantbonusactor-bonusdata), [`removeConstantBonus`](#removeconstantbonusactor-bonusid), [`getConstantBonuses`](#getconstantbonusesactor), [`injectBonusToNextRoll`](#injectbonustonextrollactor-bonus)
   - **Activation Registration**: [`registerDefaultItemReactions`](#registerdefaultitemreactionsreactions), [`registerDefaultGeneralReactions`](#registerdefaultgeneralreactionsreactions)
-  - **Spatial / Distance**: [`getActorMaxThreat`](#getactormaxthreatactor), [`getTokenDistance`](#gettokendistancetoken1-token2), [`isHostile`](#ishostiletoken1-token2), [`isFriendly`](#isfriendlytoken1-token2)
-  - **Utilities**: [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata), [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata), [`clearMoveData`](#clearmovedatatokendocid), [`getCumulativeMoveData`](#getcumulativemovedatatokendocid), [`getTokenCells`](#gettokencellstoken), [`getMaxGroundHeightUnderToken`](#getmaxgroundheightundertokentoken-terrainapi), [`openItemBrowser`](#openitembrowsertargetinput), [`drawThreatDebug`](#drawthreatdebugtoken), [`drawDistanceDebug`](#drawdistancedebug), [`knockBackToken`](#knockbacktokentokens-distance-options), [`revertMovement`](#revertmovementtoken-destination), [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
+  - **Spatial / Distance**: [`getActorMaxThreat`](#getactormaxthreatactor), [`getTokenDistance`](#gettokendistancetoken1-token2), [`getMinGridDistance`](#getmingriddistancetoken1-token2-overridepos1), [`isHostile`](#ishostiletoken1-token2), [`isFriendly`](#isfriendlytoken1-token2)
+  - **Utilities**: [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata), [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata), [`executeBasicAttack`](#executebasicattackactor-options-extradata), [`executeTechAttack`](#executetechattackactor-options-extradata), [`executeSimpleActivation`](#executesimpleactivationactor-options-extradata), [`clearMoveData`](#clearmovedatatokendocid), [`getCumulativeMoveData`](#getcumulativemovedatatokendocid), [`clearMovementHistory`](#clearmovementhistorytokens-revert), [`getTokenCells`](#gettokencellstoken), [`getMaxGroundHeightUnderToken`](#getmaxgroundheightundertokentoken-terrainapi), [`openItemBrowser`](#openitembrowsertargetinput), [`drawThreatDebug`](#drawthreatdebugtoken), [`drawDistanceDebug`](#drawdistancedebug), [`knockBackToken`](#knockbacktokentokens-distance-options), [`revertMovement`](#revertmovementtoken-destination), [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
   - **Interactive Tools**: [`chooseToken`](#choosetokencastertoken-options), [`placeZone`](#placezonecastertoken-options), [`placeToken`](#placetokenoptions), [`startChoiceCard`](#startchoicecardoptions), [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options), [`pickupWeaponToken`](#pickupweapontokenownertoken), [`resolveDeployable`](#resolvedeployabledeployableorlid-owneractor), [`placeDeployable`](#placedeployableoptions), [`beginDeploymentCard`](#begindeploymentcardoptions), [`openDeployableMenu`](#opendeployablemenuactor), [`recallDeployable`](#recalldeployableownertoken), [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon), [`getGridDistance`](#getgriddistancepos1-pos2), [`drawRangeHighlight`](#drawrangehighlightcastertoken-range-color-alpha)
 - [Trigger Types & Data](#trigger-types--data)
 - [Evaluate Function](#evaluate-function)
@@ -173,6 +173,40 @@ Get all global bonuses for an actor.
 
 ---
 
+#### `addConstantBonus(actor, bonusData)`
+
+Add a static, persistent bonus to an actor without an attached status effect.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to add the bonus to |
+| `bonusData` | `Object` | The bonus object (same properties as `addGlobalBonus`) |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `getConstantBonuses(actor)`
+
+Get all constant bonuses for an actor.
+
+**Returns:** `Array<Object>` — array of bonus data objects.
+
+---
+
+#### `removeConstantBonus(actor, bonusId)`
+
+Remove a constant bonus by its ID.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to remove the bonus from |
+| `bonusId` | `string` | The ID of the bonus to remove |
+
+**Returns:** `Promise<void>`
+
+---
+
 #### `injectBonusToNextRoll(actor, bonus)`
 
 Inject a one-time bonus (ephemeral) into the next applicable roll the actor makes. The bonus is automatically consumed upon opening the roll dialog.
@@ -228,6 +262,20 @@ Get the highest Threat range value across all of an actor's weapons.
 #### `getTokenDistance(token1, token2)`
 
 Get the grid distance between two tokens (in spaces). Handles multi-cell tokens on both square and hex grids.
+
+**Returns:** `number`
+
+---
+
+#### `getMinGridDistance(token1, token2, overridePos1)`
+
+Calculate the shortest grid distance between two tokens, natively taking token size and shape into account.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token1` | `Token` | *required* | First token (measuring from) |
+| `token2` | `Token` | *required* | Second token (measuring to) |
+| `overridePos1` | `{x, y}` | `null` | Optional origin coordinate override for token1 |
 
 **Returns:** `number`
 
@@ -313,6 +361,48 @@ await api.executeDamageRoll(attacker, targets, 5, "kinetic", "Test Roll", { ap: 
 
 ---
 
+#### `executeBasicAttack(actor, options, extraData)`
+
+Perform a Basic Attack flow.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor performing the attack |
+| `options` | `Object` | `{}` | Item/flow options |
+| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
+
+**Returns:** `Promise<boolean>`
+
+---
+
+#### `executeTechAttack(actor, options, extraData)`
+
+Perform a Tech Attack flow (Invade).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor performing the attack |
+| `options` | `Object` | `{}` | Item/flow options |
+| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
+
+**Returns:** `Promise<boolean>`
+
+---
+
+#### `executeSimpleActivation(actor, options, extraData)`
+
+Perform a Simple Activation flow (useful for traits/features).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor activating the item |
+| `options` | `Object` | `{}` | Item/flow options |
+| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
+
+**Returns:** `Promise<boolean>`
+
+---
+
 #### `clearMoveData(tokenDocId)`
 
 Reset cumulative movement data for a token. Automatically called at the start of each turn.
@@ -324,6 +414,19 @@ Reset cumulative movement data for a token. Automatically called at the start of
 Get the current cumulative movement distance for a token this turn.
 
 **Returns:** `number` (0 if no data)
+
+---
+
+#### `clearMovementHistory(tokens, revert)`
+
+Clear the `elevationruler` movement history for tokens to permanently cancel ongoing path measurements.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tokens` | `Array<Token>` | *required* | Tokens to clear |
+| `revert` | `boolean` | `false` | Whether to also revert movement visually to start |
+
+**Returns:** `Promise<void>`
 
 ---
 
@@ -1236,6 +1339,7 @@ The full structure of an activation config object, used by both item-based and g
     // Trigger configuration
     triggers: ["onMove", "onDamage"],   // Which triggers to listen for
     enabled: true,                       // Whether this activation is active
+    forceSynchronous: false,             // Forces the trigger flow to wait for fully synchronous resolution before resuming (e.g. for `onPreMove` intercepts)
 
     // Display
     triggerDescription: "When a hostile moves within range",

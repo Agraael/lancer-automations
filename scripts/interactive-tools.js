@@ -975,13 +975,28 @@ export function placeZone(casterToken, options = {}) {
  * Should be called synchronously within a preUpdateToken hook.
  * @param {Token} token
  */
-export function cancelRulerDrag(token) {
+export function cancelRulerDrag(token, moveInfo = null) {
     if (!game.modules.get("elevationruler")?.active)
         return;
     const history = token.elevationruler?.measurementHistory;
 
     if (history && history.length >= 1) {
-        history.pop();
+        // Find the most recent waypoint in history that matches the token's exact current position.
+        // elevationruler's history stores bounding center coordinates (x, y) for waypoints.
+        const center = token.getCenterPoint({ x: token.document.x, y: token.document.y });
+        // Find the last index that matches the current center (-1 if not found)
+        const matchIndex = history.findLastIndex(pt =>
+            Math.abs(pt.x - center.x) < 2 && Math.abs(pt.y - center.y) < 2
+        );
+
+        if (matchIndex !== -1) {
+            // Truncate the history down to the matched point (inclusive)
+            // This natively strips all 'future' queued waypoints from a multi-segment drag
+            history.length = matchIndex + 1;
+        } else {
+            // Fallback for when current position isn't explicitly in history
+            history.pop();
+        }
     }
 }
 

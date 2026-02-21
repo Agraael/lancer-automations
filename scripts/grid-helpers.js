@@ -414,10 +414,41 @@ export function getMovementPathHexes(token, change) {
         }
     }
 
-    // Find the first index that is NOT history
-    pathHexes.historyStartIndex = pathHexes.findIndex(step => !step.isHistory);
-    if (pathHexes.historyStartIndex === -1)
-        pathHexes.historyStartIndex = 0;
+    // Identify true historyStartIndex by matching the token's current center to pathHexes
+    const startCenter = {
+        x: token.document.x + (token.document.width * canvas.grid.size / 2),
+        y: token.document.y + (token.document.height * canvas.grid.size / 2)
+    };
+
+    let matchIndex = -1;
+    for (let i = 0; i < pathHexes.length; i++) {
+        // Skip steps already natively flagged as history from previous rounds
+        if (pathHexes[i].isHistory) {
+            continue;
+        }
+
+        const dist = Math.hypot(pathHexes[i].cx - startCenter.x, pathHexes[i].cy - startCenter.y);
+        // Take the FIRST match within half a grid square to avoid jumping ahead on looping paths
+        if (dist <= canvas.grid.size / 2) {
+            matchIndex = i;
+            break;
+        }
+    }
+
+    if (matchIndex !== -1) {
+        pathHexes.historyStartIndex = matchIndex;
+    } else {
+        // Fallback
+        pathHexes.historyStartIndex = pathHexes.findIndex(step => !step.isHistory);
+        if (pathHexes.historyStartIndex === -1)
+            pathHexes.historyStartIndex = 0;
+    }
+
+    // Force all steps before historyStartIndex to be history,
+    // overriding elevationruler's global assessment.
+    for (let i = 0; i < pathHexes.length; i++) {
+        pathHexes[i].isHistory = i < pathHexes.historyStartIndex;
+    }
 
     pathHexes.getPathPositionAt = (index) => {
         if (index < 0 || index >= pathHexes.length)

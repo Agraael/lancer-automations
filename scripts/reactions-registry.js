@@ -544,11 +544,12 @@ export function getDefaultGeneralReactionRegistry() {
                     const allTokens = canvas.tokens.placeables;
                     const mover = reactorToken;
 
-                    const historyStart = moveInfo.pathHexes.historyStartIndex || 0;
+
+                    const historyStart = Math.max(1, moveInfo.pathHexes.historyStartIndex);
                     let stoppedBy = null;
                     let interceptIndex = -1;
 
-                    for (let i = historyStart + 1; i < moveInfo.pathHexes.length; i++) {
+                    for (let i = historyStart; i < historyStart + triggerData.distanceToMove; i++) {
                         const stepPos = moveInfo.pathHexes[i];
 
                         for (const other of allTokens) {

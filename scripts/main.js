@@ -2566,7 +2566,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             if (showCard) {
                 // Cancel immediately because we cannot block Foundry synchronously
                 triggerData.cancel();
-                cancelRulerDrag(token);
+                cancelRulerDrag(token, moveInfo);
 
                 const trace = drawMovementTrace(token, endPos);
 
@@ -2593,7 +2593,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 trace.destroy();
             } else {
                 triggerData.cancel();
-                cancelRulerDrag(token);
+                cancelRulerDrag(token, moveInfo);
             }
         };
 
@@ -2612,7 +2612,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             if (showCard) {
                 // Cancel immediately because we cannot block Foundry synchronously
                 triggerData.cancel();
-                cancelRulerDrag(token);
+                cancelRulerDrag(token, moveInfo);
 
                 const trace = drawMovementTrace(token, endPos, position);
 
@@ -2643,7 +2643,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 trace.destroy();
             } else {
                 triggerData.cancel();
-                cancelRulerDrag(token);
+                cancelRulerDrag(token, moveInfo);
                 executeChange();
             }
         };
