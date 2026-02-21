@@ -423,7 +423,7 @@ async function executeSimpleActivation(actor, options = {}, extraData = {}) {
 
 function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
     if (!isInCombat && !reaction.outOfCombat) {
-        if (token?.isOwner || game.user.isGM)
+        if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered — out of combat.`);
         return null;
     }
@@ -535,7 +535,7 @@ function checkReactions(triggerType, data) {
                 }
 
                 if (!isInCombat && !reaction.outOfCombat) {
-                    if (token.isOwner || game.user.isGM)
+                    if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered — out of combat.`);
                     continue;
                 }
@@ -1102,6 +1102,7 @@ function registerReactionHooks() {
 }
 
 function registerSettings() {
+    // ── Core ──
     game.settings.register('lancer-automations', 'reactionNotificationMode', {
         name: 'Notification Mode',
         hint: 'Who should see the activation popup? (GM/Owner)',
@@ -1116,15 +1117,25 @@ function registerSettings() {
         default: "both"
     });
 
-    game.settings.register('lancer-automations', 'statRollTargeting', {
-        name: 'Enable Stat Roll Target Selection',
-        hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
-        scope: 'client',
+    game.settings.register('lancer-automations', 'consumeReaction', {
+        name: 'Consume Activation on Activate',
+        hint: 'Automatically reduce reaction count by 1 when activating an activation.',
+        scope: 'world',
         config: true,
         type: Boolean,
-        default: false
+        default: true
     });
 
+    game.settings.register('lancer-automations', 'showBonusHudButton', {
+        name: 'Token HUD Bonus Button',
+        hint: 'Show a button on the Token HUD to open the Lancer Effect Manager.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    // ── Features ──
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
@@ -1143,10 +1154,27 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'statRollTargeting', {
+        name: 'Enable Stat Roll Target Selection',
+        hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false
+    });
 
-    game.settings.register('lancer-automations', 'consumeReaction', {
-        name: 'Consume Activation on Activate',
-        hint: 'Automatically reduce reaction count by 1 when activating an activation.',
+    game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
+        name: 'Treat Generic Prints as Activations',
+        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'enablePathHexCalculation', {
+        name: 'Enable Path Hex Calculation',
+        hint: 'Calculates the token\'s exact path hexes during movement. Essential for accurate onPreMove and onMove interception. Works best with my Elevation Ruler fork.',
         scope: 'world',
         config: true,
         type: Boolean,
@@ -1155,40 +1183,42 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'experimentalBoostDetection', {
         name: 'Experimental Boost Detection (WIP)',
-        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or my own fork. Enable "Debug Boost Detection" to test. Use game.modules.get("lancer-automations").api.clearMoveData(tokenDocId) to manually reset cumulative data.',
+        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or my own fork.',
         scope: 'world',
         config: true,
         type: Boolean,
         default: false
     });
 
+    // ── Debug ──
     game.settings.register('lancer-automations', 'debugBoostDetection', {
-        name: 'Debug Boost Detection',
-        hint: 'Show UI notifications when boost detection triggers (for testing purposes).',
+        name: 'Debug: Boost Detection',
+        hint: 'Show UI notifications when boost detection triggers.',
         scope: 'world',
         config: true,
         type: Boolean,
         default: false
     });
 
-    game.settings.register('lancer-automations', 'showBonusHudButton', {
-        name: 'Token HUD Bonus Button',
-        hint: 'Show a button on the Token HUD to open the Lancer Effect Manager.',
-        scope: 'world',
-        config: true,
-        type: Boolean,
-        default: true
-    });
-
-    game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
-        name: 'Treat Generic Prints as Activations',
-        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows. This might cause issues idk.',
+    game.settings.register('lancer-automations', 'debugPathHexCalculation', {
+        name: 'Debug: Path Hex Calculation',
+        hint: 'Draw temporary circles on the map highlighting the calculated path hex steps.',
         scope: 'world',
         config: true,
         type: Boolean,
         default: false
     });
 
+    game.settings.register('lancer-automations', 'debugOutOfCombat', {
+        name: 'Debug: Out of Combat Warnings',
+        hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
+    // ── Data Management ──
     game.settings.registerMenu('lancer-automations', 'resetSettings', {
         name: 'Reset Module',
         label: 'Reset to Defaults',
@@ -1214,24 +1244,6 @@ function registerSettings() {
         icon: 'fas fa-file-import',
         type: ReactionImport,
         restricted: true
-    });
-
-    game.settings.register('lancer-automations', 'enablePathHexCalculation', {
-        name: 'Enable Path Hex Calculation',
-        hint: 'Calculates the token\'s exact path hexes during movement. Essential for accurate onPreMove and onMove interception. Works best with the custom elevationruler fork.',
-        scope: 'world',
-        config: true,
-        type: Boolean,
-        default: true
-    });
-
-    game.settings.register('lancer-automations', 'debugPathHexCalculation', {
-        name: 'Debug Path Hex Calculation',
-        hint: 'Enable visual debugging of the extracted path hexes. Draws temporary circles on the map highlighting the calculated steps.',
-        scope: 'world',
-        config: true,
-        type: Boolean,
-        default: false
     });
 }
 
