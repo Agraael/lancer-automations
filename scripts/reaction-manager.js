@@ -1527,6 +1527,10 @@ export class ReactionEditor extends FormApplication {
         if (formData['dispositionFilter.secret'])
             dispositionFilter.push('secret');
 
+        const isSourceMatch = Array.isArray(formData.onlyOnSourceMatch)
+            ? formData.onlyOnSourceMatch.some(v => v === true || v === "on")
+            : (formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on");
+
         if (isGeneral) {
             const name = formData.name;
             if (!name)
@@ -1543,7 +1547,7 @@ export class ReactionEditor extends FormApplication {
                 consumesReaction: formData.consumesReaction === true,
                 autoActivate: formData.autoActivate === true,
                 forceSynchronous: formData.forceSynchronous === true,
-                onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
+                onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",
@@ -1573,7 +1577,7 @@ export class ReactionEditor extends FormApplication {
                 consumesReaction: formData.consumesReaction === true,
                 autoActivate: formData.autoActivate === true,
                 forceSynchronous: formData.forceSynchronous === true,
-                onlyOnSourceMatch: formData.onlyOnSourceMatch === true,
+                onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
                 activationMacro: formData.activationMacro || "",

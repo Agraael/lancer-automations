@@ -580,13 +580,16 @@ export function findFlaggedEffectOnToken(token, identifier) {
     }
 
     if (typeof identifier === 'string') {
+        const identifierLower = identifier.toLowerCase().split('.').pop();
         // Check for effect by name or label (V12 uses name, older might use label)
         // Also check if it matches the flag 'effect' value which is robust
         return actor.effects.find(e =>
             e.name === identifier ||
             e.label === identifier ||
             e.getFlag('lancer-automations', 'effect') === identifier ||
-            e.getFlag('csm-lancer-qol', 'effect') === identifier
+            e.getFlag('csm-lancer-qol', 'effect') === identifier ||
+            e.name?.toLowerCase().includes(identifierLower) ||
+            e.statuses?.has(identifierLower)
         );
     }
 

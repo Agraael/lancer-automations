@@ -347,10 +347,16 @@ function _updateInfoCard(cardEl, type, data) {
             const activeClass = isActive ? "la-kb-active" : "";
             const statusIcon = isMoved ? '<i class="fas fa-check" style="color:var(--lancer-color-green)"></i>' : '<i class="fas fa-arrow-right"></i>';
 
+            let immovableIcon = "";
+            const api = game.modules.get('lancer-automations')?.api;
+            if (api?.findFlaggedEffectOnToken(token, "immovable")) {
+                immovableIcon = '<i class="cci cci-immovable" title="Immovable" style="color:#ff6400; margin-left: 8px;"></i>';
+            }
+
             const itemHtml = `
                 <div class="la-knockback-item ${statusClass} ${activeClass}" data-token-index="${idx}">
                     <img src="${token.document.texture.src}" class="la-kb-img" style="width:24px; height:24px; object-fit:contain;">
-                    <span class="la-kb-name">${token.name}</span>
+                    <span class="la-kb-name" style="display:flex; align-items:center;">${token.name}${immovableIcon}</span>
                     <span class="la-kb-status">${statusIcon}</span>
                 </div>`;
             listEl.append(itemHtml);
