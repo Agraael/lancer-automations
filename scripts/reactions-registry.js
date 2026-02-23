@@ -22,8 +22,8 @@ export function getDefaultGeneralReactionRegistry() {
     const builtInDefaults = {
         "Overwatch": {
             triggers: ["onMove"],
-            triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
-            effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
+            //triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
+            //effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
             actionType: "Reaction",
             outOfCombat: true,
@@ -163,11 +163,11 @@ export function getDefaultGeneralReactionRegistry() {
                     } else if (triggerType === 'onStatusRemoved') {
                         await api.removeConstantBonus(reactorToken.actor, BRACE_BONUS_ID);
 
-                        const throttleStatus = CONFIG.statusEffects.find(s => s.id === 'throttled');
-                        if (throttleStatus) {
+                        const laggingStatus = CONFIG.statusEffects.find(s => s.id === 'lagging');
+                        if (laggingStatus) {
                             await api.applyFlaggedEffectToTokens({
                                 tokens: [reactorToken],
-                                effectNames: throttleStatus.id,
+                                effectNames: laggingStatus.id,
                                 duration: { label: 'start', turns: 1, rounds: 0 },
                                 useTokenAsOrigin: true
                             });
@@ -447,43 +447,80 @@ export function getDefaultGeneralReactionRegistry() {
             }]
         },
         "Fall": {
-            triggers: ["onTurnEnd"],
-            triggerDescription: "At the end of your turn, if you are airborne without Flying or have Flying but haven't moved at least 1 space, you begin falling.",
-            effectDescription: "You fall, taking AP kinetic damage based on the distance fallen (3 damage per 3 spaces, max 9).",
-            isReaction: false,
-            consumesReaction: false,
-            autoActivate: false,
-            triggerSelf: true,
-            triggerOther: false,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
-                const terrainAPI = globalThis.terrainHeightTools;
-                if (!terrainAPI)
-                    return false;
+            reactions: [{
+                triggers: ["onTurnEnd"],
+                triggerDescription: "At the end of your turn, if you are airborne without Flying or have Flying but haven't moved at least 1 space, you begin falling.",
+                effectDescription: "You fall, taking AP kinetic damage based on the distance fallen (3 damage per 3 spaces, max 9).",
+                isReaction: false,
+                consumesReaction: false,
+                autoActivate: false,
+                triggerSelf: true,
+                triggerOther: false,
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const terrainAPI = globalThis.terrainHeightTools;
+                    const api = game.modules.get('lancer-automations').api;
+                    const elevation = reactorToken.document?.elevation || 0;
+                    const maxGroundHeight = terrainAPI ? api.getMaxGroundHeightUnderToken(reactorToken, terrainAPI) : 0;
 
-                const api = game.modules.get('lancer-automations').api;
-                const elevation = reactorToken.document?.elevation || 0;
-                const maxGroundHeight = api.getMaxGroundHeightUnderToken(reactorToken, terrainAPI);
+                    if (elevation <= maxGroundHeight)
+                        return false;
 
-                if (elevation <= maxGroundHeight)
-                    return false;
+                    const isFlying = !!api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.flying") || !!api.findFlaggedEffectOnToken(reactorToken, "flying");
 
-                const isFlying = reactorToken.actor?.effects.some(e =>
-                    e.statuses?.has('flying') && !e.disabled
-                );
+                    if (!isFlying)
+                        return true;
 
-                if (!isFlying)
-                    return true;
+                    const movedDistance = api.getCumulativeMoveData(reactorToken.document.id);
+                    return movedDistance < 1;
+                },
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    const api = game.modules.get('lancer-automations').api;
+                    if (api.executeFall) {
+                        await api.executeFall(reactorToken);
+                    }
+                }
+            }, {
+                triggers: ["onDamage"],
+                isReaction: false,
+                onlyOnSourceMatch: true,
+                consumesReaction: false,
+                autoActivate: true,
+                triggerSelf: true,
+                triggerOther: false,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                    reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
-                const movedDistance = api.getCumulativeMoveData(reactorToken.document.id);
-                return movedDistance < 1;
-            },
-            activationType: hasExecuteFall ? "code" : "flow",
-            activationMode: hasExecuteFall ? "instead" : "after",
-            activationMacro: "",
-            activationCode: hasExecuteFall ? async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const qol = game.modules.get('csm-lancer-qol');
-                await qol.exposed.executeFall(reactorToken);
-            } : ""
+                    if (typeof Sequencer === 'undefined')
+                        return;
+
+                    await Sequencer.Preloader.preloadForClients([
+                        "jb2a.impact.boulder.02",
+                        "jb2a.impact.ground_crack.white.01",
+                        "worlds/Lancer/VTT%20stuff/SFX/IMPACT.mp3"
+                    ]);
+                    const scale = Math.floor(reactorToken.actor?.system?.size || 1);
+                    let sequence = new Sequence()
+                        .effect()
+                        .file("jb2a.impact.boulder.02")
+                        .atLocation(reactorToken)
+                        .scale(scale / 2)
+                        .effect()
+                        .file("jb2a.impact.ground_crack.white.01")
+                        .atLocation(reactorToken)
+                        .scale(scale / 2)
+                        .belowTokens()
+                        .sound()
+                        .file("worlds/Lancer/VTT%20stuff/SFX/IMPACT.mp3")
+                        .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
+                        .waitUntilFinished();
+
+                    await sequence.play();
+                }
+            }]
         },
         "Engagement": {
             triggers: ["onUpdate", "onPreMove"],

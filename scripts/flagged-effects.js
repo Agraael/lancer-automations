@@ -101,18 +101,45 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
     if (!target)
         return;
 
+    let effectNameForLog = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
+    const isCustomRequest = (typeof effectOrData === 'object' && effectOrData.isCustom);// Auto-detect if "string" effect is actually an existing custom effect
+    let resolvedEffectData = effectOrData;
+    if (typeof effectOrData === 'string') {
+        const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+        if (customStatusApi) {
+            const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+            const hasCustom = savedStatuses.find(s => s.name === effectOrData);
+            if (hasCustom) {
+                resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
+            }
+        }
+    } else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom) {
+        const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+        if (customStatusApi) {
+            const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+            const hasCustom = savedStatuses.find(s => s.name === effectOrData.name);
+            if (hasCustom) {
+                resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
+            }
+        }
+    }
+
+    if (resolvedEffectData && resolvedEffectData.isCustom && !resolvedEffectData.icon) {
+        resolvedEffectData.icon = "icons/svg/mystery-man.svg";
+    }
+
     // Handle Custom Data Object
-    if (typeof effectOrData === 'object' && effectOrData.isCustom) {
+    if (typeof resolvedEffectData === 'object' && resolvedEffectData.isCustom) {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
 
         if (customStatusApi) {
             // Check for existing effect to stack
             const existingEffect = target.actor.effects.find(e =>
-                e.getFlag("temporary-custom-statuses", "originalName") === effectOrData.name
+                e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name
             );
 
             if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId) {
-                const addStack = extraOptions.stack || effectOrData.stack || 1;
+                const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
 
                 // Build duration entries for stack-aware expiration
@@ -132,7 +159,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
 
                 const flagsData = {
                     targetID: targetID,
-                    effect: effectOrData.name,
+                    effect: resolvedEffectData.name,
                     duration: duration,
                     note: note,
                     originID: originID,
@@ -143,7 +170,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
                 if (entries.length > 0)
                     flagsData.durationEntries = entries;
 
-                const totalStack = (existingEffect.flags?.statuscounter?.value || 1) + (extraOptions.stack || effectOrData.stack || 1);
+                const totalStack = (existingEffect.flags?.statuscounter?.value || 1) + (extraOptions.stack || resolvedEffectData.stack || 1);
                 await existingEffect.update({
                     "flags.lancer-automations": flagsData,
                     "flags.statuscounter.visible": totalStack > 1
@@ -153,21 +180,21 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
 
             const lancerFlags = {
                 targetID: targetID,
-                effect: effectOrData.name,
+                effect: resolvedEffectData.name,
                 duration: duration,
                 note: note,
                 originID: originID,
                 appliedRound: game.combat?.round || 0,
-                appliedStack: extraOptions.stack || effectOrData.stack || 1,
+                appliedStack: extraOptions.stack || resolvedEffectData.stack || 1,
                 ...extraOptions
             };
 
-            const counterValue = extraOptions.stack || effectOrData.stack || 1;
+            const counterValue = extraOptions.stack || resolvedEffectData.stack || 1;
 
             const activeEffects = await customStatusApi.addStatus(
                 target.actor,
-                effectOrData.name,
-                effectOrData.icon,
+                resolvedEffectData.name,
+                resolvedEffectData.icon,
                 counterValue,
                 {
                     forceNew: !!(extraOptions.consumption || extraOptions.linkedBonusId),
@@ -181,7 +208,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
             if (activeEffects && !Array.isArray(activeEffects)) {
                 // modifyStack was called — update our flags on the existing effect
                 const existingEffect = target.actor.effects.find(e =>
-                    e.getFlag("temporary-custom-statuses", "originalName") === effectOrData.name
+                    e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name
                 );
                 if (existingEffect) {
                     const updateData = { "flags.lancer-automations": lancerFlags };
@@ -204,14 +231,14 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
 
         // Fallback if module not active
         const effectData = {
-            name: effectOrData.name,
-            img: effectOrData.icon,
+            name: resolvedEffectData.name,
+            img: resolvedEffectData.icon,
             statuses: [],
-            changes: extraOptions?.changes || [],
+            changes: extraOptions.changes || statusEffect.changes || [],
             flags: {
                 'lancer-automations': {
                     targetID: targetID,
-                    effect: effectOrData.name,
+                    effect: resolvedEffectData.name,
                     duration: duration,
                     note: note,
                     originID: originID,
@@ -220,16 +247,16 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
                 },
                 'temporary-custom-statuses': {
                     isCustom: true,
-                    originalName: effectOrData.name
+                    originalName: resolvedEffectData.name
                 },
                 'statuscounter': {
-                    value: extraOptions.stack || effectOrData.stack || 1,
-                    visible: (extraOptions.stack || effectOrData.stack || 1) > 1
+                    value: extraOptions.stack || resolvedEffectData.stack || 1,
+                    visible: (extraOptions.stack || resolvedEffectData.stack || 1) > 1
                 }
             }
         };
 
-        const fallbackStackVal = extraOptions.stack || effectOrData.stack || 1;
+        const fallbackStackVal = extraOptions.stack || resolvedEffectData.stack || 1;
         const fallbackCreated = await target.actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
         if (fallbackCreated?.[0]) {
             await fallbackCreated[0].update({
@@ -239,7 +266,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
         }
 
     } else {
-        const effectName = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
+        const effectName = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
         const statusEffect = CONFIG.statusEffects.find(x => x.name === effectName || x.id === effectName);
 
         if (!statusEffect) {
@@ -317,7 +344,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
             id: statusEffect.id,
             statuses: [statusEffect.id],
             flags: flags,
-            changes: extraOptions?.changes || []
+            changes: extraOptions.changes || statusEffect.changes || []
         };
         log(statusEffect);
         log(effectData);
@@ -346,6 +373,8 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null)
     // Find effects matching the criteria
     const effectsToDelete = target.actor.effects.filter(e => {
         if (e.getFlag('lancer-automations', 'effect') === effectsStr)
+            return true;
+        if (e.getFlag('temporary-custom-statuses', 'originalName') === effectsStr)
             return true;
         if (e.getFlag('csm-lancer-qol', 'effect') === effectsStr)
             return true;
@@ -415,10 +444,32 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
             let hasEffect = false;
             let existingEffect = null;
             let effectNameForLog = typeof effect === 'string' ? effect : effect.name;
+            
+            // Auto-detect if "string" effect is an existing custom effect
+            let resolvedEffectData = effect;
+            if (typeof effect === 'string') {
+                const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+                if (customStatusApi) {
+                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const hasCustom = savedStatuses.find(s => s.name === effect);
+                    if (hasCustom) {
+                        resolvedEffectData = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
+                    }
+                }
+            } else if (typeof effect === 'object' && effect.name && !effect.isCustom) {
+                const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+                if (customStatusApi) {
+                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const hasCustom = savedStatuses.find(s => s.name === effect.name);
+                    if (hasCustom) {
+                        resolvedEffectData = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
+                    }
+                }
+            }
 
             if (checkEffectCallback) {
                 // Use custom check function if provided
-                hasEffect = checkEffectCallback(token, effect);
+                hasEffect = checkEffectCallback(token, resolvedEffectData);
             } else if (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) {
                 // Smart duplicate check: if the incoming effect has consumption/group data,
                 // only consider it a duplicate if an existing effect has the SAME groupId or linkedBonusId.
@@ -435,7 +486,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
                 });
             } else {
                 // Check if effect exists to stack it
-                const effectNameToCheck = typeof effect === 'string' ? effect : effect.name;
+                const effectNameToCheck = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
                 const effectNameLower = effectNameToCheck.toLowerCase().split('.').pop();
 
                 existingEffect = token.actor?.effects.find(e =>
@@ -467,7 +518,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
                 ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
             } else {
                 // Add this effect to the list to apply (or stack)
-                effectsToApplyToToken.push(effect);
+                effectsToApplyToToken.push(resolvedEffectData);
             }
         }
 
@@ -500,7 +551,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
 
             if (options.notify) {
                 const effectName = typeof effect === 'string' ? effect : effect.name;
-                const icon = typeof effect === 'object' ? effect.icon : CONFIG.statusEffects.find(e => e.id === effect)?.icon;
+                const icon = typeof effect === 'object' ? (effect.icon || "icons/svg/mystery-man.svg") : CONFIG.statusEffects.find(e => e.id === effect)?.icon;
                 queueEffectNotification(token, effectName, options.notify, 'Gained', icon);
             }
         }
@@ -542,9 +593,32 @@ export async function removeFlaggedEffectToTokens(options = {notify: true}) {
             let effectNameVal = typeof effect === 'object' ? effect.name : effect;
 
             let icon = "";
+            let resolvedEffect = effect;
+            if (typeof effect === 'string') {
+                const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+                if (customStatusApi) {
+                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const hasCustom = savedStatuses.find(s => s.name === effect);
+                    if (hasCustom) {
+                        resolvedEffect = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
+                        effectNameVal = effect;
+                    }
+                }
+            } else if (typeof effect === 'object' && effect.name && !effect.isCustom) {
+                const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+                if (customStatusApi) {
+                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const hasCustom = savedStatuses.find(s => s.name === effect.name);
+                    if (hasCustom) {
+                        resolvedEffect = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
+                        effectNameVal = effect.name;
+                    }
+                }
+            }
+
             if (options.notify) {
                 const existing = findFlaggedEffectOnToken(token, effectNameVal);
-                icon = existing?.img || existing?.icon || "";
+                icon = existing?.img || existing?.icon || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
             if (game.user.isGM) {
@@ -584,6 +658,7 @@ export function findFlaggedEffectOnToken(token, identifier) {
         // Check for effect by name or label (V12 uses name, older might use label)
         // Also check if it matches the flag 'effect' value which is robust
         return actor.effects.find(e =>
+            e.getFlag('temporary-custom-statuses', 'originalName') === identifier ||
             e.name === identifier ||
             e.label === identifier ||
             e.getFlag('lancer-automations', 'effect') === identifier ||

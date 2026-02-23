@@ -429,13 +429,24 @@ export async function executeEffectManager(options = {}) {
                 <label>Target:</label>
                 <select id="std-target">${tokensHtml}</select>
             </div>
-            <div class="form-group">
-                <label>Apply:</label>
-                <div style="flex:1; display:flex; gap:5px;">
-                    <select id="std-effect" style="flex: 3;">
-                         ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(s => `<option value="${s.name}">${game.i18n.localize(s.name)}</option>`).join('')}
-                    </select>
-                    x<input type="number" id="std-stack" value="1" min="1" style="flex: 1; max-width: 50px;">
+            <div class="form-group" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                <div style="display:flex; justify-content:space-between; align-items: center;">
+                    <label>Apply:</label>
+                    <div style="display:flex; gap:5px; align-items:center;">
+                        <span id="std-effect-label" style="font-weight:bold; color:#991e2a;">Bolster</span>
+                        <img id="std-effect-icon" src="" width="30" height="30" style="border:2px solid #991e2a; border-radius:4px; background:#1a1a1a; display:block; object-fit: contain; padding:2px;">
+                        x<input type="number" id="std-stack" value="1" min="1" style="width: 45px; height:30px; text-align:center;">
+                    </div>
+                </div>
+                <input type="hidden" id="std-effect" value="Bolster">
+                <div id="std-effect-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+                     ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(s => {
+                        const label = game.i18n.localize(s.name);
+                        return `
+                        <div class="std-effect-option" data-id="${s.name}" data-name="${label}" data-icon="${s.img || s.icon}" title="${label}" style="cursor:pointer; width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ccc; border-radius:4px; background:#1a1a1a; transition: all 0.2s;">
+                            <img src="${s.img || s.icon}" width="28" height="28" style="object-fit: contain; pointer-events:none;" title="${label}">
+                        </div>`;
+                     }).join('')}
                 </div>
             </div>
             <div class="form-group">
@@ -465,10 +476,13 @@ export async function executeEffectManager(options = {}) {
                 <label>Target:</label>
                 <select id="cust-target">${tokensHtml}</select>
                 <label style="text-align:right; padding-right:5px;">Saved:</label>
-                <select id="cust-saved">
-                    <option value="">-- Select --</option>
-                    ${savedStatuses.map(s => `<option value="${s.name}" data-icon="${s.icon}">${s.name}</option>`).join('')}
-                </select>
+                <div style="flex:1; display:flex; gap:5px; align-items:center;">
+                    <img id="cust-saved-icon" src="" width="26" height="26" style="border:2px solid #999; border-radius:4px; background:#1a1a1a; display:none; object-fit: contain;">
+                    <select id="cust-saved" style="flex:1;">
+                        <option value="">-- Select --</option>
+                        ${savedStatuses.map(s => `<option value="${s.name}" data-icon="${s.icon}">${s.name}</option>`).join('')}
+                    </select>
+                </div>
             </div>
             <div class="form-group two-col" style="grid-template-columns: 80px 1fr 60px 60px;">
                 <label>Name:</label>
@@ -657,6 +671,37 @@ export async function executeEffectManager(options = {}) {
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
+                <div class="form-group" id="row-bonus-targetTypes-roll" style="display:none;">
+                    <label>Target Type:</label>
+                    <select id="bonus-targetTypes-roll">
+                        <option value="all">All Flows</option>
+                        <option value="attack">Weapon Attacks (All)</option>
+                        <option value="tech_attack">Tech Attacks</option>
+                        <option value="melee">Melee Attacks</option>
+                        <option value="ranged">Ranged Attacks</option>
+                        <option value="nexus">Nexus Attacks</option>
+                        <option value="tech">Tech (Item Type)</option>
+                        <option value="check">Checks (All)</option>
+                        <option value="hull">Hull Check</option>
+                        <option value="agility">Agility Check</option>
+                        <option value="systems">Systems Check</option>
+                        <option value="engineering">Engineering Check</option>
+                        <option value="grit">Grit Check</option>
+                        <option value="tier">Tier Check (NPC)</option>
+                        <option value="structure">Structure Roll</option>
+                        <option value="overheat">Overheat Roll</option>
+                    </select>
+                </div>
+                <div class="form-group" id="row-bonus-targetTypes-damage" style="display:none;">
+                    <label>Target Type:</label>
+                    <select id="bonus-targetTypes-damage">
+                        <option value="all">All Damage</option>
+                        <option value="melee">Melee Damage</option>
+                        <option value="ranged">Ranged Damage</option>
+                        <option value="nexus">Nexus Damage</option>
+                        <option value="tech">Tech Damage</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label data-tooltip="Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.">Apply to items:</label>
                     <div style="flex:1; display:flex; gap:3px;">
@@ -729,10 +774,41 @@ export async function executeEffectManager(options = {}) {
                 if (val) {
                     html.find('#cust-name').val(val);
                     const icon = $(e.currentTarget).find(':selected').data('icon');
-                    if (icon)
+                    if (icon) {
                         html.find('#cust-icon').val(icon);
+                        html.find('#cust-saved-icon').attr('src', icon).show();
+                    } else {
+                        html.find('#cust-saved-icon').hide();
+                    }
+                } else {
+                    html.find('#cust-saved-icon').hide();
                 }
             });
+
+            // Standard Effect Grid Selection
+            html.find('.std-effect-option').click(function() {
+                const id = $(this).data('id');
+                const name = $(this).data('name');
+                const icon = $(this).data('icon');
+                html.find('#std-effect').val(id);
+                html.find('#std-effect-label').text(name);
+                html.find('#std-effect-icon').attr('src', icon).attr('title', name).show();
+                html.find('.std-effect-option').css('border-color', '#ccc').css('box-shadow', 'none');
+                $(this).css('border-color', '#991e2a').css('box-shadow', '0 0 5px rgba(153,30,42,0.5)');
+            });
+
+            // Set initial state for standard grid
+            const initStdGrid = () => {
+                const initialId = html.find('#std-effect').val();
+                const $initOpt = html.find(`.std-effect-option[data-id="${initialId}"]`);
+                if ($initOpt.length) {
+                    $initOpt.click();
+                } else {
+                    // Fallback to first if initial hidden value doesn't match a data-id
+                    html.find('.std-effect-option').first().click();
+                }
+            };
+            initStdGrid();
 
             // Apply Button
             html.find('.apply-btn').click(async (e) => {
@@ -959,10 +1035,11 @@ export async function executeEffectManager(options = {}) {
                         usesInfo = remaining !== null ? ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>` : ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>`;
                     }
                     const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
+                    const types = (b.targetTypes && b.targetTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.targetTypes.join(', ')}]</span>` : '';
 
                     const item = $(`
                         <div class="te-bonus-item">
-                            <span><strong>${b.name}</strong> ${details}${usesInfo}${lids}</span>
+                            <span><strong>${b.name}</strong> ${details}${usesInfo}${lids}${types}</span>
                             <div class="te-delete-btn bonus-remove-btn" data-id="${b.id}" title="Remove"><i class="fas fa-trash"></i></div>
                         </div>
                     `);
@@ -991,9 +1068,12 @@ export async function executeEffectManager(options = {}) {
                             details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
                         }
 
+                        const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
+                        const types = (b.targetTypes && b.targetTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.targetTypes.join(', ')}]</span>` : '';
+
                         const item = $(`
                             <div class="te-bonus-item">
-                                <span><strong>${b.name}</strong> ${details}</span>
+                                <span><strong>${b.name}</strong> ${details}${lids}${types}</span>
                                 <div class="te-delete-btn constant-remove-btn" data-id="${b.id}" title="Remove"><i class="fas fa-trash"></i></div>
                             </div>
                         `);
@@ -1073,11 +1153,19 @@ export async function executeEffectManager(options = {}) {
                 const itemLidsStr = html.find('#bonus-itemLids').val();
                 const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
+                let targetTypes = [];
+                if (type === 'accuracy' || type === 'difficulty') {
+                    targetTypes = [html.find('#bonus-targetTypes-roll').val()];
+                } else if (type === 'damage') {
+                    targetTypes = [html.find('#bonus-targetTypes-damage').val()];
+                }
+
                 const bonusData = {
                     name,
                     type,
                     uses,
-                    itemLids
+                    itemLids,
+                    targetTypes
                 };
 
                 if (type === 'stat') {
@@ -1150,7 +1238,14 @@ export async function executeEffectManager(options = {}) {
                 const type = $(this).val();
                 html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage').hide();
                 html.find(`#bonus-type-${type}`).show();
-                html.find('#bonus-items-row').toggle(type === 'roll' || type === 'damage');
+
+                const showItems = type === 'roll' || type === 'damage';
+                html.find('#bonus-items-row').toggle(showItems);
+                if (showItems) {
+                    html.find('#row-bonus-targetTypes-roll').toggle(type === 'roll');
+                    html.find('#row-bonus-targetTypes-damage').toggle(type === 'damage');
+                }
+
                 html.closest('.dialog').css('height', 'auto');
             });
 

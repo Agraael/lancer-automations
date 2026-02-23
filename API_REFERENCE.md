@@ -48,7 +48,7 @@ Apply status effects to tokens. Supports stacking, duration, consumption, and st
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `tokens` | `Array<Token>` | *required* | Tokens to apply the effect to |
-| `effectNames` | `string \| Array<string> \| Object` | *required* | Effect name(s) or custom effect object `{ name, icon, isCustom, stack }` |
+| `effectNames` | `string \| Array<string> \| Object \| Array<Object>` | *required* | Pre-registered effect name(s), existing custom effect name(s), or custom effect object(s) `{ name: string, icon: string, isCustom: boolean, stack?: number }` |
 | `note` | `string` | `undefined` | Description/note stored on the effect |
 | `duration` | `Object` | `undefined` | `{ label: "start"\|"end"\|"indefinite", turns: number, rounds: number }` |
 | `useTokenAsOrigin` | `boolean` | `true` | Use the target token's ID as origin for duration tracking |
@@ -67,6 +67,30 @@ Apply status effects to tokens. Supports stacking, duration, consumption, and st
 | `changes` | `Array` | ActiveEffect changes `[{ key, value, mode }]` for max/flat stats |
 
 **Returns:** `Array<Token>` — tokens that received the effect(s).
+
+**Example (Applying a built-in or existing custom effect):**
+```javascript
+await api.applyFlaggedEffectToTokens({
+    tokens: [targetToken],
+    effectNames: ["prone"], // Or an existing custom effect e.g. "My Effect"
+    duration: { label: 'end', turns: 1, rounds: 0 }
+});
+```
+
+**Example (Creating a new custom effect on the fly):**
+```javascript
+await api.applyFlaggedEffectToTokens({
+    tokens: [targetToken],
+    effectNames: [{
+        name: "My Custom Status",
+        icon: "modules/lancer-automations/icons/grapple.svg", // Optional, defaults to mystery-man.svg
+        isCustom: true 
+    }],
+    note: "Grappling the target",
+    duration: { label: 'start', turns: 2, rounds: 0 },
+    useTokenAsOrigin: true
+});
+```
 
 ---
 
@@ -1504,7 +1528,7 @@ await api.applyFlaggedEffectToTokens({
 ```javascript
 await api.applyFlaggedEffectToTokens({
     tokens: [myToken],
-    effectNames: ["My Effect"],
+    effectNames: ["lockon"],
     duration: { label: 'indefinite', turns: null },
     useTokenAsOrigin: true
 }, {

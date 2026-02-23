@@ -43,6 +43,7 @@ import {
     resolveDeployable, placeDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
     getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
 } from "./interactive-tools.js";
+import { executeFall } from "./misc-tools.js";
 
 
 let reactionDebounceTimer = null;
@@ -1136,6 +1137,15 @@ function registerSettings() {
     });
 
     // ── Features ──
+    game.settings.register('lancer-automations', 'additionalStatuses', {
+        name: 'LaSossis Additional statutes and effects',
+        hint: 'If enabled, registers additional statuses and effects from Lancer Automations into the standard status effects list.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
@@ -2060,6 +2070,9 @@ Hooks.once('ready', async () => {
 });
 
 Hooks.on('lancer.statusesReady', () => {
+    if (!game.settings.get('lancer-automations', 'additionalStatuses'))
+        return;
+
     CONFIG.statusEffects.push({
         id: "resistance_all",
         name: "Resist All",
@@ -2077,13 +2090,63 @@ Hooks.on('lancer.statusesReady', () => {
         id: "immovable",
         name: "Immovable",
         img: "modules/lancer-automations/icons/immovable.svg",
+        description: "Cannot be moved"
     });
-
 
     CONFIG.statusEffects.push({
         id: "disengage",
         name: "Disengage",
         img: "modules/lancer-automations/icons/disengage.svg",
+        description: "You ignore engagement and your movement does not provoke reactions"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "destroyed",
+        name: "Destroyed",
+        img: "modules/lancer-automations/icons/destroyed.svg",
+        description: "You are destroyed"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "grappling",
+        name: "Grappling",
+        img: "modules/lancer-automations/icons/grappling.svg",
+        description: "You are grappling in a grapple contest"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "grappled",
+        name: "Grappled",
+        img: "modules/lancer-automations/icons/grappled.svg",
+        description: "You are grappled in a grapple contest"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "falling",
+        name: "Falling",
+        img: "modules/lancer-automations/icons/falling.svg",
+        description: "Characters take damage when they fall 3 or more spaces and cannot recover before hitting the ground. Characters fall 10 spaces per round in normal gravity, but can't fall in zero-G or very low-G environments. They take 3 Kinetic AP (armour piercing) damage for every three spaces fallen, to a maximum of 9 Kinetic AP. Falling is a type of involuntary movement."
+    });
+
+    CONFIG.statusEffects.push({
+        id: "lagging",
+        name: "Lagging",
+        img: "modules/lancer-automations/icons/lagging.svg",
+        description: "You can only take a quick action"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "infection",
+        name: "Infection",
+        img: "modules/lancer-automations/icons/infection.svg",
+        description: "Works in the same way as burn but target heat instead"
+    });
+
+    CONFIG.statusEffects.push({
+        id: "throttled",
+        name: "Throttled",
+        img: "modules/lancer-automations/icons/throttled.svg",
+        description: "Deals Half damage, heat, and burn on attacks"
     });
 
     CONFIG.statusEffects.push({

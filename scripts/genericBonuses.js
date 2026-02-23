@@ -41,8 +41,7 @@ function createGenericBonusStep(flowType) {
 
             let netBonus = legacyAcc - legacyDiff;
 
-            const bonuses = actor.getFlag("lancer-automations", "global_bonuses") ||
-                            actor.getFlag("csm-lancer-qol", "global_bonuses") || [];
+            const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
 
             const activeBonuses = [];       // pure global acc/diff bonuses (no applyTo)
             const damageBonuses = [];
@@ -1249,8 +1248,7 @@ export const genericBonusStepDamage = createGenericBonusStep("damage");
 export async function addGlobalBonus(actor, bonusData, options = {}) {
     if (!actor)
         return;
-    const bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") ||
-                              actor.getFlag("csm-lancer-qol", "global_bonuses") || []);
+    const bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
 
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();

@@ -97,12 +97,16 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                     new simpleActivationFlow(token.actor.uuid, { title: item.name, item: item }).begin();
                 } else {
                     const template = `systems/${game.system.id}/templates/chat/generic-card.hbs`;
-                    
+
                     let fullDescription = item.system.description || "";
-                    if (item.system.trigger) fullDescription += `<br><strong>Trigger:</strong> ${item.system.trigger}`;
-                    if (item.system.effect) fullDescription += `<br><strong>Effect:</strong> ${item.system.effect}`;
-                    if (item.system.on_hit) fullDescription += `<br><strong>On Hit:</strong> ${item.system.on_hit}`;
-                    if (item.system.on_crit) fullDescription += `<br><strong>On Crit:</strong> ${item.system.on_crit}`;
+                    if (item.system.trigger)
+                        fullDescription += `<br><strong>Trigger:</strong> ${item.system.trigger}`;
+                    if (item.system.effect)
+                        fullDescription += `<br><strong>Effect:</strong> ${item.system.effect}`;
+                    if (item.system.on_hit)
+                        fullDescription += `<br><strong>On Hit:</strong> ${item.system.on_hit}`;
+                    if (item.system.on_crit)
+                        fullDescription += `<br><strong>On Crit:</strong> ${item.system.on_crit}`;
 
                     const tags = item.system.tags || [];
                     const content = await renderTemplate(template, {
@@ -110,7 +114,7 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                         description: fullDescription,
                         tags: tags
                     });
-                    
+
                     ChatMessage.create({
                         user: game.user.id,
                         speaker: ChatMessage.getSpeaker({ actor: token.actor }),
@@ -206,7 +210,9 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
             shouldConsume = (type === "Reaction" && consumes);
         } else {
             const registryEntryConsume = ReactionManager.getGeneralReaction(activationName);
-            const generalReactionConsume = (registryEntryConsume && !Array.isArray(registryEntryConsume.reactions)) ? registryEntryConsume : (reaction || registryEntryConsume);
+            const generalReactionConsume = (registryEntryConsume && !Array.isArray(registryEntryConsume.reactions))
+                ? registryEntryConsume : (reaction || registryEntryConsume);
+
             const type = generalReactionConsume?.actionType || (generalReactionConsume?.isReaction !== false ? "Reaction" : "Free Action");
             const consumes = generalReactionConsume?.consumesReaction !== false;
 
@@ -224,7 +230,8 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
 }
 
 export function displayReactionPopup(triggerType, triggeredReactions) {
-    if (triggeredReactions.length === 0) return;
+    if (triggeredReactions.length === 0)
+        return;
 
     const popupData = { triggerType, triggeredReactions };
     renderReactionDialog(popupData);
@@ -293,7 +300,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     } else if (item) {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-        
+
         // prioritizing specific reaction provided in reactionData (from triggeredReactions)
         const specificReaction = reactionData?.reaction;
         const reactionEntry = specificReaction || reactionConfig?.reactions?.[0];
@@ -304,11 +311,13 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         frequency = reactionEntry?.frequency || "1/Round";
 
         const resolvePath = (obj, path) => {
-            if (!path) return undefined;
+            if (!path)
+                return undefined;
             const cleanPath = path.replace(/\[(\d+)\]/g, '.$1').replace(/^\./, '');
 
             let val = foundry.utils.getProperty(obj, cleanPath);
-            if (val !== undefined) return val;
+            if (val !== undefined)
+                return val;
 
             if (!cleanPath.startsWith("system.")) {
                 val = foundry.utils.getProperty(obj, `system.${cleanPath}`);
@@ -329,13 +338,13 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             activationPath = null;
         } else if (typeof resolvedData === 'object' && resolvedData !== null) {
             triggerText = resolvedData.trigger || resolvedData.description || "";
-            
+
             // Fallback chain: specific effect -> specific on_hit -> specific detail -> root effect -> root on_hit
             effectText = resolvedData.effect || resolvedData.on_hit || resolvedData.on_crit || resolvedData.detail || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
 
             activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
         } else {
-             if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
+            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
                 effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
             }
         }
@@ -396,17 +405,17 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 <i class="fas fa-sync"></i> ${frequency}
             </span>
              ${actionType === "Reaction" ?
-            `<span style="background: rgba(153, 30, 42, 0.3); padding: 2px 8px; border-radius: 10px;">
+        `<span style="background: rgba(153, 30, 42, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-bolt"></i> Reaction
                 </span>` :
-            actionType === "Free Action" ?
-                `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
+        actionType === "Free Action" ?
+            `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-check"></i> Free Action
                 </span>` :
-                `<span style="background: rgba(42, 153, 200, 0.3); padding: 2px 8px; border-radius: 10px;">
+            `<span style="background: rgba(42, 153, 200, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-play"></i> ${actionType}
                 </span>`
-        }
+}
         </div>
 
         <button class="activate-btn" style="
@@ -448,7 +457,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         if (item) {
             const lid = item.system?.lid;
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-            
+
             const specificReaction = reactionData?.reaction;
             reaction = specificReaction || reactionConfig?.reactions?.[0];
         } else {
@@ -612,7 +621,8 @@ function renderReactionDialog(popupData) {
         default: "ok",
         render: (htmlEl) => {
             htmlEl.find('.lancer-list-item').click((event) => {
-                if (event.target.closest('.lancer-reaction-item')) return;
+                if (event.target.closest('.lancer-reaction-item'))
+                    return;
 
                 event.stopPropagation();
                 const tokenId = event.currentTarget.dataset.tokenId;
@@ -648,7 +658,8 @@ function renderReactionDialog(popupData) {
                     item = reactionEntry?.item;
                     triggerData = reactionEntry?.triggerData;
                     reactionData = reactionEntry;
-                    if (!item) return;
+                    if (!item)
+                        return;
                 }
 
                 htmlEl.find('.lancer-reaction-item').removeClass('selected');
