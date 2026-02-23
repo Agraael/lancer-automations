@@ -1266,7 +1266,12 @@ export class ReactionEditor extends FormApplication {
             });
         };
 
-        onlyOnSourceMatchCheckbox.on('change', toggleSourceMatchTriggers);
+        onlyOnSourceMatchCheckbox.on('change', (ev) => {
+            // Sync all checkboxes with this name (DOM has two: one for General, one for Item)
+            const isChecked = $(ev.currentTarget).prop('checked');
+            onlyOnSourceMatchCheckbox.prop('checked', isChecked);
+            toggleSourceMatchTriggers();
+        });
         toggleSourceMatchTriggers();
 
         const activationTypeSelect = html.find('#activationType');
@@ -1857,8 +1862,6 @@ export class ReactionEditor extends FormApplication {
             ui.notifications.warn("Please select an item first.");
             return;
         }
-
-        ui.notifications.info(`Finding actions for item: ${lid}...`);
 
         let item = null;
         for (const pack of game.packs) {
