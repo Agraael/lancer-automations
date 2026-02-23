@@ -1,10 +1,11 @@
-<form class="{{cssClass}}" autocomplete="off">
-    <header class="sheet-header">
-        <div class="flexrow" style="align-items: center;">
-            <h1 style="flex: 1; border: none;">Activation Manager</h1>
-            <a class="help-btn" title="Help"><i class="fas fa-question-circle"></i></a>
+<form class="{{cssClass}} lancer-dialog-base" autocomplete="off">
+    <header class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <h1 class="lancer-dialog-title" style="flex: 1; margin: 0; border: none;">Activation Manager</h1>
+            <a class="help-btn" title="Help" style="color: #fff; font-size: 16px;"><i
+                    class="fas fa-question-circle"></i></a>
         </div>
-        <p>Manage default and custom activations for checking triggers.</p>
+        <p class="lancer-dialog-subtitle">Manage default and custom activations for checking triggers.</p>
     </header>
 
     <nav class="sheet-tabs tabs" data-group="primary">
@@ -13,63 +14,176 @@
     </nav>
 
     <div class="content">
-        <!-- CUSTOM TAB (merged general + item-based) -->
+        <!-- CUSTOM TAB -->
         <div class="tab" data-tab="custom">
-            <div class="flexrow" style="margin-bottom: 5px;">
-                <button type="button" class="add-reaction"><i class="fas fa-plus"></i> Add Activation</button>
+            <div class="lancer-action-buttons" style="margin: 0 0 8px 0;">
+                <button type="button" class="lancer-action-btn add-reaction"><i class="fas fa-plus"></i> Add
+                    Activation</button>
+                <button type="button" class="lancer-action-btn create-folder-btn"><i class="fas fa-folder-plus"></i>
+                    Create Folder</button>
             </div>
-            <p class="notes" style="margin-bottom: 10px;">Custom activations can be General (all tokens) or Item-Based
-                (requires matching LID).</p>
-            <div class="reaction-list flexcol">
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">Drag items onto folder headers to
+                organize.</p>
+            <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
+                    <input type="text" class="search-input" placeholder="Search by name or LID..."
+                        style="flex: 2; height: 28px; padding: 4px 8px;">
+                    <select class="trigger-filter" style="flex: 1; height: 28px;">
+                        <option value="">All Triggers</option>
+                        {{#each allTriggers}}
+                        <option value="{{this}}">{{this}}</option>
+                        {{/each}}
+                    </select>
+                </div>
                 <div class="reaction-header flexrow">
-                    <span class="col-enabled" title="Enabled">En</span>
+                    <span class="col-enabled" title="Enabled"></span>
                     <span class="col-type">Type</span>
                     <span class="col-name">Name / LID</span>
                     <span class="col-triggers">Triggers</span>
                     <span class="col-controls">Controls</span>
                 </div>
-                <hr>
                 <div class="scrollable">
-                    {{#each allReactions}}
+                    {{!-- Custom Folders --}}
+                    {{#each customFolders}}
+                    <div class="category-folder" data-folder="{{this.folderName}}">
+                        <div class="reaction-item flexrow folder-header">
+                            <span class="col-enabled" style="flex: 0.15;">
+                                <i class="fas fa-folder folder-expand-icon"></i>
+                            </span>
+                            <span class="col-type" style="flex: 0.3;"></span>
+                            <span class="col-name" style="flex: 3;">
+                                <strong>{{this.folderName}}</strong>
+                                <span
+                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.items.length}})</span>
+                            </span>
+                            <span class="col-triggers" style="flex: 2;"></span>
+                            <span class="col-controls" style="flex: 0.5; text-align: right;">
+                                <a class="rename-folder-btn" title="Rename"><i class="fas fa-pen"
+                                        style="font-size: 0.75em;"></i></a>
+                                <a class="delete-folder-btn" title="Delete Folder"><i class="fas fa-times"
+                                        style="font-size: 0.75em;"></i></a>
+                            </span>
+                        </div>
+                        <div class="folder-content"
+                            style="display: none; padding-left: 8px; border-left: 2px solid #991e2a;">
+                            {{#each this.items}}
+                            {{#if this.isGroup}}
+                            <div class="reaction-group-container" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                                data-is-general="{{this.isGeneral}}">
+                                <div class="reaction-item flexrow group-header" data-lid="{{this.lid}}"
+                                    data-name="{{this.name}}" style="cursor: pointer;">
+                                    <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
+                                    <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
+                                    <span class="col-name">
+                                        <strong>{{this.name}}</strong> <span
+                                            style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                        <br><span
+                                            style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                    </span>
+                                    <span class="col-triggers">{{this.triggers}}</span>
+                                    <span class="col-controls"></span>
+                                </div>
+                                <div class="reaction-sublist"
+                                    style="display: none; padding-left: 15px; border-left: 2px solid rgba(153, 30, 42, 0.3);">
+                                    {{#each this.reactions}}
+                                    <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                                        data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                                        <span class="col-enabled"><input type="checkbox" class="reaction-enabled"
+                                                {{checked this.enabled}}></span>
+                                        <span class="col-type">
+                                            {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i
+                                                class="fas fa-input-text" title="Action-Based"></i>{{else}}<i
+                                                class="fas fa-globe" title="General"></i>{{/if}}{{else}}<i
+                                                class="fas fa-cube" title="Item-Based"></i>{{/if}}
+                                        </span>
+                                        <span class="col-name"><strong>{{this.name}}</strong>{{#if
+                                            this.reactionPath}}<br><span
+                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
+                                        <span class="col-triggers">{{this.triggers}}</span>
+                                        <span class="col-controls">
+                                            <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
+                                            <a class="delete-reaction" title="Delete"><i class="fas fa-trash"></i></a>
+                                        </span>
+                                    </div>
+                                    {{/each}}
+                                </div>
+                            </div>
+                            {{else}}
+                            <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                                data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                                <span class="col-enabled"><input type="checkbox" class="reaction-enabled" {{checked
+                                        this.enabled}}></span>
+                                <span class="col-type">
+                                    {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i class="fas fa-input-text"
+                                        title="Action-Based"></i>{{else}}<i class="fas fa-globe"
+                                        title="General"></i>{{/if}}{{else}}<i class="fas fa-cube"
+                                        title="Item-Based"></i>{{/if}}
+                                </span>
+                                <span class="col-name">
+                                    {{#if
+                                    this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
+                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
+                                    this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
+                                </span>
+                                <span class="col-triggers">{{this.triggers}}</span>
+                                <span class="col-controls">
+                                    <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
+                                    <a class="delete-reaction" title="Delete"><i class="fas fa-trash"></i></a>
+                                </span>
+                            </div>
+                            {{/if}}
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/each}}
+
+                    {{!-- Unfiled separator (only shown when folders exist) --}}
+                    {{#if customFolders.length}}
+                    <div class="unfiled-header reaction-item flexrow folder-header" style="cursor: default;">
+                        <span class="col-enabled" style="flex: 0.15;"><i class="fas fa-inbox"
+                                style="opacity: 0.5; color: #991e2a;"></i></span>
+                        <span class="col-type" style="flex: 0.3;"></span>
+                        <span class="col-name" style="flex: 3;"><span
+                                style="opacity: 0.6; font-weight: 600;">Unfiled</span></span>
+                        <span class="col-triggers" style="flex: 2;"></span>
+                        <span class="col-controls" style="flex: 0.5;"></span>
+                    </div>
+                    {{/if}}
+
+                    {{!-- Unfiled items --}}
+                    {{#each unfiledReactions}}
                     {{#if this.isGroup}}
-                    <div class="reaction-group-container">
-                        <div class="reaction-item flexrow group-header" data-lid="{{this.lid}}" data-name="{{this.name}}" 
-                             style="cursor: pointer;">
-                            <span class="col-enabled">
-                                <i class="fas fa-caret-right expand-icon"></i>
-                            </span>
-                            <span class="col-type">
-                                <i class="fas fa-layer-group" title="Group"></i>
-                            </span>
+                    <div class="reaction-group-container" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                        data-is-general="{{this.isGeneral}}">
+                        <div class="reaction-item flexrow group-header" data-lid="{{this.lid}}"
+                            data-name="{{this.name}}" style="cursor: pointer;">
+                            <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
+                            <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                             <span class="col-name">
-                                <strong>{{this.name}}</strong> <span style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
-                                <br><span style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                <strong>{{this.name}}</strong> <span
+                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                <br><span
+                                    style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
                             </span>
                             <span class="col-triggers">{{this.triggers}}</span>
                             <span class="col-controls"></span>
                         </div>
-                        <div class="reaction-sublist" style="display: none; padding-left: 15px; border-left: 2px solid rgba(255, 255, 255, 0.1);">
+                        <div class="reaction-sublist"
+                            style="display: none; padding-left: 15px; border-left: 2px solid rgba(153, 30, 42, 0.3);">
                             {{#each this.reactions}}
                             <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
                                 data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
-                                <span class="col-enabled">
-                                    <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
-                                </span>
+                                <span class="col-enabled"><input type="checkbox" class="reaction-enabled" {{checked
+                                        this.enabled}}></span>
                                 <span class="col-type">
-                                    {{#if this.isGeneral}}
-                                        {{#if this.onlyOnSourceMatch}}
-                                        <i class="fas fa-input-text" title="Action-Based"></i>
-                                        {{else}}
-                                        <i class="fas fa-globe" title="General"></i>
-                                        {{/if}}
-                                    {{else}}
-                                    <i class="fas fa-cube" title="Item-Based"></i>
-                                    {{/if}}
+                                    {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i class="fas fa-input-text"
+                                        title="Action-Based"></i>{{else}}<i class="fas fa-globe"
+                                        title="General"></i>{{/if}}{{else}}<i class="fas fa-cube"
+                                        title="Item-Based"></i>{{/if}}
                                 </span>
-                                <span class="col-name">
-                                    <strong>{{this.name}}</strong>
-                                    {{#if this.reactionPath}}<br><span style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
-                                </span>
+                                <span class="col-name"><strong>{{this.name}}</strong>{{#if this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls">
                                     <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
@@ -82,30 +196,19 @@
                     {{else}}
                     <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
                         data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
-                        <span class="col-enabled">
-                            <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
-                        </span>
+                        <span class="col-enabled"><input type="checkbox" class="reaction-enabled" {{checked
+                                this.enabled}}></span>
                         <span class="col-type">
-                            {{#if this.isGeneral}}
-                            {{#if this.onlyOnSourceMatch}}
-                            <i class="fas fa-input-text" title="Action-Based"></i>
-                            {{else}}
-                            <i class="fas fa-globe" title="General"></i>
-                            {{/if}}
-                            {{else}}
-                            <i class="fas fa-cube" title="Item-Based"></i>
-                            {{/if}}
+                            {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i class="fas fa-input-text"
+                                title="Action-Based"></i>{{else}}<i class="fas fa-globe"
+                                title="General"></i>{{/if}}{{else}}<i class="fas fa-cube" title="Item-Based"></i>{{/if}}
                         </span>
                         <span class="col-name">
-                            {{#if this.isGeneral}}
-                            <strong>{{this.name}}</strong>
-                            {{else}}
-                            <strong>{{this.name}}</strong>
-                            <br><span
-                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
-                            {{#if this.reactionPath}}<br><span
-                                style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
-                            {{/if}}
+                            {{#if
+                            this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
+                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
+                            this.reactionPath}}<br><span
+                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
                         </span>
                         <span class="col-triggers">{{this.triggers}}</span>
                         <span class="col-controls">
@@ -115,7 +218,9 @@
                     </div>
                     {{/if}}
                     {{else}}
-                    <p class="notes" style="text-align: center;">No custom activations defined.</p>
+                    {{#unless customFolders.length}}
+                    <p class="notes" style="text-align: center; color: #666;">No custom activations defined.</p>
+                    {{/unless}}
                     {{/each}}
                 </div>
             </div>
@@ -123,100 +228,109 @@
 
         <!-- DEFAULTS TAB -->
         <div class="tab" data-tab="defaults">
-            <p class="notes" style="margin-bottom: 10px;">Default activations from the registry. Click copy to create an
-                editable override.</p>
-            <div class="reaction-list flexcol">
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">Default activations from the
+                registry. Click copy to create an editable override.</p>
+            <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
+                    <input type="text" class="search-input" placeholder="Search by name or LID..."
+                        style="flex: 2; height: 28px; padding: 4px 8px;">
+                    <select class="trigger-filter" style="flex: 1; height: 28px;">
+                        <option value="">All Triggers</option>
+                        {{#each allTriggers}}
+                        <option value="{{this}}">{{this}}</option>
+                        {{/each}}
+                    </select>
+                </div>
                 <div class="reaction-header flexrow">
-                    <span class="col-enabled" title="Enabled">En</span>
+                    <span class="col-enabled" title="Enabled"></span>
                     <span class="col-type">Type</span>
                     <span class="col-name">Name / LID</span>
                     <span class="col-triggers">Triggers</span>
                     <span class="col-controls"></span>
                 </div>
-                <hr>
                 <div class="scrollable">
-                    {{#each defaultReactions}}
-                    {{#if this.isGroup}}
-                    <div class="reaction-group-container">
-                        <div class="reaction-item flexrow group-header" data-lid="{{this.lid}}" data-name="{{this.name}}" 
-                             style="cursor: pointer;">
-                            <span class="col-enabled">
-                                <i class="fas fa-caret-right expand-icon"></i>
+                    {{#each defaultFolders}}
+                    <div class="category-folder" data-folder="{{this.folderName}}">
+                        <div class="reaction-item flexrow folder-header">
+                            <span class="col-enabled" style="flex: 0.15;">
+                                <i class="fas fa-folder folder-expand-icon"></i>
                             </span>
-                            <span class="col-type">
-                                <i class="fas fa-layer-group" title="Group"></i>
+                            <span class="col-type" style="flex: 0.3;"></span>
+                            <span class="col-name" style="flex: 3;">
+                                <strong>{{this.folderName}}</strong>
+                                <span
+                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.items.length}})</span>
                             </span>
-                            <span class="col-name">
-                                <strong>{{this.name}}</strong> <span style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
-                                <br><span style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
-                            </span>
-                            <span class="col-triggers">{{this.triggers}}</span>
-                            <span class="col-controls"></span>
+                            <span class="col-triggers" style="flex: 2;"></span>
+                            <span class="col-controls" style="flex: 0.5;"></span>
                         </div>
-                        <div class="reaction-sublist" style="display: none; padding-left: 15px; border-left: 2px solid rgba(255, 255, 255, 0.1);">
-                            {{#each this.reactions}}
+                        <div class="folder-content"
+                            style="display: none; padding-left: 8px; border-left: 2px solid #991e2a;">
+                            {{#each this.items}}
+                            {{#if this.isGroup}}
+                            <div class="reaction-group-container">
+                                <div class="reaction-item flexrow group-header" data-lid="{{this.lid}}"
+                                    data-name="{{this.name}}" style="cursor: pointer;">
+                                    <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
+                                    <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
+                                    <span class="col-name">
+                                        <strong>{{this.name}}</strong> <span
+                                            style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                        <br><span
+                                            style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                    </span>
+                                    <span class="col-triggers">{{this.triggers}}</span>
+                                    <span class="col-controls"></span>
+                                </div>
+                                <div class="reaction-sublist"
+                                    style="display: none; padding-left: 15px; border-left: 2px solid rgba(153, 30, 42, 0.3);">
+                                    {{#each this.reactions}}
+                                    <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
+                                        data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                                        <span class="col-enabled"><input type="checkbox" class="reaction-enabled"
+                                                {{checked this.enabled}}></span>
+                                        <span class="col-type">
+                                            {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i
+                                                class="fas fa-input-text" title="Action-Based"></i>{{else}}<i
+                                                class="fas fa-globe" title="General"></i>{{/if}}{{else}}<i
+                                                class="fas fa-cube" title="Item-Based"></i>{{/if}}
+                                        </span>
+                                        <span class="col-name"><strong>{{this.name}}</strong>{{#if
+                                            this.reactionPath}}<br><span
+                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
+                                        <span class="col-triggers">{{this.triggers}}</span>
+                                        <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i
+                                                    class="fas fa-copy"></i></a></span>
+                                    </div>
+                                    {{/each}}
+                                </div>
+                            </div>
+                            {{else}}
                             <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
                                 data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
-                                <span class="col-enabled">
-                                    <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
-                                </span>
+                                <span class="col-enabled"><input type="checkbox" class="reaction-enabled" {{checked
+                                        this.enabled}}></span>
                                 <span class="col-type">
-                                    {{#if this.isGeneral}}
-                                        {{#if this.onlyOnSourceMatch}}
-                                        <i class="fas fa-input-text" title="Action-Based"></i>
-                                        {{else}}
-                                        <i class="fas fa-globe" title="General"></i>
-                                        {{/if}}
-                                    {{else}}
-                                    <i class="fas fa-cube" title="Item-Based"></i>
-                                    {{/if}}
+                                    {{#if this.isGeneral}}{{#if this.onlyOnSourceMatch}}<i class="fas fa-input-text"
+                                        title="Action-Based"></i>{{else}}<i class="fas fa-globe"
+                                        title="General"></i>{{/if}}{{else}}<i class="fas fa-cube"
+                                        title="Item-Based"></i>{{/if}}
                                 </span>
                                 <span class="col-name">
-                                    <strong>{{this.name}}</strong>
-                                    {{#if this.reactionPath}}<br><span style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
+                                    {{#if
+                                    this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
+                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
+                                    this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
-                                <span class="col-controls">
-                                    <a class="copy-default" title="Copy to Custom"><i class="fas fa-copy"></i></a>
-                                </span>
+                                <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i
+                                            class="fas fa-copy"></i></a></span>
                             </div>
+                            {{/if}}
                             {{/each}}
                         </div>
                     </div>
-                    {{else}}
-                    <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
-                        data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
-                        <span class="col-enabled">
-                            <input type="checkbox" class="reaction-enabled" {{checked this.enabled}}>
-                        </span>
-                        <span class="col-type">
-                            {{#if this.isGeneral}}
-                            {{#if this.onlyOnSourceMatch}}
-                            <i class="fas fa-input-text" title="Action-Based"></i>
-                            {{else}}
-                            <i class="fas fa-globe" title="General"></i>
-                            {{/if}}
-                            {{else}}
-                            <i class="fas fa-cube" title="Item-Based"></i>
-                            {{/if}}
-                        </span>
-                        <span class="col-name">
-                            {{#if this.isGeneral}}
-                            <strong>{{this.name}}</strong>
-                            {{else}}
-                            <strong>{{this.name}}</strong>
-                            <br><span
-                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
-                            {{#if this.reactionPath}}<br><span
-                                style="font-size:0.8em; color: #aaa;">{{this.reactionPath}}</span>{{/if}}
-                            {{/if}}
-                        </span>
-                        <span class="col-triggers">{{this.triggers}}</span>
-                        <span class="col-controls">
-                            <a class="copy-default" title="Copy to Custom"><i class="fas fa-copy"></i></a>
-                        </span>
-                    </div>
-                    {{/if}}
                     {{/each}}
                 </div>
             </div>
@@ -225,12 +339,82 @@
 </form>
 
 <style>
-    .reaction-list .reaction-header {
-        font-weight: bold;
-        padding: 5px;
-        background: rgba(0, 0, 0, 0.2);
+    /* ===== Window Background ===== */
+    #reaction-manager-config {
+        background: #991e2a;
     }
 
+    #reaction-manager-config .window-header {
+        background: #991e2a;
+        color: #fff;
+        border-bottom: none;
+    }
+
+    #reaction-manager-config .window-header .window-title {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: bold;
+        font-size: 0;
+    }
+
+    #reaction-manager-config .window-header .close {
+        color: #fff;
+    }
+
+    #reaction-manager-config .window-header .close:hover {
+        color: #ffc0c0;
+    }
+
+    #reaction-manager-config .window-content {
+        background: #f5f5f5;
+        color: #000;
+        padding: 8px;
+    }
+
+    /* ===== Tabs ===== */
+    .sheet-tabs {
+        margin-bottom: 8px;
+        border-bottom: 2px solid #991e2a;
+    }
+
+    .sheet-tabs .item {
+        padding: 6px 14px;
+        border: 2px solid transparent;
+        border-bottom: none;
+        cursor: pointer;
+        color: #444;
+        font-weight: 500;
+        border-radius: 4px 4px 0 0;
+        transition: all 0.15s ease;
+    }
+
+    .sheet-tabs .item:hover {
+        color: #991e2a;
+        background: rgba(153, 30, 42, 0.05);
+    }
+
+    .sheet-tabs .item.active {
+        border: 2px solid #991e2a;
+        border-bottom: 2px solid #f5f5f5;
+        background: #f5f5f5;
+        color: #991e2a;
+        font-weight: bold;
+    }
+
+    /* ===== Column Header ===== */
+    .reaction-list .reaction-header {
+        font-weight: 600;
+        padding: 6px 5px;
+        background: #991e2a;
+        color: #fff;
+        border-radius: 4px 4px 0 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* ===== Column Sizing ===== */
     .reaction-list .col-enabled {
         flex: 0.15;
         text-align: center;
@@ -261,45 +445,121 @@
         text-align: right;
     }
 
+    /* ===== Reaction Items ===== */
     .reaction-item {
         padding: 5px;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid #ddd;
+        color: #000;
+        transition: background 0.15s ease;
     }
 
     .reaction-item:nth-child(even),
     .reaction-group-container:nth-child(even) .group-header {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.03);
     }
-    
+
     .reaction-group-container:nth-child(odd) .group-header {
         background: transparent;
     }
 
     .group-header:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
+        background: rgba(153, 30, 42, 0.08) !important;
     }
 
+    /* ===== Folder Headers ===== */
+    .folder-header {
+        cursor: pointer;
+        background: #e8e8e8;
+        border-bottom: 1px solid #ccc;
+        font-weight: 600;
+    }
+
+    .folder-header:hover {
+        background: #ddd !important;
+    }
+
+    .folder-header .folder-expand-icon {
+        color: #991e2a;
+    }
+
+    .folder-header .rename-folder-btn,
+    .folder-header .delete-folder-btn {
+        color: #666;
+    }
+
+    .folder-header .rename-folder-btn:hover,
+    .folder-header .delete-folder-btn:hover {
+        color: #991e2a;
+    }
+
+    /* ===== Scrollable ===== */
     .scrollable {
         max-height: 550px;
         overflow-y: auto;
+        border: 1px solid #ccc;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        background: #fafafa;
     }
 
-    .sheet-tabs {
-        margin-bottom: 10px;
-        border-bottom: 1px solid #aaa;
+    /* ===== Filter Bar ===== */
+    .filter-bar input,
+    .filter-bar select {
+        border: 2px solid #999;
+        background: #fff;
+        color: #000;
+        border-radius: 4px;
+        font-size: 12px;
     }
 
-    .sheet-tabs .item {
-        padding: 5px 10px;
-        border: 1px solid transparent;
-        border-bottom: none;
-        cursor: pointer;
+    .filter-bar input:focus,
+    .filter-bar select:focus {
+        border-color: #991e2a;
+        outline: none;
+        box-shadow: 0 0 6px rgba(153, 30, 42, 0.25);
     }
 
-    .sheet-tabs .item.active {
-        border: 1px solid #aaa;
-        border-bottom: 1px solid #303030;
-        background: rgba(0, 0, 0, 0.2);
-        font-weight: bold;
+    /* ===== Controls ===== */
+    .col-controls a {
+        color: #666;
+        margin-left: 4px;
+        transition: color 0.15s ease;
+    }
+
+    .col-controls a:hover {
+        color: #991e2a;
+    }
+
+    /* ===== Drag and Drop ===== */
+    .dragging {
+        opacity: 0.4;
+    }
+
+    .drag-over {
+        background: rgba(153, 30, 42, 0.12) !important;
+        border-bottom: 2px solid #991e2a !important;
+    }
+
+    .reaction-item[draggable="true"] {
+        cursor: grab;
+    }
+
+    .reaction-item[draggable="true"]:active {
+        cursor: grabbing;
+    }
+
+    /* ===== Checkbox ===== */
+    .reaction-enabled {
+        accent-color: #991e2a;
+    }
+
+    /* ===== Type Icons ===== */
+    .col-type i {
+        color: #991e2a;
+    }
+
+    /* ===== Notes ===== */
+    .notes {
+        color: #555;
     }
 </style>

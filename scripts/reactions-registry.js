@@ -21,9 +21,10 @@ export function getDefaultGeneralReactionRegistry() {
 
     const builtInDefaults = {
         "Overwatch": {
+            category: "General",
             triggers: ["onMove"],
-            //triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
-            //effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
+            triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
+            effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
             isReaction: true,
             actionType: "Reaction",
             outOfCombat: true,
@@ -51,6 +52,7 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Brace": {
+            category: "General",
             reactions: [{
                 triggers: ["onDamage"],
                 triggerDescription: "You are hit by an attack and damage has been rolled.",
@@ -93,6 +95,8 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onActivation"],
+                triggerDescription: "You are hit by an attack and damage has been rolled.",
+                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 onlyOnSourceMatch: true,
                 autoActivate: true,
                 activationType: "code",
@@ -177,6 +181,7 @@ export function getDefaultGeneralReactionRegistry() {
             }],
         },
         "Flight": {
+            category: "General",
             triggers: ["onStatusApplied", "onStructure", "onStress"],
             triggerDescription: "Protects flying characters from incompatible statuses and triggers saves on structure/stress.",
             effectDescription: "Flying grants immunity to Prone. Immobilized or Stunned removes Flying. Structure or Stress requires an AGILITY save or begin falling.",
@@ -224,6 +229,7 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Lock On": {
+            category: "General",
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             activationType: "code",
@@ -276,6 +282,7 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Bolster": {
+            category: "General",
             reactions: [{
                 triggers: ["onActivation"],
                 onlyOnSourceMatch: true,
@@ -363,6 +370,7 @@ export function getDefaultGeneralReactionRegistry() {
             }]
         },
         "Fragment Signal": {
+            category: "General",
             triggers: ["onTechHit"],
             onlyOnSourceMatch: true,
             activationType: "code",
@@ -393,6 +401,7 @@ export function getDefaultGeneralReactionRegistry() {
             }
         },
         "Ram": {
+            category: "General",
             reactions: [{
                 triggers: ["onActivation"],
                 onlyOnSourceMatch: true,
@@ -447,6 +456,7 @@ export function getDefaultGeneralReactionRegistry() {
             }]
         },
         "Fall": {
+            category: "General",
             reactions: [{
                 triggers: ["onTurnEnd"],
                 triggerDescription: "At the end of your turn, if you are airborne without Flying or have Flying but haven't moved at least 1 space, you begin falling.",
@@ -523,6 +533,7 @@ export function getDefaultGeneralReactionRegistry() {
             }]
         },
         "Engagement": {
+            category: "General",
             triggers: ["onUpdate", "onPreMove"],
             triggerDescription: "When a character moves",
             effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",

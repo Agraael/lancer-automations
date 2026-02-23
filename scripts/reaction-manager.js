@@ -38,6 +38,10 @@ export class ReactionManager {
         return "generalReactions";
     }
 
+    static get SETTING_FOLDERS() {
+        return "activationFolders";
+    }
+
     static initialize() {
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {
             name: "Custom Activations",
@@ -65,6 +69,65 @@ export class ReactionManager {
             type: ReactionConfig,
             restricted: true
         });
+
+        game.settings.register(ReactionManager.ID, ReactionManager.SETTING_FOLDERS, {
+            name: "Activation Folders",
+            hint: "Folder assignments for custom activations.",
+            scope: "world",
+            config: false,
+            type: Array,
+            default: []
+        });
+    }
+
+    static getFolders() {
+        return game.settings.get(ReactionManager.ID, ReactionManager.SETTING_FOLDERS) || [];
+    }
+
+    static async saveFolders(folders) {
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_FOLDERS, folders);
+    }
+
+    static async createFolder(name) {
+        const folders = ReactionManager.getFolders();
+        if (folders.find(f => f.name === name))
+            return;
+        folders.push({ name: name, items: [] });
+        await ReactionManager.saveFolders(folders);
+    }
+
+    static async renameFolder(oldName, newName) {
+        const folders = ReactionManager.getFolders();
+        const folder = folders.find(f => f.name === oldName);
+        if (folder)
+            folder.name = newName;
+        await ReactionManager.saveFolders(folders);
+    }
+
+    static async deleteFolder(name) {
+        let folders = ReactionManager.getFolders();
+        folders = folders.filter(f => f.name !== name);
+        await ReactionManager.saveFolders(folders);
+    }
+
+    static async assignToFolder(folderName, activationKey) {
+        const folders = ReactionManager.getFolders();
+        // Remove from any existing folder first
+        for (const f of folders) {
+            f.items = f.items.filter(k => k !== activationKey);
+        }
+        const target = folders.find(f => f.name === folderName);
+        if (target)
+            target.items.push(activationKey);
+        await ReactionManager.saveFolders(folders);
+    }
+
+    static async unassignFromFolder(activationKey) {
+        const folders = ReactionManager.getFolders();
+        for (const f of folders) {
+            f.items = f.items.filter(k => k !== activationKey);
+        }
+        await ReactionManager.saveFolders(folders);
     }
 
     static getAllReactions() {
@@ -198,7 +261,7 @@ export class ReactionConfig extends FormApplication {
             id: "reaction-manager-config",
             template: `modules/lancer-automations/templates/reaction-config.html`,
             width: 800,
-            height: 700,
+            height: 850,
             resizable: true,
             tabs: [{ navSelector: ".tabs", contentSelector: ".content", initial: "custom" }]
         });
@@ -382,7 +445,8 @@ export class ReactionConfig extends FormApplication {
                     isOverridden: isOverridden,
                     reactionIndex: index,
                     original: reaction,
-                    enabled: enabledState
+                    enabled: enabledState,
+                    category: data.category || ""
                 }));
             });
 
@@ -406,7 +470,8 @@ export class ReactionConfig extends FormApplication {
                     isDefault: true,
                     isGroup: true,
                     reactions: validReactions,
-                    enabled: validReactions.every(r => r.enabled)
+                    enabled: validReactions.every(r => r.enabled),
+                    category: data.category || ""
                 });
             }
         }
@@ -446,7 +511,8 @@ export class ReactionConfig extends FormApplication {
                         onlyOnSourceMatch: subReaction.onlyOnSourceMatch || false,
                         reactionIndex: index,
                         original: subReaction,
-                        enabled: enabledState
+                        enabled: enabledState,
+                        category: reaction.category || ""
                     });
                 });
 
@@ -462,7 +528,8 @@ export class ReactionConfig extends FormApplication {
                         isDefault: true,
                         isGroup: true,
                         reactions: validReactions,
-                        enabled: validReactions.every(r => r.enabled)
+                        enabled: validReactions.every(r => r.enabled),
+                        category: reaction.category || ""
                     });
                 }
             } else {
@@ -479,7 +546,8 @@ export class ReactionConfig extends FormApplication {
                     isOverridden: isOverridden,
                     onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                     original: reaction,
-                    enabled: enabledState
+                    enabled: enabledState,
+                    category: reaction.category || ""
                 }));
             }
         }
@@ -493,9 +561,72 @@ export class ReactionConfig extends FormApplication {
         allReactions.sort(sorter);
         defaultList.sort(sorter);
 
+        // Group defaults by category into folders
+        const categoryMap = new Map();
+        for (const item of defaultList) {
+            const cat = item.category || "Other";
+            if (!categoryMap.has(cat))
+                categoryMap.set(cat, []);
+            categoryMap.get(cat).push(item);
+        }
+        const defaultFolders = [];
+        for (const [catName, items] of categoryMap) {
+            defaultFolders.push({
+                folderName: catName,
+                isFolder: true,
+                items: items
+            });
+        }
+        // Sort folders by name (General first)
+        defaultFolders.sort((a, b) => {
+            if (a.folderName === "General")
+                return -1;
+            if (b.folderName === "General")
+                return 1;
+            return a.folderName.localeCompare(b.folderName);
+        });
+
+        // Build custom folders for the custom tab
+        const folderSettings = ReactionManager.getFolders();
+        const getActivationKey = (r) => r.isGeneral ? `general::${r.name}` : `item::${r.lid}`;
+
+        // Build folders with their items
+        const assignedKeys = new Set();
+        const customFolders = folderSettings.map(f => {
+            const keySet = new Set(f.items || []);
+            const folderItems = allReactions.filter(r => keySet.has(getActivationKey(r)));
+            folderItems.forEach(r => assignedKeys.add(getActivationKey(r)));
+            return {
+                folderName: f.name,
+                isFolder: true,
+                items: folderItems
+            };
+        });
+
+        // Unfiled items
+        const unfiledReactions = allReactions.filter(r => !assignedKeys.has(getActivationKey(r)));
+
+        // Collect all unique triggers for the filter dropdown
+        const allTriggerSet = new Set();
+        for (const r of [...allReactions, ...defaultList]) {
+            const trigStr = r.triggers || "";
+            trigStr.split(", ").filter(t => t).forEach(t => allTriggerSet.add(t.trim()));
+            if (r.reactions) {
+                r.reactions.forEach(sub => {
+                    const subTrig = sub.triggers || "";
+                    subTrig.split(", ").filter(t => t).forEach(t => allTriggerSet.add(t.trim()));
+                });
+            }
+        }
+        const allTriggers = [...allTriggerSet].sort();
+
         return {
             allReactions: allReactions,
-            defaultReactions: defaultList
+            unfiledReactions: unfiledReactions,
+            customFolders: customFolders,
+            defaultReactions: defaultList,
+            defaultFolders: defaultFolders,
+            allTriggers: allTriggers
         };
     }
 
@@ -508,6 +639,7 @@ export class ReactionConfig extends FormApplication {
         html.find('.reaction-enabled').change(this._onToggleEnabled.bind(this));
         html.find('.help-btn').click(this._onHelp.bind(this));
 
+        // Group expand/collapse
         html.find('.group-header').click((ev) => {
             ev.preventDefault();
             const header = $(ev.currentTarget);
@@ -520,6 +652,242 @@ export class ReactionConfig extends FormApplication {
             } else {
                 sublist.slideDown(200);
                 icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+            }
+        });
+
+        // Folder expand/collapse
+        html.find('.folder-header').click((ev) => {
+            ev.preventDefault();
+            const header = $(ev.currentTarget);
+            const icon = header.find('.folder-expand-icon');
+            const content = header.next('.folder-content');
+
+            if (content.is(':visible')) {
+                content.slideUp(200);
+                icon.removeClass('fa-folder-open').addClass('fa-folder');
+            } else {
+                content.slideDown(200);
+                icon.removeClass('fa-folder').addClass('fa-folder-open');
+            }
+        });
+
+        // Search + trigger filter
+        const applyFilters = (container) => {
+            const searchInput = container.find('.search-input');
+            const triggerFilter = container.find('.trigger-filter');
+            const scrollable = container.find('.scrollable');
+
+            const searchVal = (searchInput.val() || '').toLowerCase();
+            const triggerVal = triggerFilter.val() || '';
+
+            // For folder-based (defaults) tab
+            scrollable.find('.category-folder').each(function () {
+                const folder = $(this);
+                let anyVisible = false;
+
+                folder.find('.reaction-item:not(.group-header):not(.folder-header)').each(function () {
+                    const item = $(this);
+                    const name = (item.data('name') || '').toString().toLowerCase();
+                    const lid = (item.data('lid') || '').toString().toLowerCase();
+                    const triggers = (item.find('.col-triggers').text() || '').toLowerCase();
+
+                    const matchesSearch = !searchVal || name.includes(searchVal) || lid.includes(searchVal);
+                    const matchesTrigger = !triggerVal || triggers.includes(triggerVal.toLowerCase());
+
+                    if (matchesSearch && matchesTrigger) {
+                        item.show();
+                        anyVisible = true;
+                    } else {
+                        item.hide();
+                    }
+                });
+
+                // Also check groups
+                folder.find('.reaction-group-container').each(function () {
+                    const group = $(this);
+                    const groupHeader = group.find('.group-header');
+                    const name = (groupHeader.data('name') || '').toString().toLowerCase();
+                    const triggers = (groupHeader.find('.col-triggers').text() || '').toLowerCase();
+
+                    const matchesSearch = !searchVal || name.includes(searchVal);
+                    const matchesTrigger = !triggerVal || triggers.includes(triggerVal.toLowerCase());
+
+                    if (matchesSearch && matchesTrigger) {
+                        group.show();
+                        anyVisible = true;
+                    } else {
+                        group.hide();
+                    }
+                });
+
+                // Hide folder if no visible items
+                if (anyVisible) {
+                    folder.show();
+                } else {
+                    folder.hide();
+                }
+            });
+
+            // For non-folder items (custom tab)
+            scrollable.find('> .reaction-item, > .reaction-group-container').each(function () {
+                const el = $(this);
+                const name = (el.data('name') || el.find('.group-header').data('name') || '').toString().toLowerCase();
+                const lid = (el.data('lid') || el.find('.group-header').data('lid') || '').toString().toLowerCase();
+                const triggers = (el.find('.col-triggers').first().text() || '').toLowerCase();
+
+                const matchesSearch = !searchVal || name.includes(searchVal) || lid.includes(searchVal);
+                const matchesTrigger = !triggerVal || triggers.includes(triggerVal.toLowerCase());
+
+                if (matchesSearch && matchesTrigger) {
+                    el.show();
+                } else {
+                    el.hide();
+                }
+            });
+        };
+
+        html.find('.search-input').on('input', function () {
+            const container = $(this).closest('.tab');
+            applyFilters(container);
+        });
+
+        html.find('.trigger-filter').on('change', function () {
+            const container = $(this).closest('.tab');
+            applyFilters(container);
+        });
+
+        // Custom folder management
+        const self = this;
+        html.find('.create-folder-btn').click(async () => {
+            const name = await new Promise(resolve => {
+                new Dialog({
+                    title: "Create Folder",
+                    content: `<div class="form-group"><label>Folder Name</label><input type="text" name="folderName" placeholder="Enter folder name..." autofocus></div>`,
+                    buttons: {
+                        ok: { label: "Create", callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) },
+                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                    },
+                    default: "ok"
+                }).render(true);
+            });
+            if (name) {
+                await ReactionManager.createFolder(name);
+                self.render();
+            }
+        });
+
+        html.find('.rename-folder-btn').click(async function (ev) {
+            ev.stopPropagation();
+            const oldName = $(this).closest('.category-folder').data('folder');
+            const newName = await new Promise(resolve => {
+                new Dialog({
+                    title: "Rename Folder",
+                    content: `<div class="form-group"><label>New Name</label><input type="text" name="folderName" value="${oldName}" autofocus></div>`,
+                    buttons: {
+                        ok: { label: "Rename", callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) },
+                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                    },
+                    default: "ok"
+                }).render(true);
+            });
+            if (newName && newName !== oldName) {
+                await ReactionManager.renameFolder(oldName, newName);
+                self.render();
+            }
+        });
+
+        html.find('.delete-folder-btn').click(async function (ev) {
+            ev.stopPropagation();
+            const folderName = $(this).closest('.category-folder').data('folder');
+            const result = await new Promise(resolve => {
+                new Dialog({
+                    title: "Delete Folder",
+                    content: `<p>Delete folder "<strong>${folderName}</strong>"?</p>`,
+                    buttons: {
+                        keep: { label: "Keep Items", icon: '<i class="fas fa-inbox"></i>', callback: () => resolve("keep") },
+                        all: { label: "Delete All", icon: '<i class="fas fa-trash"></i>', callback: () => resolve("all") },
+                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                    },
+                    default: "keep"
+                }).render(true);
+            });
+            if (!result)
+                return;
+
+            if (result === "all") {
+                // Delete all activations inside the folder
+                const folders = ReactionManager.getFolders();
+                const folder = folders.find(f => f.name === folderName);
+                if (folder) {
+                    for (const key of folder.items) {
+                        if (key.startsWith("general::")) {
+                            const name = key.replace("general::", "");
+                            await ReactionManager.deleteGeneralReaction(name);
+                        } else if (key.startsWith("item::")) {
+                            const lid = key.replace("item::", "");
+                            let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);
+                            if (userReactions[lid]) {
+                                delete userReactions[lid];
+                                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
+                            }
+                        }
+                    }
+                }
+            }
+            await ReactionManager.deleteFolder(folderName);
+            self.render();
+        });
+
+        // Drag and drop for custom tab
+        const customTab = html.find('[data-tab="custom"]');
+
+        // Make draggable items
+        customTab.find('.reaction-item:not(.group-header):not(.folder-header)').attr('draggable', 'true');
+        customTab.find('.reaction-group-container').attr('draggable', 'true');
+
+        customTab.on('dragstart', '.reaction-item[draggable="true"], .reaction-group-container[draggable="true"]', function (ev) {
+            const el = $(this);
+            const isGeneral = el.data('is-general') === true || el.data('is-general') === 'true';
+            const lid = el.data('lid');
+            const name = el.data('name');
+            const key = isGeneral ? `general::${name}` : `item::${lid}`;
+            ev.originalEvent.dataTransfer.setData('text/plain', key);
+            el.addClass('dragging');
+        });
+
+        customTab.on('dragend', '.reaction-item, .reaction-group-container', function () {
+            $(this).removeClass('dragging');
+            customTab.find('.drag-over').removeClass('drag-over');
+        });
+
+        // Drop targets: folder headers and unfiled area
+        customTab.on('dragover', '.folder-header, .unfiled-header', function (ev) {
+            ev.preventDefault();
+            $(this).addClass('drag-over');
+        });
+
+        customTab.on('dragleave', '.folder-header, .unfiled-header', function () {
+            $(this).removeClass('drag-over');
+        });
+
+        customTab.on('drop', '.folder-header', async function (ev) {
+            ev.preventDefault();
+            $(this).removeClass('drag-over');
+            const key = ev.originalEvent.dataTransfer.getData('text/plain');
+            const folderName = $(this).closest('.category-folder').data('folder');
+            if (key && folderName) {
+                await ReactionManager.assignToFolder(folderName, key);
+                self.render();
+            }
+        });
+
+        customTab.on('drop', '.unfiled-header', async function (ev) {
+            ev.preventDefault();
+            $(this).removeClass('drag-over');
+            const key = ev.originalEvent.dataTransfer.getData('text/plain');
+            if (key) {
+                await ReactionManager.unassignFromFolder(key);
+                self.render();
             }
         });
     }
@@ -1197,6 +1565,12 @@ export class ReactionEditor extends FormApplication {
             await this._openItemBrowser(lidInput, pathInput, updatePreview, previewContainer);
         });
 
+        html.find('.find-action-btn').on('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            await this._openActionBrowser(lidInput.val(), pathInput, updatePreview);
+        });
+
         html.find('.expand-editor').on('click', this._onExpandEditor.bind(this));
     }
 
@@ -1330,55 +1704,112 @@ export class ReactionEditor extends FormApplication {
 
     async _openItemBrowser(lidInput, pathInput, updatePreview, previewContainer) {
         const items = [];
+        const itemTypes = new Set();
         for (const pack of game.packs) {
             if (pack.documentName !== "Item")
                 continue;
-            const index = await pack.getIndex({ fields: ["system.lid", "type"] });
+            const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
             for (const entry of index) {
                 if (entry.system?.lid) {
+                    let actionCount = 0;
+                    if (entry.type === "npc_feature") {
+                        if (entry.system?.trigger) {
+                            actionCount++;
+                        }
+                        if (entry.system?.actions) {
+                            actionCount += entry.system.actions.length;
+                        }
+                    } else {
+                        if (entry.system?.ranks) {
+                            entry.system.ranks.forEach(r => actionCount += (r.actions?.length || 0));
+                        }
+                        if (entry.system?.profiles) {
+                            entry.system.profiles.forEach(p => actionCount += (p.actions?.length || 0));
+                        }
+                        if (entry.system?.actions) {
+                            actionCount += entry.system.actions.length;
+                        }
+                    }
+                    // If no sub-actions are found, it defaults to the item itself (1 action)
+                    if (actionCount === 0) {
+                        actionCount = 1;
+                    }
+
                     items.push({
                         name: entry.name,
                         lid: entry.system.lid,
                         type: entry.type,
-                        uuid: entry.uuid
+                        uuid: entry.uuid,
+                        actionCount: actionCount
                     });
+                    itemTypes.add(entry.type);
                 }
             }
         }
 
         items.sort((a, b) => a.name.localeCompare(b.name));
+        const sortedTypes = Array.from(itemTypes).sort();
 
-        const itemListHtml = items.map(item =>
-            `<div class="item-browser-entry" data-lid="${item.lid}" data-uuid="${item.uuid}" style="padding: 4px 8px; cursor: pointer; border-bottom: 1px solid #333;">
-                <strong>${item.name}</strong> <span style="color: #888; font-size: 0.85em;">(${item.type})</span>
-            </div>`
-        ).join('');
+        const typeOptions = sortedTypes.map(t => `<option value="${t}">${game.i18n.localize(CONFIG.Item.typeLabels[t]) || t}</option>`).join('');
+
+        const itemListHtml = items.map(item => {
+            const countLabel = item.actionCount > 1 ? `<span style="font-size: 0.8em; opacity: 0.7; font-weight: normal;">(${item.actionCount} actions)</span>` : '';
+            return `<div class="lancer-item-card item-browser-entry" data-lid="${item.lid}" data-uuid="${item.uuid}" data-type="${item.type}" style="margin-bottom: 6px; padding: 10px;">
+                <div class="lancer-item-icon"><i class="fas fa-cube"></i></div>
+                <div class="lancer-item-content">
+                    <div class="lancer-item-name">${item.name} ${countLabel}</div>
+                    <div class="lancer-item-details">${item.type} | LID: ${item.lid}</div>
+                </div>
+            </div>`;
+        }).join('');
 
         const selectedItem = await new Promise((resolve) => {
-            new Dialog({
+            const dialog = new Dialog({
                 title: "Find Item",
                 content: `
-                    <div style="margin-bottom: 8px;">
-                        <input type="text" id="item-search" placeholder="Search by name..." style="width: 100%;">
+                    <div class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
+                        <h1 class="lancer-dialog-title">Find Item</h1>
+                        <p class="lancer-dialog-subtitle">Search for an item by name or filter by category.</p>
                     </div>
-                    <div id="item-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #333;">
+                    <div class="lancer-search-container" style="margin-bottom: 8px; display: flex; gap: 6px;">
+                        <div style="flex: 2; position: relative;">
+                            <i class="fas fa-search lancer-search-icon"></i>
+                            <input type="text" id="item-search" placeholder="Search by name..." style="padding-left: 35px;">
+                        </div>
+                        <select id="type-filter" style="flex: 1;">
+                            <option value="">All Types</option>
+                            ${typeOptions}
+                        </select>
+                    </div>
+                    <div id="item-list" style="max-height: 400px; overflow-y: auto; padding: 4px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px;">
                         ${itemListHtml}
                     </div>
                 `,
                 buttons: {
-                    cancel: { label: "Cancel", callback: () => resolve(null) }
+                    cancel: {
+                        label: '<i class="fas fa-times"></i> Cancel',
+                        callback: () => resolve(null)
+                    }
                 },
                 render: (html) => {
                     const searchInput = html.find('#item-search');
+                    const typeFilter = html.find('#type-filter');
                     const listContainer = html.find('#item-list');
 
-                    searchInput.on('input', () => {
+                    const filterItems = () => {
                         const query = searchInput.val().toLowerCase();
+                        const type = typeFilter.val();
                         listContainer.find('.item-browser-entry').each((i, el) => {
-                            const name = $(el).find('strong').text().toLowerCase();
-                            $(el).toggle(name.includes(query));
+                            const name = $(el).find('.lancer-item-name').text().toLowerCase();
+                            const itemType = $(el).data('type');
+                            const matchesSearch = name.includes(query);
+                            const matchesType = !type || itemType === type;
+                            $(el).toggle(matchesSearch && matchesType);
                         });
-                    });
+                    };
+
+                    searchInput.on('input', filterItems);
+                    typeFilter.on('change', filterItems);
 
                     listContainer.on('click', '.item-browser-entry', (ev) => {
                         const entry = $(ev.currentTarget);
@@ -1386,11 +1817,15 @@ export class ReactionEditor extends FormApplication {
                             lid: entry.data('lid'),
                             uuid: entry.data('uuid')
                         });
-                        html.closest('.dialog').find('.header-button.close').click();
+                        dialog.close();
                     });
                 },
                 default: "cancel"
-            }, { width: 400 }).render(true);
+            }, { 
+                width: 500,
+                classes: ["lancer-dialog-base", "lancer-item-browser-dialog"]
+            });
+            dialog.render(true);
         });
 
         if (!selectedItem)
@@ -1400,6 +1835,65 @@ export class ReactionEditor extends FormApplication {
         if (!item)
             return;
 
+        const actions = this._getItemActions(item);
+
+        let selectedPath = "";
+        if (actions.length === 1) {
+            selectedPath = actions[0].path;
+        } else {
+            selectedPath = await this._showActionSelectionDialog(item.name, actions);
+            if (selectedPath === null)
+                return;
+        }
+
+        lidInput.val(selectedItem.lid);
+        pathInput.val(selectedPath);
+
+        await updatePreview();
+    }
+
+    async _openActionBrowser(lid, pathInput, updatePreview) {
+        if (!lid) {
+            ui.notifications.warn("Please select an item first.");
+            return;
+        }
+
+        ui.notifications.info(`Finding actions for item: ${lid}...`);
+
+        let item = null;
+        for (const pack of game.packs) {
+            if (pack.documentName !== "Item")
+                continue;
+            const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
+            const entry = index.find(e => e.system?.lid === lid);
+            if (entry) {
+                item = await fromUuid(entry.uuid);
+                break;
+            }
+        }
+
+        if (!item) {
+            ui.notifications.error(`Item with LID "${lid}" not found in any compendium.`);
+            return;
+        }
+
+        const actions = this._getItemActions(item);
+
+        if (actions.length <= 1) {
+            ui.notifications.info(`${item.name} has only one possible action.`);
+            pathInput.val("");
+            await updatePreview();
+            return;
+        }
+
+        const selectedPath = await this._showActionSelectionDialog(item.name, actions);
+        if (selectedPath !== null) {
+            pathInput.val(selectedPath);
+            await updatePreview();
+        }
+    }
+
+    _getItemActions(item) {
         const actions = [];
 
         if (item.type === "npc_feature") {
@@ -1446,47 +1940,51 @@ export class ReactionEditor extends FormApplication {
         if (actions.length === 0) {
             actions.push({ name: item.name, path: "", isDefault: true });
         }
+        return actions;
+    }
 
-        let selectedPath = "";
-        if (actions.length === 1) {
-            selectedPath = actions[0].path;
-        } else {
-            const actionListHtml = actions.map((action, idx) =>
-                `<div class="action-browser-entry" data-path="${action.path}" style="padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #333;">
-                    ${action.name}${action.isDefault ? ' <em>(default)</em>' : ''}<br>
-                    <span style="color: #888; font-size: 0.8em;">Path: ${action.path || '(empty)'}</span>
-                </div>`
-            ).join('');
+    async _showActionSelectionDialog(itemName, actions) {
+        const actionListHtml = actions.map((action, idx) =>
+            `<div class="lancer-item-card action-browser-entry" data-path="${action.path}" style="margin-bottom: 6px; padding: 10px;">
+                <div class="lancer-item-icon"><i class="fas fa-bolt"></i></div>
+                <div class="lancer-item-content">
+                    <div class="lancer-item-name">${action.name}${action.isDefault ? ' <em>(default)</em>' : ''}</div>
+                    <div class="lancer-item-details">Path: ${action.path || '(empty)'}</div>
+                </div>
+            </div>`
+        ).join('');
 
-            selectedPath = await new Promise((resolve) => {
-                new Dialog({
-                    title: `Select Action from ${item.name}`,
-                    content: `
-                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #333;">
-                            ${actionListHtml}
-                        </div>
-                    `,
-                    buttons: {
-                        cancel: { label: "Cancel", callback: () => resolve(null) }
-                    },
-                    render: (html) => {
-                        html.find('.action-browser-entry').on('click', (ev) => {
-                            resolve($(ev.currentTarget).data('path'));
-                            html.closest('.dialog').find('.header-button.close').click();
-                        });
-                    },
-                    default: "cancel"
-                }, { width: 350 }).render(true);
+        return await new Promise((resolve) => {
+            const dialog = new Dialog({
+                title: `Select Action`,
+                content: `
+                    <div class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
+                        <h1 class="lancer-dialog-title">Select Action</h1>
+                        <p class="lancer-dialog-subtitle">Choose which action from <strong>${itemName}</strong> to trigger.</p>
+                    </div>
+                    <div id="action-list" style="max-height: 350px; overflow-y: auto; padding: 4px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px;">
+                        ${actionListHtml}
+                    </div>
+                `,
+                buttons: {
+                    cancel: {
+                        label: '<i class="fas fa-times"></i> Cancel',
+                        callback: () => resolve(null)
+                    }
+                },
+                render: (html) => {
+                    html.find('.action-browser-entry').on('click', (ev) => {
+                        resolve($(ev.currentTarget).data('path'));
+                        dialog.close();
+                    });
+                },
+                default: "cancel"
+            }, {
+                width: 400,
+                classes: ["lancer-dialog-base", "lancer-action-browser-dialog"]
             });
-
-            if (selectedPath === null)
-                return;
-        }
-
-        lidInput.val(selectedItem.lid);
-        pathInput.val(selectedPath);
-
-        await updatePreview();
+            dialog.render(true);
+        });
     }
 
     _getTriggerOptions(selected) {

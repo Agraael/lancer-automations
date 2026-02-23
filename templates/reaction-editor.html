@@ -49,11 +49,14 @@
             <span id="preview-item-name">{{#if foundItemName}}<strong>Item:</strong> {{foundItemName}}{{else}}<em>No
                     item found</em>{{/if}}</span>
             {{#if foundActionName}}<span id="preview-action-name" style="margin-left: 8px;"><strong>Action:</strong>
-                {{foundActionName}}</span>{{/if}}
+                {{foundActionName}}</span>
+            <a class="find-action-btn" title="Change Action"
+                style="margin-left: 4px; color: #991e2a; cursor: pointer;"><i class="fas fa-bolt"></i></a>
+            {{/if}}
             <a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
-                style="margin-left: 8px; color: #4a90d9; cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
+                style="margin-left: 8px; color: #991e2a; cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
                     class="fas fa-eye"></i></a>
-            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #4a90d9; cursor: pointer;"><i
+            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #991e2a; cursor: pointer;"><i
                     class="fas fa-search"></i></a>
         </span>
     </div>
@@ -63,6 +66,8 @@
         <label>Action Path</label>
         <div class="form-fields">
             <input type="text" name="reactionPath" value="{{reactionPath}}">
+            <a class="find-action-btn" title="Find Action" style="margin-left: 6px; color: #991e2a; cursor: pointer;"><i
+                    class="fas fa-bolt"></i></a>
         </div>
         <p class="notes">Path within <code>system</code> to the action data. Leave empty to use the item itself.
             (system)</p>
@@ -323,6 +328,40 @@
 </form>
 
 <style>
+    /* ===== Window Chrome ===== */
+    #reaction-editor {
+        background: #991e2a;
+    }
+
+    #reaction-editor .window-header {
+        background: #991e2a;
+        color: #fff;
+        border-bottom: none;
+    }
+
+    #reaction-editor .window-header .window-title {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: bold;
+        font-size: 0;
+    }
+
+    #reaction-editor .window-header .close {
+        color: #fff;
+    }
+
+    #reaction-editor .window-header .close:hover {
+        color: #ffc0c0;
+    }
+
+    #reaction-editor .window-content {
+        background: #f5f5f5;
+        color: #000;
+        padding: 10px;
+    }
+
+    /* ===== Layout ===== */
     .reaction-columns {
         display: flex;
         gap: 15px;
@@ -342,11 +381,12 @@
         flex-direction: column;
     }
 
+    /* ===== Panels ===== */
     .panel-section {
-        background: rgba(0, 0, 0, 0.03);
+        background: #fff;
         border: 1px solid #ccc;
-        border-radius: 4px;
-        padding: 8px;
+        border-radius: 6px;
+        padding: 10px;
     }
 
     .panel-section.full-height {
@@ -357,13 +397,16 @@
 
     .panel-header {
         margin: 0 0 8px 0;
-        padding-bottom: 4px;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        padding-bottom: 6px;
+        border-bottom: 2px solid #991e2a;
         font-size: 1.1em;
         font-weight: bold;
-        color: #444;
+        color: #991e2a;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
+    /* ===== Form Grids ===== */
     .form-grid-2col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -376,6 +419,7 @@
         font-weight: bold;
         font-size: 0.9em;
         margin-bottom: 3px;
+        color: #333;
     }
 
     .options-grid {
@@ -390,13 +434,12 @@
         gap: 6px;
     }
 
+    /* ===== Triggers ===== */
     .trigger-grid-container {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
         gap: 4px;
-        overflow-y: auto;
         flex: 1;
-        /* max-height: 250px; Optional: limit height if needed */
     }
 
     .trigger-item {
@@ -404,22 +447,93 @@
         align-items: center;
         white-space: nowrap;
         font-size: 0.85em;
-        padding: 2px;
-        border-radius: 3px;
+        padding: 3px 4px;
+        border-radius: 4px;
+        transition: background 0.15s ease;
     }
 
     .trigger-item:hover {
-        background: rgba(0, 0, 0, 0.05);
+        background: rgba(153, 30, 42, 0.08);
     }
 
     .trigger-item input {
         margin-right: 4px;
+        accent-color: #991e2a;
     }
 
+    /* ===== Form Inputs ===== */
+    #reaction-editor input[type="text"],
+    #reaction-editor select,
+    #reaction-editor textarea {
+        border: 2px solid #999;
+        background: #fff;
+        color: #000;
+        border-radius: 4px;
+    }
+
+    #reaction-editor input[type="text"]:focus,
+    #reaction-editor select:focus,
+    #reaction-editor textarea:focus {
+        border-color: #991e2a;
+        outline: none;
+        box-shadow: 0 0 6px rgba(153, 30, 42, 0.25);
+    }
+
+    #reaction-editor input[type="checkbox"] {
+        accent-color: #991e2a;
+    }
+
+    /* ===== Labels & Notes ===== */
+    #reaction-editor label {
+        color: #333;
+    }
+
+    #reaction-editor .notes {
+        color: #555;
+    }
+
+    #reaction-editor code {
+        background: rgba(153, 30, 42, 0.08);
+        color: #991e2a;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+
+    /* ===== Footer Button ===== */
+    .sheet-footer {
+        position: sticky;
+        bottom: 0;
+        background: #f5f5f5;
+        padding: 8px 0;
+        z-index: 10;
+        border-top: 1px solid #ccc;
+    }
+
+    .sheet-footer button[type="submit"] {
+        background: #991e2a;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sheet-footer button[type="submit"]:hover {
+        background: #7a1822;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        transform: translateY(-1px);
+    }
+
+    /* ===== Utility ===== */
     .optional {
         font-weight: normal;
         font-size: 0.8em;
-        color: #666;
+        color: #888;
         margin-left: 4px;
     }
 
@@ -427,7 +541,6 @@
         display: none !important;
     }
 
-    /* Override checkbox margins */
     label.checkbox {
         margin: 0;
         padding: 0;
