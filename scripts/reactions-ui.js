@@ -5,13 +5,13 @@ let activeReactionDialog = null;
 let activeDetailPanel = null;
 let selectedReactionKey = null;
 
-async function runCustomActivation({ activationType, source, triggerType, triggerData, token, item, activationName }) {
+function runCustomActivation({ activationType, source, triggerType, triggerData, token, item, activationName }) {
     if (activationType === "macro") {
         const macroName = source?.activationMacro;
         if (macroName) {
             const macro = game.macros.find(m => m.name === macroName);
             if (macro) {
-                await macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
+                return macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
             } else {
                 ui.notifications.warn(`Macro "${macroName}" not found`);
             }
@@ -21,18 +21,10 @@ async function runCustomActivation({ activationType, source, triggerType, trigge
         if (code) {
             try {
                 if (typeof code === 'function') {
-                    if (source.forceSynchronous) {
-                        code(triggerType, triggerData, token, item, activationName);
-                    } else {
-                        await code(triggerType, triggerData, token, item, activationName);
-                    }
+                    return code(triggerType, triggerData, token, item, activationName);
                 } else if (typeof code === 'string') {
                     const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                    if (source.forceSynchronous) {
-                        fn(triggerType, triggerData, token, item, activationName);
-                    } else {
-                        await fn(triggerType, triggerData, token, item, activationName);
-                    }
+                    return fn(triggerType, triggerData, token, item, activationName);
                 }
             } catch (e) {
                 console.error(`lancer-automations | Error executing activation code:`, e);
@@ -41,7 +33,7 @@ async function runCustomActivation({ activationType, source, triggerType, trigge
     }
 }
 
-export async function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
+export function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
     // Skip controlling the token for silent code auto-activations — no UI is shown so there's no
     // reason to steal focus from the currently controlled token.
     const isSilentCode = reaction?.autoActivate && reaction?.activationType === 'code';
@@ -79,10 +71,8 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                 await item.beginActivationFlow(path);
             } else if (item.beginSystemFlow && item.system.type !== "Weapon") {
                 await item.beginSystemFlow();
-            } else{
+            } else {
                 const sendUnknownToChatFlow = game.lancer?.flows?.get("SendUnknownToChat");
-                const simpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-
                 if (sendUnknownToChatFlow) {
                     new sendUnknownToChatFlow(item.uuid, {
                         title: item.name,
@@ -94,7 +84,7 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                         tags: item.system.tags
                     }).begin();
                 } else if (simpleActivationFlow) {
-                    new simpleActivationFlow(token.actor.uuid, { title: item.name, item: item }).begin();
+                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
                 } else {
                     const template = `systems/${game.system.id}/templates/chat/generic-card.hbs`;
 
@@ -127,13 +117,16 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
 
         if (activationType === "none") {
         } else if (activationType === "flow") {
-            await itemActivation();
+            return itemActivation();
         } else if (activationType === "macro" || activationType === "code") {
             if (activationMode === "instead") {
-                await executeCustomActivation();
+                return executeCustomActivation();
             } else {
-                await itemActivation();
-                await executeCustomActivation();
+                const p1 = itemActivation();
+                const p2 = executeCustomActivation();
+                if (p1 instanceof Promise || p2 instanceof Promise) {
+                    return Promise.all([p1 || Promise.resolve(), p2 || Promise.resolve()]);
+                }
             }
         }
     } else {
@@ -153,10 +146,6 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
         });
 
         const showChatActivation = async () => {
-            const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-
-            let flowData;
-
             if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
                 const actionData = triggerData.actionData;
                 flowData = {
@@ -180,19 +169,21 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
                 };
             }
 
-            const flow = new SimpleActivationFlow(actor, flowData);
-            await flow.begin();
+            await game.modules.get('lancer-automations').api.executeSimpleActivation(actor, flowData);
         };
 
         if (activationType === "none") {
         } else if (activationType === "flow") {
-            await showChatActivation();
+            return showChatActivation();
         } else if (activationType === "macro" || activationType === "code") {
             if (activationMode === "instead") {
-                await executeCustomActivation();
+                return executeCustomActivation();
             } else {
-                await showChatActivation();
-                await executeCustomActivation();
+                const p1 = showChatActivation();
+                const p2 = executeCustomActivation();
+                if (p1 instanceof Promise || p2 instanceof Promise) {
+                    return Promise.all([p1 || Promise.resolve(), p2 || Promise.resolve()]);
+                }
             }
         }
     }
@@ -223,7 +214,7 @@ export async function activateReaction(triggerType, triggerData, token, item, ac
             const actor = token.actor;
             if (actor?.system?.action_tracker?.reaction > 0) {
                 const newReaction = actor.system.action_tracker.reaction - 1;
-                await actor.update({ 'system.action_tracker.reaction': newReaction });
+                return actor.update({ 'system.action_tracker.reaction': newReaction });
             }
         }
     }

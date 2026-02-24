@@ -4,8 +4,8 @@ if (!myActor) {
     return ui.notifications.error("⚠️ Please select your mech first!");
 }
 
-const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-const flow = new SimpleActivationFlow(myActor, {
+const api = game.modules.get('lancer-automations').api;
+await api.executeSimpleActivation(myActor, {
     title: "Disengage",
     action: {
         name: "Disengage",
@@ -13,5 +13,3 @@ const flow = new SimpleActivationFlow(myActor, {
     },
     detail: "Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.",
 });
-
-await flow.begin();

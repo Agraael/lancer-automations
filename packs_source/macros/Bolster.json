@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Bolster",
+    "type": "script",
+    "img": "icons/svg/upgrade.svg",
+    "command_source": "Bolster.js"
+}

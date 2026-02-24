@@ -160,8 +160,8 @@
 
                     <!-- Force Synchronous (only when Auto Activate is checked) -->
                     <label class="checkbox force-sync-option"
-                        title="Run activation code synchronously (required for cancel() to work in onPreMove)" {{#unless
-                        autoActivate}}style="display:none" {{/unless}}>
+                        title="Run activation code synchronously. Required for cancel() in onPreMove and ensures bonuses like Accuracy are applied before rolls begin."
+                        {{#unless autoActivate}}style="display:none" {{/unless}}>
                         <input type="checkbox" name="forceSynchronous" {{#if forceSynchronous}}checked{{/if}}>
                         <span>Force Sync</span>
                     </label>

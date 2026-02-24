@@ -1,5 +1,5 @@
 {
-    "name": "Throw Weapon",
+    "name": "L.A - Throw Weapon",
     "type": "script",
     "img": "modules/lancer-automations/icons/throw.svg",
     "command_source": "ThrowWeapon.js"

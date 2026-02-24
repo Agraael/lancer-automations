@@ -1,5 +1,5 @@
 {
-    "name": "Brace",
+    "name": "L.A - Brace",
     "type": "script",
     "img": "modules/lancer-automations/icons/brace.svg",
     "command_source": "Brace.js"

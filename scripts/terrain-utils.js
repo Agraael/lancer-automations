@@ -25,6 +25,13 @@ export function getTokenCells(token) {
     return cells;
 }
 
+// Cache for terrain types to avoid redundant API calls and array searches
+const _terrainCache = {
+    blockingMap: new Map(),
+    timestamp: 0,
+    ttl: 2000 // 2 second TTL is safe for terrain config changes
+};
+
 /**
  * Get the maximum ground height under a token considering all occupied cells.
  * @param {Token} token - The token to check ground height for
@@ -33,7 +40,20 @@ export function getTokenCells(token) {
  */
 export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     const cells = getTokenCells(token);
-    const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
+
+    // Refresh terrain type cache if expired
+    const now = Date.now();
+    if (now - _terrainCache.timestamp > _terrainCache.ttl) {
+        const types = terrainAPI.getTerrainTypes?.() || [];
+        _terrainCache.blockingMap.clear();
+        for (const t of types) {
+            if (t.blockMovement) {
+                _terrainCache.blockingMap.set(t.id, t);
+            }
+        }
+        _terrainCache.timestamp = now;
+    }
+
     let maxGroundHeight = 0;
 
     for (const [x, y] of cells) {
@@ -42,11 +62,8 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
 
         // Find the highest terrain height at this position (only consider terrain that blocks movement)
         for (const terrain of existingTerrain) {
-            // Find the terrain type configuration
-            const terrainType = terrainTypes.find(t => t.id === terrain.terrainTypeId);
-
-            // Only consider this terrain if it blocks movement
-            if (terrainType && terrainType.blockMovement) {
+            // Check if this terrain type blocks movement using the cached Map
+            if (_terrainCache.blockingMap.has(terrain.terrainTypeId)) {
                 const totalHeight = (terrain.elevation || 0) + (terrain.height || 0);
                 if (totalHeight > maxGroundHeight) {
                     maxGroundHeight = totalHeight;

@@ -2,8 +2,21 @@
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 
-export function stringToFunction(str, args = []) {
+const scriptCache = new Map();
+
+export function clearScriptCache() {
+    console.log("lancer-automations | Clearing script compilation cache.");
+    scriptCache.clear();
+    Hooks.callAll('lancer-automations.clearCaches');
+}
+
+export function stringToFunction(str, args = [], reaction = null) {
     const trimmed = str.trim();
+    const cacheKey = `${trimmed}|${args.join(',')}`;
+    if (scriptCache.has(cacheKey)) {
+        return scriptCache.get(cacheKey);
+    }
+
     let fn;
     if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
         fn = eval(`(${trimmed})`);
@@ -11,18 +24,46 @@ export function stringToFunction(str, args = []) {
         fn = new Function(...args, trimmed);
     }
     if (fn.constructor.name === 'AsyncFunction') {
-        console.warn(`lancer-automations | stringToFunction created an async function. Async evaluate functions cannot use cancel(). Consider making it synchronous.`);
+        const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove'];
+        const foundKeywords = blockingKeywords.filter(k => trimmed.includes(k));
+
+        const sensitiveTriggers = ['onPreMove', 'onInitAttack', 'onInitCheck'];
+        const foundTriggers = reaction?.triggers?.filter(t => sensitiveTriggers.includes(t)) || [];
+
+        const isForceSync = reaction?.forceSynchronous;
+
+        if ((foundKeywords.length > 0 || foundTriggers.length > 0) && !isForceSync) {
+            let reason = "";
+            if (foundKeywords.length > 0) {
+                reason += `uses blocking logic (${foundKeywords.join(', ')})`;
+            }
+            if (foundTriggers.length > 0) {
+                reason += (reason ? " and " : "") + `is associated with sensitive triggers (${foundTriggers.join(', ')})`;
+            }
+
+            ui.notifications.warn(`lancer-automations | Evaluation for "${reaction?.name || 'Activation'}" is async and ${reason} without "Force Synchronous". This will likely fail to block movement or timing-sensitive bonuses.`, {permanent: true});
+        }
     }
+    scriptCache.set(cacheKey, fn);
     return fn;
 }
 
 export function stringToAsyncFunction(str, args = []) {
     const trimmed = str.trim();
-    if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
-        return eval(`(${trimmed})`);
+    const cacheKey = `async|${trimmed}|${args.join(',')}`;
+    if (scriptCache.has(cacheKey)) {
+        return scriptCache.get(cacheKey);
     }
-    const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-    return new AsyncFunction(...args, trimmed);
+
+    let fn;
+    if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
+        fn = eval(`(${trimmed})`);
+    } else {
+        const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+        fn = new AsyncFunction(...args, trimmed);
+    }
+    scriptCache.set(cacheKey, fn);
+    return fn;
 }
 
 export class ReactionManager {
@@ -179,6 +220,7 @@ export class ReactionManager {
     static async saveGeneralReaction(name, reaction) {
         const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         userSaved[name] = reaction;
+        clearScriptCache();
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
     }
 
@@ -186,6 +228,7 @@ export class ReactionManager {
         const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         if (userSaved[name]) {
             delete userSaved[name];
+            clearScriptCache();
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
         }
     }
@@ -240,6 +283,7 @@ export class ReactionManager {
                         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, mergedItem);
                         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, mergedGeneral);
                     }
+                    clearScriptCache();
 
                     ui.notifications.info(`Activations imported successfully (${mode} mode).`);
                     resolve(true);
@@ -976,6 +1020,7 @@ export class ReactionConfig extends FormApplication {
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
             }
         }
+        clearScriptCache();
         this.render();
     }
 
@@ -1055,6 +1100,7 @@ export class ReactionConfig extends FormApplication {
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userItemSettings);
         }
+        clearScriptCache();
         this.render();
     }
 
@@ -1183,7 +1229,7 @@ export class ReactionEditor extends FormApplication {
             triggerOther: reaction.triggerOther !== false,
             outOfCombat: reaction.outOfCombat === true,
             autoActivate: reaction.autoActivate || false,
-            forceSynchronous: reaction.forceSynchronous || false,
+            forceSynchronous: reaction.forceSynchronous ?? (reaction.autoActivate ?? false),
             onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
@@ -2109,6 +2155,8 @@ export class ReactionEditor extends FormApplication {
 
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
         }
+
+        clearScriptCache();
 
         Object.values(ui.windows).forEach(w => {
             if (w.id === "reaction-manager-config")

@@ -1,5 +1,5 @@
 {
-    "name": "Deploy Item",
+    "name": "L.A - Deploy Item",
     "type": "script",
     "img": "systems/lancer/assets/icons/white/deployable.svg",
     "command_source": "DeployItem.js"

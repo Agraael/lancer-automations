@@ -35,7 +35,7 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
             }
         }
 
-        highlight.lineStyle(2, color, 0.7);
+        highlight.lineStyle(2, color, 0.4);
         highlight.beginFill(color, alpha);
 
         for (const key of hexesInRange) {
@@ -471,7 +471,7 @@ export function chooseToken(casterToken, options = {}) {
         const selectionHighlights = [];
 
         if (range !== null && casterToken) {
-            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.3, includeSelf);
+            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, includeSelf);
         }
 
         const cursorPreview = new PIXI.Graphics();
@@ -528,11 +528,24 @@ export function chooseToken(casterToken, options = {}) {
                 }
                 rangeHighlight.destroy();
             }
-            canvas.stage.removeChild(cursorPreview);
+            if (cursorPreview) {
+                if (cursorPreview.parent) {
+                    cursorPreview.parent.removeChild(cursorPreview);
+                }
+                cursorPreview.destroy();
+            }
             selectionHighlightGraphics.forEach(hl => {
-                canvas.stage.removeChild(hl); hl.destroy();
+                if (hl.parent) {
+                    hl.parent.removeChild(hl);
+                }
+                hl.destroy();
             });
-            selectionHighlights.forEach(h => canvas.stage.removeChild(h.graphics));
+            selectionHighlights.forEach(h => {
+                if (h.graphics.parent) {
+                    h.graphics.parent.removeChild(h.graphics);
+                }
+                h.graphics.destroy();
+            });
 
             canvas.tokens.interactiveChildren = prevInteractive;
             _removeInfoCard(cardEl);
@@ -612,7 +625,11 @@ export function chooseToken(casterToken, options = {}) {
         const removeSelectionHighlight = (token) => {
             const idx = selectionHighlights.findIndex(h => h.tokenI === token.id);
             if (idx !== -1) {
-                canvas.stage.removeChild(selectionHighlights[idx].graphics);
+                const g = selectionHighlights[idx].graphics;
+                if (g.parent) {
+                    g.parent.removeChild(g);
+                }
+                g.destroy();
                 selectionHighlights.splice(idx, 1);
             }
         };
@@ -797,7 +814,7 @@ export function placeZone(casterToken, options = {}) {
 
         // Draw range highlight if range is specified (low grey, very transparent)
         if (range !== null && casterToken) {
-            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.3, false);
+            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, false);
         }
 
         const doCleanup = () => {
@@ -1082,7 +1099,7 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance) {
     }
 
     await Promise.all(updates);
-    Hooks.callAll('lancer-automations.onKnockback', triggeringToken, distance, pushedActors);
+    await game.modules.get('lancer-automations').api.handleTrigger('onKnockback', { triggeringToken, range: distance, pushedActors });
 }
 
 export function knockBackToken(tokens, distance, options = {}) {
@@ -1289,7 +1306,7 @@ export function knockBackToken(tokens, distance, options = {}) {
                     rangeHighlight.destroy();
                 }
                 // Range is from the token's current position
-                rangeHighlight = drawRangeHighlight(activeToken, distance, 0x888888, 0.3, true);
+                rangeHighlight = drawRangeHighlight(activeToken, distance, 0x888888, 0.1, true);
             }
         };
 
@@ -1500,11 +1517,11 @@ export function placeToken(options = {}) {
 
         if (range !== null && origin) {
             if (originToken) {
-                rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.3, false);
+                rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.1, false);
             } else if (originOffset) {
                 const hl = new PIXI.Graphics();
-                hl.lineStyle(2, 0x888888, 0.7);
-                hl.beginFill(0x888888, 0.3);
+                hl.lineStyle(2, 0x888888, 0.3);
+                hl.beginFill(0x888888, 0.1);
 
                 if (isHexGrid()) {
                     const originCube = offsetToCube(originOffset.col, originOffset.row);
@@ -2854,7 +2871,8 @@ export async function openThrowMenu(actor) {
             const profiles = item.system?.profiles ?? [];
             const activeProfileIndex = item.system?.selected_profile_index ?? 0;
             const activeProfile = profiles[activeProfileIndex];
-            if (!activeProfile) return false;
+            if (!activeProfile)
+                return false;
             const tags = activeProfile.tags ?? [];
             return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
         } else if (item.type === 'npc_feature' && item.system?.type === 'Weapon') {
@@ -2944,7 +2962,8 @@ export async function openThrowMenu(actor) {
                 label: "Throw",
                 callback: async () => {
                     const item = items.find(i => i.id === selectedId);
-                    if (!item || item.disabled) return;
+                    if (!item || item.disabled)
+                        return;
                     const weapon = item.weaponData;
                     const api = game.modules.get('lancer-automations')?.api;
                     if (api?.beginThrowWeaponFlow) {

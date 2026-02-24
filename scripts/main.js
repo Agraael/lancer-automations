@@ -45,13 +45,23 @@ import {
     openThrowMenu,
     getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
 } from "./interactive-tools.js";
-import { executeFall } from "./misc-tools.js";
+import {
+    executeFall, getItemLID, isItemAvailable, hasReactionAvailable,
+    executeStatRoll, executeDamageRoll, executeBasicAttack,
+    executeTechAttack, executeSimpleActivation
+} from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
+import { registerModuleFlows } from "./flows.js";
 
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
+let cachedFlatGeneralReactions = null;
+
+Hooks.on('lancer-automations.clearCaches', () => {
+    cachedFlatGeneralReactions = null;
+});
 
 function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter) {
     if (!dispositionFilter || dispositionFilter.length === 0)
@@ -123,42 +133,7 @@ function getReactionItems(token) {
     return items;
 }
 
-function getItemLID(item) {
-    return item.system?.lid || null;
-}
 
-function isItemAvailable(item, reactionPath) {
-    if (!item)
-        return false;
-    if (item.system?.destroyed || item.system?.disabled)
-        return false;
-
-    if (item.type === "talent" && reactionPath) {
-        const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
-        if (rankMatch) {
-            const requiredRank = parseInt(rankMatch[1]) + 1;
-            if ((item.system?.curr_rank || 0) < requiredRank)
-                return false;
-        }
-    }
-
-    if (item.type === "mech_weapon" && reactionPath) {
-        const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
-        if (profileMatch) {
-            const requiredProfile = parseInt(profileMatch[1]);
-            const currentProfile = item.system?.selected_profile_index ?? 0;
-            if (currentProfile !== requiredProfile)
-                return false;
-        }
-    }
-
-    return true;
-}
-
-function hasReactionAvailable(token) {
-    const reaction = token.actor?.system?.action_tracker?.reaction;
-    return reaction !== undefined && reaction > 0;
-}
 
 function getCombatTokens() {
     if (!game.combat)
@@ -238,192 +213,6 @@ async function checkOnInitReactions(token) {
     }
 }
 
-const STAT_PATHS = {
-    HULL: "system.hull",
-    AGI: "system.agi",
-    SYS: "system.sys",
-    ENG: "system.eng",
-    GRIT: "system.grit"
-};
-
-async function executeStatRoll(actor, stat, title, target = 10, extraData = {}) {
-    const StatRollFlow = game.lancer.flows.get("StatRollFlow");
-    if (!StatRollFlow) {
-        console.error("lancer-automations | StatRollFlow not found");
-        return { completed: false };
-    }
-
-    let targetVal = target;
-    let targetToken = null;
-    let rollTitle = title;
-    const upperStat = stat.toUpperCase();
-
-    // Handle "token" target selection or object target
-    const useFlowTargeting = game.settings.get('lancer-automations', 'statRollTargeting');
-
-    if (target === "token" && !useFlowTargeting) {
-        const token = actor.token?.object;
-        if (!token) {
-            ui.notifications.warn("No source token found for choosing target.");
-            return { completed: false };
-        }
-
-        const targets = await chooseToken(token, {
-            title: `${upperStat} SAVE TARGET`,
-            description: `Select a target for the ${upperStat} Save.`,
-            count: 1,
-            range: null
-        });
-
-        if (targets && targets.length > 0) {
-            targetToken = targets[0];
-        } else {
-            return { completed: false };
-        }
-    } else if (typeof target === 'object') {
-        if (target instanceof TokenDocument) {
-            targetToken = target.object;
-        } else if (target.actor) {
-            targetToken = target;
-        } else {
-            console.error("lancer-automations | executeStatRoll | Invalid target type");
-        }
-
-    }
-
-    if (targetToken && targetToken.actor) {
-        const targetActor = targetToken.actor;
-
-        if (!rollTitle) {
-            rollTitle = `${upperStat} Save`;
-        }
-
-        // Dynamic Difficulty
-        if (targetActor.type === "npc" || targetActor.type === "deployable") {
-            targetVal = targetActor.system.save || 10;
-        } else if (targetActor.type === "mech") {
-            // Same stat on target (e.g. HULL check vs HULL)
-            const path = STAT_PATHS[upperStat] || stat;
-            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
-        }
-    }
-
-    if (!rollTitle) {
-        rollTitle = `${upperStat} Check`;
-    }
-
-    const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
-    const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
-
-    // Pass targetToken to flow options
-    const flowOptions = { path: statPath, title: rollTitle };
-    const flow = new StatRollFlow(actor, flowOptions);
-    if (targetToken)
-        flow.state.data.targetToken = targetToken;
-    flow.state.data.targetVal = targetVal;
-
-    if (extraData && typeof extraData === 'object')
-        foundry.utils.mergeObject(flow.state.data, extraData);
-
-    const completed = await flow.begin();
-    if (!completed) {
-        return { completed: false };
-    }
-    const total = flow.state.data?.result?.roll?.total ?? null;
-    return {
-        completed: true,
-        total,
-        roll: flow.state.data?.result?.roll ?? null,
-        passed: total !== null ? (targetVal !== undefined ? total >= targetVal : false) : false
-    };
-}
-
-async function executeDamageRoll(attacker, targets, damageValue, damageType, title = "Damage Roll", options = {}, extraData = {}) {
-    const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
-    if (!DamageRollFlow)
-        return { completed: false };
-
-    const actor = attacker.actor || attacker;
-    if (!actor)
-        return { completed: false };
-
-    if (targets && Array.isArray(targets)) {
-        targets.forEach((t, i) => {
-            const token = t.object || t;
-            if (token?.setTarget)
-                token.setTarget(true, { releaseOthers: i === 0, groupSelection: true });
-        });
-    }
-
-    const typeMap = {kinetic: "Kinetic",energy: "Energy",explosive: "Explosive",burn: "Burn",heat: "Heat",variable: "Variable"};
-    const resolvedType = typeMap[damageType.toLowerCase()] || "Kinetic";
-
-    const flowData = {
-        title: title,
-        damage: [{
-            val: String(damageValue),
-            type: resolvedType
-        }],
-        tags: options.tags || [],
-        hit_results: options.hit_results || [],
-        has_normal_hit: options.has_normal_hit !== undefined ? options.has_normal_hit : true,
-        has_crit_hit: options.has_crit_hit || false,
-        ap: options.ap || false,
-        paracausal: options.paracausal || false,
-        half_damage: options.half_damage || false,
-        overkill: options.overkill || false,
-        reliable: options.reliable || false,
-        add_burn: options.add_burn !== undefined ? options.add_burn : true,
-        invade: options.invade || false,
-        bonus_damage: options.bonus_damage || []
-    };
-
-    foundry.utils.mergeObject(flowData, options);
-    const flow = new DamageRollFlow(actor.uuid, flowData);
-    if (extraData && typeof extraData === 'object')
-        foundry.utils.mergeObject(flow.state.data, extraData);
-    const completed = await flow.begin();
-    return {completed, flow};
-}
-
-async function executeBasicAttack(actor, options = {}, extraData = {}) {
-    const BasicAttackFlow = game.lancer?.flows?.get("BasicAttackFlow");
-    if (!BasicAttackFlow) {
-        console.error("lancer-automations | BasicAttackFlow not found");
-        return { completed: false };
-    }
-    const flow = new BasicAttackFlow(actor, options);
-    if (extraData && typeof extraData === 'object')
-        foundry.utils.mergeObject(flow.state.data, extraData);
-    const completed = await flow.begin();
-    return { completed, flow };
-}
-
-async function executeTechAttack(actor, options = {}, extraData = {}) {
-    const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
-    if (!TechAttackFlow) {
-        console.error("lancer-automations | TechAttackFlow not found");
-        return { completed: false };
-    }
-    const flow = new TechAttackFlow(actor, options);
-    if (extraData && typeof extraData === 'object')
-        foundry.utils.mergeObject(flow.state.data, extraData);
-    const completed = await flow.begin();
-    return { completed, flow };
-}
-
-async function executeSimpleActivation(actor, options = {}, extraData = {}) {
-    const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-    if (!SimpleActivationFlow) {
-        console.error("lancer-automations | SimpleActivationFlow not found");
-        return { completed: false };
-    }
-    const flow = new SimpleActivationFlow(actor, options);
-    if (extraData && typeof extraData === 'object')
-        foundry.utils.mergeObject(flow.state.data, extraData);
-    const completed = await flow.begin();
-    return { completed, flow };
-}
 
 function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
     if (!isInCombat && !reaction.outOfCombat) {
@@ -456,7 +245,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
                 shouldTrigger = result;
             }
         } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
-            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"], reaction);
             const result = evalFunc(triggerType, enrichedData, token, null, reactionName);
             if (result instanceof Promise) {
                 console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancel().`);
@@ -475,21 +264,25 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
     }
 }
 
-function checkReactions(triggerType, data) {
+async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
-    const generalReactions = ReactionManager.getGeneralReactions();
+    const reactionsPromises = [];
 
     // Flatten general reactions: entries with a "reactions" array are expanded into individual sub-reactions
-    const flatGeneralReactions = [];
-    for (const [reactionName, entry] of Object.entries(generalReactions)) {
-        if (Array.isArray(entry.reactions)) {
-            for (const subReaction of entry.reactions) {
-                flatGeneralReactions.push([reactionName, { ...subReaction, enabled: subReaction.enabled ?? entry.enabled }]);
+    if (!cachedFlatGeneralReactions) {
+        const generalReactions = ReactionManager.getGeneralReactions();
+        cachedFlatGeneralReactions = [];
+        for (const [reactionName, entry] of Object.entries(generalReactions)) {
+            if (Array.isArray(entry.reactions)) {
+                for (const subReaction of entry.reactions) {
+                    cachedFlatGeneralReactions.push([reactionName, { ...subReaction, enabled: subReaction.enabled ?? entry.enabled }]);
+                }
+            } else {
+                cachedFlatGeneralReactions.push([reactionName, entry]);
             }
-        } else {
-            flatGeneralReactions.push([reactionName, entry]);
         }
     }
+    const flatGeneralReactions = cachedFlatGeneralReactions;
 
     const actionBasedReaction = data.actionName ?
         flatGeneralReactions.find(([name, r]) => name === data.actionName && r.onlyOnSourceMatch)?.[1] ?
@@ -603,7 +396,7 @@ function checkReactions(triggerType, data) {
                         }
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
-                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
+                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"], reaction);
                             const result = evalFunc(triggerType, enrichedData, token, item, activationName);
                             if (result instanceof Promise) {
                                 console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancel().`);
@@ -621,16 +414,12 @@ function checkReactions(triggerType, data) {
                     if (shouldTrigger) {
                         if (reaction.autoActivate) {
                             try {
-                                if (reaction.forceSynchronous) {
-                                    activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
-                                } else {
-                                    (async () => {
-                                        try {
-                                            await activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
-                                        } catch (err) {
-                                            console.error(`lancer-automations | Error in async auto-activation:`, err);
-                                        }
-                                    })();
+                                const p = activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
+                                if (p instanceof Promise) {
+                                    p.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
+                                    if (reaction.forceSynchronous !== false) {
+                                        reactionsPromises.push(p);
+                                    }
                                 }
                             } catch (error) {
                                 console.error(`lancer-automations | Error auto-activating reaction:`, error);
@@ -660,16 +449,12 @@ function checkReactions(triggerType, data) {
             if (enrichedData) {
                 if (reaction.autoActivate) {
                     try {
-                        if (reaction.forceSynchronous) {
-                            activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
-                        } else {
-                            (async () => {
-                                try {
-                                    await activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
-                                } catch (err) {
-                                    console.error(`lancer-automations | Error in async auto-activation:`, err);
-                                }
-                            })();
+                        const p = activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        if (p instanceof Promise) {
+                            p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
+                            if (reaction.forceSynchronous !== false) {
+                                reactionsPromises.push(p);
+                            }
                         }
                     } catch (error) {
                         console.error(`lancer-automations | Error auto-activating general reaction:`, error);
@@ -694,16 +479,12 @@ function checkReactions(triggerType, data) {
             if (enrichedData) {
                 if (reaction.autoActivate) {
                     try {
-                        if (reaction.forceSynchronous) {
-                            activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
-                        } else {
-                            (async () => {
-                                try {
-                                    await activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
-                                } catch (err) {
-                                    console.error(`lancer-automations | Error in async auto-activation:`, err);
-                                }
-                            })();
+                        const p = activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        if (p instanceof Promise) {
+                            p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
+                            if (reaction.forceSynchronous !== false) {
+                                reactionsPromises.push(p);
+                            }
                         }
                     } catch (error) {
                         console.error(`lancer-automations | Error auto-activating general reaction:`, error);
@@ -722,6 +503,10 @@ function checkReactions(triggerType, data) {
                 }
             }
         }
+    }
+
+    if (reactionsPromises.length > 0) {
+        await Promise.all(reactionsPromises);
     }
 
     if (reactionDebounceTimer) {
@@ -855,6 +640,8 @@ function passesBuiltInFilters(consumption, triggerType, data) {
 async function processEffectConsumption(triggerType, data) {
     const allTokens = getAllSceneTokens();
 
+    const consumptionPromises = [];
+
     for (const token of allTokens) {
         const actor = token.actor;
         if (!actor)
@@ -885,225 +672,43 @@ async function processEffectConsumption(triggerType, data) {
             if (!passesBuiltInFilters(consumption, triggerType, data))
                 continue;
 
-            if (consumption.evaluate) {
-                try {
-                    let shouldConsume = false;
-                    if (typeof consumption.evaluate === 'function') {
-                        shouldConsume = await consumption.evaluate(triggerType, data, token, effect);
-                    } else if (typeof consumption.evaluate === 'string' && consumption.evaluate.trim() !== '') {
-                        const evalFunc = stringToFunction(consumption.evaluate, ["triggerType", "triggerData", "effectBearerToken", "effect"]);
-                        shouldConsume = await evalFunc(triggerType, data, token, effect);
+            const processConsumption = async () => {
+                if (consumption.evaluate) {
+                    try {
+                        let shouldConsume = false;
+                        if (typeof consumption.evaluate === 'function') {
+                            shouldConsume = await consumption.evaluate(triggerType, data, token, effect);
+                        } else if (typeof consumption.evaluate === 'string' && consumption.evaluate.trim() !== '') {
+                            const evalFunc = stringToFunction(consumption.evaluate, ["triggerType", "triggerData", "effectBearerToken", "effect"]);
+                            shouldConsume = await evalFunc(triggerType, data, token, effect);
+                        }
+                        if (!shouldConsume)
+                            return;
+                    } catch (e) {
+                        console.error(`lancer-automations | Error evaluating consumption for ${effect.name}:`, e);
+                        return;
                     }
-                    if (!shouldConsume)
-                        continue;
-                } catch (e) {
-                    console.error(`lancer-automations | Error evaluating consumption for ${effect.name}:`, e);
-                    continue;
                 }
-            }
 
-            console.log(`lancer-automations | Consuming charge on ${effect.name} (trigger: ${triggerType})`);
-            if (consumption.groupId)
-                consumedGroups.add(consumption.groupId);
-            await consumeEffectCharge(effect);
+                console.log(`lancer-automations | Consuming charge on ${effect.name} (trigger: ${triggerType})`);
+                if (consumption.groupId)
+                    consumedGroups.add(consumption.groupId);
+                await consumeEffectCharge(effect);
+            };
+
+            consumptionPromises.push(processConsumption());
         }
     }
+    await Promise.all(consumptionPromises);
 }
 
-/**
- * Handle a trigger event: run reactions AND process consumption-based effects.
- */
-function handleTrigger(triggerType, data) {
-    checkReactions(triggerType, data);
-    processEffectConsumption(triggerType, data);
+async function handleTrigger(triggerType, data) {
+    const reactionsPromise = checkReactions(triggerType, data);
+    const consumptionPromise = processEffectConsumption(triggerType, data);
+    await reactionsPromise;
+    await consumptionPromise;
 }
 
-function registerReactionHooks() {
-
-    Hooks.on('lancer-automations.onInitAttack', (attacker, weapon, targets, actionData) => {
-        handleTrigger('onInitAttack', {
-            triggeringToken: attacker,
-            weapon,
-            targets,
-            actionName: actionData?.action?.name || weapon?.name || "Attack",
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onAttack', (attacker, weapon, targets, actionData) => {
-        handleTrigger('onAttack', {
-            triggeringToken: attacker,
-            weapon,
-            targets,
-            attackType: actionData?.attack_type || null,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onHit', (attacker, weapon, hitTargets, actionData) => {
-        handleTrigger('onHit', {
-            triggeringToken: attacker,
-            weapon,
-            targets: hitTargets,
-            attackType: actionData?.attack_type || null,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onMiss', (attacker, weapon, missTargets, actionData) => {
-        handleTrigger('onMiss', {
-            triggeringToken: attacker,
-            weapon,
-            targets: missTargets,
-            attackType: actionData?.attack_type || null,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onDamage', (attacker, weapon, target, damages, types, isCrit, isHit, actionData) => {
-        handleTrigger('onDamage', {
-            triggeringToken: attacker,
-            weapon,
-            target,
-            damages,
-            types,
-            isCrit,
-            isHit,
-            attackType: actionData?.attack_type || null,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onMove', (mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo) => {
-        handleTrigger('onMove', { triggeringToken: mover, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
-    });
-
-    Hooks.on('lancer-automations.onPreMove', (mover, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel, cancelTriggeredMove, changeTriggeredMove) => {
-        handleTrigger('onPreMove', { triggeringToken: mover, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel, cancelTriggeredMove, changeTriggeredMove });
-    });
-
-    Hooks.on('lancer-automations.onUpdate', (mover, document, change, options) => {
-        handleTrigger('onUpdate', { triggeringToken: mover, document, change, options });
-    });
-
-    Hooks.on('lancer-automations.onTurnStart', (token) => {
-        handleTrigger('onTurnStart', { triggeringToken: token });
-    });
-
-    Hooks.on('lancer-automations.onTurnEnd', (token) => {
-        handleTrigger('onTurnEnd', { triggeringToken: token });
-    });
-
-    Hooks.on('lancer-automations.onStatusApplied', (token, statusId, effect) => {
-        handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
-    });
-
-    Hooks.on('lancer-automations.onStatusRemoved', (token, statusId, effect) => {
-        handleTrigger('onStatusRemoved', { triggeringToken: token, statusId, effect });
-    });
-
-    Hooks.on('lancer-automations.onStructure', (token, remainingStructure, rollResult) => {
-        handleTrigger('onStructure', { triggeringToken: token, remainingStructure, rollResult });
-    });
-
-    Hooks.on('lancer-automations.onStress', (token, remainingStress, rollResult) => {
-        handleTrigger('onStress', { triggeringToken: token, remainingStress, rollResult });
-    });
-
-    Hooks.on('lancer-automations.onHeat', (token, heatGained, currentHeat, inDangerZone) => {
-        handleTrigger('onHeat', { triggeringToken: token, heatGained, currentHeat, inDangerZone });
-    });
-
-    Hooks.on('lancer-automations.onDestroyed', (token) => {
-        handleTrigger('onDestroyed', { triggeringToken: token });
-    });
-
-
-    Hooks.on('lancer-automations.onInitTechAttack', (attacker, techItem, targets, actionData) => {
-        handleTrigger('onInitTechAttack', {
-            triggeringToken: attacker,
-            techItem,
-            targets,
-            actionName: actionData?.action?.name || techItem?.name || "Tech Attack",
-            isInvade: actionData?.isInvade || false,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onTechAttack', (attacker, techItem, targets, actionData) => {
-        handleTrigger('onTechAttack', {
-            triggeringToken: attacker,
-            techItem,
-            targets,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            isInvade: actionData?.isInvade || false,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onTechHit', (attacker, techItem, hitTargets, actionData) => {
-        handleTrigger('onTechHit', {
-            triggeringToken: attacker,
-            techItem,
-            targets: hitTargets,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            isInvade: actionData?.isInvade || false,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onTechMiss', (attacker, techItem, missTargets, actionData) => {
-        handleTrigger('onTechMiss', {
-            triggeringToken: attacker,
-            techItem,
-            targets: missTargets,
-            actionName: actionData?.title || actionData?.action?.name || null,
-            isInvade: actionData?.isInvade || false,
-            tags: actionData?.tags || [],
-            actionData
-        });
-    });
-
-    Hooks.on('lancer-automations.onCheck', (triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal) => {
-        handleTrigger('onCheck', { triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal });
-    });
-
-    Hooks.on('lancer-automations.onInitCheck', (triggeringToken, statName, checkAgainstToken, targetVal) => {
-        handleTrigger('onInitCheck', { triggeringToken, statName, checkAgainstToken, targetVal });
-    });
-
-    Hooks.on('lancer-automations.onActivation', (token, actionType, actionName, item, actionData) => {
-        handleTrigger('onActivation', { triggeringToken: token, actionType, actionName, item, actionData });
-    });
-
-    Hooks.on('lancer-automations.onHPRestored', (token, hpRestored, currentHP, maxHP) => {
-        handleTrigger('onHPRestored', { triggeringToken: token, hpRestored, currentHP, maxHP });
-    });
-
-    Hooks.on('lancer-automations.onHpLoss', (token, hpLost, currentHP) => {
-        handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
-    });
-
-    Hooks.on('lancer-automations.onClearHeat', (token, heatCleared, currentHeat) => {
-        handleTrigger('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
-    });
-
-    Hooks.on('lancer-automations.onKnockback', (triggeringToken, range, pushedActors) => {
-        handleTrigger('onKnockback', { triggeringToken, range, pushedActors });
-    });
-}
 
 function registerSettings() {
     // ── Core ──
@@ -1381,7 +986,7 @@ function getIntentionalMoveData(tokenDocId) {
     return intentionalMoveData.get(tokenDocId) || 0;
 }
 
-function handleTokenMove(document, change, options, userId) {
+async function handleTokenMove(document, change, options, userId) {
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
     const hasXChange = change.x !== undefined && Math.abs(change.x - document.x) >= threshold;
@@ -1468,7 +1073,7 @@ function handleTokenMove(document, change, options, userId) {
         }
     }
 
-    Hooks.callAll('lancer-automations.onMove', token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo);
+    await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
 }
 
 async function onAttackStep(state) {
@@ -1490,7 +1095,15 @@ async function onAttackStep(state) {
         tags: state.data?.tags || weapon?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-automations.onAttack', token, weapon, targets, actionData);
+    await handleTrigger('onAttack', {
+        triggeringToken: token,
+        weapon,
+        targets,
+        attackType: actionData.attack_type,
+        actionName: actionData.title,
+        tags: actionData.tags,
+        actionData
+    });
     return true;
 }
 
@@ -1539,10 +1152,26 @@ async function onHitMissStep(state) {
     }
 
     if (hitTargets.length > 0) {
-        Hooks.callAll('lancer-automations.onHit', token, weapon, hitTargets, actionData);
+        await handleTrigger('onHit', {
+            triggeringToken: token,
+            weapon,
+            targets: hitTargets,
+            attackType: actionData.attack_type,
+            actionName: actionData.title,
+            tags: actionData.tags,
+            actionData
+        });
     }
     if (missTargets.length > 0) {
-        Hooks.callAll('lancer-automations.onMiss', token, weapon, missTargets, actionData);
+        await handleTrigger('onMiss', {
+            triggeringToken: token,
+            weapon,
+            targets: missTargets,
+            attackType: actionData.attack_type,
+            actionName: actionData.title,
+            tags: actionData.tags,
+            actionData
+        });
     }
 
     return true;
@@ -1579,7 +1208,19 @@ async function onDamageStep(state) {
         const targetTypes = targetInfo.damage?.map(d => d.type) || [];
 
         if (targetDamages.length > 0) {
-            Hooks.callAll('lancer-automations.onDamage', token, weapon, targetToken, targetDamages, targetTypes, isCrit, isHit, actionData);
+            await handleTrigger('onDamage', {
+                triggeringToken: token,
+                weapon,
+                target: targetToken,
+                damages: targetDamages,
+                types: targetTypes,
+                isCrit,
+                isHit,
+                attackType: actionData.attack_type,
+                actionName: actionData.title,
+                tags: actionData.tags,
+                actionData
+            });
         }
     }
 
@@ -1592,7 +1233,7 @@ async function onStructureStep(state) {
     const remainingStructure = actor?.system?.structure?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
 
-    Hooks.callAll('lancer-automations.onStructure', token, remainingStructure, rollResult);
+    await handleTrigger('onStructure', { triggeringToken: token, remainingStructure, rollResult });
     return true;
 }
 
@@ -1602,7 +1243,7 @@ async function onStressStep(state) {
     const remainingStress = actor?.system?.stress?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
 
-    Hooks.callAll('lancer-automations.onStress', token, remainingStress, rollResult);
+    await handleTrigger('onStress', { triggeringToken: token, remainingStress, rollResult });
     return true;
 }
 
@@ -1625,7 +1266,15 @@ async function onTechAttackStep(state) {
         tags: state.data?.tags || techItem?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-automations.onTechAttack', token, techItem, targets, actionData);
+    await handleTrigger('onTechAttack', {
+        triggeringToken: token,
+        techItem,
+        targets,
+        actionName: actionData.title,
+        isInvade: actionData.isInvade,
+        tags: actionData.tags,
+        actionData
+    });
     return true;
 }
 
@@ -1674,10 +1323,26 @@ async function onTechHitMissStep(state) {
     }
 
     if (hitTargets.length > 0) {
-        Hooks.callAll('lancer-automations.onTechHit', token, techItem, hitTargets, actionData);
+        await handleTrigger('onTechHit', {
+            triggeringToken: token,
+            techItem,
+            targets: hitTargets,
+            actionName: actionData.title,
+            isInvade: actionData.isInvade,
+            tags: actionData.tags,
+            actionData
+        });
     }
     if (missTargets.length > 0) {
-        Hooks.callAll('lancer-automations.onTechMiss', token, techItem, missTargets, actionData);
+        await handleTrigger('onTechMiss', {
+            triggeringToken: token,
+            techItem,
+            targets: missTargets,
+            actionName: actionData.title,
+            isInvade: actionData.isInvade,
+            tags: actionData.tags,
+            actionData
+        });
     }
 
     return true;
@@ -1692,7 +1357,15 @@ async function onCheckStep(state) {
     state.data.targetVal = state.data.targetVal? state.data.targetVal : 10;
     const success = total >= state.data.targetVal;
 
-    Hooks.callAll('lancer-automations.onCheck', token, statName, roll, total, success, state.data.targetToken, state.data.targetVal);
+    await handleTrigger('onCheck', {
+        triggeringToken: token,
+        statName,
+        roll,
+        total,
+        success,
+        checkAgainstToken: state.data.targetToken,
+        targetVal: state.data.targetVal
+    });
     return true;
 }
 
@@ -1701,7 +1374,17 @@ async function onInitCheckStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const statName = state.data?.title || 'Unknown';
     state.data.targetVal = state.data.targetVal ? state.data.targetVal : 10;
-    Hooks.callAll('lancer-automations.onInitCheck', token, statName, state.data.targetToken, state.data.targetVal);
+
+    await handleTrigger('onInitCheck', {
+        triggeringToken: token,
+        statName,
+        checkAgainstToken: state.data.targetToken,
+        targetVal: state.data.targetVal
+    });
+
+    if (token) {
+        state.actor = token.actor;
+    }
     return true;
 }
 
@@ -1723,7 +1406,18 @@ async function onInitAttackStep(state) {
         tags: state.data?.tags || weapon?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-automations.onInitAttack', token, weapon, targets, actionData);
+    await handleTrigger('onInitAttack', {
+        triggeringToken: token,
+        weapon,
+        targets,
+        actionName: actionData.title,
+        tags: actionData.tags,
+        actionData
+    });
+
+    if (token) {
+        state.actor = token.actor;
+    }
     return true;
 }
 
@@ -1745,7 +1439,19 @@ async function onInitTechAttackStep(state) {
         tags: state.data?.tags || techItem?.system?.tags || []
     };
 
-    Hooks.callAll('lancer-automations.onInitTechAttack', token, techItem, targets, actionData);
+    await handleTrigger('onInitTechAttack', {
+        triggeringToken: token,
+        techItem,
+        targets,
+        actionName: actionData.title,
+        isInvade: actionData.isInvade,
+        tags: actionData.tags,
+        actionData
+    });
+
+    if (token) {
+        state.actor = token.actor;
+    }
     return true;
 }
 
@@ -1786,7 +1492,17 @@ async function onActivationStep(state) {
         tags: tags
     };
 
-    Hooks.callAll('lancer-automations.onActivation', token, actionType, actionName, item, actionData);
+    await handleTrigger('onActivation', {
+        triggeringToken: token,
+        actionType: actionType,
+        actionName: actionName,
+        item,
+        actionData
+    });
+
+    if (token) {
+        state.actor = token.actor;
+    }
     return true;
 }
 
@@ -1987,7 +1703,7 @@ async function knockbackStep(state) {
     return true;
 }
 
-Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
+function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-automations:onDamage', onDamageStep);
@@ -2056,11 +1772,16 @@ Hooks.once('lancer.registerFlows', (flowSteps, flows) => {
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
 
-});
+}
 
 Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
+});
+
+Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
+    registerModuleFlows(flowSteps, flows);
+    insertModuleFlowSteps(flowSteps, flows);
 });
 
 Hooks.once('ready', async () => {
@@ -2180,7 +1901,6 @@ Hooks.on('ready', () => {
     console.log('lancer-automations | Ready');
 
     ReactionManager.initialize();
-    registerReactionHooks();
 
     game.modules.get('lancer-automations').api = {
         drawThreatDebug,
@@ -2241,7 +1961,8 @@ Hooks.on('ready', () => {
         getIntentionalMoveData,
         triggerFlaggedEffectImmunity,
         packMacros,
-        openThrowMenu
+        openThrowMenu,
+        handleTrigger
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -2339,12 +2060,12 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
 });
 let previousCombatantId = null;
 
-Hooks.on('combatTurnChange', (combat, prior, current) => {
+Hooks.on('combatTurnChange', async (combat, prior, current) => {
     if (prior.combatantId) {
         const endingCombatant = combat.combatants.get(prior.combatantId);
         const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
         if (endingToken) {
-            Hooks.callAll('lancer-automations.onTurnEnd', endingToken);
+            await handleTrigger('onTurnEnd', { triggeringToken: endingToken });
             processDurationEffects('end', endingToken.id);
         }
     }
@@ -2354,7 +2075,7 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
         const startingToken = startingCombatant?.token ? canvas.tokens.get(startingCombatant.token.id) : null;
         if (startingToken) {
             clearMoveData(startingToken.document.id);
-            Hooks.callAll('lancer-automations.onTurnStart', startingToken);
+            await handleTrigger('onTurnStart', { triggeringToken: startingToken });
             processDurationEffects('start', startingToken.id);
         }
     }
@@ -2362,7 +2083,7 @@ Hooks.on('combatTurnChange', (combat, prior, current) => {
     previousCombatantId = current.combatantId;
 });
 
-Hooks.on('updateCombat', (combat, change, options, userId) => {
+Hooks.on('updateCombat', async (combat, change, options, userId) => {
     if (change.turn === undefined && change.round === undefined)
         return;
 
@@ -2374,7 +2095,7 @@ Hooks.on('updateCombat', (combat, change, options, userId) => {
         const endingCombatant = combat.combatants.get(previousCombatantId);
         const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
         if (endingToken) {
-            Hooks.callAll('lancer-automations.onTurnEnd', endingToken);
+            await handleTrigger('onTurnEnd', { triggeringToken: endingToken });
             processDurationEffects('end', endingToken.id);
         }
     }
@@ -2382,14 +2103,14 @@ Hooks.on('updateCombat', (combat, change, options, userId) => {
     const startingToken = currentCombatant.token ? canvas.tokens.get(currentCombatant.token.id) : null;
     if (startingToken && currentCombatant.id !== previousCombatantId) {
         clearMoveData(startingToken.document.id);
-        Hooks.callAll('lancer-automations.onTurnStart', startingToken);
+        await handleTrigger('onTurnStart', { triggeringToken: startingToken });
         processDurationEffects('start', startingToken.id);
     }
 
     previousCombatantId = currentCombatant.id;
 });
 
-Hooks.on('createActiveEffect', (effect, options, userId) => {
+Hooks.on('createActiveEffect', async (effect, options, userId) => {
     const actor = effect.parent;
     if (!actor)
         return;
@@ -2397,10 +2118,10 @@ Hooks.on('createActiveEffect', (effect, options, userId) => {
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
 
-    Hooks.callAll('lancer-automations.onStatusApplied', token, statusId, effect);
+    await handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
 });
 
-Hooks.on('deleteActiveEffect', (effect, options, userId) => {
+Hooks.on('deleteActiveEffect', async (effect, options, userId) => {
     const actor = effect.parent;
     if (!actor)
         return;
@@ -2408,7 +2129,7 @@ Hooks.on('deleteActiveEffect', (effect, options, userId) => {
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
 
-    Hooks.callAll('lancer-automations.onStatusRemoved', token, statusId, effect);
+    await handleTrigger('onStatusRemoved', { triggeringToken: token, statusId, effect });
 
     // Clean up grouped effects: if one effect in a group is removed, remove the rest
     const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
@@ -2467,7 +2188,7 @@ Hooks.on('createToken', (tokenDocument, options, userId) => {
     }, 100);
 });
 
-Hooks.on('updateActor', (actor, change, options, userId) => {
+Hooks.on('updateActor', async (actor, change, options, userId) => {
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     if (!token)
         return;
@@ -2480,10 +2201,10 @@ Hooks.on('updateActor', (actor, change, options, userId) => {
         if (heatChange > 0) {
             const heatMax = actor.system.heat.max;
             const inDangerZone = currentHeat >= Math.floor(heatMax / 2);
-            Hooks.callAll('lancer-automations.onHeat', token, heatChange, currentHeat, inDangerZone);
+            await handleTrigger('onHeat', { triggeringToken: token, heatChange, currentHeat, inDangerZone });
         } else if (heatChange < 0) {
             const heatCleared = Math.abs(heatChange);
-            Hooks.callAll('lancer-automations.onClearHeat', token, heatCleared, currentHeat);
+            await handleTrigger('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
         }
 
         previousHeatValues.set(actor.id, currentHeat);
@@ -2496,13 +2217,13 @@ Hooks.on('updateActor', (actor, change, options, userId) => {
 
         if (hpChange > 0) {
             const maxHP = actor.system.hp.max;
-            Hooks.callAll('lancer-automations.onHPRestored', token, hpChange, currentHP, maxHP);
+            await handleTrigger('onHPRestored', { triggeringToken: token, hpChange, currentHP, maxHP });
         } else if (hpChange < 0) {
             const hpLost = Math.abs(hpChange);
-            Hooks.callAll('lancer-automations.onHpLoss', token, hpLost, currentHP);
+            await handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
 
             if (previousHP > 0 && currentHP <= 0) {
-                Hooks.callAll('lancer-automations.onDestroyed', token);
+                await handleTrigger('onDestroyed', { triggeringToken: token });
             }
         }
 
@@ -2642,7 +2363,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 
         triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true) => {
             if (showCard) {
-                // Cancel immediately because we cannot block Foundry synchronously
+                // Cancel immediately because we cannot block Foundry synchronously with async code
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
 
@@ -2688,7 +2409,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             };
 
             if (showCard) {
-                // Cancel immediately because we cannot block Foundry synchronously
+                // Cancel immediately because we cannot block Foundry synchronously with async code
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
 
@@ -2726,28 +2447,15 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
-        Hooks.callAll('lancer-automations.onPreMove', token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, triggerData.cancel, triggerData.cancelTriggeredMove, triggerData.changeTriggeredMove);
+        // Call handleTrigger without await. If onPreMove reactions are synchronous,
+        // cancelUpdate will be set to true before we check it on the next line.
+        handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove });
+
         if (cancelUpdate) {
             return false;
         }
+
         handleTokenMove(token, change, options, userId);
-
-
-        // TEST CODE:
-        /* if (!options.isModified && moveInfo.pathHexes && moveInfo.pathHexes.length > 2) {
-            const historyStart = moveInfo.pathHexes.historyStartIndex || 1;
-            const validLen = moveInfo.pathHexes.length - historyStart;
-
-            if (validLen > 0) {
-                const randomIndex = historyStart + Math.floor(Math.random() * validLen);
-                const interceptPoint = moveInfo.pathHexes.getPathPositionAt(randomIndex);
-
-                if (interceptPoint) {
-                    triggerData.changeTriggeredMove(interceptPoint, { interceptIndex: randomIndex }, "Intercepted mid-movement!", true);
-                } else {
-                }
-            }
-        }*/
 
         if (game.settings.get('lancer-automations', 'debugPathHexCalculation') && moveInfo.pathHexes.length > 0) {
             try {
@@ -2781,5 +2489,5 @@ Hooks.on('updateToken', async function(document, change, options, userId) {
         await CanvasAnimation.getAnimation(document.object.animationName)?.promise;
     }
 
-    Hooks.callAll("lancer-automations.onUpdate", token, document, change, options);
+    await handleTrigger("onUpdate", { triggeringToken: token, document, change, options });
 });

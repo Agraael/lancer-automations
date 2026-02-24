@@ -1,5 +1,5 @@
 {
-    "name": "Fragment Signal",
+    "name": "L.A - Fragment Signal",
     "type": "script",
     "img": "systems/lancer/assets/icons/white/tech_quick.svg",
     "command_source": "FragSignal.js"

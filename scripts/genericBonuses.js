@@ -1017,119 +1017,106 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = []) {
         if (perCardBonuses.length > 0)
             injectTargetedDamageBonuses(perCardBonuses, $form, state.data.damage_hud_data.targets);
 
-        let prevTargetSig = (state.data?.damage_hud_data?.targets || []).map(t => t.target?.id).sort().join(',');
-        const watchInterval = setInterval(() => {
-            if ($('#damage-hud').length === 0) {
-                clearInterval(watchInterval);
+        return true;
+    };
+
+    let prevTargetSig = (state.data?.damage_hud_data?.targets || []).map(t => t.target?.id).sort().join(',');
+    let reinjectPending = false;
+
+    const observer = new MutationObserver(() => {
+        const $form = $('#damage-hud');
+        if ($form.length === 0) {
+            observer.disconnect();
+            return;
+        }
+
+        const hudData = state.data?.damage_hud_data;
+        if (!hudData) {
+            return;
+        }
+
+        const currentTargets = hudData.targets || [];
+        const sig = currentTargets.map(t => t.target?.id).sort().join(',');
+        const hasContainer = $form.find('.csm-bonus-container').length > 0;
+        const targetCount = currentTargets.length;
+        const cardsFound = $form.find('.damage-hud-target-card').length;
+
+        // Wait for cards to populate if there are multiple targets
+        if (targetCount > 1 && cardsFound < targetCount) {
+            return;
+        }
+
+        if (sig === prevTargetSig && hasContainer && !reinjectPending) {
+            return;
+        }
+
+        if (reinjectPending) {
+            return;
+        }
+        reinjectPending = true;
+
+        setTimeout(() => {
+            const refreshedForm = $('#damage-hud');
+            if (refreshedForm.length === 0) {
+                reinjectPending = false;
                 return;
             }
-            const currentTargets = state.data?.damage_hud_data?.targets || [];
-            const sig = currentTargets.map(t => t.target?.id).sort().join(',');
-            if (sig === prevTargetSig)
-                return;
-            prevTargetSig = sig;
-            const newCount = currentTargets.length;
 
-            // Clear per-card injections
-            targetedBonuses.forEach(bonus => {
-                const gc = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
-                $form.find(`.${gc}`).remove();
-            });
-            $form.find('.damage-hud-target-card [class*="csm-tgt-dmg-ctrl-"]').each(function() {
-                const $del = $(this).find('button').first();
-                if ($del.length)
-                    $del.click(); else
-                    $(this).remove();
-            });
+            // Signature change logic
+            if (sig !== prevTargetSig) {
+                prevTargetSig = sig;
+                // Clear per-card injections
+                targetedBonuses.forEach(bonus => {
+                    const gc = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
+                    refreshedForm.find(`.${gc}`).remove();
+                });
+                refreshedForm.find('.damage-hud-target-card [class*="csm-tgt-dmg-ctrl-"]').each(function() {
+                    const $del = $(this).find('button').first();
+                    if ($del.length) {
+                        $del.click();
+                    } else {
+                        $(this).remove();
+                    }
+                });
 
-            // Remove targeted bonuses from bonusStates and their global damage entries
-            for (let i = bonusStates.length - 1; i >= 0; i--) {
-                if (!bonusStates[i]._fromTargeted)
-                    continue;
-                const b = bonusStates[i];
-                b.enabled = false;
-                const $bs = $form.find('.bonus-damage');
-                const $addBtn = $bs.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
-                if ($addBtn.length > 0)
-                    syncBonusToForm(b, $bs, $addBtn);
-                bonusStates.splice(i, 1);
+                // Remove targeted bonuses from bonusStates and their global damage entries
+                for (let i = bonusStates.length - 1; i >= 0; i--) {
+                    if (!bonusStates[i]._fromTargeted) {
+                        continue;
+                    }
+                    const b = bonusStates[i];
+                    b.enabled = false;
+                    const $bs = refreshedForm.find('.bonus-damage');
+                    const $addBtn = $bs.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+                    if ($addBtn.length > 0) {
+                        syncBonusToForm(b, $bs, $addBtn);
+                    }
+                    bonusStates.splice(i, 1);
+                }
+                bonusStates.forEach((b, i) => {
+                    b.index = i;
+                });
             }
-            bonusStates.forEach((b, i) => {
-                b.index = i;
-            });
 
-            // Re-render global container and re-inject targeted bonuses
-            $myContainer.find('.csm-bonus-config-row').remove();
-            bonusStates.forEach((bonus, index) => $myContainer.append($(renderBonusRow(bonus, index))));
-            $myContainer.toggle(bonusStates.length > 0);
-
-            perCardBonuses = [];
             const newResolved = targetedBonuses.map(bonus => {
                 const ht = currentTargets.find(ht => (bonus.applyTo || []).includes(ht.target?.id));
                 return ht ? { ...bonus } : null;
             }).filter(Boolean);
-            if (newResolved.length > 0) {
-                if (newCount <= 1) {
-                    newResolved.forEach(bonus => {
-                        bonusStates.push({ ...bonus, _fromTargeted: true, index: bonusStates.length, enabled: true });
-                        $myContainer.append($(renderBonusRow(bonusStates[bonusStates.length - 1], bonusStates.length - 1)));
-                    });
-                    $myContainer.show();
-                    setTimeout(() => {
-                        newResolved.forEach(bonus => {
-                            const b = bonusStates.find(bs => bs._fromTargeted && (bs.id || bs.name) === (bonus.id || bonus.name));
-                            if (!b)
-                                return;
-                            const $bs = $form.find('.bonus-damage');
-                            const $addBtn = $bs.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
-                            if ($addBtn.length > 0)
-                                syncBonusToForm(b, $bs, $addBtn);
-                        });
-                    }, 200);
-                } else {
-                    perCardBonuses = newResolved;
-                    injectTargetedDamageBonuses(perCardBonuses, $form, currentTargets);
-                }
-            }
-        }, 100);
 
-        return true;
-    };
+            doInject(refreshedForm, newResolved, targetCount);
+            reinjectPending = false;
+        }, 50);
+    });
 
-    let elapsed = 0;
-    const MAX_WAIT = 10000;
-    const POLL_MS = 50;
+    const $hudzone = $('#hudzone');
+    if ($hudzone.length > 0) {
+        observer.observe($hudzone[0], { childList: true, subtree: true });
+    } else {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
 
-    const poll = () => {
-        const hudData = state.data?.damage_hud_data;
-        const $form = $('#damage-hud');
-
-        if (!hudData || !$form.length) {
-            elapsed += POLL_MS;
-            if (elapsed < MAX_WAIT)
-                setTimeout(poll, POLL_MS);
-            return;
-        }
-
-        const hudTargets = hudData.targets || [];
-        const targetCount = hudTargets.length;
-
-        const resolved = targetedBonuses.map(bonus => {
-            const ht = hudTargets.find(ht => (bonus.applyTo || []).includes(ht.target?.id));
-            return ht ? { ...bonus } : null;
-        }).filter(Boolean);
-
-        if (targetCount > 1 && $form.find('.damage-hud-target-card').length < targetCount) {
-            elapsed += POLL_MS;
-            if (elapsed < MAX_WAIT)
-                setTimeout(poll, POLL_MS);
-            return;
-        }
-
-        doInject($form, resolved, targetCount);
-    };
-
-    setTimeout(poll, POLL_MS);
+    // Safety disconnect after 10 minutes
+    setTimeout(() => observer.disconnect(), 600000);
 
     return bonusStates;
 }
@@ -1487,6 +1474,13 @@ Hooks.on("deleteActiveEffect", (effect) => {
 export async function injectBonusToNextRoll(actor, bonus) {
     if (!actor)
         return;
+
+    if (!actor.testUserPermission(game.user, "OWNER")) {
+        const msg = `lancer-automations | injectBonusToNextRoll called for ${actor.name} by non-owner. This may cause timing issues if the reaction isn't Force Synchronous.`;
+        console.warn(msg);
+        ui.notifications.warn(msg);
+    }
+
     const bonuses = duplicate(actor.getFlag("lancer-automations", "ephemeral_bonuses") || []);
     if (!bonus.id)
         bonus.id = foundry.utils.randomID();

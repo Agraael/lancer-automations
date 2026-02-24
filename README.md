@@ -307,12 +307,15 @@ There are many utility functions exposed for scripting. Two notable ones for mac
 -   `api.deployWeaponToken(weapon, actor, token, options)`: Deploy a weapon as a ground token (for Thrown weapons).
 -   `api.pickupWeaponToken(ownerToken)`: Pick up a thrown weapon token from the scene.
 -   `api.beginThrowWeaponFlow(weapon)`: Start a weapon attack flow with throw pre-set.
--   `api.resolveDeployable(deployableOrLid, ownerActor)`: Resolve a deployable actor from LID or direct reference.
 -   `api.placeDeployable(options)`: Place a deployable token with interactive placement, use consumption, and compendium support.
 -   `api.beginDeploymentCard(options)`: Show a deployment card for an item's deployables with per-deployable options.
 -   `api.openDeployableMenu(actor)`: Open a dialog listing all of an actor's deployables for deployment.
 -   `api.recallDeployable(ownerToken)`: Recall a deployed token from the scene.
 -   `api.openThrowMenu(actor)`: Opens a dialog listing all of an actor's throwable weapons for attack.
+-   `api.executeStatRoll(actor, stat, ...)`: Perform a stat roll (HULL, AGI, SYS, ENG, GRIT) with optional target selection.
+-   `api.executeDamageRoll(attacker, targets, ...)`: Perform a damage roll with full Lancer flow support.
+-   `api.executeBasicAttack(actor, ...)` / `api.executeTechAttack(actor, ...)`: Programmatically trigger core attack flows.
+-   `api.executeSimpleActivation(actor, ...)`: Post a flavored action card and trigger related onActivation events.
 
 For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
 

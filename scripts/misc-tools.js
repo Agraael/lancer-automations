@@ -1,5 +1,14 @@
 import { removeFlaggedEffectToTokens, applyFlaggedEffectToTokens, findFlaggedEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
+import { chooseToken } from "./interactive-tools.js";
+
+const STAT_PATHS = {
+    HULL: "system.hull",
+    AGI: "system.agi",
+    SYS: "system.sys",
+    ENG: "system.eng",
+    GRIT: "system.grit"
+};
 
 /**
  * Checks the token height and applies fall damage if necessary
@@ -14,11 +23,12 @@ export async function executeFall(paramToken) {
     }
 
     const targetToken = paramToken;
-
+    const tokenDoc = targetToken.document;
+    const actor = targetToken.actor;
     const terrainAPI = globalThis.terrainHeightTools;
 
     // Remove Flying status if present - falling means no longer flying
-    const hasFlyingStatus = !!findFlaggedEffectOnToken(targetToken, "lancer.statusIconsNames.flying") || !!findFlaggedEffectOnToken(targetToken, "flying");
+    const hasFlyingStatus = !!findFlaggedEffectOnToken(targetToken, "flying");
     if (hasFlyingStatus) {
         await removeFlaggedEffectToTokens({
             tokens: [targetToken],
@@ -26,7 +36,7 @@ export async function executeFall(paramToken) {
         });
     }
 
-    const tokenElevation = targetToken.document.elevation || 0;
+    const tokenElevation = tokenDoc.elevation || 0;
     const maxGroundHeight = terrainAPI ? getMaxGroundHeightUnderToken(targetToken, terrainAPI) : 0;
 
     const hasFallingEffect = !!findFlaggedEffectOnToken(targetToken, "falling");
@@ -44,14 +54,14 @@ export async function executeFall(paramToken) {
     }
 
     // Calculate fall distance
-    let fallStartElevation = Math.max(tokenElevation, targetToken.document.getFlag('lancer-automations', 'fallStartElevation') || 0);
+    let fallStartElevation = Math.max(tokenElevation, tokenDoc.getFlag('lancer-automations', 'fallStartElevation') || 0);
     const fallDistance = tokenElevation - maxGroundHeight;
     const fallAmount = Math.min(10, fallDistance); // Maximum 10 per tick
     const newElevation = tokenElevation - fallAmount;
     const totalFallAmount = fallStartElevation - newElevation;
 
     // Update token elevation
-    await targetToken.document.update({ elevation: newElevation });
+    await tokenDoc.update({ elevation: newElevation });
     ui.notifications.info(`Token has fallen ${fallAmount} space${fallAmount !== totalFallAmount ? ` (for a total of ${totalFallAmount})` : ''}`);
 
     // If the token reaches the ground, calculate damage
@@ -68,30 +78,16 @@ export async function executeFall(paramToken) {
 
         if (damageGroups > 0) {
             const totalDamage = damageGroups * 3;
-
-            targetToken.setTarget(true, { releaseOthers: true, groupSelection: false });
-
-            const DamageRollFlow = game?.lancer?.flows?.get("DamageRollFlow");
-            if (DamageRollFlow) {
-                const flowData = {
-                    title: "Fall",
-                    action: { name: "Fall" },
-                    damage: [{ val: totalDamage.toString(), type: "Kinetic" }],
-                    overkill: false,
-                    ap: true
-                };
-                const flow = new DamageRollFlow(targetToken.actor.uuid, flowData);
-                await flow.begin();
-            }
+            await executeDamageRoll(targetToken, [targetToken], totalDamage, "Kinetic", "Fall", { ap: true, action: { name: "Fall" } });
         }
 
         // Adjust final elevation to be exactly at ground level
         if (newElevation < maxGroundHeight) {
-            await targetToken.document.update({ elevation: maxGroundHeight });
+            await tokenDoc.update({ elevation: maxGroundHeight });
         }
 
         // Clean up the flag
-        await targetToken.document.unsetFlag('lancer-automations', 'fallStartElevation');
+        await tokenDoc.unsetFlag('lancer-automations', 'fallStartElevation');
 
     } else if (!hasFallingEffect) {
         await applyFlaggedEffectToTokens({
@@ -99,8 +95,223 @@ export async function executeFall(paramToken) {
             effectNames: ["Falling"],
             duration: { label: "unlimited" }
         });
-        await targetToken.document.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
+        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
     } else {
-        await targetToken.document.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
+        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
     }
+}
+
+export function getItemLID(item) {
+    return item.system?.lid || null;
+}
+
+export function isItemAvailable(item, reactionPath) {
+    if (!item || item.system?.destroyed || item.system?.disabled) {
+        return false;
+    }
+
+    if (item.type === "talent" && reactionPath) {
+        const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
+        if (rankMatch) {
+            const requiredRank = parseInt(rankMatch[1]) + 1;
+            if ((item.system?.curr_rank || 0) < requiredRank) {
+                return false;
+            }
+        }
+    }
+
+    if (item.type === "mech_weapon" && reactionPath) {
+        const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
+        if (profileMatch) {
+            const requiredProfile = parseInt(profileMatch[1]);
+            const currentProfile = item.system?.selected_profile_index ?? 0;
+            if (currentProfile !== requiredProfile) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+export function hasReactionAvailable(token) {
+    const reaction = token.actor?.system?.action_tracker?.reaction;
+    return reaction !== undefined && reaction > 0;
+}
+
+export async function executeStatRoll(actor, stat, title, target = 10, extraData = {}) {
+    const StatRollFlow = game.lancer.flows.get("StatRollFlow");
+    if (!StatRollFlow) {
+        console.error("lancer-automations | StatRollFlow not found");
+        return { completed: false };
+    }
+
+    let targetVal = target;
+    let targetToken = null;
+    let rollTitle = title;
+    const upperStat = stat.toUpperCase();
+
+    // Handle "token" target selection or object target
+    const useFlowTargeting = game.settings.get('lancer-automations', 'statRollTargeting');
+
+    if (target === "token" && !useFlowTargeting) {
+        const token = actor.token?.object;
+        if (!token) {
+            ui.notifications.warn("No source token found for choosing target.");
+            return { completed: false };
+        }
+
+        const targets = await chooseToken(token, {
+            title: `${upperStat} SAVE TARGET`,
+            description: `Select a target for the ${upperStat} Save.`,
+            count: 1,
+            range: null
+        });
+
+        if (targets && targets.length > 0) {
+            targetToken = targets[0];
+        } else {
+            return { completed: false };
+        }
+    } else if (typeof target === 'object') {
+        if (typeof TokenDocument !== 'undefined' && target instanceof TokenDocument) {
+            targetToken = target.object;
+        } else if (target.actor) {
+            targetToken = target;
+        } else {
+            console.error("lancer-automations | executeStatRoll | Invalid target type");
+        }
+    }
+
+    if (targetToken && targetToken.actor) {
+        const targetActor = targetToken.actor;
+        rollTitle = rollTitle || `${upperStat} Save`;
+
+        // Dynamic Difficulty
+        if (targetActor.type === "npc" || targetActor.type === "deployable") {
+            targetVal = targetActor.system.save || 10;
+        } else if (targetActor.type === "mech") {
+            const path = STAT_PATHS[upperStat] || stat;
+            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
+        }
+    }
+
+    rollTitle = rollTitle || `${upperStat} Check`;
+
+    const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
+    const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
+
+    const flowOptions = { path: statPath, title: rollTitle };
+    const flow = new StatRollFlow(actor, flowOptions);
+    if (targetToken) {
+        flow.state.data.targetToken = targetToken;
+    }
+    flow.state.data.targetVal = targetVal;
+
+    if (extraData && typeof extraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    }
+
+    const completed = await flow.begin();
+    if (!completed) {
+        return { completed: false };
+    }
+    const total = flow.state.data?.result?.roll?.total ?? null;
+    return {
+        completed: true,
+        total,
+        roll: flow.state.data?.result?.roll ?? null,
+        passed: total !== null ? (targetVal !== undefined ? total >= targetVal : false) : false
+    };
+}
+
+export async function executeDamageRoll(attacker, targets, damageValue, damageType, title = "Damage Roll", options = {}, extraData = {}) {
+    const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
+    if (!DamageRollFlow) {
+        return { completed: false };
+    }
+
+    const actor = attacker.actor || attacker;
+    if (!actor) {
+        return { completed: false };
+    }
+
+    if (targets && Array.isArray(targets)) {
+        targets.forEach((t, i) => {
+            const token = t.object || t;
+            if (token?.setTarget) {
+                token.setTarget(true, { releaseOthers: i === 0, groupSelection: true });
+            }
+        });
+    }
+
+    const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
+    const resolvedType = typeMap[damageType.toLowerCase()] || "Kinetic";
+
+    const flowData = {
+        title: title,
+        damage: [{
+            val: String(damageValue),
+            type: resolvedType
+        }],
+        tags: options.tags || [],
+        hit_results: options.hit_results || [],
+        has_normal_hit: options.has_normal_hit !== undefined ? options.has_normal_hit : true,
+        has_crit_hit: options.has_crit_hit || false,
+        ap: options.ap || false,
+        paracausal: options.paracausal || false,
+        half_damage: options.half_damage || false,
+        overkill: options.overkill || false,
+        reliable: options.reliable || false,
+        add_burn: options.add_burn !== undefined ? options.add_burn : true,
+        invade: options.invade || false,
+        bonus_damage: options.bonus_damage || []
+    };
+
+    foundry.utils.mergeObject(flowData, options);
+    const flow = new DamageRollFlow(actor.uuid, flowData);
+    if (extraData && typeof extraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+export async function executeBasicAttack(actor, options = {}, extraData = {}) {
+    const BasicAttackFlow = game.lancer.flows.get("BasicAttackFlow");
+    if (!BasicAttackFlow) {
+        return { completed: false };
+    }
+    const flow = new BasicAttackFlow(actor.uuid, options);
+    if (extraData && typeof extraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+export async function executeTechAttack(actor, options = {}, extraData = {}) {
+    const TechAttackFlow = game.lancer.flows.get("TechAttackFlow");
+    if (!TechAttackFlow) {
+        return { completed: false };
+    }
+    const flow = new TechAttackFlow(actor.uuid, options);
+    if (extraData && typeof extraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+export async function executeSimpleActivation(actor, options = {}, extraData = {}) {
+    const SimpleActivationFlow = game.lancer.flows.get("SimpleActivationFlow");
+    if (!SimpleActivationFlow) {
+        return { completed: false };
+    }
+    const flow = new SimpleActivationFlow(actor.uuid, options);
+    if (extraData && typeof extraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
 }

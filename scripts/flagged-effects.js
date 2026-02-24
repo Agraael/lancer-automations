@@ -7,6 +7,25 @@ function log(...args) {
 let notificationQueue = [];
 let notificationTimer = null;
 
+// Settings cache for external module lookups
+const _statusCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 500 // 500ms TTL is safe for user-driven changes
+};
+
+/**
+ * Helper to get saved statuses with a short-lived cache to avoid redundant settings lookups in loops.
+ */
+function _getSavedStatuses() {
+    const now = Date.now();
+    if (!_statusCache.data || (now - _statusCache.timestamp > _statusCache.ttl)) {
+        _statusCache.data = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+        _statusCache.timestamp = now;
+    }
+    return _statusCache.data;
+}
+
 /**
  * Queue an effect notification to be aggregated.
  * @param {Token|TokenDocument} token - The token involved
@@ -107,7 +126,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
     if (typeof effectOrData === 'string') {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
         if (customStatusApi) {
-            const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+            const savedStatuses = _getSavedStatuses();
             const hasCustom = savedStatuses.find(s => s.name === effectOrData);
             if (hasCustom) {
                 resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
@@ -116,7 +135,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
     } else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom) {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
         if (customStatusApi) {
-            const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+            const savedStatuses = _getSavedStatuses();
             const hasCustom = savedStatuses.find(s => s.name === effectOrData.name);
             if (hasCustom) {
                 resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
@@ -450,7 +469,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
             if (typeof effect === 'string') {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
-                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const savedStatuses = _getSavedStatuses();
                     const hasCustom = savedStatuses.find(s => s.name === effect);
                     if (hasCustom) {
                         resolvedEffectData = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
@@ -459,7 +478,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
             } else if (typeof effect === 'object' && effect.name && !effect.isCustom) {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
-                    const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
+                    const savedStatuses = _getSavedStatuses();
                     const hasCustom = savedStatuses.find(s => s.name === effect.name);
                     if (hasCustom) {
                         resolvedEffectData = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
@@ -654,18 +673,24 @@ export function findFlaggedEffectOnToken(token, identifier) {
     }
 
     if (typeof identifier === 'string') {
-        const identifierLower = identifier.toLowerCase().split('.').pop();
-        // Check for effect by name or label (V12 uses name, older might use label)
-        // Also check if it matches the flag 'effect' value which is robust
-        return actor.effects.find(e =>
-            e.getFlag('temporary-custom-statuses', 'originalName') === identifier ||
-            e.name === identifier ||
-            e.label === identifier ||
-            e.getFlag('lancer-automations', 'effect') === identifier ||
-            e.getFlag('csm-lancer-qol', 'effect') === identifier ||
-            e.name?.toLowerCase().includes(identifierLower) ||
-            e.statuses?.has(identifierLower)
-        );
+        const identifierLower = identifier.toLowerCase();
+        const identifierPathTail = identifierLower.split('.').pop();
+
+        return actor.effects.find(e => {
+            const flags = e.flags;
+            const laFlags = flags?.['lancer-automations'];
+            const tcsFlags = flags?.['temporary-custom-statuses'];
+            const qolFlags = flags?.['csm-lancer-qol'];
+
+            return (
+                tcsFlags?.originalName === identifier ||
+                e.name === identifier ||
+                laFlags?.effect === identifier ||
+                qolFlags?.effect === identifier ||
+                (e.name && e.name.toLowerCase().includes(identifierPathTail)) ||
+                (e.statuses && e.statuses.has(identifierPathTail))
+            );
+        });
     }
 
     return undefined;

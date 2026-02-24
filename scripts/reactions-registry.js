@@ -39,8 +39,8 @@ export function getDefaultGeneralReactionRegistry() {
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-                const flow = new SimpleActivationFlow(reactorToken.actor, {
+                const api = game.modules.get('lancer-automations').api;
+                await api.executeSimpleActivation(reactorToken.actor, {
                     title: "Overwatch",
                     action: {
                         name: "Overwatch",
@@ -48,7 +48,6 @@ export function getDefaultGeneralReactionRegistry() {
                     },
                     detail: "Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move."
                 });
-                await flow.begin();
             }
         },
         "Brace": {
@@ -82,8 +81,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                     const api = game.modules.get('lancer-automations').api;
 
-                    const SimpleActivationFlow = game.lancer?.flows?.get("SimpleActivationFlow");
-                    const flow = new SimpleActivationFlow(reactorToken.actor, {
+                    await api.executeSimpleActivation(reactorToken.actor, {
                         title: "Brace",
                         action: {
                             name: "Brace",
@@ -91,7 +89,6 @@ export function getDefaultGeneralReactionRegistry() {
                         },
                         detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
                     });
-                    await flow.begin();
                 }
             }, {
                 triggers: ["onActivation"],
@@ -346,6 +343,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
+                forceSynchronous: true,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
@@ -579,7 +577,7 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: function (triggerType, triggerData, reactorToken, item, activationName) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                 if (triggerType === "onUpdate") {
                     const api = game.modules.get('lancer-automations')?.api;
                     api.updateAllEngagements();
@@ -619,7 +617,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (stoppedBy && interceptIndex < moveInfo.pathHexes.length - 1) {
                         const pt = moveInfo.pathHexes.getPathPositionAt(interceptIndex);
                         const interceptPoint = pt || moveInfo.pathHexes[interceptIndex];
-                        triggerData.changeTriggeredMove(interceptPoint, { stopTokenId: stoppedBy.id }, `Stopped by Engagement (${stoppedBy.name})`, true);
+                        await triggerData.changeTriggeredMove(interceptPoint, { stopTokenId: stoppedBy.id }, `Stopped by Engagement (${stoppedBy.name})`, true);
                     }
                 }
             }

@@ -1,5 +1,5 @@
 {
-    "name": "Disengage",
+    "name": "L.A - Disengage",
     "type": "script",
     "img": "modules/lancer-automations/icons/disengage.svg",
     "command_source": "Disengage.js"
