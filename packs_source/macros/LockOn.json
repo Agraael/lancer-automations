@@ -1,0 +1,6 @@
+{
+    "name": "Lock On",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/condition_lockon.svg",
+    "command_source": "LockOn.js"
+}

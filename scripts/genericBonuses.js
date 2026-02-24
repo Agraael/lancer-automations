@@ -461,8 +461,8 @@ function getFlowTags(flowType, state) {
 }
 
 async function isBonusApplicable(bonus, flowTags, state) {
-    if (bonus.targetTypes && Array.isArray(bonus.targetTypes) && bonus.targetTypes.length > 0) {
-        const hasMatch = bonus.targetTypes.some(t => flowTags.has(t.toLowerCase()));
+    if (bonus.rollTypes && Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0) {
+        const hasMatch = bonus.rollTypes.some(t => flowTags.has(t.toLowerCase()));
         if (!hasMatch)
             return false;
     }

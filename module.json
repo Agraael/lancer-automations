@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.2.10",
+    "version": "2.2.12",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -47,5 +47,14 @@
                 "type": "module"
             }
         ]
-    }
+    },
+    "packs": [
+        {
+            "name": "macros",
+            "label": "Lancer Automations Macros",
+            "path": "packs/macros",
+            "type": "Macro",
+            "system": "lancer"
+        }
+    ]
 }

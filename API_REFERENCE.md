@@ -9,7 +9,7 @@
   - **Activation Registration**: [`registerDefaultItemReactions`](#registerdefaultitemreactionsreactions), [`registerDefaultGeneralReactions`](#registerdefaultgeneralreactionsreactions)
   - **Spatial / Distance**: [`getActorMaxThreat`](#getactormaxthreatactor), [`getTokenDistance`](#gettokendistancetoken1-token2), [`getMinGridDistance`](#getmingriddistancetoken1-token2-overridepos1), [`isHostile`](#ishostiletoken1-token2), [`isFriendly`](#isfriendlytoken1-token2)
   - **Utilities**: [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata), [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata), [`executeBasicAttack`](#executebasicattackactor-options-extradata), [`executeTechAttack`](#executetechattackactor-options-extradata), [`executeSimpleActivation`](#executesimpleactivationactor-options-extradata), [`clearMoveData`](#clearmovedatatokendocid), [`getCumulativeMoveData`](#getcumulativemovedatatokendocid), [`clearMovementHistory`](#clearmovementhistorytokens-revert), [`getTokenCells`](#gettokencellstoken), [`getMaxGroundHeightUnderToken`](#getmaxgroundheightundertokentoken-terrainapi), [`openItemBrowser`](#openitembrowsertargetinput), [`drawThreatDebug`](#drawthreatdebugtoken), [`drawDistanceDebug`](#drawdistancedebug), [`knockBackToken`](#knockbacktokentokens-distance-options), [`revertMovement`](#revertmovementtoken-destination), [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
-  - **Interactive Tools**: [`chooseToken`](#choosetokencastertoken-options), [`placeZone`](#placezonecastertoken-options), [`placeToken`](#placetokenoptions), [`startChoiceCard`](#startchoicecardoptions), [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options), [`pickupWeaponToken`](#pickupweapontokenownertoken), [`resolveDeployable`](#resolvedeployabledeployableorlid-owneractor), [`placeDeployable`](#placedeployableoptions), [`beginDeploymentCard`](#begindeploymentcardoptions), [`openDeployableMenu`](#opendeployablemenuactor), [`recallDeployable`](#recalldeployableownertoken), [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon), [`getGridDistance`](#getgriddistancepos1-pos2), [`drawRangeHighlight`](#drawrangehighlightcastertoken-range-color-alpha)
+  - **Interactive Tools**: [`chooseToken`](#choosetokencastertoken-options), [`placeZone`](#placezonecastertoken-options), [`placeToken`](#placetokenoptions), [`startChoiceCard`](#startchoicecardoptions), [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options), [`pickupWeaponToken`](#pickupweapontokenownertoken), [`resolveDeployable`](#resolvedeployabledeployableorlid-owneractor), [`placeDeployable`](#placedeployableoptions), [`beginDeploymentCard`](#begindeploymentcardoptions), [`openDeployableMenu`](#opendeployablemenuactor), [`recallDeployable`](#recalldeployableownertoken), [`openThrowMenu`](#openthrowmenuactor), [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon), [`getGridDistance`](#getgriddistancepos1-pos2), [`drawRangeHighlight`](#drawrangehighlightcastertoken-range-color-alpha)
 - [Trigger Types & Data](#trigger-types--data)
 - [Evaluate Function](#evaluate-function)
 - [Activation Function](#activation-function)
@@ -156,9 +156,11 @@ Add a global bonus to an actor. Creates a linked status effect on the token.
 | `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, or `"stat"` |
 | `uses` | `number` | Stack count (optional) |
 | `stat` | `string` | For stat bonuses: property path (e.g. `"system.hp.max"`, `"system.evasion"`) |
-| `targetTypes` | `Array<string>` | Flow type filters: `["all"]`, `["attack"]`, `["check"]`, `["damage"]`, etc. |
+| `rollTypes` | `Array<string>` | Flow type filters: `["all"]`, `["attack"]`, `["check"]`, `["damage"]`, etc. |
 | `condition` | `string \| function` | JS condition — function reference or string expression. Args: `(state, actor, data, context)`, returns boolean. Supports async. |
 | `itemLids` | `Array<string>` | Item LID filters |
+| `applyTo` | `Array<string>` | Token ID filters: only applies if the actor/target has these IDs |
+| `applyToTargetter` | `boolean` | If true, the bonus is checked on the target but applied to the attacker |
 | `context` | `Object` | Data passed to condition evaluation |
 | `damage` | `Array<Object>` | For damage bonuses: `[{ type: "Kinetic", val: 2 }]` |
 
@@ -832,6 +834,21 @@ Recall (pick up) a deployed deployable from the scene. Shows a `chooseToken` car
 | `ownerToken` | `Token` | The token whose actor owns the deployables |
 
 **Returns:** `Promise<{deployableName, deployableId}|null>`
+
+---
+
+### `openThrowMenu(actor)`
+
+Opens a dialog listing all of an actor's throwable weapons for attack. Supports both mech weapons (with "Thrown" tag) and NPC features.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | `null` | The actor whose weapons to show. Defaults to the first controlled token's actor. |
+
+**Example:**
+```javascript
+await api.openThrowMenu(actor);
+```
 
 ---
 
@@ -1560,7 +1577,7 @@ await api.addGlobalBonus(actor, {
     name: "+1 Accuracy",
     val: 1,
     type: "accuracy",
-    targetTypes: ["all"]
+    rollTypes: ["all"]
 }, {
     duration: "end",
     durationTurns: 1,
@@ -1576,7 +1593,7 @@ await api.addGlobalBonus(actor, {
     val: 2,
     type: "damage",
     damage: [{ type: "Kinetic", val: 2 }],
-    targetTypes: ["all"],
+    rollTypes: ["all"],
     itemLids: ["my_weapon_lid"]
 }, {
     duration: "indefinite",
@@ -1626,7 +1643,7 @@ await api.addGlobalBonus(actor, {
     name: "Impaired Attacks",
     val: 1,
     type: "difficulty",
-    targetTypes: ["attack"],
+    rollTypes: ["attack"],
     condition: async (state, actor, data, context) => { return state.data?.title?.includes('Melee'); }
 }, {
     duration: "start",

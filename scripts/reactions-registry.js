@@ -161,7 +161,7 @@ export function getDefaultGeneralReactionRegistry() {
                             name: "Brace",
                             type: "difficulty",
                             val: 1,
-                            targetTypes: ["attack"],
+                            rollTypes: ["attack"],
                             applyToTargetter: true
                         });
                     } else if (triggerType === 'onStatusRemoved') {
@@ -623,7 +623,30 @@ export function getDefaultGeneralReactionRegistry() {
                     }
                 }
             }
+        },
+        "Disengage": {
+            category: "General",
+            triggers: ["onActivation"],
+            effectDescription: "Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.",
+            actionType: "Full Action",
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                const api = game.modules.get('lancer-automations').api;
+                await api.applyFlaggedEffectToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ["Disengage"],
+                    duration: { label: 'end', turns: 1, rounds: 0 },
+                    useTokenAsOrigin: true
+                });
+            }
         }
+
     };
     return { ...builtInDefaults, ...externalGeneralReactions };
 }

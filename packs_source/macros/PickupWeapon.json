@@ -1,0 +1,6 @@
+{
+    "name": "Pickup Weapon",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/pickup.svg",
+    "command_source": "PickupWeapon.js"
+}

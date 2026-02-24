@@ -444,7 +444,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
             let hasEffect = false;
             let existingEffect = null;
             let effectNameForLog = typeof effect === 'string' ? effect : effect.name;
-            
+
             // Auto-detect if "string" effect is an existing custom effect
             let resolvedEffectData = effect;
             if (typeof effect === 'string') {

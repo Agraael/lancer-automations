@@ -1826,7 +1826,7 @@ export class ReactionEditor extends FormApplication {
                     });
                 },
                 default: "cancel"
-            }, { 
+            }, {
                 width: 500,
                 classes: ["lancer-dialog-base", "lancer-item-browser-dialog"]
             });

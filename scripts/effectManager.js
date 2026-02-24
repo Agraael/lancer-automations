@@ -134,10 +134,13 @@ function triggerFieldsHtml(prefix, tokensHtml) {
         <div id="${prefix}-trigger-fields" style="display:none;">
             <div class="form-group">
                 <label>Origin:</label>
-                <select id="${prefix}-trigger-origin">
-                    <option value="">Same as Target</option>
-                    ${tokensHtml}
-                </select>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <select id="${prefix}-trigger-origin" style="flex:1;">
+                        <option value="">Same as Target</option>
+                        ${tokensHtml}
+                    </select>
+                    <button type="button" class="token-picker-btn" data-target="${prefix}-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                </div>
             </div>
             <div class="form-group cfilter-itemLid" style="display:none;">
                 <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Consume on item:</label>
@@ -427,7 +430,10 @@ export async function executeEffectManager(options = {}) {
         <div class="te-content active" id="tab-standard">
             <div class="form-group">
                 <label>Target:</label>
-                <select id="std-target">${tokensHtml}</select>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <select id="std-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="std-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                </div>
             </div>
             <div class="form-group" style="flex-direction: column; align-items: stretch; gap: 8px;">
                 <div style="display:flex; justify-content:space-between; align-items: center;">
@@ -454,7 +460,10 @@ export async function executeEffectManager(options = {}) {
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="std-duration">${durationOptionsHtml}</select>
                     <span class="dur-opts"> of </span>
-                    <select id="std-origin" class="dur-opts" style="max-width: 100px;">${tokensHtml}</select>
+                    <div class="dur-opts" style="flex:1; display:flex; gap:3px; max-width: 130px;">
+                        <select id="std-origin" style="flex:1;">${tokensHtml}</select>
+                        <button type="button" class="token-picker-btn" data-target="std-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                    </div>
                     <span class="dur-opts" style="margin-left:5px;">Turns:</span>
                     <input type="number" id="std-turns" value="1" min="1" class="dur-opts" style="max-width: 40px;">
                 </div>
@@ -474,7 +483,10 @@ export async function executeEffectManager(options = {}) {
         <div class="te-content" id="tab-custom">
             <div class="form-group two-col">
                 <label>Target:</label>
-                <select id="cust-target">${tokensHtml}</select>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <select id="cust-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="cust-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                </div>
                 <label style="text-align:right; padding-right:5px;">Saved:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <img id="cust-saved-icon" src="" width="26" height="26" style="border:2px solid #999; border-radius:4px; background:#1a1a1a; display:none; object-fit: contain;">
@@ -502,7 +514,10 @@ export async function executeEffectManager(options = {}) {
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="cust-duration">${durationOptionsHtml}</select>
                     <span class="dur-opts"> of </span>
-                    <select id="cust-origin" class="dur-opts" style="max-width: 100px;">${tokensHtml}</select>
+                    <div class="dur-opts" style="flex:1; display:flex; gap:3px; max-width: 130px;">
+                        <select id="cust-origin" style="flex:1;">${tokensHtml}</select>
+                        <button type="button" class="token-picker-btn" data-target="cust-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                    </div>
                     <span class="dur-opts" style="margin-left:5px;">Turns:</span>
                     <input type="number" id="cust-turns" value="1" min="1" class="dur-opts" style="max-width: 40px;">
                 </div>
@@ -522,7 +537,10 @@ export async function executeEffectManager(options = {}) {
         <div class="te-content" id="tab-manage">
             <div class="form-group">
                 <label>Token:</label>
-                <select id="manage-target">${tokensHtml}</select>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <select id="manage-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="manage-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                </div>
             </div>
             <div class="te-effect-list" id="manage-list">
                 <p style="text-align:center">Loading...</p>
@@ -536,7 +554,10 @@ export async function executeEffectManager(options = {}) {
         <div class="te-content" id="tab-bonus">
             <div class="form-group">
                 <label>Token:</label>
-                <select id="bonus-target">${tokensHtml}</select>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <select id="bonus-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                </div>
             </div>
             <div class="te-effect-list" id="bonus-list">
                 <p style="text-align:center; color:#666; font-style:italic;">No active bonuses.</p>
@@ -552,7 +573,10 @@ export async function executeEffectManager(options = {}) {
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="bonus-duration">${bonusDurationOptionsHtml}</select>
                     <span class="bonus-dur-opts"> of </span>
-                    <select id="bonus-durOrigin" class="bonus-dur-opts" style="max-width:100px;">${tokensHtml}</select>
+                    <div class="bonus-dur-opts" style="flex:1; display:flex; gap:3px; max-width:130px;">
+                        <select id="bonus-durOrigin" style="flex:1;">${tokensHtml}</select>
+                        <button type="button" class="token-picker-btn" data-target="bonus-durOrigin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                    </div>
                     <span class="bonus-dur-opts" style="margin-left:3px;">Turns:</span>
                     <input type="number" id="bonus-durTurns" value="1" min="1" class="bonus-dur-opts" style="max-width:40px;">
                 </div>
@@ -568,10 +592,13 @@ export async function executeEffectManager(options = {}) {
             <div id="bonus-trigger-fields" style="display:none;">
                 <div class="form-group">
                     <label>Origin:</label>
-                    <select id="bonus-trigger-origin">
-                        <option value="">Same as Target</option>
-                        ${tokensHtml}
-                    </select>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <select id="bonus-trigger-origin" style="flex:1;">
+                            <option value="">Same as Target</option>
+                            ${tokensHtml}
+                        </select>
+                        <button type="button" class="token-picker-btn" data-target="bonus-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+                    </div>
                 </div>
                 <div class="form-group bonus-filter-itemLid" style="display:none;">
                     <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Consume on item:</label>
@@ -671,9 +698,9 @@ export async function executeEffectManager(options = {}) {
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
-                <div class="form-group" id="row-bonus-targetTypes-roll" style="display:none;">
-                    <label>Target Type:</label>
-                    <select id="bonus-targetTypes-roll">
+                <div class="form-group" id="row-bonus-rollTypes-roll" style="display:none;">
+                    <label>Roll Type:</label>
+                    <select id="bonus-rollTypes-roll">
                         <option value="all">All Flows</option>
                         <option value="attack">Weapon Attacks (All)</option>
                         <option value="tech_attack">Tech Attacks</option>
@@ -692,9 +719,9 @@ export async function executeEffectManager(options = {}) {
                         <option value="overheat">Overheat Roll</option>
                     </select>
                 </div>
-                <div class="form-group" id="row-bonus-targetTypes-damage" style="display:none;">
-                    <label>Target Type:</label>
-                    <select id="bonus-targetTypes-damage">
+                <div class="form-group" id="row-bonus-rollTypes-damage" style="display:none;">
+                    <label>Roll Type:</label>
+                    <select id="bonus-rollTypes-damage">
                         <option value="all">All Damage</option>
                         <option value="melee">Melee Damage</option>
                         <option value="ranged">Ranged Damage</option>
@@ -708,6 +735,17 @@ export async function executeEffectManager(options = {}) {
                         <input type="text" id="bonus-itemLids" placeholder="e.g. mb_knife, cqb_shotgun" style="flex:1;">
                         <button type="button" class="find-lid-btn" data-target="bonus-itemLids" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label data-tooltip="Apply this bonus to specific token IDs. Use the selector to pick tokens from the map.">Apply to tokens:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-applyTo" placeholder="Token IDs (comma-separated)" style="flex:1;">
+                        <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers.">Apply to Targetter:</label>
+                    <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content;">
                 </div>
             </div>
             <div style="margin-top:8px;">
@@ -1035,7 +1073,7 @@ export async function executeEffectManager(options = {}) {
                         usesInfo = remaining !== null ? ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>` : ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>`;
                     }
                     const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
-                    const types = (b.targetTypes && b.targetTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.targetTypes.join(', ')}]</span>` : '';
+                    const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
 
                     const item = $(`
                         <div class="te-bonus-item">
@@ -1067,9 +1105,8 @@ export async function executeEffectManager(options = {}) {
                         } else if (b.type === 'damage') {
                             details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
                         }
-
                         const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
-                        const types = (b.targetTypes && b.targetTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.targetTypes.join(', ')}]</span>` : '';
+                        const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
 
                         const item = $(`
                             <div class="te-bonus-item">
@@ -1136,6 +1173,34 @@ export async function executeEffectManager(options = {}) {
                 openItemBrowser(html.find(`#${targetId}`));
             });
 
+            // Token selector buttons (interactive picking)
+            html.find('.token-picker-btn').on('click', async function (e) {
+                e.preventDefault();
+                const targetId = $(this).data('target');
+                const count = parseInt($(this).data('count')) || 1;
+                const api = game.modules.get('lancer-automations').api;
+
+                // Use currently selected token as caster for the selection tool context if possible
+                const currentVal = html.find(`#${targetId}`).val();
+                const caster = canvas.tokens.get(currentVal) || canvas.tokens.controlled[0];
+
+                const selected = await api.chooseToken(caster, {
+                    count: count,
+                    title: count === 1 ? "Pick Token" : "Select Tokens",
+                    description: count === 1 ? "Select a token on the map to update the field." : "Select tokens to apply this bonus to. Close the card to confirm.",
+                    icon: "fas fa-crosshairs"
+                });
+
+                if (selected && selected.length > 0) {
+                    if (count === 1) {
+                        html.find(`#${targetId}`).val(selected[0].id).change();
+                    } else {
+                        const ids = selected.map(t => t.id).join(', ');
+                        html.find(`#${targetId}`).val(ids).change();
+                    }
+                }
+            });
+
             // Add bonus handler
             const addBonusFromTab = async (type) => {
                 const targetID = html.find('#bonus-target').val();
@@ -1153,19 +1218,25 @@ export async function executeEffectManager(options = {}) {
                 const itemLidsStr = html.find('#bonus-itemLids').val();
                 const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
-                let targetTypes = [];
+                let rollTypes = [];
                 if (type === 'accuracy' || type === 'difficulty') {
-                    targetTypes = [html.find('#bonus-targetTypes-roll').val()];
+                    rollTypes = [html.find('#bonus-rollTypes-roll').val()];
                 } else if (type === 'damage') {
-                    targetTypes = [html.find('#bonus-targetTypes-damage').val()];
+                    rollTypes = [html.find('#bonus-rollTypes-damage').val()];
                 }
+
+                const applyToStr = html.find('#bonus-applyTo').val();
+                const applyTo = applyToStr ? applyToStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
+                const applyToTargetter = html.find('#bonus-applyToTargetter').is(':checked');
 
                 const bonusData = {
                     name,
                     type,
                     uses,
                     itemLids,
-                    targetTypes
+                    rollTypes,
+                    applyTo,
+                    applyToTargetter
                 };
 
                 if (type === 'stat') {
@@ -1242,8 +1313,8 @@ export async function executeEffectManager(options = {}) {
                 const showItems = type === 'roll' || type === 'damage';
                 html.find('#bonus-items-row').toggle(showItems);
                 if (showItems) {
-                    html.find('#row-bonus-targetTypes-roll').toggle(type === 'roll');
-                    html.find('#row-bonus-targetTypes-damage').toggle(type === 'damage');
+                    html.find('#row-bonus-rollTypes-roll').toggle(type === 'roll');
+                    html.find('#row-bonus-rollTypes-damage').toggle(type === 'damage');
                 }
 
                 html.closest('.dialog').css('height', 'auto');
@@ -1303,7 +1374,8 @@ export async function executeEffectManager(options = {}) {
         }
     }, {
         width: 'auto',
-        height: 'auto'
+        height: 'auto',
+        left: 100
     });
 
     dialog.render(true);

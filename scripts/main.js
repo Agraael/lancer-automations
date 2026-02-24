@@ -1,5 +1,6 @@
 import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance, canEngage, updateAllEngagements } from "./overwatch.js";
 import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
+import { packMacros } from "./compendium-tools.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
@@ -41,9 +42,11 @@ import {
     chooseToken, placeZone, knockBackToken, applyKnockbackMoves,
     placeToken, startChoiceCard, deployWeaponToken, pickupWeaponToken,
     resolveDeployable, placeDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
+    openThrowMenu,
     getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
 } from "./interactive-tools.js";
 import { executeFall } from "./misc-tools.js";
+import { checkModuleUpdate } from "./version-check.js";
 
 
 let reactionDebounceTimer = null;
@@ -1255,6 +1258,14 @@ function registerSettings() {
         type: ReactionImport,
         restricted: true
     });
+
+    game.settings.register('lancer-automations', 'lastNotifiedVersion', {
+        name: 'Last Notified Version',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: ""
+    });
 }
 
 async function handleSocketEvent({ action, payload }) {
@@ -2067,6 +2078,8 @@ Hooks.once('ready', async () => {
                 await actor.setFlag("lancer-automations", "ephemeral_bonuses", []);
         }
     }
+
+    checkModuleUpdate('lancer-automations');
 });
 
 Hooks.on('lancer.statusesReady', () => {
@@ -2226,7 +2239,9 @@ Hooks.on('ready', () => {
         clearMovementHistory,
         undoMoveData,
         getIntentionalMoveData,
-        triggerFlaggedEffectImmunity
+        triggerFlaggedEffectImmunity,
+        packMacros,
+        openThrowMenu
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 

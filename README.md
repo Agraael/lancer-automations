@@ -312,6 +312,7 @@ There are many utility functions exposed for scripting. Two notable ones for mac
 -   `api.beginDeploymentCard(options)`: Show a deployment card for an item's deployables with per-deployable options.
 -   `api.openDeployableMenu(actor)`: Open a dialog listing all of an actor's deployables for deployment.
 -   `api.recallDeployable(ownerToken)`: Recall a deployed token from the scene.
+-   `api.openThrowMenu(actor)`: Opens a dialog listing all of an actor's throwable weapons for attack.
 
 For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
 

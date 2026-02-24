@@ -2822,13 +2822,156 @@ export async function recallDeployable(ownerToken) {
             action: "recallDeployable",
             payload: {
                 sceneId: canvas.scene.id,
-                tokenId: pickedToken.document?.id || pickedToken.id
+                tokenId: pickedToken.document?.id || pickedToken.id,
+                ownerActorUuid: ownerActor.uuid,
+                deployableName
             }
         });
     }
 
     ui.notifications.info(`Recalled ${deployableName}.`);
     return { deployableName, deployableId };
+}
+
+/**
+ * Opens a dialog to select and throw a weapon.
+ * @param {Actor} [actor] - The actor throwing the weapon. Defaults to the character of the first controlled token.
+ */
+export async function openThrowMenu(actor) {
+    const controlled = canvas.tokens.controlled;
+    const activeActor = actor || controlled[0]?.actor;
+
+    if (!activeActor) {
+        ui.notifications.warn("No actor found. Select a token or provide an actor.");
+        return;
+    }
+
+    const token = activeActor.getActiveTokens()?.[0] || controlled[0];
+
+    // Filter weapons with the "Throw" tag
+    const throwWeapons = activeActor.items.filter(item => {
+        if (item.type === 'mech_weapon') {
+            const profiles = item.system?.profiles ?? [];
+            const activeProfileIndex = item.system?.selected_profile_index ?? 0;
+            const activeProfile = profiles[activeProfileIndex];
+            if (!activeProfile) return false;
+            const tags = activeProfile.tags ?? [];
+            return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
+        } else if (item.type === 'npc_feature' && item.system?.type === 'Weapon') {
+            const tags = item.system?.tags ?? [];
+            return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
+        }
+        return false;
+    });
+
+    if (throwWeapons.length === 0) {
+        ui.notifications.warn(`No throwable weapons found for ${activeActor.name}.`);
+        return;
+    }
+
+    const items = throwWeapons.map(weapon => {
+        const uses = weapon.system?.uses;
+        const hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
+        const noUsesLeft = hasUses && uses.value <= 0;
+        const isDestroyed = weapon.system?.destroyed ?? false;
+        const isLoaded = weapon.type === 'mech_weapon' ? (weapon.system?.loaded ?? true) : true;
+
+        let damageText = '';
+        if (weapon.type === 'mech_weapon') {
+            const profiles = weapon.system?.profiles ?? [];
+            const activeProfileIndex = weapon.system?.selected_profile_index ?? 0;
+            const activeProfile = profiles[activeProfileIndex];
+            if (activeProfile?.damage) {
+                damageText = activeProfile.damage.map(d => `${d.val} ${d.type}`).join(' + ');
+            }
+        } else if (weapon.type === 'npc_feature') {
+            const tier = activeActor.system?.tier ?? 1;
+            const tierIndex = Math.max(0, Math.min(2, tier - 1));
+            const damages = weapon.system?.damage?.[tierIndex] ?? [];
+            if (damages.length > 0) {
+                damageText = damages.map(d => `${d.val} ${d.type}`).join(' + ');
+            }
+        }
+
+        return {
+            id: weapon.id,
+            name: weapon.name,
+            img: weapon.img,
+            weaponData: weapon,
+            damageText: damageText,
+            usesText: hasUses ? `${uses.value}/${uses.max}` : '',
+            disabled: noUsesLeft || isDestroyed || !isLoaded || weapon.system?.disabled,
+        };
+    });
+
+    let selectedId = items.find(i => !i.disabled)?.id;
+    const content = `
+        <style>
+            .lancer-items-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; max-height: 60vh; overflow-y: auto; }
+            .lancer-item-card { min-height: 50px; padding: 8px 10px; padding-top: 20px; position: relative; overflow: hidden; border: 1px solid #7a7971; border-radius: 4px; background: rgba(0, 0, 0, 0.1); cursor: pointer; }
+            .lancer-item-card.disabled { opacity: 0.5; cursor: not-allowed; border-color: #888; background-color: #00000030; }
+            .lancer-item-card.selected { border-color: #ff6400; box-shadow: 0 0 5px #ff6400; }
+            .lancer-item-header { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; }
+            .lancer-item-icon { width: 32px; height: 32px; min-width: 32px; object-fit: cover; border-radius: 3px; border: none; }
+            .lancer-item-name { flex: 1; font-weight: bold; font-size: 0.95em; line-height: 1.2; }
+            .lancer-item-damage { font-size: 0.85em; color: #444; margin-top: 2px; display: flex; align-items: center; gap: 3px; font-weight: bold; }
+        </style>
+        <div class="lancer-dialog-base">
+            <div class="lancer-dialog-header" style="margin-bottom: 10px;">
+                <div class="lancer-dialog-title" style="font-weight: bold; font-size: 1.2em;">THROW WEAPON</div>
+                <div class="lancer-dialog-subtitle" style="font-style: italic; font-size: 0.9em; color: #666;">Select a throwable weapon to attack with.</div>
+            </div>
+            <div class="lancer-items-grid" style="display: grid;">
+                ${items.map(item => `
+                    <div class="lancer-item-card ${item.disabled ? 'disabled' : ''} ${item.id === selectedId ? 'selected' : ''}" data-item-id="${item.id}">
+                        <div class="lancer-item-header">
+                            <img src="${item.img}" class="lancer-item-icon" />
+                            <div class="lancer-item-name">${item.name}</div>
+                        </div>
+                        ${item.damageText ? `<div class="lancer-item-damage"><i class="cci cci-damage"></i> ${item.damageText}</div>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    new Dialog({
+        title: "Throw Weapon",
+        content: content,
+        buttons: {
+            throw: {
+                icon: '<i class="cci cci-weapon-range"></i>',
+                label: "Throw",
+                callback: async () => {
+                    const item = items.find(i => i.id === selectedId);
+                    if (!item || item.disabled) return;
+                    const weapon = item.weaponData;
+                    const api = game.modules.get('lancer-automations')?.api;
+                    if (api?.beginThrowWeaponFlow) {
+                        await api.beginThrowWeaponFlow(weapon);
+                    } else if (weapon.beginWeaponAttackFlow) {
+                        await weapon.beginWeaponAttackFlow(true);
+                        if (api?.deployWeaponToken) {
+                            await api.deployWeaponToken(weapon, activeActor, token);
+                        }
+                    }
+                }
+            },
+            cancel: { label: "Cancel" }
+        },
+        default: "throw",
+        render: (html) => {
+            html.find('.lancer-item-card:not(.disabled)').on('click', function () {
+                html.find('.lancer-item-card').removeClass('selected');
+                $(this).addClass('selected');
+                selectedId = $(this).data('item-id');
+            });
+            html.find('.lancer-item-card:not(.disabled)').on('dblclick', function () {
+                selectedId = $(this).data('item-id');
+                html.closest('.dialog').find('.dialog-button.throw').click();
+            });
+        }
+    }, { width: 400 }).render(true);
 }
 
 /**
