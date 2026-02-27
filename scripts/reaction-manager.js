@@ -425,7 +425,8 @@ export class ReactionConfig extends FormApplication {
                     isGeneral: false,
                     reactionIndex: index,
                     original: reaction,
-                    enabled: reaction.enabled
+                    enabled: reaction.enabled,
+                    comments: reaction.comments || ""
                 }));
             });
 
@@ -490,7 +491,8 @@ export class ReactionConfig extends FormApplication {
                     reactionIndex: index,
                     original: reaction,
                     enabled: enabledState,
-                    category: data.category || ""
+                    category: data.category || "",
+                    comments: reaction.comments || ""
                 }));
             });
 
@@ -534,7 +536,8 @@ export class ReactionConfig extends FormApplication {
                 isCustom: true,
                 onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                 original: reaction,
-                enabled: reaction.enabled
+                enabled: reaction.enabled,
+                comments: reaction.comments || ""
             }));
         }
 
@@ -556,7 +559,8 @@ export class ReactionConfig extends FormApplication {
                         reactionIndex: index,
                         original: subReaction,
                         enabled: enabledState,
-                        category: reaction.category || ""
+                        category: reaction.category || "",
+                        comments: subReaction.comments || ""
                     });
                 });
 
@@ -591,7 +595,8 @@ export class ReactionConfig extends FormApplication {
                     onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                     original: reaction,
                     enabled: enabledState,
-                    category: reaction.category || ""
+                    category: reaction.category || "",
+                    comments: reaction.comments || ""
                 }));
             }
         }
@@ -1209,7 +1214,7 @@ export class ReactionEditor extends FormApplication {
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
             onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
-            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], distanceToTrigger }",
+            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], actionName, item, distanceToTrigger }",
             onUpdate: "{ triggeringToken, document, change, options }"
         };
 
@@ -1223,6 +1228,7 @@ export class ReactionEditor extends FormApplication {
             reactionPath: reaction.reactionPath || "",
             triggerDescription: reaction.triggerDescription || "",
             effectDescription: reaction.effectDescription || foundEffectDescription || "",
+            comments: reaction.comments || "",
             isReaction: reaction.isReaction !== false,
             isReactionDefined: reaction.isReaction !== undefined,
             triggerSelf: reaction.triggerSelf === true,
@@ -1291,7 +1297,7 @@ export class ReactionEditor extends FormApplication {
         const sourceMatchTriggers = [
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation',
-            'onInitAttack', 'onInitTechAttack'
+            'onInitAttack', 'onInitTechAttack', 'onKnockback'
         ];
 
         const toggleSourceMatchTriggers = () => {
@@ -2086,6 +2092,7 @@ export class ReactionEditor extends FormApplication {
             const newReaction = {
                 triggers: triggers,
                 evaluate: formData.evaluate,
+                comments: formData.comments || "",
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",
@@ -2116,6 +2123,7 @@ export class ReactionEditor extends FormApplication {
                 reactionPath: formData.reactionPath || "",
                 triggers: triggers,
                 evaluate: formData.evaluate,
+                comments: formData.comments || "",
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",

@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Downtime",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/downtime.svg",
+    "command_source": "Downtime.js"
+}

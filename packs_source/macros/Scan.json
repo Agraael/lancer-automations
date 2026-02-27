@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Scan",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/radar-sweep.svg",
+    "command_source": "Scan.js"
+}

@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Suicide",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/suicide.svg",
+    "command_source": "Suicide.js"
+}

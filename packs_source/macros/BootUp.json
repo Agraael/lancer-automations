@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Boot Up",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/boot.svg",
+    "command_source": "BootUp.js"
+}

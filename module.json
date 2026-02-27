@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.2.14",
+    "version": "2.3.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -14,7 +14,8 @@
     "download": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.zip",
     "esmodules": [
         "scripts/overwatch.js",
-        "scripts/main.js"
+        "scripts/main.js",
+        "scripts/grapple.js"
     ],
     "styles": [
         "styles/codemirror-dark.css",

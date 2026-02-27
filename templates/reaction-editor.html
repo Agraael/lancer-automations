@@ -11,20 +11,27 @@
         </label>
     </div>
 
-    <!-- Activation Name (General only) -->
+    <!-- Activation Name \u0026 Comments (General only) -->
     <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
-        <label>Activation Name</label>
-        <div class="form-fields">
-            <input type="text" name="name" value="{{name}}" placeholder="e.g. Custom Overwatch">
+        <div class="form-fields flexrow" style="gap: 10px;">
+            <div style="flex: 2;">
+                <label style="font-weight: bold;">Activation Name</label>
+                <input type="text" name="name" value="{{name}}" placeholder="e.g. Custom Overwatch">
+                <p class="notes">A unique name for this activation.</p>
+            </div>
+            <div style="flex: 3;">
+                <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
+                <input type="text" name="comments" value="{{comments}}" placeholder="Brief notes for the list...">
+                <p class="notes">Shown in the manager list.</p>
+            </div>
         </div>
-        <p class="notes">A unique name for this general activation.</p>
     </div>
 
     <!-- Only On Source Match (General only - matches action name) -->
     <div class="form-group general-only"
         style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onInitAttack, onInitTechAttack) will work in this mode."
+            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onInitAttack, onInitTechAttack, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
@@ -33,13 +40,20 @@
         </p>
     </div>
 
-    <!-- Item LID (Item-based only) -->
+    <!-- Item LID \u0026 Comments (Item-based only) -->
     <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
-        <label>Item LID</label>
-        <div class="form-fields">
-            <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
+        <div class="form-fields flexrow" style="gap: 10px;">
+            <div style="flex: 2;">
+                <label style="font-weight: bold;">Item LID</label>
+                <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
+                <p class="notes">Item system.lid to attach to.</p>
+            </div>
+            <div style="flex: 3;">
+                <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
+                <input type="text" name="comments" value="{{comments}}" placeholder="Brief notes for the list...">
+                <p class="notes">Shown in the manager list.</p>
+            </div>
         </div>
-        <p class="notes">The ID of the item (system.lid) to attach this activation to.</p>
     </div>
 
     <!-- Item Preview (dynamically updated) -->
@@ -77,7 +91,7 @@
     <div class="form-group item-only"
         style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation) will work in this mode."
+            title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>

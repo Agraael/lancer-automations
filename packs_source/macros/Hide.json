@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Hide",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/status_hidden.svg",
+    "command_source": "Hide.js"
+}

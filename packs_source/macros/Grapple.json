@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Grapple Choice",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/grappling.svg",
+    "command_source": "Grapple.js"
+}

@@ -434,7 +434,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
         tokens,
         effectNames,
         note,
-        duration,
+        duration = {},
         useTokenAsOrigin = true,
         customOriginId = null,
         checkEffectCallback = null
@@ -937,3 +937,40 @@ export async function triggerFlaggedEffectImmunity(token, effectNames, source = 
         });
     }
 }
+
+/**
+ * Delete flagged (or all) active effects from a list of tokens.
+ * @param {Array<Token|TokenDocument>} tokens - List of tokens to process
+ * @param {boolean} [allEffects=false] - If true, removes ALL effects instead of just flagged ones.
+ */
+export async function executeDeleteAllFlaggedEffect(tokens, allEffects = false) {
+    if (!tokens || tokens.length === 0) {
+        return ui.notifications.error('No tokens provided for effect removal!');
+    }
+
+    ui.notifications.info(`Removing ${allEffects ? 'ALL' : 'flagged'} effects from ${tokens.length} tokens...`);
+
+    for (const token of tokens) {
+        if (!token.actor)
+            continue;
+
+        let effectsToDelete;
+        if (allEffects) {
+            effectsToDelete = token.actor.effects;
+        } else {
+            effectsToDelete = token.actor.effects.filter(e =>
+                e.getFlag('lancer-automations', 'effect') ||
+                e.getFlag('temporary-custom-statuses', 'originalName') ||
+                e.getFlag('csm-lancer-qol', 'effect')
+            );
+        }
+
+        const ids = effectsToDelete.map(e => e.id.toString());
+        if (ids.length > 0) {
+            await token.actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+            log(`Removed ${ids.length} ${allEffects ? '' : 'flagged '}effects from ${token.name}`);
+        }
+    }
+}
+
+

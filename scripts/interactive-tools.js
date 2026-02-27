@@ -130,6 +130,44 @@ const _cardDefaults = {
     deploymentCard: { title: "DEPLOY",      icon: "cci cci-deployable" }
 };
 
+// --- Card queue: serialise all interactive cards so they never overwrite each other ---
+let _cardQueue = Promise.resolve();
+let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
+
+function _updatePendingBadge() {
+    const pendingTitles = _cardQueueTitles.slice(1);
+    const badge = $('.la-info-card .la-queue-badge');
+    if (pendingTitles.length > 0) {
+        const text = `+${pendingTitles.length}`;
+        const tooltip = pendingTitles.join('\n');
+        if (badge.length) {
+            badge.text(text).attr('title', tooltip);
+        } else {
+            $('.la-info-card .lancer-header').append(
+                `<span class="la-queue-badge" title="${tooltip}">${text}</span>`
+            );
+        }
+    } else {
+        badge.remove();
+    }
+}
+
+function _queueCard(fn, title = '') {
+    _cardQueueTitles.push(title);
+    _updatePendingBadge(); // badge on currently visible card, if any
+    const next = _cardQueue.then(() => {
+        const promise = fn(); // card DOM created synchronously here
+        _updatePendingBadge(); // badge on newly shown card
+        return promise;
+    });
+    const _onCardDone = () => {
+        _cardQueueTitles.shift();
+        _updatePendingBadge();
+    };
+    _cardQueue = next.then(_onCardDone, _onCardDone);
+    return next;
+}
+
 function _createInfoCard(type, opts) {
     const defaults = _cardDefaults[type] || { title: "INFO", icon: "fas fa-info" };
     const {
@@ -450,13 +488,15 @@ function _removeInfoCard(cardEl) {
 
 
 export function chooseToken(casterToken, options = {}) {
-    return new Promise((resolve) => {
+    const _title = options.title || 'SELECT TARGETS';
+    return _queueCard(() => new Promise((resolve) => {
         const {
             range = null,
             includeHidden = false,
             includeSelf = false,
             filter = null,
             selection = null,
+            preSelected = [],
             count = 1,
             title,
             description = "",
@@ -770,12 +810,26 @@ export function chooseToken(casterToken, options = {}) {
             }
         };
 
+        // Apply pre-selected tokens (capped to count)
+        if (preSelected.length > 0) {
+            if (preSelected.length > count) {
+                ui.notifications.warn(`chooseToken: ${preSelected.length} pre-selected tokens but count is ${count} — only the first ${count} will be used.`);
+            }
+            for (const t of preSelected.slice(0, count)) {
+                if (!selectedTokens.has(t)) {
+                    selectedTokens.add(t);
+                    drawSelectionHighlight(t);
+                }
+            }
+            refreshCard();
+        }
+
         canvas.stage.on('pointermove', moveHandler);
 
         canvas.stage.on('click', clickHandler);
         canvas.stage.on('rightdown', abortHandler);
         document.addEventListener('keydown', keyHandler);
-    });
+    }), _title);
 }
 
 /**
@@ -791,7 +845,8 @@ export function chooseToken(casterToken, options = {}) {
  * @returns {Promise<Array<{x: number, y: number, template: MeasuredTemplate}>|null>} Zone positions and templates, or null if cancelled
  */
 export function placeZone(casterToken, options = {}) {
-    return new Promise(async (resolve) => {
+    const _title = options.title || 'PLACE ZONE';
+    return _queueCard(() => new Promise(async (resolve) => {
         const {
             range = null,
             size = 1,
@@ -990,7 +1045,7 @@ export function placeZone(casterToken, options = {}) {
             doCleanup();
             resolve(placedZones.length > 0 ? placedZones : null);
         }
-    });
+    }), _title);
 }
 
 /**
@@ -1036,7 +1091,10 @@ export function cancelRulerDrag(token, moveInfo = null) {
  * @param {Token|null} triggeringToken
  * @param {number} distance
  */
-export async function applyKnockbackMoves(moveList, triggeringToken, distance) {
+export async function applyKnockbackMoves(moveList, triggeringToken, distance, actionName = "", item = null) {
+    if (!triggeringToken)
+        console.warn("lancer-automations | applyKnockbackMoves called without a triggeringToken. Reactions using triggerSelf will not work correctly.");
+
     const updates = [];
     const pushedActors = [];
 
@@ -1099,17 +1157,20 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance) {
     }
 
     await Promise.all(updates);
-    await game.modules.get('lancer-automations').api.handleTrigger('onKnockback', { triggeringToken, range: distance, pushedActors });
+    await game.modules.get('lancer-automations').api.handleTrigger('onKnockback', { triggeringToken, range: distance, pushedActors, actionName, item });
 }
 
 export function knockBackToken(tokens, distance, options = {}) {
-    return new Promise((resolve) => {
+    const _title = options.title || 'KNOCKBACK';
+    return _queueCard(() => new Promise((resolve) => {
         const {
             title = "KNOCKBACK",
             description = "Select destination for each token.",
             icon,
             headerClass = "",
-            triggeringToken = null
+            triggeringToken = null,
+            actionName = "",
+            item = null
         } = options;
 
         if (!tokens || (Array.isArray(tokens) && tokens.length === 0)) {
@@ -1172,14 +1233,16 @@ export function knockBackToken(tokens, distance, options = {}) {
                 }
 
                 if (game.user.isGM) {
-                    await applyKnockbackMoves(moveList, triggeringToken, distance);
+                    await applyKnockbackMoves(moveList, triggeringToken, distance, actionName, item);
                 } else {
                     game.socket.emit('module.lancer-automations', {
                         action: "moveTokens",
                         payload: {
                             moves: moveList,
                             triggeringTokenId: triggeringToken?.id || null,
-                            distance
+                            distance,
+                            actionName,
+                            itemId: item?.id || null
                         }
                     });
                 }
@@ -1305,8 +1368,9 @@ export function knockBackToken(tokens, distance, options = {}) {
                         rangeHighlight.parent.removeChild(rangeHighlight);
                     rangeHighlight.destroy();
                 }
-                // Range is from the token's current position
-                rangeHighlight = drawRangeHighlight(activeToken, distance, 0x888888, 0.1, true);
+                // Range is from the token's current position (skip highlight if infinite)
+                if (distance >= 0)
+                    rangeHighlight = drawRangeHighlight(activeToken, distance, 0x888888, 0.1, true);
             }
         };
 
@@ -1339,9 +1403,9 @@ export function knockBackToken(tokens, distance, options = {}) {
             const snappedY = snapped.y;
             const gridSize = canvas.grid.size;
 
-            // Check validity (distance)
+            // Check validity (distance; -1 = infinite)
             const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
-            const inRange = dist <= distance;
+            const inRange = distance < 0 || dist <= distance;
 
             // Check overlap
             const otherOccupied = getOccupiedGridSpaces([activeToken.id]);
@@ -1399,7 +1463,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             const snappedY = snapped.y;
 
             const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
-            if (dist > distance) {
+            if (distance >= 0 && dist > distance) {
                 ui.notifications.warn("Destination is out of range!");
                 return;
             }
@@ -1459,7 +1523,7 @@ export function knockBackToken(tokens, distance, options = {}) {
         canvas.stage.on('click', clickHandler);
         canvas.stage.on('rightdown', abortHandler);
         document.addEventListener('keydown', keyHandler);
-    });
+    }), _title);
 }
 
 
@@ -1481,7 +1545,8 @@ export function knockBackToken(tokens, distance, options = {}) {
  * @returns {Promise<Array<TokenDocument>|null>} Array of spawned token documents, or null if cancelled
  */
 export function placeToken(options = {}) {
-    return new Promise((resolve) => {
+    const _title = options.title || 'PLACE TOKEN';
+    return _queueCard(() => new Promise((resolve) => {
         const {
             actor = null,
             prototypeToken,
@@ -1574,8 +1639,13 @@ export function placeToken(options = {}) {
         const checkInRange = (col, row) => {
             if (range === null || !origin)
                 return true;
-            if (originToken)
-                return getDistanceTokenToPoint(getHexCenter(col, row), originToken) <= range;
+            if (originToken) {
+                // Match drawRangeHighlight: min distance from any occupied cell of the origin token
+                const targetCube = offsetToCube(col, row);
+                return getOccupiedOffsets(originToken).some(o =>
+                    cubeDistance(offsetToCube(o.col, o.row), targetCube) <= range
+                );
+            }
             if (isHexGrid()) {
                 return cubeDistance(
                     offsetToCube(originOffset.col, originOffset.row),
@@ -1814,7 +1884,7 @@ export function placeToken(options = {}) {
         canvas.stage.on('click', clickHandler);
         canvas.stage.on('rightdown', rightHandler);
         document.addEventListener('keydown', keyHandler);
-    });
+    }), _title);
 }
 
 
@@ -1830,7 +1900,8 @@ export function placeToken(options = {}) {
  * @returns {Promise<true|null>} true on completion, null if cancelled
  */
 export function startChoiceCard(options = {}) {
-    return new Promise((resolve) => {
+    const _title = options.title || 'CHOICE';
+    return _queueCard(() => new Promise(async (resolve) => {
         const {
             mode = "or",
             choices = [],
@@ -1846,74 +1917,86 @@ export function startChoiceCard(options = {}) {
         }
 
         const chosenSet = new Set();
-        let cancelled = false;
 
-        const doCleanup = () => {
-            document.removeEventListener('keydown', keyHandler);
-            _removeInfoCard(cardEl);
-        };
+        // Show the card once and wait for a single pick or cancel.
+        // Stays within the outer _queueCard slot — does NOT go through _queueCard itself.
+        const _pickOne = () => new Promise((innerResolve) => {
+            let dismissed = false;
 
-        const refreshCard = () => {
+            const doCleanup = () => {
+                document.removeEventListener('keydown', keyHandler);
+                _removeInfoCard(cardEl);
+            };
+
+            const cardEl = _createInfoCard("choiceCard", {
+                title,
+                icon,
+                headerClass,
+                description,
+                mode,
+                onConfirm: () => {},
+                onCancel: () => {
+                    dismissed = true;
+                    doCleanup();
+                    innerResolve(null);
+                }
+            });
+
+            const keyHandler = (event) => {
+                if (event.key === "Escape") {
+                    dismissed = true;
+                    doCleanup();
+                    innerResolve(null);
+                }
+            };
+
+            document.addEventListener('keydown', keyHandler);
+
             _updateInfoCard(cardEl, "choiceCard", {
                 choices,
                 chosenSet,
-                onChoose: async (idx) => {
-                    if (cancelled)
+                onChoose: (idx) => {
+                    if (dismissed)
                         return;
-
-                    const choice = choices[idx];
-                    chosenSet.add(idx);
-
-                    if (mode === "and")
-                        cardEl.hide();
-                    if (choice.callback)
-                        await choice.callback(choice.data);
-                    if (cancelled)
-                        return;
-
-                    if (mode === "or") {
-                        doCleanup();
-                        resolve(true);
-                        return;
-                    }
-
-                    if (chosenSet.size >= choices.length) {
-                        doCleanup();
-                        resolve(true);
-                        return;
-                    }
-
-                    cardEl.show();
-                    refreshCard();
+                    dismissed = true;
+                    doCleanup(); // close card before callback
+                    innerResolve(idx);
                 }
             });
-        };
 
-        const cardEl = _createInfoCard("choiceCard", {
-            title,
-            icon,
-            headerClass,
-            description,
-            mode,
-            onConfirm: () => {},
-            onCancel: () => {
-                cancelled = true;
-                doCleanup();
-                resolve(null);
-            }
+            // Re-apply pending badge since this card was created outside _queueCard
+            _updatePendingBadge();
         });
 
-        const keyHandler = (event) => {
-            if (event.key === "Escape") {
-                cancelled = true;
-                doCleanup();
+        if (mode === "or") {
+            // OR: single pick → release queue → run callback
+            const idx = await _pickOne();
+            if (idx === null) {
                 resolve(null);
+                return;
             }
-        };
+            const choice = choices[idx];
+            resolve(true); // release queue slot so callback's cards appear immediately
+            if (choice.callback)
+                await choice.callback(choice.data);
 
-        document.addEventListener('keydown', keyHandler);
-        refreshCard();
-    });
+        } else {
+            // AND: loop entirely within this queue slot until all choices are picked.
+            // The OR card (or any other queued card) waits until the loop ends.
+            while (chosenSet.size < choices.length) {
+                const idx = await _pickOne();
+                if (idx === null) {
+                    resolve(null);
+                    return;
+                }
+                chosenSet.add(idx);
+                const choice = choices[idx];
+                if (choice.callback)
+                    await choice.callback(choice.data);
+            }
+            resolve(true);
+        }
+    }), _title);
 }
 
 /**
@@ -2253,6 +2336,22 @@ export async function placeDeployable(options = {}) {
 }
 
 /**
+ * Find a deployable by LID and place it interactively using placeDeployable.
+ * @param {Actor} actor - The owner actor
+ * @param {string} deployableLid - The LID of the deployable
+ * @param {Object|null} parentItem - The item that grants the deployable (for use consumption)
+ * @param {boolean} consumeUse - Whether to consume a use from parentItem
+ */
+export async function deployDeployable(actor, deployableLid, parentItem, consumeUse) {
+    await placeDeployable({
+        deployable: deployableLid,
+        ownerActor: actor,
+        systemItem: parentItem,
+        consumeUse: consumeUse ?? false,
+    });
+}
+
+/**
  * Show a deployment card for a specific item's deployables. Clicking a deployable
  * triggers placeDeployable with noCard. The card stays open until the user confirms or cancels.
  * @param {Object} options
@@ -2262,7 +2361,8 @@ export async function placeDeployable(options = {}) {
  * @returns {Promise<boolean>} true if confirmed, null if cancelled
  */
 export function beginDeploymentCard(options = {}) {
-    return new Promise(async (resolve) => {
+    const _title = options.item?.name || 'DEPLOY';
+    return _queueCard(() => new Promise(async (resolve) => {
         const {
             actor,
             item,
@@ -2417,7 +2517,7 @@ export function beginDeploymentCard(options = {}) {
 
         document.addEventListener('keydown', keyHandler);
         refreshCard();
-    });
+    }), _title);
 }
 
 /**

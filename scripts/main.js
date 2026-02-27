@@ -1,6 +1,6 @@
 import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance, canEngage, updateAllEngagements } from "./overwatch.js";
 import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
-import { packMacros } from "./compendium-tools.js";
+import { packMacros, executePackMacro } from "./compendium-tools.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
@@ -14,7 +14,8 @@ import {
     findFlaggedEffectOnToken,
     consumeEffectCharge,
     processDurationEffects,
-    triggerFlaggedEffectImmunity
+    triggerFlaggedEffectImmunity,
+    executeDeleteAllFlaggedEffect
 } from "./flagged-effects.js";
 import { getOccupiedCenters,    getMovementPathHexes,
     drawDebugPath,
@@ -41,17 +42,19 @@ import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js"
 import {
     chooseToken, placeZone, knockBackToken, applyKnockbackMoves,
     placeToken, startChoiceCard, deployWeaponToken, pickupWeaponToken,
-    resolveDeployable, placeDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
+    resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
     openThrowMenu,
     getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
 } from "./interactive-tools.js";
 import {
     executeFall, getItemLID, isItemAvailable, hasReactionAvailable,
     executeStatRoll, executeDamageRoll, executeBasicAttack,
-    executeTechAttack, executeSimpleActivation
+    executeTechAttack, executeSimpleActivation, executeReactorMeltdown, executeReactorExplosion
 } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows } from "./flows.js";
+import { executeDowntime } from "./downtime.js";
+import { executeScanOnActivation, performSystemScan, performGMInputScan } from "./scan.js";
 
 
 let reactionDebounceTimer = null;
@@ -284,9 +287,11 @@ async function checkReactions(triggerType, data) {
     }
     const flatGeneralReactions = cachedFlatGeneralReactions;
 
+    const _matchActionReaction = ([name, r]) =>
+        name === data.actionName && r.onlyOnSourceMatch && r.triggers?.includes(triggerType);
     const actionBasedReaction = data.actionName ?
-        flatGeneralReactions.find(([name, r]) => name === data.actionName && r.onlyOnSourceMatch)?.[1] ?
-            { name: data.actionName, reaction: flatGeneralReactions.find(([name, r]) => name === data.actionName && r.onlyOnSourceMatch)[1] } : null
+        flatGeneralReactions.find(_matchActionReaction)?.[1] ?
+            { name: data.actionName, reaction: flatGeneralReactions.find(_matchActionReaction)[1] } : null
         : null;
 
     const nonActionBasedReactions = [];
@@ -301,7 +306,6 @@ async function checkReactions(triggerType, data) {
     }
 
     const hasValidActionBasedReaction = actionBasedReaction &&
-        actionBasedReaction.reaction.triggers?.includes(triggerType) &&
         actionBasedReaction.reaction.enabled !== false;
 
     for (const token of allTokens) {
@@ -922,7 +926,10 @@ async function handleSocketEvent({ action, payload }) {
         if (!game.user.isGM)
             return;
         const trigToken = payload.triggeringTokenId ? canvas.tokens.get(payload.triggeringTokenId) : null;
-        applyKnockbackMoves(payload.moves, trigToken, payload.distance);
+        const kbItem = payload.itemId
+            ? (canvas.tokens.placeables.find(t => t.actor?.items?.get(payload.itemId))?.actor?.items?.get(payload.itemId) ?? null)
+            : null;
+        applyKnockbackMoves(payload.moves, trigToken, payload.distance, payload.actionName || "", kbItem);
     } else if (action === 'createTokens') {
         if (!game.user.isGM)
             return;
@@ -957,6 +964,57 @@ async function handleSocketEvent({ action, payload }) {
         const token = scene.tokens.get(payload.tokenId);
         if (token)
             await token.delete();
+    } else if (action === 'scanInfoRequest') {
+        if (!game.user.isGM)
+            return;
+        const target = canvas.tokens.get(payload.targetId);
+        if (!target)
+            return;
+        await performGMInputScan([target], payload.scanTitle, payload.requestingUserName);
+    } else if (action === 'scanSystemJournalRequest') {
+        if (!game.user.isGM)
+            return;
+        const target = canvas.tokens.get(payload.targetId);
+        if (!target)
+            return;
+        new Dialog({
+            title: "Journal Entry Request",
+            content: `
+                <div class="lancer-dialog-header">
+                    <h2 class="lancer-dialog-title">Journal Entry Request</h2>
+                    <p class="lancer-dialog-subtitle">Requested by: ${payload.requestingUserName}</p>
+                </div>
+                <form>
+                    <div class="form-group">
+                        <p style="margin-bottom: 12px;"><strong>${payload.requestingUserName}</strong> wants to create a journal entry for the scan of <strong>${payload.targetName}</strong>.</p>
+                        <p style="color: #666; margin-bottom: 12px;">Do you want to create this journal entry?</p>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Custom Journal Name (optional):</label>
+                        <input type="text" id="custom-journal-name" name="custom-journal-name" value="${payload.customName || ''}" placeholder="Leave empty for auto-generated name" style="width: 100%; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px;" />
+                    </div>
+                </form>
+            `,
+            buttons: {
+                yes: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: "Create Journal Entry",
+                    callback: async (html) => {
+                        const customName = html.find('[name="custom-journal-name"]').val().trim();
+                        await performSystemScan(target, true, customName);
+                        ui.notifications.info(`Journal entry created for ${payload.targetName}`);
+                    }
+                },
+                no: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Decline",
+                    callback: () => {
+                        ui.notifications.info(`Journal entry request declined`);
+                    }
+                }
+            },
+            default: "yes"
+        }, { classes: ["lancer-dialog-base"], width: 450 }).render(true);
     }
 }
 
@@ -1092,7 +1150,8 @@ async function onAttackStep(state) {
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || []
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        stateData: state.data
     };
 
     await handleTrigger('onAttack', {
@@ -1123,7 +1182,8 @@ async function onHitMissStep(state) {
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || []
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        stateData: state.data
     };
 
     const hitTargets = [];
@@ -1197,7 +1257,8 @@ async function onDamageStep(state) {
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || []
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        stateData: state.data
     };
 
     for (const targetInfo of targets) {
@@ -1263,7 +1324,8 @@ async function onTechAttackStep(state) {
         },
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || []
+        tags: state.data?.tags || techItem?.system?.tags || [],
+        stateData: state.data
     };
 
     await handleTrigger('onTechAttack', {
@@ -1294,7 +1356,8 @@ async function onTechHitMissStep(state) {
         },
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || []
+        tags: state.data?.tags || techItem?.system?.tags || [],
+        stateData: state.data
     };
 
     const hitTargets = [];
@@ -1403,7 +1466,8 @@ async function onInitAttackStep(state) {
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || []
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        stateData: state.data
     };
 
     await handleTrigger('onInitAttack', {
@@ -1436,7 +1500,8 @@ async function onInitTechAttackStep(state) {
         },
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || []
+        tags: state.data?.tags || techItem?.system?.tags || [],
+        stateData: state.data
     };
 
     await handleTrigger('onInitTechAttack', {
@@ -1489,7 +1554,8 @@ async function onActivationStep(state) {
             activation: actionType
         },
         detail: state.data?.detail || item?.system?.effect || "",
-        tags: tags
+        tags: tags,
+        stateData: state.data
     };
 
     await handleTrigger('onActivation', {
@@ -1512,7 +1578,7 @@ async function statRollTargetSelectStep(state) {
     }
 
     // If target already provided (e.g. via executeStatRoll), skip
-    if (state.data.targetToken) {
+    if (state.data.targetToken || state.data.chooseToken === false) {
         return true;
     }
 
@@ -1845,14 +1911,22 @@ Hooks.on('lancer.statusesReady', () => {
         id: "grappling",
         name: "Grappling",
         img: "modules/lancer-automations/icons/grappling.svg",
-        description: "You are grappling in a grapple contest"
+        description: "You are grappling in a grapple contest",
+        changes: [
+            { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+        ]
     });
 
     CONFIG.statusEffects.push({
         id: "grappled",
         name: "Grappled",
         img: "modules/lancer-automations/icons/grappled.svg",
-        description: "You are grappled in a grapple contest"
+        description: "You are grappled in a grapple contest",
+        changes: [
+            { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+        ]
     });
 
     CONFIG.statusEffects.push({
@@ -1922,6 +1996,7 @@ Hooks.on('ready', () => {
         consumeEffectCharge,
         processEffectConsumption,
         processDurationEffects,
+        executeDeleteAllFlaggedEffect,
         addGlobalBonus,
         removeGlobalBonus,
         getGlobalBonuses,
@@ -1940,6 +2015,8 @@ Hooks.on('ready', () => {
         executeBasicAttack,
         executeTechAttack,
         executeSimpleActivation,
+        executeReactorMeltdown,
+        executeReactorExplosion,
         knockBackToken,
         chooseToken,
         placeZone,
@@ -1949,6 +2026,7 @@ Hooks.on('ready', () => {
         pickupWeaponToken,
         resolveDeployable,
         placeDeployable,
+        deployDeployable,
         beginDeploymentCard,
         openDeployableMenu,
         recallDeployable,
@@ -1961,6 +2039,9 @@ Hooks.on('ready', () => {
         getIntentionalMoveData,
         triggerFlaggedEffectImmunity,
         packMacros,
+        executePackMacro,
+        executeDowntime,
+        executeScanOnActivation,
         openThrowMenu,
         handleTrigger
     };
@@ -2084,30 +2165,8 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
 });
 
 Hooks.on('updateCombat', async (combat, change, options, userId) => {
-    if (change.turn === undefined && change.round === undefined)
-        return;
-
-    const currentCombatant = combat.combatant;
-    if (!currentCombatant)
-        return;
-
-    if (previousCombatantId && previousCombatantId !== currentCombatant.id) {
-        const endingCombatant = combat.combatants.get(previousCombatantId);
-        const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
-        if (endingToken) {
-            await handleTrigger('onTurnEnd', { triggeringToken: endingToken });
-            processDurationEffects('end', endingToken.id);
-        }
-    }
-
-    const startingToken = currentCombatant.token ? canvas.tokens.get(currentCombatant.token.id) : null;
-    if (startingToken && currentCombatant.id !== previousCombatantId) {
-        clearMoveData(startingToken.document.id);
-        await handleTrigger('onTurnStart', { triggeringToken: startingToken });
-        processDurationEffects('start', startingToken.id);
-    }
-
-    previousCombatantId = currentCombatant.id;
+    // Turn/round logic is handled by combatTurnChange above.
+    // Reserved for future use.
 });
 
 Hooks.on('createActiveEffect', async (effect, options, userId) => {

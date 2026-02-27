@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Search",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/search.svg",
+    "command_source": "Search.js"
+}

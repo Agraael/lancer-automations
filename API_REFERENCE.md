@@ -27,6 +27,7 @@
   - [`findFlaggedEffectOnToken`](#findflaggedeffectontokentoken-identifier)
   - [`consumeEffectCharge`](#consumeeffectchargeeffect)
   - [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
+  - [`executeDeleteAllFlaggedEffect`](#executedeleteallflaggedeffect)
   - [`executeEffectManager`](#executeeffectmanageroptions)
 - [Global & Constant Bonuses](#global--constant-bonuses)
   - [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options)
@@ -160,7 +161,8 @@ Fires *before* movement is finalized. Allows interception.
         }
     }
     ```
-- **`onKnockback`**: Fires on `knockbackStep`. `{ triggeringToken, range, pushedActors }`.
+- **`onKnockback`**: Fires after knockback moves are applied. `{ triggeringToken, range, pushedActors: Actor[], actionName, item }`.
+  - `actionName` and `item` are set when `knockBackToken()` is called with those options — enables `onlyOnSourceMatch` matching (e.g. a reaction named `"Grapple"` with `triggers: ["onKnockback"]` and `onlyOnSourceMatch: true` will only fire for grapple-triggered knockbacks).
 
 #### Turn Events
 - **`onTurnStart`** / **`onTurnEnd`**: `{ triggeringToken }`.
@@ -335,6 +337,12 @@ Code to run when activated.
 - **Returns**: `Promise<boolean>`
 
 #### `triggerFlaggedEffectImmunity(token, effectNames, source, notify)`
+- **Returns**: `Promise<void>` (Removes effects and announces immunity in chat)
+
+#### `executeDeleteAllFlaggedEffect(tokens, allEffects)`
+Removes flagged active effects (those managed by this module) from the provided tokens.
+- **tokens**: `Array<Token|TokenDocument>` (Required). The list of tokens to clear.
+- **allEffects**: `boolean` (Default `false`). If `true`, removes ALL active effects instead of just flagged ones.
 - **Returns**: `Promise<void>`
 
 #### `executeEffectManager(options)`

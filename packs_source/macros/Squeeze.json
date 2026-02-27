@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Squeeze",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/contract.svg",
+    "command_source": "Squeeze.js"
+}

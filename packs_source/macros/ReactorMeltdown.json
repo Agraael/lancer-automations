@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Reactor Meltdown",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/time-bomb.svg",
+    "command_source": "ReactorMeltdown.js"
+}

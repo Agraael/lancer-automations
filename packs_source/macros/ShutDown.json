@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Shut Down",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/status_shutdown.svg",
+    "command_source": "ShutDown.js"
+}

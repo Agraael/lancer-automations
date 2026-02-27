@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Handle",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/hand-truck.svg",
+    "command_source": "Handle.js"
+}

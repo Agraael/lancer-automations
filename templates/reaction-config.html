@@ -75,7 +75,10 @@
                                     <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
                                     <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                                     <span class="col-name">
-                                        <strong>{{this.name}}</strong> <span
+                                        <strong>{{this.name}}</strong>
+                                        {{#if this.comments}}<span
+                                            style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        <span
                                             style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
                                         <br><span
                                             style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
@@ -96,9 +99,13 @@
                                                 class="fas fa-globe" title="General"></i>{{/if}}{{else}}<i
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
-                                        <span class="col-name"><strong>{{this.name}}</strong>{{#if
-                                            this.reactionPath}}<br><span
-                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
+                                        <span class="col-name">
+                                            <strong>{{this.name}}</strong>
+                                            {{#if this.comments}}<span
+                                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                            {{#if this.reactionPath}}<br><span
+                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                        </span>
                                         <span class="col-triggers">{{this.triggers}}</span>
                                         <span class="col-controls">
                                             <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
@@ -120,11 +127,19 @@
                                         title="Item-Based"></i>{{/if}}
                                 </span>
                                 <span class="col-name">
-                                    {{#if
-                                    this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
-                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
-                                    this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
+                                    {{#if this.isGeneral}}
+                                    <strong>{{this.name}}</strong>
+                                    {{#if this.comments}}<span
+                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                    {{else}}
+                                    <strong>{{this.name}}</strong>
+                                    {{#if this.comments}}<span
+                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                    <br><span
+                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                    {{/if}}
+                                    {{#if this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls">
@@ -138,7 +153,7 @@
                     </div>
                     {{/each}}
 
-                    {{!-- Unfiled separator (only shown when folders exist) --}}
+                    {{!-- Unfiled separator --}}
                     {{#if customFolders.length}}
                     <div class="unfiled-header reaction-item flexrow folder-header" style="cursor: default;">
                         <span class="col-enabled" style="flex: 0.15;"><i class="fas fa-inbox"
@@ -182,8 +197,13 @@
                                         title="General"></i>{{/if}}{{else}}<i class="fas fa-cube"
                                         title="Item-Based"></i>{{/if}}
                                 </span>
-                                <span class="col-name"><strong>{{this.name}}</strong>{{#if this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
+                                <span class="col-name">
+                                    <strong>{{this.name}}</strong>
+                                    {{#if this.comments}}<span
+                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                    {{#if this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls">
                                     <a class="edit-reaction" title="Edit"><i class="fas fa-edit"></i></a>
@@ -204,11 +224,19 @@
                                 title="General"></i>{{/if}}{{else}}<i class="fas fa-cube" title="Item-Based"></i>{{/if}}
                         </span>
                         <span class="col-name">
-                            {{#if
-                            this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
-                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
-                            this.reactionPath}}<br><span
-                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
+                            {{#if this.isGeneral}}
+                            <strong>{{this.name}}</strong>
+                            {{#if this.comments}}<span
+                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                            {{else}}
+                            <strong>{{this.name}}</strong>
+                            {{#if this.comments}}<span
+                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                            <br><span
+                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                            {{/if}}
+                            {{#if this.reactionPath}}<br><span
+                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
                         </span>
                         <span class="col-triggers">{{this.triggers}}</span>
                         <span class="col-controls">
@@ -274,7 +302,10 @@
                                     <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
                                     <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                                     <span class="col-name">
-                                        <strong>{{this.name}}</strong> <span
+                                        <strong>{{this.name}}</strong>
+                                        {{#if this.comments}}<span
+                                            style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        <span
                                             style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
                                         <br><span
                                             style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
@@ -295,9 +326,13 @@
                                                 class="fas fa-globe" title="General"></i>{{/if}}{{else}}<i
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
-                                        <span class="col-name"><strong>{{this.name}}</strong>{{#if
-                                            this.reactionPath}}<br><span
-                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}</span>
+                                        <span class="col-name">
+                                            <strong>{{this.name}}</strong>
+                                            {{#if this.comments}}<span
+                                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                            {{#if this.reactionPath}}<br><span
+                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                        </span>
                                         <span class="col-triggers">{{this.triggers}}</span>
                                         <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i
                                                     class="fas fa-copy"></i></a></span>
@@ -317,11 +352,19 @@
                                         title="Item-Based"></i>{{/if}}
                                 </span>
                                 <span class="col-name">
-                                    {{#if
-                                    this.isGeneral}}<strong>{{this.name}}</strong>{{else}}<strong>{{this.name}}</strong><br><span
-                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>{{#if
-                                    this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}{{/if}}
+                                    {{#if this.isGeneral}}
+                                    <strong>{{this.name}}</strong>
+                                    {{#if this.comments}}<span
+                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                    {{else}}
+                                    <strong>{{this.name}}</strong>
+                                    {{#if this.comments}}<span
+                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                    <br><span
+                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                    {{/if}}
+                                    {{#if this.reactionPath}}<br><span
+                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i

@@ -146,8 +146,11 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
         return { completed: false };
     }
 
+    const { targetStat, ...restExtraData } = (extraData && typeof extraData === 'object') ? extraData : {};
+
     let targetVal = target;
     let targetToken = null;
+    let chooseTokenInFlow = target === "token";
     let rollTitle = title;
     const upperStat = stat.toUpperCase();
 
@@ -191,12 +194,14 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
         if (targetActor.type === "npc" || targetActor.type === "deployable") {
             targetVal = targetActor.system.save || 10;
         } else if (targetActor.type === "mech") {
-            const path = STAT_PATHS[upperStat] || stat;
+            const lookupStat = targetStat ? targetStat.toUpperCase() : upperStat;
+            const path = STAT_PATHS[lookupStat] || lookupStat.toLowerCase();
             targetVal = foundry.utils.getProperty(targetActor, path) || 10;
         }
     }
 
     rollTitle = rollTitle || `${upperStat} Check`;
+    if (targetToken && typeof targetVal === 'number') rollTitle += ` (>= ${targetVal})`;
 
     const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
     const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
@@ -205,11 +210,13 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     const flow = new StatRollFlow(actor, flowOptions);
     if (targetToken) {
         flow.state.data.targetToken = targetToken;
+        chooseTokenInFlow = false;
     }
     flow.state.data.targetVal = targetVal;
+    flow.state.data.chooseToken = chooseTokenInFlow;
 
-    if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+    if (restExtraData && typeof restExtraData === 'object') {
+        foundry.utils.mergeObject(flow.state.data, restExtraData);
     }
 
     const completed = await flow.begin();
@@ -301,6 +308,206 @@ export async function executeTechAttack(actor, options = {}, extraData = {}) {
     }
     const completed = await flow.begin();
     return { completed, flow };
+}
+
+export async function executeReactorMeltdown(token, turns = null) {
+    if (!token) {
+        ui.notifications.error('lancer-automations | executeReactorMeltdown requires a token.');
+        return;
+    }
+
+    let selectedTurns = turns;
+
+    if (selectedTurns === null) {
+        selectedTurns = await new Promise((resolve) => {
+            const dialog = new Dialog({
+                title: "Reactor Meltdown",
+                content: `
+                    <div class="lancer-dialog-base">
+                        <div class="lancer-dialog-header">
+                            <div class="lancer-dialog-title">⚠ REACTOR MELTDOWN ⚠</div>
+                            <div class="lancer-dialog-subtitle">Initiate Self-Destruct Sequence</div>
+                        </div>
+                        <p style="margin-bottom: 12px; color: #000;">As a Quick Action, you may initiate a reactor meltdown. Choose when the explosion occurs:</p>
+                        <div class="lancer-items-grid">
+                            <div class="lancer-item-card" data-turn="1">
+                                <div class="lancer-item-icon"><i class="fas fa-bomb"></i></div>
+                                <div class="lancer-item-content">
+                                    <div class="lancer-item-name">1 TURN</div>
+                                    <div class="lancer-item-details">Explodes at the end of your next turn</div>
+                                </div>
+                            </div>
+                            <div class="lancer-item-card" data-turn="2">
+                                <div class="lancer-item-icon"><i class="fas fa-bomb"></i></div>
+                                <div class="lancer-item-content">
+                                    <div class="lancer-item-name">2 TURNS</div>
+                                    <div class="lancer-item-details">Explodes in 2 turns</div>
+                                </div>
+                            </div>
+                            <div class="lancer-item-card" data-turn="3">
+                                <div class="lancer-item-icon"><i class="fas fa-bomb"></i></div>
+                                <div class="lancer-item-content">
+                                    <div class="lancer-item-name">3 TURNS</div>
+                                    <div class="lancer-item-details">Explodes in 3 turns</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lancer-info-box">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Your mech will be annihilated, dealing <strong>4d6 Explosive</strong> damage in a <strong>Burst 2</strong> radius.</span>
+                        </div>
+                    </div>
+                `,
+                buttons: {
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: "Cancel",
+                        callback: () => resolve(null)
+                    }
+                },
+                default: "cancel",
+                close: () => resolve(null),
+                render: (html) => {
+                    html.find('.lancer-item-card').click(function () {
+                        const turnValue = parseInt($(this).data('turn'));
+                        if (turnValue) {
+                            resolve(turnValue);
+                            dialog.close();
+                        }
+                    });
+                }
+            }, {
+                classes: ["lancer-dialog-base"],
+                width: 450
+            });
+            dialog.render(true);
+        });
+    }
+
+    if (selectedTurns === null) {
+        ui.notifications.info('Reactor Meltdown cancelled.');
+        return;
+    }
+
+    await executeSimpleActivation(token.actor, {
+        title: "Reactor Meltdown",
+        action: { name: "Reactor Meltdown", activation: "Quick" },
+        detail: `Reactor meltdown initiated. Explosion will occur at the end of turn ${selectedTurns}. Your mech will be annihilated, dealing 4d6 Explosive Damage in a Burst 2 radius.`
+    }, { selectedTurns });
+}
+
+export async function executeReactorExplosion(token) {
+    if (!token) {
+        ui.notifications.error('lancer-automations | executeReactorExplosion requires a token.');
+        return;
+    }
+
+    const myActor = token.actor;
+
+    await canvas.animatePan({
+        x: token.center.x,
+        y: token.center.y,
+        scale: 1.25,
+        duration: 750
+    });
+
+    const template = await game.lancer.canvas.WeaponRangeTemplate.fromRange({
+        type: "Burst",
+        val: 2,
+    }).placeTemplate();
+
+    if (!template)
+        return;
+
+    const targets = await game.lancer.targetsFromTemplate(template.id);
+    token.control({ releaseOthers: true });
+
+    await executeDamageRoll(token, targets, "4d6", "Explosive", "REACTOR EXPLOSION");
+
+    await template.delete();
+
+    const BASE_SCALE = 0.2;
+    const systemSize = Math.floor(myActor?.system?.size || 1);
+    const scaleFactor = (systemSize + 2) * BASE_SCALE;
+    const tokenCenterX = token.document.x + (token.document.width * canvas.grid.size) / 2;
+    const tokenCenterY = token.document.y + (token.document.height * canvas.grid.size) / 2;
+    const tokenCenter = { x: tokenCenterX, y: tokenCenterY };
+
+    await Sequencer.Preloader.preloadForClients([
+        "modules/lancer-weapon-fx/sprites/jetlancer_explosion_white_bg.png",
+        "modules/lancer-weapon-fx/sprites/shockwave.png",
+        "modules/lancer-weapon-fx/soundfx/pw_nuke.ogg",
+        "modules/lancer-weapon-fx/video/pw_nuke_effect.webm",
+        "jb2a.ground_cracks.01.orange",
+        "modules/lancer-weapon-fx/sprites/scorch_mark_hires.png",
+    ]);
+
+    new Sequence()
+        .effect("modules/lancer-weapon-fx/sprites/jetlancer_explosion_white_bg.png")
+            .fadeIn(100)
+            .duration(6000)
+            .fadeOut(3000)
+            .screenSpace()
+        .effect("modules/lancer-weapon-fx/sprites/shockwave.png")
+            .atLocation(tokenCenter)
+            .duration(7000)
+            .scale(0.2 * scaleFactor)
+            .scaleOut(12 * scaleFactor, 7000)
+            .fadeOut(7000)
+            .delay(3000)
+        .sound("modules/lancer-weapon-fx/soundfx/pw_nuke.ogg")
+            .startTime(800)
+            .delay(1000)
+        .effect("modules/lancer-weapon-fx/video/pw_nuke_effect.webm")
+            .delay(1000)
+            .atLocation(tokenCenter)
+            .aboveLighting()
+            .xray()
+            .scale(scaleFactor)
+            .zIndex(100)
+            .thenDo(async () => {
+                await token.document.delete();
+            })
+        .effect("jb2a.ground_cracks.01.orange")
+            .persist()
+            .belowTokens()
+            .aboveLighting()
+            .zIndex(1)
+            .xray()
+            .randomRotation()
+            .atLocation({ x: tokenCenterX, y: tokenCenterY })
+            .scale(scaleFactor)
+            .thenDo(async () => {
+                await canvas.scene.createEmbeddedDocuments("AmbientLight", [{
+                    x: tokenCenterX,
+                    y: tokenCenterY,
+                    config: {
+                        color: "#ff9117",
+                        dim: 10 * scaleFactor,
+                        bright: 5 * scaleFactor,
+                        animation: { type: "pulse" },
+                    },
+                }]);
+            })
+        .effect("modules/lancer-weapon-fx/sprites/scorch_mark_hires.png")
+            .atLocation({ x: tokenCenterX, y: tokenCenterY })
+            .scale(scaleFactor * 1.1)
+            .persist()
+            .belowTokens()
+            .zIndex(0)
+            .randomRotation()
+            .xray()
+        .canvasPan()
+            .delay(1000)
+            .atLocation(tokenCenter)
+            .scale(0.5)
+            .shake({
+                duration: 20000,
+                strength: 15 * scaleFactor,
+                fadeOutDuration: 10000,
+                rotation: true,
+            })
+        .play();
 }
 
 export async function executeSimpleActivation(actor, options = {}, extraData = {}) {

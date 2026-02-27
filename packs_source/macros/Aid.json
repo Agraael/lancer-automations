@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Aid",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/medical-pack.svg",
+    "command_source": "Aid.js"
+}

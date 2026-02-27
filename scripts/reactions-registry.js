@@ -22,6 +22,7 @@ export function getDefaultGeneralReactionRegistry() {
     const builtInDefaults = {
         "Overwatch": {
             category: "General",
+            comments: "Reaction Skirmish",
             triggers: ["onMove"],
             triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
             effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
@@ -92,6 +93,7 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onActivation"],
+                comments: "Apply Brace Status",
                 triggerDescription: "You are hit by an attack and damage has been rolled.",
                 effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 onlyOnSourceMatch: true,
@@ -139,6 +141,7 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onStatusApplied", "onStatusRemoved"],
+                comments: "Add bonuses while Braced",
                 autoActivate: true,
                 activationType: "code",
                 activationMode: "instead",
@@ -179,6 +182,7 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Flight": {
             category: "General",
+            comments: "Prone Immunity / Falling Check",
             triggers: ["onStatusApplied", "onStructure", "onStress"],
             triggerDescription: "Protects flying characters from incompatible statuses and triggers saves on structure/stress.",
             effectDescription: "Flying grants immunity to Prone. Immobilized or Stunned removes Flying. Structure or Stress requires an AGILITY save or begin falling.",
@@ -227,6 +231,7 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Lock On": {
             category: "General",
+            comments: "Apply Lock On Status",
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             activationType: "code",
@@ -282,6 +287,7 @@ export function getDefaultGeneralReactionRegistry() {
             category: "General",
             reactions: [{
                 triggers: ["onActivation"],
+                comments: "Grant Bolster to Ally",
                 onlyOnSourceMatch: true,
                 activationType: "code",
                 activationMode: "instead",
@@ -339,6 +345,7 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onInitCheck", "onCheck"],
+                comments: "Consume Bolster for Accuracy",
                 triggerSelf: true,
                 triggerOther: false,
                 autoActivate: true,
@@ -369,6 +376,7 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Fragment Signal": {
             category: "General",
+            comments: "Impair/Slow on Tech Hit",
             triggers: ["onTechHit"],
             onlyOnSourceMatch: true,
             activationType: "code",
@@ -402,6 +410,7 @@ export function getDefaultGeneralReactionRegistry() {
             category: "General",
             reactions: [{
                 triggers: ["onActivation"],
+                comments: "Execute Ram Attack",
                 onlyOnSourceMatch: true,
                 activationType: "code",
                 activationMode: "instead",
@@ -427,6 +436,7 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onHit"],
+                comments: "Apply Knockback and Prone",
                 onlyOnSourceMatch: true,
                 activationType: "code",
                 activationMode: "instead",
@@ -457,6 +467,7 @@ export function getDefaultGeneralReactionRegistry() {
             category: "General",
             reactions: [{
                 triggers: ["onTurnEnd"],
+                comments: "Check for Airborne Falling",
                 triggerDescription: "At the end of your turn, if you are airborne without Flying or have Flying but haven't moved at least 1 space, you begin falling.",
                 effectDescription: "You fall, taking AP kinetic damage based on the distance fallen (3 damage per 3 spaces, max 9).",
                 isReaction: false,
@@ -491,6 +502,7 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }, {
                 triggers: ["onDamage"],
+                comments: "Ground Impact",
                 isReaction: false,
                 onlyOnSourceMatch: true,
                 consumesReaction: false,
@@ -532,6 +544,7 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Engagement": {
             category: "General",
+            comments: "Stop Movement & Engagement",
             triggers: ["onUpdate", "onPreMove"],
             triggerDescription: "When a character moves",
             effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",
@@ -624,6 +637,7 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Disengage": {
             category: "General",
+            comments: "Apply Disengage Status",
             triggers: ["onActivation"],
             effectDescription: "Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.",
             actionType: "Full Action",
@@ -642,6 +656,329 @@ export function getDefaultGeneralReactionRegistry() {
                     duration: { label: 'end', turns: 1, rounds: 0 },
                     useTokenAsOrigin: true
                 });
+            }
+        },
+        "Reactor Meltdown": {
+            category: "General",
+            reactions: [{
+                triggers: ["onActivation"],
+                comments: "Meltdown status",
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                evaluate: function (triggerType, triggerData) {
+                    if (!triggerData.actionData?.stateData?.selectedTurns) {
+                        ui.notifications.warn('Reactor Meltdown: no turn count provided.');
+                        return false;
+                    }
+                    return true;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken) {
+                    const api = game.modules.get('lancer-automations').api;
+                    const selectedTurns = triggerData.actionData.stateData.selectedTurns;
+                    const validTokens = await api.applyFlaggedEffectToTokens({
+                        tokens: [reactorToken],
+                        effectNames: "lancer.statusIconsNames.reactor_meltdown",
+                        duration: { label: 'end', turns: selectedTurns, rounds: 0 },
+                        useTokenAsOrigin: true,
+                    });
+                    if (validTokens.length > 0)
+                        ui.notifications.warn(`⚠️ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
+                }
+            }, {
+                triggers: ["onStatusRemoved"],
+                comments: "Trigger explosion",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'reactor_meltdown';
+                },
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken) {
+                    const api = game.modules.get('lancer-automations').api;
+                    await api.startChoiceCard({
+                        mode: "or",
+                        title: "Reactor Explosion",
+                        icon: "cci cci-boom",
+                        description: "Trigger the explosion?",
+                        choices: [{
+                            text: "Trigger Reactor Explosion",
+                            icon: "cci cci-boom",
+                            callback: async () => {
+                                await api.executeReactorExplosion(reactorToken);
+                            }
+                        }]
+                    });
+                }
+            }]
+        },
+        "Eject": {
+            category: "General",
+            comments: "Eject pilot from mech",
+            triggers: ["onActivation"],
+            triggerDescription: "A pilot ejects from their mech as a quick action.",
+            effectDescription: "The pilot is placed within range of the mech. The mech becomes IMPAIRED.",
+            actionType: "Quick Action",
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                const mechActor = reactorToken.actor;
+                if (mechActor?.type !== 'mech') {
+                    ui.notifications.warn('Eject: this action must be used by a mech token.');
+                    return false;
+                }
+
+                const pilotRef = mechActor.system.pilot;
+                const idStr = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
+                const pilotActor = idStr
+                    ? (idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr))
+                    : null;
+
+                if (!pilotActor) {
+                    ui.notifications.warn(`Eject: no linked pilot found on ${mechActor.name}.`);
+                    return false;
+                }
+
+                return true;
+            },
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                const api = game.modules.get('lancer-automations').api;
+                const mechActor = reactorToken.actor;
+
+                const pilotRef = mechActor.system.pilot;
+                const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
+                const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
+
+                const placed = await api.placeToken({
+                    actor: pilotActor,
+                    prototypeToken: pilotActor.prototypeToken.toObject(),
+                    range: 6,
+                    origin: reactorToken,
+                    count: 1,
+                    title: "Eject — Place Pilot",
+                    description: `Place ${pilotActor.name} within 6 spaces of ${mechActor.name}.`
+                });
+
+                if (!placed || placed.length === 0) return;
+
+                await api.applyFlaggedEffectToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ['lancer.statusIconsNames.impaired'],
+                    note: 'Eject',
+                    useTokenAsOrigin: true
+                });
+
+                ui.notifications.info(`${pilotActor.name} has ejected from ${mechActor.name}!`);
+            }
+        },
+        "Shut Down": {
+            category: "General",
+            comments: "Apply Shutdown Effects",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Quick Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                await api.applyFlaggedEffectToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ["shutdown", "stunned"],
+                    duration: { label: "unlimited" }
+                });
+
+                const weaponFx = game.modules.get("lancer-weapon-fx");
+                if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                    return;
+
+                await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PowerDown.ogg"]);
+                new Sequence()
+                    .sound()
+                    .file("modules/lancer-weapon-fx/soundfx/PowerDown.ogg")
+                    .volume(weaponFx.api.getEffectVolume(0.7))
+                    .atLocation(reactorToken)
+                    .play();
+            }
+        },
+        "Boot Up": {
+            category: "General",
+            comments: "Remove Shutdown Effects",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Full Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                await api.removeFlaggedEffectToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ["shutdown", "stunned"]
+                });
+            }
+        },
+        "Hide": {
+            category: "General",
+            comments: "Apply Hidden Effect",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Quick Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                await api.applyFlaggedEffectToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ["hidden"],
+                    duration: { label: "unlimited" }
+                });
+
+                if (typeof Sequencer === 'undefined')
+                    return;
+
+                new Sequence()
+                    .effect()
+                    .file("jb2a.smoke.puff.centered.grey")
+                    .atLocation(reactorToken)
+                    .scale(1.1)
+                    .sound()
+                    .file("worlds/Lancer/VTT%20stuff/SFX/PuffSmoke.wav")
+                    .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
+                    .play();
+            }
+        },
+        "Squeeze": {
+            category: "General",
+            comments: "Toggle Squeeze/Prone",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Free Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                const hasProne = reactorToken.actor.effects.some(e => e.statuses?.has("prone"));
+                if (hasProne) {
+                    await api.removeFlaggedEffectToTokens({
+                        tokens: [reactorToken],
+                        effectNames: ["prone"]
+                    });
+                } else {
+                    await api.applyFlaggedEffectToTokens({
+                        tokens: [reactorToken],
+                        effectNames: ["prone"],
+                        duration: { label: "unlimited" }
+                    });
+                }
+            }
+        },
+        "Dismount": {
+            category: "General",
+            comments: "Place pilot adjacent to mech",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Full Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            evaluate: function (triggerType, triggerData, reactorToken) {
+                const mechActor = reactorToken.actor;
+                if (mechActor?.type !== 'mech') {
+                    ui.notifications.warn('Dismount: this action must be used by a mech token.');
+                    return false;
+                }
+                const pilotRef = mechActor.system.pilot;
+                const idStr = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
+                const pilotActor = idStr
+                    ? (idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr))
+                    : null;
+                if (!pilotActor) {
+                    ui.notifications.warn(`Dismount: no linked pilot found on ${mechActor.name}.`);
+                    return false;
+                }
+                return true;
+            },
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                const mechActor = reactorToken.actor;
+                const pilotRef = mechActor.system.pilot;
+                const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
+                const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
+                await api.placeToken({
+                    actor: pilotActor,
+                    prototypeToken: pilotActor.prototypeToken.toObject(),
+                    range: 1,
+                    origin: reactorToken,
+                    count: 1,
+                    title: "Dismount — Place Pilot",
+                    description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
+                });
+            }
+        },
+        "Scan": {
+            category: "General",
+            triggers: ["onActivation"], onlyOnSourceMatch: true,
+            actionType: "Quick Action", triggerSelf: true, triggerOther: false,
+            autoActivate: true, outOfCombat: true,
+            activationType: "code", activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                await api.executeScanOnActivation(reactorToken);
+            }
+        },
+        "Search": {
+            category: "General",
+            triggers: ["onActivation"], onlyOnSourceMatch: true,
+            actionType: "Quick Action", triggerSelf: true, triggerOther: false,
+            autoActivate: true, outOfCombat: true,
+            activationType: "code", activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                const api = game.modules.get('lancer-automations').api;
+                const targets = await api.chooseToken(reactorToken, {
+                    title: "SEARCH", count: 1,
+                    range: reactorToken.actor?.system?.sensor_range ?? null,
+                    includeHidden: true
+                });
+                if (!targets?.length) return;
+                const targetToken = targets[0];
+                const result = await api.executeStatRoll(
+                    reactorToken.actor, "SYS", "SEARCH — SYSTEMS vs AGILITY",
+                    targetToken, { targetStat: "AGI" }
+                );
+                if (result?.completed && result.passed) {
+                    await api.removeFlaggedEffectToTokens({ tokens: [targetToken], effectNames: ["hidden"] });
+                    ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
+                }
             }
         }
 

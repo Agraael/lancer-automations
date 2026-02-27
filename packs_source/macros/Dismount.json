@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Dismount",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/dismount.svg",
+    "command_source": "Dismount.js"
+}

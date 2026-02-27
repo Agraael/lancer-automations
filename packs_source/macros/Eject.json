@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Eject",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/parachute.svg",
+    "command_source": "Eject.js"
+}

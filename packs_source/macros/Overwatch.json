@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Overwatch",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/reaction.svg",
+    "command_source": "Overwatch.js"
+}

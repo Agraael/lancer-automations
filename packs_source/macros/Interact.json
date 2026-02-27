@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Interact",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/click.svg",
+    "command_source": "Interact.js"
+}

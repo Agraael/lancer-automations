@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Reactor Explosion",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/mushroom-cloud.svg",
+    "command_source": "ReactorExplosion.js"
+}

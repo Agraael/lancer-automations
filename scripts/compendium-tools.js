@@ -1,4 +1,18 @@
 /**
+ * Looks up a macro by name in the lancer-automations compendium and executes it.
+ */
+export async function executePackMacro(macroName, scope = {}) {
+    const packKey = "lancer-automations.macros";
+    const pack = game.packs.get(packKey);
+    if (!pack) return ui.notifications.error(`lancer-automations macro pack not found`);
+    const index = await pack.getIndex();
+    const entry = index.find(e => e.name === macroName);
+    if (!entry) return ui.notifications.error(`Macro "${macroName}" not found in lancer-automations pack`);
+    const macro = await pack.getDocument(entry._id);
+    await macro.execute({ ParamActor: null, ...scope });
+}
+
+/**
  * THE PACKER
  * Synchronizes your source files into the Lancer Automations Macros compendium.
  */
