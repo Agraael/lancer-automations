@@ -114,6 +114,22 @@ export function pushFlaggedEffect(targetID, effect, duration, note, originID) {
     }
 }
 
+/**
+ * Returns true if the incoming extraOptions are considered the same "source" as an existing effect's stored flags.
+ * Effects with different identity key values (e.g. different suppressSourceId) are treated as distinct
+ * and should NOT be stacked onto each other.
+ * @param {Object} extraOptions - The incoming extra options
+ * @param {ActiveEffect} existingEffect - The existing effect on the actor
+ */
+function _sameIdentity(extraOptions, existingEffect) {
+    const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
+    const identityKeys = Object.keys(extraOptions || {}).filter(k => !META_KEYS.has(k));
+    if (identityKeys.length === 0)
+        return true;
+    const storedFlags = existingEffect?.flags?.['lancer-automations'] || {};
+    return identityKeys.every(k => storedFlags[k] === extraOptions[k]);
+}
+
 export async function setFlaggedEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}) {
     log('**setFlaggedEffect**');
     const target = canvas.tokens.placeables.find(x => x.id === targetID);
@@ -157,7 +173,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
                 e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name
             );
 
-            if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId) {
+            if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
                 const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
 
@@ -216,7 +232,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
                 resolvedEffectData.icon,
                 counterValue,
                 {
-                    forceNew: !!(extraOptions.consumption || extraOptions.linkedBonusId),
+                    forceNew: !!(extraOptions.consumption || extraOptions.linkedBonusId || existingEffect),
                     extraFlags: {
                         "lancer-automations": lancerFlags,
                         "statuscounter": { value: counterValue, visible: counterValue > 1 }
@@ -300,7 +316,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
             e.getFlag('lancer-automations', 'effect') === statusEffect.name
         );
 
-        if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId) {
+        if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
             // Update existing stack
             const currentStack = existingEffect.getFlag('statuscounter', 'value') || 1;
             const addStack = extraOptions.stack || 1;
@@ -379,7 +395,7 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
     }
 }
 
-export async function removeFlaggedEffect(targetID, effectName, originID = null) {
+export async function removeFlaggedEffect(targetID, effectName, originID = null, extraFlags = null) {
     log('**removeFlaggedEffect**');
     const target = canvas.tokens.placeables.find(x => x.id === targetID);
     if (!target)
@@ -391,6 +407,22 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null)
 
     // Find effects matching the criteria
     const effectsToDelete = target.actor.effects.filter(e => {
+        // When a source is specified, skip effects from any other source.
+        if (originID) {
+            const flagOrigin = e.getFlag('lancer-automations', 'originID') || e.getFlag('csm-lancer-qol', 'originID');
+            if (flagOrigin !== originID)
+                return false;
+        }
+
+        // When extra flag constraints are specified, all must match.
+        if (extraFlags) {
+            const storedFlags = e.flags?.['lancer-automations'] ?? {};
+            for (const [key, val] of Object.entries(extraFlags)) {
+                if (storedFlags[key] !== val)
+                    return false;
+            }
+        }
+
         if (e.getFlag('lancer-automations', 'effect') === effectsStr)
             return true;
         if (e.getFlag('temporary-custom-statuses', 'originalName') === effectsStr)
@@ -400,12 +432,6 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null)
         if (e.name?.toLowerCase().includes(effectNameLower) ||
             e.statuses?.has(effectNameLower))
             return true;
-
-        if (originID) {
-            const flagOrigin = e.getFlag('lancer-automations', 'originID') || e.getFlag('csm-lancer-qol', 'originID');
-            if (flagOrigin && flagOrigin !== originID)
-                return false;
-        }
 
         return false;
     });
@@ -508,12 +534,16 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
                 const effectNameToCheck = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
                 const effectNameLower = effectNameToCheck.toLowerCase().split('.').pop();
 
-                existingEffect = token.actor?.effects.find(e =>
-                    e.name?.toLowerCase().includes(effectNameLower) ||
-                    e.statuses?.has(effectNameLower) ||
-                    e.flags?.['lancer-automations']?.effect === effectNameToCheck ||
-                    e.flags?.['csm-lancer-qol']?.effect === effectNameToCheck
-                );
+                // Find a matching effect: same name AND same identity flags (different source = different effect).
+                existingEffect = token.actor?.effects.find(e => {
+                    const nameMatch = e.name?.toLowerCase().includes(effectNameLower) ||
+                        e.statuses?.has(effectNameLower) ||
+                        e.flags?.['lancer-automations']?.effect === effectNameToCheck ||
+                        e.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
+                    if (!nameMatch)
+                        return false;
+                    return _sameIdentity(extraOptions, e);
+                });
 
                 // If it exists, check if stacking is allowed
                 if (existingEffect) {
@@ -593,6 +623,7 @@ export async function removeFlaggedEffectToTokens(options = {notify: true}) {
         tokens,
         effectNames,
         originId = null,
+        extraFlags = null,
     } = options;
 
     const effectsToRemove = Array.isArray(effectNames) ? effectNames : [effectNames];
@@ -641,11 +672,11 @@ export async function removeFlaggedEffectToTokens(options = {notify: true}) {
             }
 
             if (game.user.isGM) {
-                removeFlaggedEffect(tokenID, effectNameVal, originId);
+                removeFlaggedEffect(tokenID, effectNameVal, originId, extraFlags);
             } else {
                 game.socket.emit('module.lancer-automations', {
                     action: "removeFlaggedEffect",
-                    payload: { targetID: tokenID, effect: effectNameVal, originID: originId }
+                    payload: { targetID: tokenID, effect: effectNameVal, originID: originId, extraFlags }
                 });
             }
 
@@ -973,4 +1004,150 @@ export async function executeDeleteAllFlaggedEffect(tokens, allEffects = false) 
     }
 }
 
+// --- Multi-source effect display collapsing ---
 
+/**
+ * Register a libWrapper on Token._refreshEffects to collapse duplicate same-name
+ * lancer-automations effects into a single visible icon with an aggregate counter badge.
+ * Must be called in a 'ready' hook so it runs after statuscounter's wrapper (outermost).
+ */
+export function initCollapseHook() {
+    if (typeof libWrapper === 'undefined')
+        return;
+    libWrapper.register('lancer-automations', 'Token.prototype._refreshEffects',
+        function (wrapped, ...args) {
+            // PRE: destroy duplicate sprites before _refreshEffects positions them.
+            // This prevents layout gaps and removes bg boxes for duplicates automatically,
+            // since FoundryVTT only draws bg boxes for sprites it actually sees.
+            _collapseRemoveDuplicates(this);
+            // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
+            wrapped(...args);
+            // POST: add count badges for each collapsed group.
+            _collapseAddBadges(this);
+        }, 'WRAPPER');
+}
+
+/**
+ * PRE-phase: remove duplicate sprites for same-name lancer-automations effects from
+ * token.effects.children before _refreshEffects positions them.
+ * Sprites are matched to effects via sprite.zIndex (set by _drawEffects = effect index).
+ * @param {Token} token
+ */
+function _collapseRemoveDuplicates(token) {
+    if (!token.actor || !token.effects?.children)
+        return;
+    const temporaryEffects = token.actor.temporaryEffects;
+    if (!temporaryEffects?.length)
+        return;
+
+    // Build a map from effect id to its current sprite using zIndex as the key.
+    const bg = token.effects.bg;
+    const spriteMap = new Map();
+    for (const child of token.effects.children) {
+        if (child === bg)
+            continue;
+        const zIdx = child.zIndex;
+        if (zIdx >= 0 && zIdx < temporaryEffects.length)
+            spriteMap.set(temporaryEffects[zIdx].id, child);
+    }
+
+    // Walk effects in order; keep the first sprite for each name, destroy the rest.
+    const seenPrimary = new Set();
+    for (const e of temporaryEffects) {
+        if (!e.flags?.['lancer-automations'] || !spriteMap.has(e.id))
+            continue;
+        const name = e.name;
+        if (!name)
+            continue;
+        if (seenPrimary.has(name)) {
+            const sprite = spriteMap.get(e.id);
+            if (sprite.parent === token.effects) {
+                token.effects.removeChild(sprite);
+                sprite.destroy();
+            }
+        } else {
+            seenPrimary.add(name);
+        }
+    }
+}
+
+/**
+ * POST-phase: after _refreshEffects and statuscounter have run with the compacted sprite list,
+ * add numeric count badges on primary sprites for each collapsed group.
+ * Counts ALL effects by name from actor data, so the badge shows the true total even when
+ * duplicate sprites have already been removed.
+ * @param {Token} token
+ */
+function _collapseAddBadges(token) {
+    if (!token.actor || !token.effects?.children)
+        return;
+    const temporaryEffects = token.actor.temporaryEffects;
+    if (!temporaryEffects?.length)
+        return;
+
+    // Rebuild spriteMap with post-layout positions (sprites were repositioned by _refreshEffects).
+    const bg = token.effects.bg;
+    const spriteMap = new Map();
+    for (const child of token.effects.children) {
+        if (child === bg)
+            continue;
+        const zIdx = child.zIndex;
+        if (zIdx >= 0 && zIdx < temporaryEffects.length)
+            spriteMap.set(temporaryEffects[zIdx].id, child);
+    }
+
+    // Count ALL lancer-automations effects by name (including those whose sprites were removed).
+    const effectCountByName = new Map();
+    for (const e of temporaryEffects) {
+        if (!e.flags?.['lancer-automations'])
+            continue;
+        const name = e.name;
+        if (!name)
+            continue;
+        effectCountByName.set(name, (effectCountByName.get(name) ?? 0) + 1);
+    }
+
+    const effectsOffsetX = token.effects?.x ?? 0;
+    const effectsOffsetY = token.effects?.y ?? 0;
+
+    for (const [name, count] of effectCountByName) {
+        if (count <= 1)
+            continue;
+        // Find the first effect with this name that still has a sprite (the primary).
+        const primaryEffect = temporaryEffects.find(e =>
+            e.flags?.['lancer-automations'] && e.name === name && spriteMap.has(e.id));
+        if (!primaryEffect)
+            continue;
+        const sprite = spriteMap.get(primaryEffect.id);
+        const entry = { posX: sprite.x, posY: sprite.y, width: sprite.width, height: sprite.height };
+        _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, count);
+    }
+}
+
+function _addCounterBadge(token, entry, offsetX, offsetY, count) {
+    if (!token.effectCounters) {
+        const container = new PIXI.Container();
+        container.name = "effectCounters";
+        token.effectCounters = token.addChild(container);
+    }
+
+    // statuscounter always clears effectCounters before our POST runs, so we always create fresh.
+    // (No need to search for existing badges — there won't be any for our effects.)
+    const sizeRatio = entry.height / 20;
+    const badgeX = entry.posX + offsetX + entry.width + 1 * sizeRatio;
+    const badgeY = entry.posY + offsetY + entry.height + 4 * sizeRatio;
+    const style = new PIXI.TextStyle({
+        fontFamily: 'Signika, sans-serif',
+        fontSize: Math.max(9, Math.round(12 * sizeRatio)),
+        fill: '#00aaff',
+        stroke: '#000000',
+        strokeThickness: Math.max(1, Math.round(2 * sizeRatio)),
+        fontWeight: 'bold'
+    });
+    const text = new PIXI.Text(String(count), style);
+    text.anchor.set(1, 1);
+    text.x = badgeX;
+    text.y = badgeY;
+    text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
+    token.effectCounters.addChild(text);
+}

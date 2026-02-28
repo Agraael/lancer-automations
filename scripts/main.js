@@ -15,7 +15,8 @@ import {
     consumeEffectCharge,
     processDurationEffects,
     triggerFlaggedEffectImmunity,
-    executeDeleteAllFlaggedEffect
+    executeDeleteAllFlaggedEffect,
+    initCollapseHook
 } from "./flagged-effects.js";
 import { getOccupiedCenters,    getMovementPathHexes,
     drawDebugPath,
@@ -44,7 +45,8 @@ import {
     placeToken, startChoiceCard, deployWeaponToken, pickupWeaponToken,
     resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
     openThrowMenu,
-    getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory
+    getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory,
+    showGMControlledChoiceCard, resolveGMChoiceCard
 } from "./interactive-tools.js";
 import {
     executeFall, getItemLID, isItemAvailable, hasReactionAvailable,
@@ -561,7 +563,8 @@ async function checkReactions(triggerType, data) {
                                 itemId: r.item?.id,
                                 reactionName: r.reactionName,
                                 itemName: r.itemName,
-                                isGeneral: r.isGeneral
+                                isGeneral: r.isGeneral,
+                                triggerData: serializeTriggerData(r.triggerData)
                             }))
                         };
                         game.socket.emit('module.lancer-automations', {
@@ -877,6 +880,71 @@ function registerSettings() {
     });
 }
 
+function serializeTriggerData(data, depth = 0) {
+    if (!data || depth > 8)
+        return null;
+    const serialize = (value, d) => {
+        if (d > 8 || value === null || value === undefined)
+            return value;
+        if (typeof value === 'function')
+            return undefined;
+        if (value?.document?.documentName === 'Token')
+            return { __type: 'token', id: value.id };
+        if (value?.documentName === 'Token')
+            return { __type: 'tokenDoc', id: value.id };
+        if (value?.documentName === 'Actor')
+            return { __type: 'actor', id: value.id };
+        if (Array.isArray(value))
+            return value.map(v => serialize(v, d + 1)).filter(v => v !== undefined);
+        if (typeof value === 'object') {
+            try {
+                const result = {};
+                for (const [k, v] of Object.entries(value)) {
+                    const s = serialize(v, d + 1);
+                    if (s !== undefined)
+                        result[k] = s;
+                }
+                return result;
+            } catch (e) {
+                return undefined;
+            }
+        }
+        return value;
+    };
+    const result = {};
+    for (const [key, value] of Object.entries(data)) {
+        const s = serialize(value, depth + 1);
+        if (s !== undefined)
+            result[key] = s;
+    }
+    return result;
+}
+
+function deserializeTriggerData(data) {
+    if (!data)
+        return null;
+    const deserialize = (value) => {
+        if (value === null || value === undefined)
+            return value;
+        if (typeof value === 'object' && value.__type === 'token')
+            return canvas.tokens.get(value.id) ?? null;
+        if (typeof value === 'object' && value.__type === 'tokenDoc')
+            return canvas.tokens.get(value.id)?.document ?? null;
+        if (typeof value === 'object' && value.__type === 'actor')
+            return game.actors.get(value.id) ?? null;
+        if (Array.isArray(value))
+            return value.map(deserialize);
+        if (typeof value === 'object') {
+            const result = {};
+            for (const [k, v] of Object.entries(value))
+                result[k] = deserialize(v);
+            return result;
+        }
+        return value;
+    };
+    return deserialize(data);
+}
+
 async function handleSocketEvent({ action, payload }) {
     if (action === 'showReactionPopup') {
         if (payload.targetUserId && payload.targetUserId !== game.userId)
@@ -901,6 +969,7 @@ async function handleSocketEvent({ action, payload }) {
                 reactionName: r.reactionName,
                 itemName: r.itemName,
                 isGeneral: r.isGeneral,
+                triggerData: deserializeTriggerData(r.triggerData),
             });
         }
 
@@ -916,7 +985,7 @@ async function handleSocketEvent({ action, payload }) {
     } else if (action === 'setFlaggedEffect') {
         setFlaggedEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
     } else if (action === 'removeFlaggedEffect') {
-        removeFlaggedEffect(payload.targetID, payload.effect, payload.originID);
+        removeFlaggedEffect(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
     } else if (action === 'removeEffect') {
         const target = canvas.tokens.get(payload.targetID);
         if (target?.actor) {
@@ -1015,6 +1084,14 @@ async function handleSocketEvent({ action, payload }) {
             },
             default: "yes"
         }, { classes: ["lancer-dialog-base"], width: 450 }).render(true);
+    } else if (action === 'choiceCardGMRequest') {
+        if (!game.user.isGM)
+            return;
+        showGMControlledChoiceCard(payload);
+    } else if (action === 'choiceCardGMResponse') {
+        if (payload.requestingUserId !== game.userId)
+            return;
+        resolveGMChoiceCard(payload.cardId, payload.choiceIdx);
     }
 }
 
@@ -1867,6 +1944,13 @@ Hooks.once('ready', async () => {
     }
 
     checkModuleUpdate('lancer-automations');
+    initCollapseHook();
+});
+
+// After each scene load (including page reload), force-refresh all token effects so
+// the collapse wrapper runs even if tokens were drawn before our hook was registered.
+Hooks.on('canvasReady', () => {
+    canvas.tokens?.placeables.forEach(t => t.renderFlags?.set({ refreshEffects: true }));
 });
 
 Hooks.on('lancer.statusesReady', () => {
@@ -2420,7 +2504,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
-        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true) => {
+        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, gmControl = false) => {
             if (showCard) {
                 // Cancel immediately because we cannot block Foundry synchronously with async code
                 triggerData.cancel();
@@ -2432,6 +2516,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     mode: "or",
                     title: "MOVEMENT CANCELED",
                     description: reasonText,
+                    gmControl,
                     choices: [
                         { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
                         { text: "Ignore",
@@ -2455,7 +2540,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
-        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true) => {
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, gmControl = false) => {
             const executeChange = () => {
                 setTimeout(() => {
                     const updateData = { x: position.x, y: position.y };
@@ -2478,6 +2563,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     mode: "or",
                     title: "MOVEMENT REROUTED",
                     description: reasonText,
+                    gmControl,
                     choices: [
                         { text: "Confirm",
                             icon: "fas fa-check",

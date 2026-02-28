@@ -165,6 +165,18 @@
     text-decoration: line-through;
 }
 
+.la-choice-item.la-choice-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    background: #e0e0e0;
+    border-color: #bbb;
+}
+
+.la-choice-item.la-choice-disabled .la-choice-text {
+    color: #666;
+}
+
 .la-choice-status {
     color: var(--lancer-color-green, #2e7d32);
     font-size: 14px;

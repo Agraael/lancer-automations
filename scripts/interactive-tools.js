@@ -134,6 +134,9 @@ const _cardDefaults = {
 let _cardQueue = Promise.resolve();
 let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
 
+// --- GM-controlled choice cards ---
+const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
+
 function _updatePendingBadge() {
     const pendingTitles = _cardQueueTitles.slice(1);
     const badge = $('.la-info-card .la-queue-badge');
@@ -240,7 +243,7 @@ function _createInfoCard(type, opts) {
     } else if (type === "choiceCard") {
         const modeLabel = opts.mode === "and" ? "Complete All" : "Choose One";
         dynamicHtml = `
-            <h3 class="la-section-header lancer-border-primary">${modeLabel}</h3>
+            ${opts.disabled ? '' : `<h3 class="la-section-header lancer-border-primary">${modeLabel}</h3>`}
             <div class="la-choice-list" data-role="choice-list"></div>`;
     } else if (type === "deploymentCard") {
         dynamicHtml = `
@@ -410,8 +413,9 @@ function _updateInfoCard(cardEl, type, data) {
         listEl.empty();
 
         data.choices.forEach((choice, idx) => {
-            const isDone = data.chosenSet.has(idx);
+            const isDone = data.chosenSet?.has(idx);
             const doneClass = isDone ? "la-choice-done" : "";
+            const disabledClass = data.disabled ? "la-choice-disabled" : "";
             const iconHtml = choice.icon
                 ? `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`
                 : '';
@@ -420,18 +424,20 @@ function _updateInfoCard(cardEl, type, data) {
                 : '';
 
             listEl.append(`
-                <div class="la-choice-item ${doneClass}" data-choice-index="${idx}">
+                <div class="la-choice-item ${doneClass} ${disabledClass}" data-choice-index="${idx}">
                     ${iconHtml}
                     <span class="la-choice-text">${choice.text}</span>
                     ${statusHtml}
                 </div>`);
         });
 
-        listEl.find('.la-choice-item:not(.la-choice-done)').on('click', function () {
-            const idx = $(this).data('choice-index');
-            if (data.onChoose)
-                data.onChoose(idx);
-        });
+        if (!data.disabled) {
+            listEl.find('.la-choice-item:not(.la-choice-done)').on('click', function () {
+                const idx = $(this).data('choice-index');
+                if (data.onChoose)
+                    data.onChoose(idx);
+            });
+        }
     } else if (type === "deploymentCard") {
         const listEl = cardEl.find('[data-role="deployment-list"]');
         listEl.empty();
@@ -1901,16 +1907,64 @@ export function placeToken(options = {}) {
  */
 export function startChoiceCard(options = {}) {
     const _title = options.title || 'CHOICE';
-    return _queueCard(() => new Promise(async (resolve) => {
-        const {
-            mode = "or",
-            choices = [],
-            title,
-            description = "",
-            icon,
-            headerClass = ""
-        } = options;
+    const {
+        mode = "or",
+        choices = [],
+        title,
+        description = "",
+        icon,
+        headerClass = "",
+        gmControl = false
+    } = options;
 
+    if (gmControl && !game.user.isGM) {
+        return _queueCard(() => new Promise((resolve) => {
+            if (choices.length === 0) {
+                resolve(true);
+                return;
+            }
+
+            const cardId = foundry.utils.randomID();
+
+            const cardEl = _createInfoCard("choiceCard", {
+                title,
+                icon,
+                headerClass,
+                description: (description ? description + '<br>' : '') + '<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> Waiting for GM...</em>',
+                mode,
+                disabled: true,
+                onConfirm: () => {},
+                onCancel: () => {}
+            });
+
+            _updateInfoCard(cardEl, "choiceCard", {
+                choices,
+                chosenSet: new Set(),
+                disabled: true,
+                onChoose: () => {}
+            });
+
+            _updatePendingBadge();
+
+            _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode });
+
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardGMRequest',
+                payload: {
+                    cardId,
+                    requestingUserId: game.user.id,
+                    title,
+                    description,
+                    icon,
+                    headerClass,
+                    mode,
+                    choices: choices.map(c => ({ text: c.text, icon: c.icon }))
+                }
+            });
+        }), _title);
+    }
+
+    return _queueCard(() => new Promise(async (resolve) => {
         if (choices.length === 0) {
             resolve(true);
             return;
@@ -1997,6 +2051,111 @@ export function startChoiceCard(options = {}) {
             resolve(true);
         }
     }), _title);
+}
+
+/**
+ * Called on the GM's client (via socket) to show a controlled choice card on behalf of a player.
+ * When the GM picks or cancels, the result is sent back to the requesting user.
+ */
+export async function showGMControlledChoiceCard({ cardId, requestingUserId, title, description, icon, headerClass, mode, choices }) {
+    await _queueCard(() => new Promise(async (resolve) => {
+        const chosenSet = new Set();
+
+        const _pickOne = () => new Promise((innerResolve) => {
+            let dismissed = false;
+
+            const doCleanup = () => {
+                document.removeEventListener('keydown', keyHandler);
+                _removeInfoCard(cardEl);
+            };
+
+            const cardEl = _createInfoCard("choiceCard", {
+                title: `[GM] ${title}`,
+                icon,
+                headerClass,
+                description: (description ? description + '<br>' : '') + '<em style="color:#aaa;">Controlling choice for player</em>',
+                mode,
+                onConfirm: () => {},
+                onCancel: () => {
+                    dismissed = true;
+                    doCleanup();
+                    innerResolve(null);
+                }
+            });
+
+            const keyHandler = (event) => {
+                if (event.key === "Escape") {
+                    dismissed = true;
+                    doCleanup();
+                    innerResolve(null);
+                }
+            };
+
+            document.addEventListener('keydown', keyHandler);
+
+            _updateInfoCard(cardEl, "choiceCard", {
+                choices,
+                chosenSet,
+                onChoose: (idx) => {
+                    if (dismissed)
+                        return;
+                    dismissed = true;
+                    doCleanup();
+                    innerResolve(idx);
+                }
+            });
+
+            _updatePendingBadge();
+        });
+
+        if (mode === "or") {
+            const idx = await _pickOne();
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardGMResponse',
+                payload: { cardId, requestingUserId, choiceIdx: idx }
+            });
+            resolve(true);
+        } else {
+            while (chosenSet.size < choices.length) {
+                const idx = await _pickOne();
+                if (idx === null) {
+                    game.socket.emit('module.lancer-automations', {
+                        action: 'choiceCardGMResponse',
+                        payload: { cardId, requestingUserId, choiceIdx: null }
+                    });
+                    resolve(null);
+                    return;
+                }
+                chosenSet.add(idx);
+                game.socket.emit('module.lancer-automations', {
+                    action: 'choiceCardGMResponse',
+                    payload: { cardId, requestingUserId, choiceIdx: idx }
+                });
+            }
+            resolve(true);
+        }
+    }), `[GM] ${title}`);
+}
+
+/**
+ * Called on the player's client (via socket) to resolve a pending GM-controlled choice.
+ */
+export async function resolveGMChoiceCard(cardId, choiceIdx) {
+    const pending = _pendingGMChoices.get(cardId);
+    if (!pending)
+        return;
+    _pendingGMChoices.delete(cardId);
+    _removeInfoCard(pending.cardEl);
+
+    if (choiceIdx === null || choiceIdx === undefined) {
+        pending.resolve(null);
+        return;
+    }
+
+    const choice = pending.choices[choiceIdx];
+    pending.resolve(true);
+    if (choice?.callback)
+        await choice.callback(choice.data);
 }
 
 /**

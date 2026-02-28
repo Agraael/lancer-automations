@@ -136,6 +136,7 @@ Fires *before* movement is finalized. Allows interception.
         isTeleport: boolean,
         pathHexes: Array<Object> // [{x, y, cx, cy, isHistory, hexes}]
     },
+    cancel: Function(),
     cancelTriggeredMove: Function(reason?, showCard?),
     changeTriggeredMove: Function(pos, extraData?, reason?, showCard?)
 }
@@ -258,8 +259,8 @@ Code to run when activated.
 | `actor` | `Actor` | *required* | The actor making the roll |
 | `stat` | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` |
 | `title` | `string` | auto | Roll title |
-| `target` | `number` | `10` | Pass threshold |
-| `extraData` | `Object` | `{}` | Extra data to inject into flow state |
+| `target` | `number\|"token"`| `10` | Pass threshold or `"token"` for interactive choice |
+| `extraData` | `Object` | `{}` | Extra data: `{ targetStat: "HULL" }` to use a different stat for difficulty lookup |
 
 **Returns:** `{ completed: boolean, total: number, roll: Roll, passed: boolean }`
 
@@ -320,15 +321,36 @@ Code to run when activated.
 | `notify` | `bool\|obj`| `true`| Unified notification config |
 
 **`extraOptions` Object:**
-`{ stack, linkedBonusId, consumption, statDirect, changes }`
+`{ stack, linkedBonusId, consumption, statDirect, changes, ...customFlags }`
+
+Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `suppressSourceName`) are stored verbatim inside `flags['lancer-automations']` on each created effect. These can later be used as removal filters via `extraFlags` in `removeFlaggedEffectToTokens`.
 
 **Returns:** `Promise<Array<Token>>`
 
 ---
 
 #### `removeFlaggedEffectToTokens(options)`
-- **options**: `{ tokens, effectNames, originId, notify }`
-- **Returns**: `Promise<Array<Token>>`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `tokens` | `Array<Token>` | *required* | Tokens to remove from |
+| `effectNames` | `string\|Array` | *required* | Effect name(s) to remove |
+| `originId` | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
+| `extraFlags` | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data. Use this to target effects by custom flags stored via `extraOptions` at apply time (e.g. `{ suppressSourceId: reactorToken.id }`) |
+| `notify` | `bool\|Object` | `true` | Notification config |
+
+> **Note:** `originId` and `extraFlags` are independent filters — both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
+
+**Returns:** `Promise<Array<Token>>`
+
+**Example — remove only this archer's suppress effects:**
+```javascript
+await api.removeFlaggedEffectToTokens({
+    tokens: [targetToken],
+    effectNames: ["Suppress", "impaired"],
+    extraFlags: { suppressSourceId: reactorToken.id }
+});
+```
 
 #### `findFlaggedEffectOnToken(token, identifier)`
 - **Returns**: `ActiveEffect | undefined` (Search by string name or predicate function)
@@ -461,8 +483,37 @@ Removes flagged active effects (those managed by this module) from the provided 
 ---
 
 #### `knockBackToken(tokens, distance, options)`
+Interactive tool to apply knockback. Shows visual traces and requires confirmation.
+
 #### `revertMovement(token, destination)`
+Reverts a token's movement history by one step.
+
 #### `startChoiceCard(options)`
+
+Presents a choice card to the user (or GM) with custom buttons and callbacks. 
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `mode` | `string` | `"or"` | `"or"` (pick one, close) or `"and"` (must pick all) |
+| `choices` | `Array` | `[]` | List of choice objects (see below) |
+| `title` | `string` | `"CHOICE"` | Card header title |
+| `description`| `string` | `""` | Subtitle text |
+| `icon` | `string` | `null` | FontAwesome class (e.g. `"fas fa-shield-alt"`) |
+| `headerClass`| `string` | `""` | Optional CSS class for the header |
+| `gmControl` | `boolean`| `false` | If true, the card is shown to the GM instead |
+
+**Choice Object Structure:**
+```javascript
+{
+    text: "Button Label",
+    icon: "fas fa-check",       // Optional icon
+    data: { id: 1 },            // Arbitrary data passed to callback
+    callback: async (data) => { // Logic to run when selected
+        console.log(data.id);
+    }
+}
+```
+
+**Returns:** `Promise<true|null>` (true on completion, null if cancelled)
 
 ---
 
@@ -488,11 +539,26 @@ Removes flagged active effects (those managed by this module) from the provided 
 ---
 
 #### `beginDeploymentCard(options)`
-#### `openDeployableMenu(actor)`
-#### `recallDeployable(ownerToken)`
-#### `deployWeaponToken(weapon, actor, origin, options)`
-#### `pickupWeaponToken(ownerToken)`
-#### `openThrowMenu(actor)` / `beginThrowWeaponFlow(weapon)`
+Shows an interactive card allowing the user to pick which deployable from an item to place.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The owner actor |
+| `item` | `Item` | *required* | The item (system/frame) with deployables |
+| `deployableOptions` | `Array` | `[]` | Per-index options overrides for `placeDeployable` |
+
+#### `deployWeaponToken(weapon, ownerActor, originToken, options)`
+Deploys a weapon as a token on the map (for thrown weapons).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `weapon` | `Item` | *required* | The weapon to deploy |
+| `ownerActor` | `Actor` | *required* | The actor throwing it |
+| `originToken` | `Token` | `null` | Measurement origin |
+| `options` | `Object`| `{}` | Supports `range`, `count`, `description` |
+
+#### `openDeployableMenu(actor)` / `recallDeployable(ownerToken)`
+#### `pickupWeaponToken(ownerToken)` / `openThrowMenu(actor)`
 #### `openItemBrowser(targetInput)`
 
 ---
@@ -508,8 +574,14 @@ Removes flagged active effects (those managed by this module) from the provided 
 ## Registration & Logic
 
 #### Registration Functions
-- **`registerDefaultItemReactions(reactions)`**
-- **`registerDefaultGeneralReactions(reactions)`**
+
+#### `registerDefaultItemReactions(reactions)`
+Registers reaction logic for specific item LIDs.
+- **reactions**: Object mapping LIDs to activation objects.
+
+#### `registerDefaultGeneralReactions(reactions)`
+Registers global reactions that aren't tied to a specific item.
+- **reactions**: Object mapping names to activation objects.
 
 #### How-To: Register Activations
 
