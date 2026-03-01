@@ -1,4 +1,4 @@
-const myActor = ParamActor || canvas.tokens.controlled[0]?.actor;
+const myActor = (typeof ParamActor !== 'undefined' ? ParamActor : null) || canvas.tokens.controlled[0]?.actor;
 
 if (!myActor) {
     return ui.notifications.error('Please select your token first!');

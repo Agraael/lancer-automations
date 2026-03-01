@@ -201,7 +201,8 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     }
 
     rollTitle = rollTitle || `${upperStat} Check`;
-    if (targetToken && typeof targetVal === 'number') rollTitle += ` (>= ${targetVal})`;
+    if (targetToken && typeof targetVal === 'number')
+        rollTitle += ` (>= ${targetVal})`;
 
     const isNpcGrit = actor.type === "npc" && upperStat === "GRIT";
     const statPath = isNpcGrit ? "system.tier" : (STAT_PATHS[upperStat] || stat);
@@ -216,7 +217,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     flow.state.data.chooseToken = chooseTokenInFlow;
 
     if (restExtraData && typeof restExtraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, restExtraData);
+        globalThis.mergeObject(flow.state.data, restExtraData);
     }
 
     const completed = await flow.begin();
@@ -275,10 +276,10 @@ export async function executeDamageRoll(attacker, targets, damageValue, damageTy
         bonus_damage: options.bonus_damage || []
     };
 
-    foundry.utils.mergeObject(flowData, options);
+    globalThis.mergeObject(flowData, options);
     const flow = new DamageRollFlow(actor.uuid, flowData);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        globalThis.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -291,7 +292,7 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new BasicAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        globalThis.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -304,7 +305,7 @@ export async function executeTechAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new TechAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        globalThis.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -444,69 +445,69 @@ export async function executeReactorExplosion(token) {
 
     new Sequence()
         .effect("modules/lancer-weapon-fx/sprites/jetlancer_explosion_white_bg.png")
-            .fadeIn(100)
-            .duration(6000)
-            .fadeOut(3000)
-            .screenSpace()
+        .fadeIn(100)
+        .duration(6000)
+        .fadeOut(3000)
+        .screenSpace()
         .effect("modules/lancer-weapon-fx/sprites/shockwave.png")
-            .atLocation(tokenCenter)
-            .duration(7000)
-            .scale(0.2 * scaleFactor)
-            .scaleOut(12 * scaleFactor, 7000)
-            .fadeOut(7000)
-            .delay(3000)
+        .atLocation(tokenCenter)
+        .duration(7000)
+        .scale(0.2 * scaleFactor)
+        .scaleOut(12 * scaleFactor, 7000)
+        .fadeOut(7000)
+        .delay(3000)
         .sound("modules/lancer-weapon-fx/soundfx/pw_nuke.ogg")
-            .startTime(800)
-            .delay(1000)
+        .startTime(800)
+        .delay(1000)
         .effect("modules/lancer-weapon-fx/video/pw_nuke_effect.webm")
-            .delay(1000)
-            .atLocation(tokenCenter)
-            .aboveLighting()
-            .xray()
-            .scale(scaleFactor)
-            .zIndex(100)
-            .thenDo(async () => {
-                await token.document.delete();
-            })
+        .delay(1000)
+        .atLocation(tokenCenter)
+        .aboveLighting()
+        .xray()
+        .scale(scaleFactor)
+        .zIndex(100)
+        .thenDo(async () => {
+            await token.document.delete();
+        })
         .effect("jb2a.ground_cracks.01.orange")
-            .persist()
-            .belowTokens()
-            .aboveLighting()
-            .zIndex(1)
-            .xray()
-            .randomRotation()
-            .atLocation({ x: tokenCenterX, y: tokenCenterY })
-            .scale(scaleFactor)
-            .thenDo(async () => {
-                await canvas.scene.createEmbeddedDocuments("AmbientLight", [{
-                    x: tokenCenterX,
-                    y: tokenCenterY,
-                    config: {
-                        color: "#ff9117",
-                        dim: 10 * scaleFactor,
-                        bright: 5 * scaleFactor,
-                        animation: { type: "pulse" },
-                    },
-                }]);
-            })
+        .persist()
+        .belowTokens()
+        .aboveLighting()
+        .zIndex(1)
+        .xray()
+        .randomRotation()
+        .atLocation({ x: tokenCenterX, y: tokenCenterY })
+        .scale(scaleFactor)
+        .thenDo(async () => {
+            await canvas.scene.createEmbeddedDocuments("AmbientLight", [{
+                x: tokenCenterX,
+                y: tokenCenterY,
+                config: {
+                    color: "#ff9117",
+                    dim: 10 * scaleFactor,
+                    bright: 5 * scaleFactor,
+                    animation: { type: "pulse" },
+                },
+            }]);
+        })
         .effect("modules/lancer-weapon-fx/sprites/scorch_mark_hires.png")
-            .atLocation({ x: tokenCenterX, y: tokenCenterY })
-            .scale(scaleFactor * 1.1)
-            .persist()
-            .belowTokens()
-            .zIndex(0)
-            .randomRotation()
-            .xray()
+        .atLocation({ x: tokenCenterX, y: tokenCenterY })
+        .scale(scaleFactor * 1.1)
+        .persist()
+        .belowTokens()
+        .zIndex(0)
+        .randomRotation()
+        .xray()
         .canvasPan()
-            .delay(1000)
-            .atLocation(tokenCenter)
-            .scale(0.5)
-            .shake({
-                duration: 20000,
-                strength: 15 * scaleFactor,
-                fadeOutDuration: 10000,
-                rotation: true,
-            })
+        .delay(1000)
+        .atLocation(tokenCenter)
+        .scale(0.5)
+        .shake({
+            duration: 20000,
+            strength: 15 * scaleFactor,
+            fadeOutDuration: 10000,
+            rotation: true,
+        })
         .play();
 }
 
@@ -517,7 +518,7 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
     }
     const flow = new SimpleActivationFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        globalThis.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };

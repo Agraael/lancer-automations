@@ -771,7 +771,8 @@ export function getDefaultGeneralReactionRegistry() {
                     description: `Place ${pilotActor.name} within 6 spaces of ${mechActor.name}.`
                 });
 
-                if (!placed || placed.length === 0) return;
+                if (!placed || placed.length === 0)
+                    return;
 
                 await api.applyFlaggedEffectToTokens({
                     tokens: [reactorToken],
@@ -947,10 +948,15 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Scan": {
             category: "General",
-            triggers: ["onActivation"], onlyOnSourceMatch: true,
-            actionType: "Quick Action", triggerSelf: true, triggerOther: false,
-            autoActivate: true, outOfCombat: true,
-            activationType: "code", activationMode: "instead",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Quick Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
                 await api.executeScanOnActivation(reactorToken);
@@ -958,18 +964,25 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Search": {
             category: "General",
-            triggers: ["onActivation"], onlyOnSourceMatch: true,
-            actionType: "Quick Action", triggerSelf: true, triggerOther: false,
-            autoActivate: true, outOfCombat: true,
-            activationType: "code", activationMode: "instead",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Quick Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
                 const targets = await api.chooseToken(reactorToken, {
-                    title: "SEARCH", count: 1,
+                    title: "SEARCH",
+                    count: 1,
                     range: reactorToken.actor?.system?.sensor_range ?? null,
                     includeHidden: true
                 });
-                if (!targets?.length) return;
+                if (!targets?.length)
+                    return;
                 const targetToken = targets[0];
                 const result = await api.executeStatRoll(
                     reactorToken.actor, "SYS", "SEARCH — SYSTEMS vs AGILITY",

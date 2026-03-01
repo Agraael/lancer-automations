@@ -2504,40 +2504,59 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
+        // Shared state for deduplicating simultaneous cancel cards.
+        let cancelCardPending = false;
+        const cancelledReasons = [];
+
         triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, gmControl = false) => {
-            if (showCard) {
-                // Cancel immediately because we cannot block Foundry synchronously with async code
-                triggerData.cancel();
-                cancelRulerDrag(token, moveInfo);
+            // Always cancel the movement immediately (idempotent).
+            triggerData.cancel();
+            cancelRulerDrag(token, moveInfo);
 
-                const trace = drawMovementTrace(token, endPos);
+            if (!showCard)
+                return;
 
-                await startChoiceCard({
-                    mode: "or",
-                    title: "MOVEMENT CANCELED",
-                    description: reasonText,
-                    gmControl,
-                    choices: [
-                        { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
-                        { text: "Ignore",
-                            icon: "fas fa-times",
-                            callback: async () => {
-                            // Re-submit the original movement with a flag to bypass preUpdateToken
-                                const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
-                                if (change.elevation !== undefined)
-                                    originalUpdate.elevation = change.elevation;
-                                token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
-                            }}
-                    ]
-                });
+            if (reasonText)
+                cancelledReasons.push(reasonText);
 
-                if (trace.parent)
-                    trace.parent.removeChild(trace);
-                trace.destroy();
-            } else {
-                triggerData.cancel();
-                cancelRulerDrag(token, moveInfo);
-            }
+            // If a card is already being prepared by a concurrent cancelTriggeredMove call, bail out.
+            // Our reason has been collected above and will appear in that card.
+            if (cancelCardPending)
+                return;
+            cancelCardPending = true;
+
+            // Yield one microtask so any other simultaneous cancelTriggeredMove calls can
+            // push their reasons into cancelledReasons before we render the card.
+            await Promise.resolve();
+
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This movement has been canceled.");
+
+            const trace = drawMovementTrace(token, endPos);
+
+            await startChoiceCard({
+                mode: "or",
+                title: "MOVEMENT CANCELED",
+                description,
+                gmControl,
+                choices: [
+                    { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
+                    { text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                        // Re-submit the original movement with a flag to bypass preUpdateToken
+                            const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
+                            if (change.elevation !== undefined)
+                                originalUpdate.elevation = change.elevation;
+                            token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+                        }}
+                ]
+            });
+
+            if (trace.parent)
+                trace.parent.removeChild(trace);
+            trace.destroy();
         };
 
         triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, gmControl = false) => {

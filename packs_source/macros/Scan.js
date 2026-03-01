@@ -1,7 +1,7 @@
 const targets = Array.from(game.user.targets);
 if (targets.length === 0) return ui.notifications.error('You must target at least one token!');
 
-const myActor = ParamActor || canvas.tokens.controlled[0]?.actor;
+const myActor = (typeof ParamActor !== 'undefined' ? ParamActor : null) || canvas.tokens.controlled[0]?.actor;
 if (!myActor) return ui.notifications.error('Please select your token first!');
 
 const targetNames = targets.map(t => t.name).join(', ');
