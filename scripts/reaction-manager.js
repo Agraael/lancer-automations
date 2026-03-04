@@ -1218,7 +1218,9 @@ export class ReactionEditor extends FormApplication {
             onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
             onKnockback: "{ triggeringToken, range, pushedActors: [Actor], actionName, item, distanceToTrigger }",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger }",
-            onUpdate: "{ triggeringToken, document, change, options }"
+            onUpdate: "{ triggeringToken, document, change, options }",
+            onEnterCombat: "{ triggeringToken, distanceToTrigger }",
+            onExitCombat: "{ triggeringToken, distanceToTrigger }"
         };
 
         const result = {
@@ -1936,7 +1938,7 @@ export class ReactionEditor extends FormApplication {
 
     _getTriggerOptions(selected) {
         const options = [
-            "onTurnStart", "onTurnEnd",
+            "onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd",
             "onPreMove", "onMove", "onKnockback",
             "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
             "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
@@ -1944,7 +1946,7 @@ export class ReactionEditor extends FormApplication {
             "onInitCheck", "onCheck",
             "onStatusApplied", "onStatusRemoved",
             "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
-            "onStructure", "onStress", "onDestroyed", "onUpdate",
+            "onStructure", "onStress", "onDestroyed", "onUpdate"
         ];
         return options.reduce((obj, trigger) => {
             obj[trigger] = selected.includes(trigger);

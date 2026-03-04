@@ -183,6 +183,7 @@ Fires *before* movement is finalized. Allows interception.
 
 #### Turn Events
 - **`onTurnStart`** / **`onTurnEnd`**: `{ triggeringToken }`.
+- **`onEnterCombat`** / **`onExitCombat`**: `{ triggeringToken }`. Fires when a token is added to or removed from the combat tracker.
 
 #### Status Effect Triggers
 - **`onStatusApplied`** / **`onStatusRemoved`**: `{ triggeringToken, statusId, effect }`.
@@ -590,6 +591,54 @@ Interactive tool to apply knockback. Shows visual traces and requires confirmati
 
 #### `revertMovement(token, destination)`
 Reverts a token's movement history by one step.
+
+#### `pickItem(items, options)`
+
+Prompts the user to pick an item from a list of items using a Choice Card.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `items` | `Array<Item>`| *required* | Array of items to choose from |
+| `title` | `string` | `"PICK ITEM"` | Card title |
+| `description`| `string` | `"Select an item:"`| Subtitle text |
+| `icon` | `string` | `"fas fa-box"`| FontAwesome class |
+| `formatText` | `Function` | `null` | Optional function to format text: `(item) => item.name` |
+
+**Returns:** `Promise<Item|null>` (the selected item, or null if cancelled)
+
+---
+
+#### `getWeapons(entity)`
+
+Returns an array of all weapon, mech_weapon, and npc_feature (Weapon) items on an actor.
+
+**Returns:** `Array<Item>`
+
+---
+
+#### `reloadOneWeapon(actorOrToken, targetName)`
+
+Prompts to select and reload an unloaded Loading weapon on an actor.
+
+**Returns:** `Promise<Item|null>`
+
+---
+
+#### `findAura(actorOrToken, auraName)`
+
+Finds a Grid-Aware Aura configuration on an actor by its name.
+
+**Returns:** `object|null`
+
+---
+
+#### `findItemByLid(actorOrToken, lid)`
+
+Finds an item on an actor by its Lancer ID (lid).
+
+**Returns:** `Item|null`
+
+---
 
 #### `startChoiceCard(options)`
 

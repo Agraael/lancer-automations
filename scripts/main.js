@@ -243,7 +243,8 @@ async function checkOnInitReactions(token) {
 
 
 function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
-    if (!isInCombat && !reaction.outOfCombat) {
+    const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
+    if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
         if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered — out of combat.`);
         return null;
@@ -360,7 +361,8 @@ async function checkReactions(triggerType, data) {
                         continue;
                 }
 
-                if (!isInCombat && !reaction.outOfCombat) {
+                const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
+                if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
                     if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered — out of combat.`);
                     continue;
@@ -2179,7 +2181,7 @@ Hooks.on('hoverToken', (token, hovered) => {
         }
     } else {
         // Hovered token is a potential owner, draw lines to all its deployables
-        const deployables = canvas.tokens.placeables.filter(t => 
+        const deployables = canvas.tokens.placeables.filter(t =>
             t.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
         );
         for (const dep of deployables) {
@@ -2398,6 +2400,29 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
         }
     }
 
+});
+
+Hooks.on('createCombatant', async (combatant, options, userId) => {
+    const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
+    if (!token)
+        return;
+    await handleTrigger('onEnterCombat', { triggeringToken: token });
+});
+
+Hooks.on('deleteCombatant', async (combatant, options, userId) => {
+    const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
+    if (!token)
+        return;
+    await handleTrigger('onExitCombat', { triggeringToken: token });
+});
+
+Hooks.on('deleteCombat', async (combat, options, userId) => {
+    for (const combatant of combat.combatants) {
+        const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
+        if (!token)
+            continue;
+        await handleTrigger('onExitCombat', { triggeringToken: token });
+    }
 });
 
 Hooks.on('updateCombat', async (combat, change, options, userId) => {

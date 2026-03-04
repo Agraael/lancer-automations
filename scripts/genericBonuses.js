@@ -566,6 +566,13 @@ async function isBonusApplicable(bonus, flowTags, state) {
             return false;
     }
 
+    if (bonus.itemId) {
+        if (!state.item)
+            return false;
+        if (state.item.id !== bonus.itemId && state.item._id !== bonus.itemId)
+            return false;
+    }
+
     return true;
 }
 

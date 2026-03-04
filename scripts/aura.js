@@ -142,9 +142,24 @@ export class LAAuras {
 
         return deletedAuras;
     }
+
+    /**
+     * Finds an aura on an actor by its name.
+     * @param {Actor|Token|TokenDocument} actorOrToken - The actor or token to search.
+     * @param {string} auraName - The name of the aura to find.
+     * @returns {object|null} The aura configuration object, or null if not found.
+     */
+    static findAura(actorOrToken, auraName) {
+        const actor = actorOrToken?.actor || actorOrToken;
+        const auras = actor?.getFlag('grid-aware-auras', 'auras');
+        if (!auras)
+            return null;
+        return Object.values(auras).find(a => a.name === auraName) || null;
+    }
 }
 
 export const AurasAPI = {
     createAura: LAAuras.createAura,
-    deleteAuras: LAAuras.deleteAuras
+    deleteAuras: LAAuras.deleteAuras,
+    findAura: LAAuras.findAura
 };

@@ -3569,6 +3569,108 @@ export async function clearMovementHistory(tokens, revert = false) {
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
 }
 
+/**
+ * Prompts the user to pick an item from a list of items using a Choice Card.
+ * @param {Item[]} items - Array of items to choose from.
+ * @param {Object} [options] - Options for the choice card.
+ * @param {string} [options.title="PICK ITEM"] - Title of the choice card.
+ * @param {string} [options.description="Select an item:"] - Description text.
+ * @param {string} [options.icon="fas fa-box"] - Icon class for the choice card.
+ * @param {function} [options.formatText] - Optional function to format the button text. Defaults to `(item) => item.name`.
+ * @returns {Promise<Item|null>} The selected item or null if cancelled (or ignored).
+ */
+export function pickItem(items, options = {}) {
+    return new Promise((resolve) => {
+        if (!items || items.length === 0) {
+            ui.notifications.warn("No items available to pick.");
+            return resolve(null);
+        }
+
+        const choices = items.map(item => {
+            const text = options.formatText ? options.formatText(item) : item.name;
+            const icon = item.img || "systems/lancer/assets/icons/white/generic_item.svg";
+            return {
+                text: text,
+                icon: icon,
+                callback: () => resolve(item)
+            };
+        });
+
+        startChoiceCard({
+            title: options.title || "PICK ITEM",
+            description: options.description || "Select an item:",
+            choices: choices,
+            icon: options.icon || "fas fa-box"
+        });
+    });
+}
+
+/**
+ * Retrieves all valid weapon items from an actor, handling both Mechs and NPCs.
+ * @param {Actor|Token|TokenDocument} entity - The actor or token to get weapons from.
+ * @returns {Item[]} Array of weapon items.
+ */
+export function getWeapons(entity) {
+    const actor = entity?.actor || entity;
+    if (!actor || !actor.items)
+        return [];
+
+    return actor.items.filter(i =>
+        i.type === 'mech_weapon' ||
+        (i.system?.type && i.system.type.toLowerCase() === 'weapon')
+    );
+}
+
+/**
+ * Finds an item on an actor by its Lancer ID (lid).
+ * @param {Actor|Token|TokenDocument} actorOrToken - The actor or token to search.
+ * @param {string} lid - The Lancer ID to find.
+ * @returns {Item|null} The item, or null if not found.
+ */
+export function findItemByLid(actorOrToken, lid) {
+    const actor = actorOrToken?.actor || actorOrToken;
+    if (!actor || !actor.items)
+        return null;
+    return actor.items.find(i => i.system?.lid === lid) || null;
+}
+
+/**
+ * Prompts the user to pick an unloaded weapon from an actor and reloads it.
+ * @param {Actor|Token|TokenDocument} actorOrToken - The actor or token to reload weapons for.
+ * @param {string} [targetName] - Optional target name for the UI notification.
+ * @returns {Promise<Item|null>} The reloaded weapon, or null if cancelled.
+ */
+export async function reloadOneWeapon(actorOrToken, targetName) {
+    const actor = actorOrToken?.actor || actorOrToken;
+    const name = targetName || actorOrToken?.name || actor?.name || "Target";
+
+    if (!actor) {
+        ui.notifications.warn("No valid actor provided for reloading.");
+        return null;
+    }
+
+    const weapons = getWeapons(actor);
+    const unloadedWeapons = weapons.filter(w => w.system.tags?.some(t => t.id === "tg_loading") && w.system.loaded === false);
+
+    if (unloadedWeapons.length === 0) {
+        ui.notifications.warn(`${name} has no unloaded weapons to reload!`);
+        return null;
+    }
+
+    const chosenWeapon = await pickItem(unloadedWeapons, {
+        title: "CHOOSE WEAPON TO RELOAD",
+        description: `Select which of ${name}'s weapons to reload:`,
+        icon: "fas fa-sync",
+        formatText: (w) => `Reload ${w.name}`
+    });
+
+    if (chosenWeapon) {
+        await chosenWeapon.update({ "system.loaded": true });
+        ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
+    }
+    return chosenWeapon;
+}
+
 export const InteractiveAPI = {
     chooseToken,
     placeZone,
@@ -3591,5 +3693,9 @@ export const InteractiveAPI = {
     getGridDistance,
     drawRangeHighlight,
     revertMovement,
-    clearMovementHistory
+    clearMovementHistory,
+    pickItem,
+    reloadOneWeapon,
+    getWeapons,
+    findItemByLid
 };

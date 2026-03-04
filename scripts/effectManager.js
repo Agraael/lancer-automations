@@ -38,6 +38,8 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onHpLoss">On HP Loss</option>
     <option value="onTurnStart">On Turn Start</option>
     <option value="onTurnEnd">On Turn End</option>
+    <option value="onEnterCombat">On Enter Combat</option>
+    <option value="onExitCombat">On Exit Combat</option>
 `;
 
 const CONSUMPTION_FILTER_MAP = {
@@ -352,6 +354,14 @@ export async function executeEffectManager(options = {}) {
     {
         value: "onTurnEnd",
         label: "On Turn End"
+    },
+    {
+        value: "onEnterCombat",
+        label: "On Enter Combat"
+    },
+    {
+        value: "onExitCombat",
+        label: "On Exit Combat"
     }
     ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
@@ -742,6 +752,13 @@ export async function executeEffectManager(options = {}) {
                     <div style="flex:1; display:flex; gap:3px;">
                         <input type="text" id="bonus-applyTo" placeholder="Token IDs (comma-separated)" style="flex:1;">
                         <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-tooltip="Apply this bonus selectively to a specific item ID on an actor.">Apply to specific Item ID:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-itemId" placeholder="Item ID" style="flex:1;">
+                        <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1200,6 +1217,7 @@ export async function executeEffectManager(options = {}) {
 
                 const selected = await api.chooseToken(caster, {
                     count: count,
+                    includeSelf: true,
                     title: count === 1 ? "Pick Token" : "Select Tokens",
                     description: count === 1 ? "Select a token on the map to update the field." : "Select tokens to apply this bonus to. Close the card to confirm.",
                     icon: "fas fa-crosshairs"
@@ -1213,6 +1231,83 @@ export async function executeEffectManager(options = {}) {
                         html.find(`#${targetId}`).val(ids).change();
                     }
                 }
+            });
+
+            // Specific Item ID selector buttons (interactive picking)
+            html.find('.item-picker-btn').on('click', async function (e) {
+                e.preventDefault();
+                const targetId = $(this).data('target');
+                const api = game.modules.get('lancer-automations').api;
+
+                // We need a specific token to pick an item from. Let's trace it back from `bonus-applyTo` if available, or selected token.
+                const applyToStr = html.find('#bonus-applyTo').val();
+                let targetToken = null;
+
+                if (applyToStr) {
+                    const firstTargetId = applyToStr.split(',')[0].trim();
+                    targetToken = canvas.tokens.get(firstTargetId);
+                }
+                if (!targetToken) {
+                    targetToken = canvas.tokens.controlled[0];
+                }
+
+                if (!targetToken || !targetToken.actor) {
+                    ui.notifications.warn("Please select a target token on the map, or fill in the 'Apply to tokens' field first, to pick an item from them.");
+                    return;
+                }
+
+                const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
+                if (items.length === 0) {
+                    ui.notifications.warn(`${targetToken.name} has no valid items.`);
+                    return;
+                }
+
+                // Sort items by type, then name
+                items.sort((a, b) => {
+                    if (a.type !== b.type)
+                        return a.type.localeCompare(b.type);
+                    return a.name.localeCompare(b.name);
+                });
+
+                const buildItemHtml = (item) => {
+                    const icon = item.img || "systems/lancer/assets/icons/white/generic_item.svg";
+                    const displayType = item.system?.type ? `${item.type.toUpperCase()} - ${item.system.type.toUpperCase()}` : item.type.toUpperCase();
+                    return `<div class="lancer-item-card actor-item-entry" data-id="${item.id}" data-type="${item.type}" style="margin-bottom:6px;padding:10px; cursor:pointer; display:flex; gap:10px;">
+                        <div class="lancer-item-icon" style="width:32px; height:32px; background:url('${icon}') no-repeat center/contain;"></div>
+                        <div class="lancer-item-content" style="flex:1;min-width:0;">
+                            <div class="lancer-item-name" style="font-weight:bold;">${item.name}</div>
+                            <div class="lancer-item-details" style="font-size:0.85em; opacity:0.8;">[${displayType}]</div>
+                        </div>
+                    </div>`;
+                };
+
+                const dialog = new Dialog({
+                    title: `Select Item on ${targetToken.name}`,
+                    content: `
+                        <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                            <h1 class="lancer-dialog-title">Select Item on ${targetToken.name.toUpperCase()}</h1>
+                            <p class="lancer-dialog-subtitle">Choose which item this bonus applies to.</p>
+                        </div>
+                        <div id="actor-item-list" style="height:400px;overflow-y:auto;padding:4px;border:1px solid #ddd;background:#fafafa;border-radius:4px;">
+                            ${items.map(buildItemHtml).join('')}
+                        </div>
+                    `,
+                    buttons: {
+                        cancel: { label: '<i class="fas fa-times"></i> Cancel', callback: () => {} }
+                    },
+                    render: (htmlContent) => {
+                        htmlContent.find('#actor-item-list').on('click', '.actor-item-entry', (ev) => {
+                            const el = $(ev.currentTarget);
+                            html.find(`#${targetId}`).val(el.data('id')).change();
+                            dialog.close();
+                        });
+                    },
+                    default: "cancel"
+                }, {
+                    width: 500,
+                    classes: ["lancer-dialog-base", "lancer-item-browser-dialog", "lancer-no-title"]
+                });
+                dialog.render(true);
             });
 
             // Add bonus handler
@@ -1242,12 +1337,14 @@ export async function executeEffectManager(options = {}) {
                 const applyToStr = html.find('#bonus-applyTo').val();
                 const applyTo = applyToStr ? applyToStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
                 const applyToTargetter = html.find('#bonus-applyToTargetter').is(':checked');
+                const itemId = html.find('#bonus-itemId').val()?.trim() || undefined;
 
                 const bonusData = {
                     name,
                     type,
                     uses,
                     itemLids,
+                    itemId,
                     rollTypes,
                     applyTo,
                     applyToTargetter
