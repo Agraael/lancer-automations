@@ -108,7 +108,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                     const api = game.modules.get('lancer-automations').api;
-                    const validTokens = await api.applyFlaggedEffectToTokens({
+                    const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "brace",
                         note: "brace",
@@ -169,7 +169,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                         const laggingStatus = CONFIG.statusEffects.find(s => s.id === 'lagging');
                         if (laggingStatus) {
-                            await api.applyFlaggedEffectToTokens({
+                            await api.applyEffectsToTokens({
                                 tokens: [reactorToken],
                                 effectNames: laggingStatus.id,
                                 duration: { label: 'start', turns: 1, rounds: 0 },
@@ -214,9 +214,9 @@ export function getDefaultGeneralReactionRegistry() {
 
                 if (triggerType === 'onStatusApplied') {
                     if (triggerData.statusId === 'prone') {
-                        await api.triggerFlaggedEffectImmunity(reactorToken, ["Prone"], "Flying");
+                        await api.triggerEffectImmunity(reactorToken, ["Prone"], "Flying");
                     } else {
-                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
+                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                     }
                 }
 
@@ -224,7 +224,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
                     const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
                     if (result.completed && !result.passed) {
-                        await api.removeFlaggedEffectToTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
+                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                     }
                 }
             }
@@ -249,7 +249,7 @@ export function getDefaultGeneralReactionRegistry() {
                     return ui.notifications.warn('No targets selected!');
                 }
 
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: targets,
                     effectNames: ["lockon"],
                     note: "Lock On",
@@ -257,7 +257,7 @@ export function getDefaultGeneralReactionRegistry() {
                 });
 
                 const targetsWithLockOn = targets.filter(target =>
-                    api.findFlaggedEffectOnToken(target, "lockon")
+                    api.findEffectOnToken(target, "lockon")
                 );
 
                 if (targetsWithLockOn.length === 0)
@@ -301,13 +301,13 @@ export function getDefaultGeneralReactionRegistry() {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: reactorToken.actor.system.sensor_range,
-                        filter: (t) => !api.findFlaggedEffectOnToken(t, "lancer.statusIconsNames.bolster")
+                        filter: (t) => !api.findEffectOnToken(t, "lancer.statusIconsNames.bolster")
                     });
                     if (!chosen || chosen.length === 0)
                         return;
                     const targets = chosen;
 
-                    const validTargets = await api.applyFlaggedEffectToTokens({
+                    const validTargets = await api.applyEffectsToTokens({
                         tokens: targets,
                         effectNames: "lancer.statusIconsNames.bolster",
                         note: "Bolster",
@@ -355,7 +355,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                     const api = game.modules.get('lancer-automations').api;
-                    return !!api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.bolster");
+                    return !!api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.bolster");
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                     const api = game.modules.get('lancer-automations').api;
@@ -366,7 +366,7 @@ export function getDefaultGeneralReactionRegistry() {
                             val: 2
                         });
                     } else if (triggerType === 'onCheck') {
-                        await api.removeFlaggedEffectToTokens({
+                        await api.removeEffectsByNameFromTokens({
                             tokens: [reactorToken],
                             effectNames: ["lancer.statusIconsNames.bolster"]
                         });
@@ -398,7 +398,7 @@ export function getDefaultGeneralReactionRegistry() {
                     : ["lancer.statusIconsNames.slow", "lancer.statusIconsNames.impaired"];
 
                 const api = game.modules.get('lancer-automations').api;
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: targetTokens,
                     effectNames: effects,
                     duration: { label: 'end', turns: 1, rounds: 0 },
@@ -453,7 +453,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                     await api.knockBackToken(targetTokens, 1, { triggeringToken: reactorToken });
 
-                    await api.applyFlaggedEffectToTokens({
+                    await api.applyEffectsToTokens({
                         tokens: targetTokens,
                         effectNames: ["prone"],
                         note: "Ram by " + reactorToken.name,
@@ -484,7 +484,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (elevation <= maxGroundHeight)
                         return false;
 
-                    const isFlying = !!api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.flying") || !!api.findFlaggedEffectOnToken(reactorToken, "flying");
+                    const isFlying = !!api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.flying") || !!api.findEffectOnToken(reactorToken, "flying");
 
                     if (!isFlying)
                         return true;
@@ -572,14 +572,14 @@ export function getDefaultGeneralReactionRegistry() {
                         return false;
 
                     const api = game.modules.get('lancer-automations')?.api;
-                    if (api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.hidden") ||
-                        api.findFlaggedEffectOnToken(reactorToken, "disengage") ||
-                        api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.intangible") ||
+                    if (api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.hidden") ||
+                        api.findEffectOnToken(reactorToken, "disengage") ||
+                        api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.intangible") ||
                         reactorToken.actor?.effects.some(e => e.statuses?.has("hidden") || e.statuses?.has("disengage") || e.statuses?.has("intangible"))) {
                         return false;
                     }
 
-                    const isAlreadyEngaged = api.findFlaggedEffectOnToken(reactorToken, "lancer.statusIconsNames.engaged") ||
+                    const isAlreadyEngaged = api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.engaged") ||
                         reactorToken.actor?.effects.some(e => e.statuses?.has("engaged"));
                     if (isAlreadyEngaged)
                         return false;
@@ -650,7 +650,7 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                 const api = game.modules.get('lancer-automations').api;
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["Disengage"],
                     duration: { label: 'end', turns: 1, rounds: 0 },
@@ -680,7 +680,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationCode: async function (triggerType, triggerData, reactorToken) {
                     const api = game.modules.get('lancer-automations').api;
                     const selectedTurns = triggerData.actionData.stateData.selectedTurns;
-                    const validTokens = await api.applyFlaggedEffectToTokens({
+                    const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "lancer.statusIconsNames.reactor_meltdown",
                         duration: { label: 'end', turns: selectedTurns, rounds: 0 },
@@ -763,7 +763,6 @@ export function getDefaultGeneralReactionRegistry() {
 
                 const placed = await api.placeToken({
                     actor: pilotActor,
-                    prototypeToken: pilotActor.prototypeToken.toObject(),
                     range: 6,
                     origin: reactorToken,
                     count: 1,
@@ -774,7 +773,7 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!placed || placed.length === 0)
                     return;
 
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ['lancer.statusIconsNames.impaired'],
                     note: 'Eject',
@@ -798,7 +797,7 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"],
                     duration: { label: "unlimited" }
@@ -831,7 +830,7 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
-                await api.removeFlaggedEffectToTokens({
+                await api.removeEffectsByNameFromTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
                 });
@@ -851,7 +850,7 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["hidden"],
                     duration: { label: "unlimited" }
@@ -885,18 +884,22 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken) {
                 const api = game.modules.get('lancer-automations').api;
-                const hasProne = reactorToken.actor.effects.some(e => e.statuses?.has("prone"));
-                if (hasProne) {
-                    await api.removeFlaggedEffectToTokens({
+                const squeezeProne = api.findEffectOnToken(reactorToken, e =>
+                    e.statuses?.has("prone") &&
+                    e.flags?.['lancer-automations']?.squeezeSource === reactorToken.id
+                );
+                if (squeezeProne) {
+                    await api.removeEffectsByNameFromTokens({
                         tokens: [reactorToken],
-                        effectNames: ["prone"]
+                        effectNames: ["prone"],
+                        extraFlags: { squeezeSource: reactorToken.id }
                     });
                 } else {
-                    await api.applyFlaggedEffectToTokens({
+                    await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: ["prone"],
                         duration: { label: "unlimited" }
-                    });
+                    }, { squeezeSource: reactorToken.id });
                 }
             }
         },
@@ -937,7 +940,6 @@ export function getDefaultGeneralReactionRegistry() {
                 const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
                 await api.placeToken({
                     actor: pilotActor,
-                    prototypeToken: pilotActor.prototypeToken.toObject(),
                     range: 1,
                     origin: reactorToken,
                     count: 1,
@@ -989,7 +991,7 @@ export function getDefaultGeneralReactionRegistry() {
                     targetToken, { targetStat: "AGI" }
                 );
                 if (result?.completed && result.passed) {
-                    await api.removeFlaggedEffectToTokens({ tokens: [targetToken], effectNames: ["hidden"] });
+                    await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
                 }
             }
@@ -998,3 +1000,8 @@ export function getDefaultGeneralReactionRegistry() {
     };
     return { ...builtInDefaults, ...externalGeneralReactions };
 }
+
+export const ReactionsAPI = {
+    registerDefaultItemReactions: registerExternalItemReactions,
+    registerDefaultGeneralReactions: registerExternalGeneralReactions
+};

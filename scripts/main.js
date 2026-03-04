@@ -1,71 +1,87 @@
-import { drawThreatDebug, drawDistanceDebug, getTokenDistance, isHostile, isFriendly, checkOverwatchCondition, getActorMaxThreat, getMinGridDistance, canEngage, updateAllEngagements } from "./overwatch.js";
+import { OverwatchAPI, getTokenDistance } from "./overwatch.js";
 import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
-import { packMacros, executePackMacro } from "./compendium-tools.js";
+import { CompendiumToolsAPI } from "./compendium-tools.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
-import { registerExternalItemReactions, registerExternalGeneralReactions } from "./reactions-registry.js";
+import { ReactionsAPI } from "./reactions-registry.js";
 import { cancelRulerDrag } from './interactive-tools.js';
 import {
-    setFlaggedEffect,
-    removeFlaggedEffect,
-    applyFlaggedEffectToTokens,
-    removeFlaggedEffectToTokens,
-    findFlaggedEffectOnToken,
+    EffectsAPI,
+    setEffect,
+    removeEffectsByName,
     consumeEffectCharge,
     processDurationEffects,
-    triggerFlaggedEffectImmunity,
-    executeDeleteAllFlaggedEffect,
-    initCollapseHook
+    initCollapseHook,
 } from "./flagged-effects.js";
-import { getOccupiedCenters,    getMovementPathHexes,
-    drawDebugPath,
-    snapTokenCenter,
+import {
+    getMovementPathHexes, drawDebugPath,
     isHexGrid, getOccupiedOffsets, drawHexAt
 } from "./grid-helpers.js";
 import {
-    addGlobalBonus,
-    removeGlobalBonus,
-    getGlobalBonuses,
-    addConstantBonus,
-    removeConstantBonus,
-    getConstantBonuses,
+    BonusesAPI,
     executeGenericBonusMenu,
-    injectBonusToNextRoll,
     genericAccuracyStepAttack,
     genericAccuracyStepTechAttack,
     genericAccuracyStepWeaponAttack,
     genericAccuracyStepStatRoll,
-    genericBonusStepDamage
+    genericBonusStepDamage,
+    injectKnockbackCheckbox
 } from "./genericBonuses.js";
-import { executeEffectManager, openItemBrowser } from "./effectManager.js";
-import { getTokenCells, getMaxGroundHeightUnderToken } from "./terrain-utils.js";
+import { EffectManagerAPI } from "./effectManager.js";
+import { TerrainAPI } from "./terrain-utils.js";
 import {
-    chooseToken, placeZone, knockBackToken, applyKnockbackMoves,
-    placeToken, startChoiceCard, deployWeaponToken, pickupWeaponToken,
-    resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable,
-    openThrowMenu,
-    getGridDistance, drawRangeHighlight, revertMovement, clearMovementHistory,
+    InteractiveAPI,
+    chooseToken, knockBackToken, applyKnockbackMoves,
+    startChoiceCard, deployWeaponToken,
+    revertMovement, clearMovementHistory,
     showGMControlledChoiceCard, resolveGMChoiceCard
 } from "./interactive-tools.js";
 import {
-    executeFall, getItemLID, isItemAvailable, hasReactionAvailable,
-    executeStatRoll, executeDamageRoll, executeBasicAttack,
-    executeTechAttack, executeSimpleActivation, executeReactorMeltdown, executeReactorExplosion
+    MiscAPI,
+    getItemLID, isItemAvailable, hasReactionAvailable,
 } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows } from "./flows.js";
-import { executeDowntime } from "./downtime.js";
-import { executeScanOnActivation, performSystemScan, performGMInputScan } from "./scan.js";
-
+import { DowntimeAPI } from "./downtime.js";
+import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
+import { LAAuras, AurasAPI } from "./aura.js";
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
 let cachedFlatGeneralReactions = null;
+let deployableConnectionsGraphic = null;
+
+// Cache reaction items per actor; invalidated on actor/item changes
+const _reactionItemsCache = new Map();
 
 Hooks.on('lancer-automations.clearCaches', () => {
     cachedFlatGeneralReactions = null;
+    _reactionItemsCache.clear();
+});
+
+Hooks.on('updateActor', (actor) => {
+    _reactionItemsCache.delete(actor.id);
+    for (const [id, entry] of _reactionItemsCache) {
+        if (entry.pilotId === actor.id)
+            _reactionItemsCache.delete(id);
+    }
+});
+
+Hooks.on('createItem', (item) => {
+    if (item.parent?.id)
+        _reactionItemsCache.delete(item.parent.id);
+});
+
+Hooks.on('deleteItem', (item) => {
+    if (item.parent?.id)
+        _reactionItemsCache.delete(item.parent.id);
+});
+
+Hooks.on('updateItem', (item) => {
+    if (item.parent?.id)
+        _reactionItemsCache.delete(item.parent.id);
 });
 
 function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter) {
@@ -105,8 +121,13 @@ function getReactionItems(token) {
     if (!actor)
         return [];
 
+    const cached = _reactionItemsCache.get(actor.id);
+    if (cached)
+        return cached.items;
+
     const itemTypes = ["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"];
     let items = actor.items.filter(item => itemTypes.includes(item.type));
+    let pilotId = null;
 
     if (actor.type === "mech") {
         let pilot = null;
@@ -130,11 +151,13 @@ function getReactionItems(token) {
         }
 
         if (pilot) {
+            pilotId = pilot.id;
             const pilotItems = pilot.items.filter(item => itemTypes.includes(item.type));
             items = items.concat(pilotItems);
         }
     }
 
+    _reactionItemsCache.set(actor.id, { items, pilotId });
     return items;
 }
 
@@ -815,6 +838,26 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'showDeployableLines', {
+        name: 'Show Deployable Lines',
+        hint: 'If enabled, hovering over tokens you own will draw subtle red lines connecting them to their active deployables and thrown weapons.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    // ── Vision ──
+    game.settings.register('lancer-automations', 'dragVisionMultiplier', {
+        name: 'Drag Vision Radius Multiplier',
+        hint: 'Scale the token vision radius shown while dragging (requires "Drag Vision" enabled in Foundry core settings). 1 = full vision, 0.5 = half, 0 = none.',
+        scope: 'client',
+        config: true,
+        type: Number,
+        range: { min: 0, max: 1, step: 0.05 },
+        default: 1
+    });
+
     // ── Debug ──
     game.settings.register('lancer-automations', 'debugBoostDetection', {
         name: 'Debug: Boost Detection',
@@ -982,10 +1025,10 @@ async function handleSocketEvent({ action, payload }) {
         const actor = game.actors.get(payload.actorId);
         if (actor)
             await actor.setFlag(payload.ns, payload.key, payload.value);
-    } else if (action === 'setFlaggedEffect') {
-        setFlaggedEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
-    } else if (action === 'removeFlaggedEffect') {
-        removeFlaggedEffect(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
+    } else if (action === 'setEffect' || action === 'setFlaggedEffect') {
+        setEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
+    } else if (action === 'removeEffect' || action === 'removeFlaggedEffect') {
+        removeEffectsByName(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
     } else if (action === 'removeEffect') {
         const target = canvas.tokens.get(payload.targetID);
         if (target?.actor) {
@@ -1806,44 +1849,76 @@ async function beginThrowWeaponFlow(weapon) {
     }
 }
 
-async function knockbackStep(state) {
+/**
+ * Flow step that injects the Knockback checkbox into the damage HUD.
+ * Runs before showDamageHUD in DamageRollFlow.
+ */
+async function knockbackInjectStep(state) {
+    if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
+        return true;
+    injectKnockbackCheckbox(state);
+    return true;
+}
+
+/**
+ * Flow step that triggers knockback after damage is rolled in DamageRollFlow.
+ * Reads the checkbox state from state.data._csmKnockback (set by knockbackInjectStep).
+ */
+async function knockbackDamageStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
 
-    const item = state.item; // Weapon or Tech
-    if (!item)
-        return true;
-    const tags = state.data?.tags || item.system?.tags || [];
-    const kbTag = tags.find(t => t.id === "knockback");
-    if (!kbTag)
+    const kb = state.data?._csmKnockback;
+    if (!kb || !kb.enabled)
         return true;
 
-    let distance = parseInt(kbTag.val);
-    if (isNaN(distance) || distance <= 0)
-        distance = 1;
-    const hitResults = state.data?.hit_results || [];
-    const targetInfos = state.data?.acc_diff?.targets || [];
+    const distance = kb.value || 1;
+    const targets = state.data?.targets || [];
     const hitTokens = [];
 
-    for (let i = 0; i < hitResults.length; i++) {
-        if (hitResults[i]?.hit) {
-            const tDoc = targetInfos[i]?.target;
-            const t = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
-            if (t) {
-                hitTokens.push(t);
-            }
+    for (const targetInfo of targets) {
+        const t = targetInfo.target;
+        if (t) {
+            const tokenObj = t.object || (t.id ? canvas.tokens.get(t.id) : null) || t;
+            if (tokenObj)
+                hitTokens.push(tokenObj);
         }
     }
 
-    const attackerToken = state.actor?.token?.object || canvas.tokens.get(state.actor?.token?.id) || state.actor?.getActiveTokens()?.[0];
-    if (hitTokens.length > 0) {
-        await knockBackToken(hitTokens, distance, {
-            title: `${item.name} Knockback`,
-            triggeringToken: attackerToken
-        });
-    }
+    if (hitTokens.length === 0)
+        return true;
+
+    const attackerToken = state.actor?.token?.object
+        || canvas.tokens.get(state.actor?.token?.id)
+        || state.actor?.getActiveTokens()?.[0];
+
+    const itemName = state.item?.name || state.data?.title || 'Damage';
+    await knockBackToken(hitTokens, distance, {
+        title: `${itemName} Knockback`,
+        triggeringToken: attackerToken
+    });
 
     return true;
+}
+
+/**
+ * Wraps the system's 'rollReliable' step so that knockback-only flows
+ * (no damage dice) don't abort. If the original step returns false but
+ * knockback is enabled, we allow the flow to continue.
+ */
+function wrapRollReliable(flowSteps) {
+    const origRollReliable = flowSteps.get('rollReliable');
+    if (!origRollReliable)
+        return;
+
+    flowSteps.set('rollReliable', async function wrappedRollReliable(state) {
+        const result = await origRollReliable(state);
+        if (result === false && state.data?._csmKnockback?.enabled) {
+            // No damage configured but knockback is pending — let the flow continue
+            return true;
+        }
+        return result;
+    });
 }
 
 function insertModuleFlowSteps(flowSteps, flows) {
@@ -1859,8 +1934,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
     flowSteps.set('lancer-automations:onInitAttack', onInitAttackStep);
     flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
-    // Register Knockback step
-    flowSteps.set('lancer-automations:knockback', knockbackStep);
+    // Register Knockback steps
+    flowSteps.set('lancer-automations:knockbackInject', knockbackInjectStep);
+    flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
     // Register Throw steps
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
@@ -1893,18 +1969,20 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('WeaponAttackFlow')?.insertStepBefore('initAttackData', 'lancer-automations:throwChoice');
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
-    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:knockback');
-    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:knockback', 'lancer-automations:throwDeploy');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:throwDeploy');
 
     flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
-    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:knockback');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
     flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
-    flows.get('TechAttackFlow')?.insertStepAfter('lancer-automations:onTechHitMiss', 'lancer-automations:knockback');
 
     flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-automations:onDamage');
+    flows.get('DamageRollFlow')?.insertStepAfter('lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
+
+    // Wrap rollReliable so knockback-only flows (no damage dice) don't abort
+    wrapRollReliable(flowSteps);
 
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
@@ -1912,14 +1990,68 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('StatRollFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepStatRoll', 'lancer-automations:onInitCheck');
     flows.get('StatRollFlow')?.insertStepAfter('rollCheck', 'lancer-automations:onCheck');
 
+    flows.get('ActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
+    flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onActivation');
+    flows.get('CoreActiveFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
 
+}
+
+function openResetMovementDialog(token) {
+    if (!token)
+        return;
+    new Dialog({
+        title: `Movement History: ${token.name}`,
+        content: `
+            <div class="lancer-dialog-header">
+                <h2 class="lancer-dialog-title">Movement History</h2>
+                <p class="lancer-dialog-subtitle">${token.name}</p>
+            </div>
+            <div class="form-group">
+                <p>What would you like to do with the movement history?</p>
+            </div>
+        `,
+        buttons: {
+            clear: {
+                icon: '<i class="fas fa-trash"></i>',
+                label: "Reset History",
+                callback: () => clearMovementHistory(token, false)
+            },
+            revert: {
+                icon: '<i class="fas fa-undo-alt"></i>',
+                label: "Reset & Revert Movement",
+                callback: () => clearMovementHistory(token, true)
+            },
+            cancel: {
+                icon: '<i class="fas fa-times"></i>',
+                label: "Cancel"
+            }
+        },
+        default: "revert"
+    }, {
+        classes: ["lancer-dialog-base"],
+        width: 400,
+        height: 250
+    }).render(true);
 }
 
 Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
+
+    game.keybindings.register('lancer-automations', 'resetMovement', {
+        name: 'Reset Movement',
+        hint: 'Open the movement history reset dialog for the selected token.',
+        editable: [{ key: 'KeyR' }],
+        onDown: () => {
+            const token = canvas.tokens?.controlled[0];
+            if (!token)
+                return ui.notifications.warn('Please select a token first.');
+            openResetMovementDialog(token);
+        },
+        precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
+    });
 });
 
 Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
@@ -1931,6 +2063,7 @@ Hooks.once('ready', async () => {
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
         const flows = game.lancer?.flows;
         flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
+        flows?.get('SendUnknownToChat')?.insertStepAfter('printFeatureCard', 'lancer-automations:onActivation');
     }
 
     if (game.user.isGM) {
@@ -1945,12 +2078,114 @@ Hooks.once('ready', async () => {
 
     checkModuleUpdate('lancer-automations');
     initCollapseHook();
+
+    // Scale down token vision radius during drag if the multiplier is configured
+    if (typeof libWrapper !== 'undefined') {
+        libWrapper.register('lancer-automations', 'Token.prototype._getVisionSourceData',
+            function (wrapped, ...args) {
+                const data = wrapped(...args);
+                if (this.isPreview) {
+                    const multiplier = game.settings.get('lancer-automations', 'dragVisionMultiplier');
+                    if (multiplier < 1) {
+                        data.radius *= multiplier;
+                        data.lightRadius *= multiplier;
+                    }
+                }
+                return data;
+            }, 'WRAPPER');
+    }
 });
 
 // After each scene load (including page reload), force-refresh all token effects so
 // the collapse wrapper runs even if tokens were drawn before our hook was registered.
 Hooks.on('canvasReady', () => {
     canvas.tokens?.placeables.forEach(t => t.renderFlags?.set({ refreshEffects: true }));
+
+    // Set up deployable connection lines graphic
+    if (deployableConnectionsGraphic) {
+        deployableConnectionsGraphic.destroy();
+    }
+    deployableConnectionsGraphic = new PIXI.Graphics();
+    // Add to the background or tokens layer so it appears under/over tokens appropriately
+    if (canvas.tokens) {
+        canvas.tokens.addChild(deployableConnectionsGraphic);
+    }
+});
+
+Hooks.on('hoverToken', (token, hovered) => {
+    if (!deployableConnectionsGraphic) {
+        return;
+    }
+    deployableConnectionsGraphic.clear();
+
+    if (!hovered) {
+        return;
+    }
+
+    // Only show lines if the user has ownership over the hovered token
+    if (!token.actor?.isOwner) {
+        return;
+    }
+
+    if (!game.settings.get('lancer-automations', 'showDeployableLines')) {
+        return;
+    }
+
+    const sourceUuid = token.actor?.uuid;
+    if (!sourceUuid) {
+        return;
+    }
+
+    // Check if hovered token is a deployable itself
+    const ownerUuidFlag = token.document.getFlag('lancer-automations', 'ownerActorUuid');
+
+    const drawDashedLine = (g, x1, y1, x2, y2, dashLength = 8, spaceLength = 8) => {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const distance = Math.hypot(dx, dy);
+        const steps = Math.floor(distance / (dashLength + spaceLength));
+        const dashX = (dx / distance) * dashLength;
+        const dashY = (dy / distance) * dashLength;
+        const spaceX = (dx / distance) * spaceLength;
+        const spaceY = (dy / distance) * spaceLength;
+
+        let cx = x1;
+        let cy = y1;
+        for (let i = 0; i < steps; i++) {
+            g.moveTo(cx, cy);
+            g.lineTo(cx + dashX, cy + dashY);
+            cx += dashX + spaceX;
+            cy += dashY + spaceY;
+        }
+        const rem = distance - (steps * (dashLength + spaceLength));
+        if (rem > 0) {
+            g.moveTo(cx, cy);
+            if (rem > dashLength) {
+                g.lineTo(cx + dashX, cy + dashY);
+            } else {
+                g.lineTo(x2, y2);
+            }
+        }
+    };
+
+    // 2px width, yellowish color (0xffd700 = Gold), 0.6 alpha
+    deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
+
+    if (ownerUuidFlag) {
+        // Hovered token is a deployable, draw line to its owner
+        const ownerToken = canvas.tokens.placeables.find(t => t.actor?.uuid === ownerUuidFlag);
+        if (ownerToken) {
+            drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, ownerToken.center.x, ownerToken.center.y);
+        }
+    } else {
+        // Hovered token is a potential owner, draw lines to all its deployables
+        const deployables = canvas.tokens.placeables.filter(t => 
+            t.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
+        );
+        for (const dep of deployables) {
+            drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, dep.center.x, dep.center.y);
+        }
+    }
 });
 
 Hooks.on('lancer.statusesReady', () => {
@@ -2059,74 +2294,28 @@ Hooks.on('ready', () => {
     console.log('lancer-automations | Ready');
 
     ReactionManager.initialize();
+    LAAuras.init();
 
     game.modules.get('lancer-automations').api = {
-        drawThreatDebug,
-        drawDistanceDebug,
-        getTokenDistance,
-        checkOverwatchCondition,
-        isHostile,
-        isFriendly,
-        getActorMaxThreat,
-        getMinGridDistance,
-        canEngage,
-        updateAllEngagements,
-        registerDefaultItemReactions: registerExternalItemReactions,
-        registerDefaultGeneralReactions: registerExternalGeneralReactions,
+        ...OverwatchAPI,
+        ...ReactionsAPI,
+        ...EffectsAPI,
+        ...BonusesAPI,
+        ...InteractiveAPI,
+        ...MiscAPI,
+        ...CompendiumToolsAPI,
+        ...EffectManagerAPI,
+        ...TerrainAPI,
+        ...DowntimeAPI,
+        ...ScanAPI,
+        ...AurasAPI,
+        // Internal main.js functions
         clearMoveData,
-        applyFlaggedEffectToTokens,
-        removeFlaggedEffectToTokens,
-        findFlaggedEffectOnToken,
-        consumeEffectCharge,
-        processEffectConsumption,
-        processDurationEffects,
-        executeDeleteAllFlaggedEffect,
-        addGlobalBonus,
-        removeGlobalBonus,
-        getGlobalBonuses,
-        addConstantBonus,
-        removeConstantBonus,
-        getConstantBonuses,
-        executeGenericBonusMenu,
-        injectBonusToNextRoll,
-        executeEffectManager,
-        openItemBrowser,
-        getCumulativeMoveData,
-        getTokenCells,
-        getMaxGroundHeightUnderToken,
-        executeStatRoll,
-        executeDamageRoll,
-        executeBasicAttack,
-        executeTechAttack,
-        executeSimpleActivation,
-        executeReactorMeltdown,
-        executeReactorExplosion,
-        knockBackToken,
-        chooseToken,
-        placeZone,
-        placeToken,
-        startChoiceCard,
-        deployWeaponToken,
-        pickupWeaponToken,
-        resolveDeployable,
-        placeDeployable,
-        deployDeployable,
-        beginDeploymentCard,
-        openDeployableMenu,
-        recallDeployable,
-        beginThrowWeaponFlow,
-        getGridDistance,
-        drawRangeHighlight,
-        revertMovement,
-        clearMovementHistory,
         undoMoveData,
+        getCumulativeMoveData,
         getIntentionalMoveData,
-        triggerFlaggedEffectImmunity,
-        packMacros,
-        executePackMacro,
-        executeDowntime,
-        executeScanOnActivation,
-        openThrowMenu,
+        beginThrowWeaponFlow,
+        processEffectConsumption,
         handleTrigger
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
@@ -2185,45 +2374,9 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         event.stopPropagation();
 
         const token = hud.object;
-        if (!token)
-            return;
-
-        new Dialog({
-            title: `Movement History: ${token.name}`,
-            content: `
-                <div class="lancer-dialog-header">
-                    <h2 class="lancer-dialog-title">Movement History</h2>
-                    <p class="lancer-dialog-subtitle">${token.name}</p>
-                </div>
-                <div class="form-group">
-                    <p>What would you like to do with the movement history?</p>
-                </div>
-            `,
-            buttons: {
-                clear: {
-                    icon: '<i class="fas fa-trash"></i>',
-                    label: "Reset History",
-                    callback: () => clearMovementHistory(token, false)
-                },
-                revert: {
-                    icon: '<i class="fas fa-undo-alt"></i>',
-                    label: "Reset & Revert Movement",
-                    callback: () => clearMovementHistory(token, true)
-                },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel"
-                }
-            },
-            default: "revert"
-        }, {
-            classes: ["lancer-dialog-base"],
-            width: 400,
-            height: 250
-        }).render(true);
+        openResetMovementDialog(token);
     });
 });
-let previousCombatantId = null;
 
 Hooks.on('combatTurnChange', async (combat, prior, current) => {
     if (prior.combatantId) {
@@ -2245,7 +2398,6 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
         }
     }
 
-    previousCombatantId = current.combatantId;
 });
 
 Hooks.on('updateCombat', async (combat, change, options, userId) => {
@@ -2323,6 +2475,8 @@ let previousHeatValues = new Map();
 let previousHPValues = new Map();
 
 Hooks.on('createToken', (tokenDocument, options, userId) => {
+    if (userId !== game.userId)
+        return;
     const token = canvas.tokens.get(tokenDocument.id);
     if (!token)
         return;

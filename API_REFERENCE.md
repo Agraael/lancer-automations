@@ -22,12 +22,14 @@
   - [`executeTechAttack`](#executetechattackactor-options-extradata)
   - [`executeSimpleActivation`](#executesimpleactivationactor-options-extradata)
 - [Status Effect Management](#status-effect-management)
-  - [`applyFlaggedEffectToTokens`](#applyflaggedeffecttotokensoptions-extraoptions)
-  - [`removeFlaggedEffectToTokens`](#removeflaggedeffecttotokensoptions)
-  - [`findFlaggedEffectOnToken`](#findflaggedeffectontokentoken-identifier)
+  - [`applyEffectsToTokens`](#applyeffectstotokensoptions-extraoptions)
+  - [`removeEffectsByNameFromTokens`](#removeeffectsfromtokensoptions)
+  - [`removeEffectsByName`](#removeeffectsbynameactor-effectnames-originid)
+  - [`deleteEffect`](#deleteeffecttoken-effect)
+  - [`findEffectOnToken`](#findeffectontokentoken-identifier)
   - [`consumeEffectCharge`](#consumeeffectchargeeffect)
-  - [`triggerFlaggedEffectImmunity`](#triggerflaggedeffectimmunitytoken-effectnames-source-notify)
-  - [`executeDeleteAllFlaggedEffect`](#executedeleteallflaggedeffect)
+  - [`triggerEffectImmunity`](#triggereffectimmunitytoken-effectnames-source-notify)
+  - [`deleteAllEffects`](#deletealleffects)
   - [`executeEffectManager`](#executeeffectmanageroptions)
 - [Global & Constant Bonuses](#global--constant-bonuses)
   - [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options)
@@ -50,6 +52,8 @@
   - [`revertMovement`](#revertmovementtoken-destination)
   - [`startChoiceCard`](#startchoicecardoptions)
 - [Deployment & Thrown Weapons](#deployment--thrown-weapons)
+  - [`addItemFlags`](#additemflagsitem-flags)
+  - [`getItemFlags`](#getitemflagsitem-flagname)
   - [`placeDeployable`](#placedeployableoptions)
   - [`beginDeploymentCard`](#begindeploymentcardoptions)
   - [`openDeployableMenu`](#opendeployablemenuactor)
@@ -164,6 +168,18 @@ Fires *before* movement is finalized. Allows interception.
     ```
 - **`onKnockback`**: Fires after knockback moves are applied. `{ triggeringToken, range, pushedActors: Actor[], actionName, item }`.
   - `actionName` and `item` are set when `knockBackToken()` is called with those options — enables `onlyOnSourceMatch` matching (e.g. a reaction named `"Grapple"` with `triggers: ["onKnockback"]` and `onlyOnSourceMatch: true` will only fire for grapple-triggered knockbacks).
+
+#### Deployment & Placement Triggers
+- **`onDeploy`**: Fires when a deployable or weapon token is placed on the map.
+    ```javascript
+    {
+        triggeringToken: Token,
+        item: Item,
+        deployedTokens: Array<TokenDocument>,
+        deployType: string, // "deployable" | "throw"
+        distanceToTrigger: number
+    }
+    ```
 
 #### Turn Events
 - **`onTurnStart`** / **`onTurnEnd`**: `{ triggeringToken }`.
@@ -304,9 +320,9 @@ Code to run when activated.
 
 ---
 
-## Status Effect Management
+## Effect Management
 
-#### `applyFlaggedEffectToTokens(options, extraOptions)`
+#### `applyEffectsToTokens(options, extraOptions)`
 
 **`options` Object:**
 | Property | Type | Default | Description |
@@ -323,18 +339,20 @@ Code to run when activated.
 **`extraOptions` Object:**
 `{ stack, linkedBonusId, consumption, statDirect, changes, ...customFlags }`
 
-Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `suppressSourceName`) are stored verbatim inside `flags['lancer-automations']` on each created effect. These can later be used as removal filters via `extraFlags` in `removeFlaggedEffectToTokens`.
+Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `suppressSourceName`) are stored verbatim inside `flags['lancer-automations']` on each created effect. These can later be used as removal filters via `extraFlags` in `removeEffectsByNameFromTokens`.
 
 **Returns:** `Promise<Array<Token>>`
 
 ---
 
-#### `removeFlaggedEffectToTokens(options)`
+#### `removeEffectsByNameFromTokens(options)`
+
+Finds all effects matching the given name(s) and removes them. This is a **find-by-name-and-delete-all-matches** operation — it removes every effect whose name matches, not a targeted removal by ID. To delete a specific known effect by ID, use [`deleteEffect`](#deleteeffecttoken-effect) instead.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `tokens` | `Array<Token>` | *required* | Tokens to remove from |
-| `effectNames` | `string\|Array` | *required* | Effect name(s) to remove |
+| `effectNames` | `string\|Array` | *required* | Effect name(s) to match and remove |
 | `originId` | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
 | `extraFlags` | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data. Use this to target effects by custom flags stored via `extraOptions` at apply time (e.g. `{ suppressSourceId: reactorToken.id }`) |
 | `notify` | `bool\|Object` | `true` | Notification config |
@@ -345,26 +363,43 @@ Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `supp
 
 **Example — remove only this archer's suppress effects:**
 ```javascript
-await api.removeFlaggedEffectToTokens({
+await api.removeEffectsByNameFromTokens({
     tokens: [targetToken],
     effectNames: ["Suppress", "impaired"],
     extraFlags: { suppressSourceId: reactorToken.id }
 });
 ```
 
-#### `findFlaggedEffectOnToken(token, identifier)`
+#### `deleteEffect(token, effect)`
+
+Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFromTokens`, this targets one exact effect — no name matching, no side effects. Routes through the GM socket automatically for non-GM users.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token\|TokenDocument\|string` | The token (or its ID) that owns the effect |
+| `effect` | `ActiveEffect\|string` | The effect (or its ID) to delete |
+
+```javascript
+const effects = api.getAllEffects(target);
+// Let user pick one, then delete exactly that effect:
+api.deleteEffect(target, effects[0]);
+```
+
+#### `findEffectOnToken(token, identifier)`
 - **Returns**: `ActiveEffect | undefined` (Search by string name or predicate function)
+
+#### `getAllEffects(target)`
+- **Returns**: `Array<ActiveEffect>` — all active effects on the target, including unflagged player-added ones.
 
 #### `consumeEffectCharge(effect)`
 - **Returns**: `Promise<boolean>`
 
-#### `triggerFlaggedEffectImmunity(token, effectNames, source, notify)`
+#### `triggerEffectImmunity(token, effectNames, source, notify)`
 - **Returns**: `Promise<void>` (Removes effects and announces immunity in chat)
 
-#### `executeDeleteAllFlaggedEffect(tokens, allEffects)`
-Removes flagged active effects (those managed by this module) from the provided tokens.
-- **tokens**: `Array<Token|TokenDocument>` (Required). The list of tokens to clear.
-- **allEffects**: `boolean` (Default `false`). If `true`, removes ALL active effects instead of just flagged ones.
+#### `deleteAllEffects(tokens)`
+Removes **all** active effects from the provided tokens.
+- **tokens**: `Array<Token|TokenDocument>` (Required)
 - **Returns**: `Promise<void>`
 
 #### `executeEffectManager(options)`
@@ -459,10 +494,79 @@ Removes flagged active effects (those managed by this module) from the provided 
 | `borderColor`| `string` | `"#964611ff"`| Template border |
 | `texture` | `string` | `null` | Optional texture path |
 | `count` | `number` | `1` | Number of zones (-1 for unlimited) |
-| `hooks` | `Object` | `{}` | templatemacro hooks |
-| `dangerous` | `Object` | `null` | `{ damageValue, damageType }` |
-| `statusEffects`| `Array` | `[]` | Effects applied to tokens inside |
+| `hooks` | `Object` | `{}` | templatemacro hooks (see trigger list below) |
+| `dangerous` | `Object` | `null` | Shortcut: `{ damageType, damageValue }` — triggers ENG check on entry/turn start, deals damage on failure |
+| `statusEffects` | `Array` | `[]` | Shortcut: status effect IDs applied to tokens inside (e.g. `["impaired", "lockon"]`) |
+| `difficultTerrain` | `Object` | `null` | Shortcut: `{ movementPenalty, isFlatPenalty }` — sets ElevationRuler movement cost on the template |
+| `centerLabel` | `string` | `""` | Text rendered at the center of the template on canvas |
 | `title` | `string` | `"PLACE ZONE"` | Card header |
+
+**Custom Logic via `hooks`:**
+The `hooks` object allows you to attach custom logic to template events. Each hook entry supports two formats that can be used independently or combined:
+
+| Format | Description |
+|--------|-------------|
+| `{ command: string, asGM: boolean }` | A string of Javascript code stored in template flags (persists across reloads) |
+| `{ function: Function, asGM: boolean }` | A direct Javascript function stored in a runtime registry (lost on reload) |
+
+Both formats **stack** — if you provide both `command` and `function` for the same trigger, both will run.
+
+- **Trigger List:** `created`, `deleted`, `moved`, `hidden`, `revealed`, `entered`, `left`, `through`, `staying`, `turnStart`, `turnEnd`.
+- **Available Variables:** Both `command` strings and `function` callbacks receive:
+    - `template` — The `MeasuredTemplateDocument` being triggered.
+    - `scene` — The current Scene document.
+    - `token` — The token that triggered the event (if applicable, e.g. for `entered`/`left`).
+    - `context` — Additional context (e.g. `gmId`, `userId`, `coords`). In `command` strings this is available as `this`.
+
+**Example — String Command:**
+```javascript
+api.placeZone(token, {
+    size: 2,
+    hooks: {
+        entered: {
+            command: "console.log(`${token.name} entered the zone!`);",
+            asGM: true
+        }
+    }
+});
+```
+
+**Example — Direct Function:**
+```javascript
+api.placeZone(token, {
+    size: 2,
+    hooks: {
+        entered: {
+            function: (template, scene, token, context) => {
+                if (!token?.actor) return;
+                const api = game.modules.get('lancer-automations').api;
+                api.applyEffectsToTokens({ tokens: [token], effectNames: ["impaired"] });
+            },
+            asGM: true
+        },
+        left: {
+            function: (template, scene, token, context) => {
+                if (!token?.actor) return;
+                const api = game.modules.get('lancer-automations').api;
+                api.removeEffectsByNameFromTokens({ tokens: [token], effectNames: ["impaired"] });
+            },
+            asGM: true
+        }
+    }
+});
+```
+
+**Zone type examples:**
+```js
+// Dangerous zone — ENG check on entry/turn start, damage on failure
+placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
+
+// Status effect zone — applies effects to tokens inside
+placeZone(token, { size: 2, statusEffects: ["impaired", "lockon"] });
+
+// Difficult terrain — movement penalty via ElevationRuler
+placeZone(token, { size: 2, difficultTerrain: { movementPenalty: 1, isFlatPenalty: true } });
+```
 
 ---
 
@@ -470,11 +574,10 @@ Removes flagged active effects (those managed by this module) from the provided 
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `actor` | `Actor` | `null` | Linked actor |
-| `prototypeToken`| `Object`| *req* | Prototype token data |
+| `actor` | `Actor\|Array` | `null` | Single Actor, Array of Actors, or Array of `{actor, extraData}` objects. When an array is passed, the card shows an actor selector. |
 | `range` | `number` | `null` | Placement range |
-| `count` | `number` | `1` | Number to place |
-| `extraData` | `Object` | `{}` | Data injection |
+| `count` | `number` | `1` | Total tokens to place |
+| `extraData` | `Object` | `{}` | Default token data overrides. Per-entry `extraData` merges on top. Flags are shallow-merged with prototype flags. |
 | `origin` | `Token\|{x,y}`| `null` | Measurement origin |
 | `onSpawn` | `Function`| `null` | `(newTokenDoc, origin) => {}` |
 | `title` | `string` | `"PLACE TOKEN"` | Card header |
@@ -519,19 +622,106 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 
 ## Deployment & Thrown Weapons
 
+#### `addItemFlags(item, flags)`
+Persists lancer-automations flags onto a Foundry Item document. These flags are read back automatically by `placeDeployable` when the item is passed as `systemItem`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to update |
+| `flags` | `Object` | Key/value pairs to set under `flags['lancer-automations']` |
+
+**Returns:** `Promise<Item>` — the updated item.
+
+**Known flag keys:**
+
+| Key | Type | Used by | Description |
+|-----|------|---------|-------------|
+| `deployRange` | `number` | `placeDeployable` | Default placement range for this item's deployables |
+| `deployCount` | `number` | `placeDeployable` | Default number of deployables to place |
+
+**Example:**
+```js
+// Set deploy range 5 and deploy count 2 on a system item
+await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
+
+// Now placeDeployable will use range=5 and count=2 automatically
+await api.placeDeployable({ deployable: lid, ownerActor: actor, systemItem: myItem });
+```
+
+---
+
+#### `addExtraDeploymentLids(item, lids)`
+Adds extra deployable LIDs to an item via flags (`lancer-automations.extraDeployables`).
+Since Lancer's TypeDataModel prevents writing to `system.deployables` on NPC features,
+this stores extra LIDs as flags that are merged in by `getItemDeployables`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to update |
+| `lids` | `string\|Array<string>` | A single LID string or array of LID strings to add |
+
+**Returns:** `Promise<Item>` — the updated item.
+
+**Example:**
+```js
+await api.addExtraDeploymentLids(myNpcFeature, ["dep_turret_t1", "dep_turret_t2", "dep_turret_t3"]);
+```
+
+---
+
+#### `getItemDeployables(item, actor)`
+Returns the effective deployable LIDs for an item, merging `system.deployables` with
+extra LIDs from the `lancer-automations.extraDeployables` flag. For NPC actors, applies
+tier-based selection (1 entry = same for all tiers, 3 entries = pick by tier).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The item document |
+| `actor` | `Actor` | Optional. The owner actor (needed for NPC tier selection) |
+
+**Returns:** `string[]` — array of deployable LID strings.
+
+**Example:**
+```js
+const lids = api.getItemDeployables(myItem, myActor);
+```
+
+---
+
+#### `getItemFlags(item, flagName)`
+Retrieves lancer-automations flags from a Foundry Item document.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to read from |
+| `flagName` | `string` | Optional. Specific flag key to retrieve. If null, returns all module flags. |
+
+**Returns:** `any` — the value of the requested flag, or an object containing all flags.
+
+**Example:**
+```js
+// Get all flags
+const allFlags = api.getItemFlags(myItem);
+
+// Get a specific flag
+const range = api.getItemFlags(myItem, 'deployRange');
+```
+
+---
+
 #### `placeDeployable(options)`
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `deployable` | `Actor\|str`| *req* | LID or Actor reference |
+| `deployable` | `Actor\|string\|Array`| *req* | LID, Actor, or array of LIDs/Actors. Array shows actor selector. |
 | `ownerActor` | `Actor` | *req* | Owner |
 | `systemItem` | `Item` | `null` | Parent item |
 | `consumeUse` | `boolean` | `false` | Consumes system use |
 | `fromCompendium`| `boolean`| `false` | Creates new actor if not in world |
 | `width` | `number` | `null` | Width override |
 | `height` | `number` | `null` | Height override |
-| `range` | `number` | `1` | Placement range |
-| `count` | `number` | `1` | Number to place |
+| `range` | `number` | `1` | Placement range (if `systemItem` has a `deployRange` flag, that is used instead) |
+| `count` | `number` | `1` | Total to place (if `systemItem` has a `deployCount` flag, that is used instead) |
 | `at` | `Token\|pos`| `null` | Measurement origin |
 | `title` | `string` | `"DEPLOY"` | Card title |
 | `noCard` | `boolean` | `false` | Auto-confirm |
@@ -539,13 +729,13 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 ---
 
 #### `beginDeploymentCard(options)`
-Shows an interactive card allowing the user to pick which deployable from an item to place.
+Resolves all deployable LIDs on an item and opens a single `placeDeployable` session with actor selector.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `actor` | `Actor` | *required* | The owner actor |
 | `item` | `Item` | *required* | The item (system/frame) with deployables |
-| `deployableOptions` | `Array` | `[]` | Per-index options overrides for `placeDeployable` |
+| `deployableOptions` | `Array` | `[]` | Per-index options (e.g. `[{ range: 3, count: 2 }]`) |
 
 #### `deployWeaponToken(weapon, ownerActor, originToken, options)`
 Deploys a weapon as a token on the map (for thrown weapons).
@@ -560,6 +750,26 @@ Deploys a weapon as a token on the map (for thrown weapons).
 #### `openDeployableMenu(actor)` / `recallDeployable(ownerToken)`
 #### `pickupWeaponToken(ownerToken)` / `openThrowMenu(actor)`
 #### `openItemBrowser(targetInput)`
+
+#### `addItemTag(item, tagData)`
+Adds a tag to an item. If a tag with the same `id` exists, it updates it.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to modify |
+| `tagData` | `Object` | The tag object (e.g. `{ id: "tg_heat_self", val: "2" }`) |
+
+**Returns:** `Promise<Item>` — the updated item.
+
+#### `removeItemTag(item, tagId)`
+Removes a tag from an item by its ID.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to modify |
+| `tagId` | `string` | The ID of the tag to remove (e.g. `"tg_heat_self"`) |
+
+**Returns:** `Promise<Item>` — the updated item.
 
 ---
 
@@ -603,7 +813,7 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 **Shared Shield Charges:**
 ```javascript
-await api.applyFlaggedEffectToTokens({
+await api.applyEffectsToTokens({
     tokens: [target],
     effectNames: ["resistance_kinetic", "resistance_energy"]
 }, {
@@ -615,3 +825,47 @@ await api.applyFlaggedEffectToTokens({
     }
 });
 ```
+
+---
+
+## Grid-Aware Auras Wrapper
+
+Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) module (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)).
+
+#### `api.createAura(owner, auraConfig)`
+
+Creates an aura using the Grid-Aware Auras module. This wrapper supports passing a Javascript `function` instead of a macro ID.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `owner` | `Token\|Item` | *required* | The document that owns the aura |
+| `auraConfig` | `Object` | *required* | Full Grid-Aware Auras configuration object |
+
+**`macros` Function Example:**
+```javascript
+macros: [{
+    mode: "ENTER_LEAVE",
+    function: (token, parent, aura, options) => {
+        if (options.hasEntered) console.log(`${token.name} entered the aura!`);
+    }
+}]
+```
+
+**Available Trigger Modes:**
+
+| Category | Modes |
+|----------|-------|
+| **Macro Modes** | `ENTER_LEAVE`, `ENTER`, `LEAVE`, `PREVIEW_ENTER_LEAVE`, `PREVIEW_ENTER`, `PREVIEW_LEAVE`, `OWNER_TURN_START_END`, `OWNER_TURN_START`, `OWNER_TURN_END`, `TARGET_TURN_START_END`, `TARGET_TURN_START`, `TARGET_TURN_END`, `ROUND_START_END`, `ROUND_START`, `ROUND_END`, `TARGET_START_MOVE`, `TARGET_END_MOVE` |
+| **Effect Modes** | `APPLY_WHILE_INSIDE`, `APPLY_ON_ENTER`, `APPLY_ON_LEAVE`, `APPLY_ON_OWNER_TURN_START`, `APPLY_ON_OWNER_TURN_END`, `APPLY_ON_TARGET_TURN_START`, `APPLY_ON_TARGET_TURN_END`, `APPLY_ON_ROUND_START`, `APPLY_ON_ROUND_END`, `REMOVE_WHILE_INSIDE`, `REMOVE_ON_ENTER`, `REMOVE_ON_LEAVE`, `REMOVE_ON_OWNER_TURN_START`, `REMOVE_ON_OWNER_TURN_END`, `REMOVE_ON_TARGET_TURN_START`, `REMOVE_ON_TARGET_TURN_END`, `REMOVE_ON_ROUND_START`, `REMOVE_ON_ROUND_END` |
+
+---
+
+#### `api.deleteAuras(owner, filter, options)`
+
+Deletes auras from the specified owner. Safely cleans up any associated lambda callbacks generated by `createAura` from memory.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `owner` | `Token\|Item` | *required* | The document that owns the auras |
+| `filter` | `string\|Object` | *required* | String ID, name, or Object filter |
+| `options` | `Object` | `{}` | Internal Grid-Aware Auras delete options |

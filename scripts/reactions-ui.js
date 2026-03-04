@@ -658,6 +658,19 @@ function renderReactionDialog(popupData) {
 
                 showDetailPanel(token, item, htmlEl, popupData, reactionData, triggerData);
             });
+
+            htmlEl.find('.lancer-reaction-item').on('contextmenu', (event) => {
+                event.preventDefault();
+                const el = event.currentTarget;
+                if (el.dataset.general === 'true')
+                    return;
+                const tokenId = el.dataset.tokenId;
+                const itemId = el.dataset.itemId;
+                const token = canvas.tokens.get(tokenId);
+                const item = token?.actor?.items.get(itemId);
+                if (item)
+                    item.sheet.render(true);
+            });
         },
         close: () => {
             closeDetailPanel();

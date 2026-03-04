@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Knockback",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/push.svg",
+    "command_source": "Knockback.js"
+}

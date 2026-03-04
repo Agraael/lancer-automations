@@ -1,94 +1,24 @@
-/* global CONFIG, canvas, game, Dialog, ui, FilePicker */
+/* global canvas, game, ui, FilePicker */
 
 import {
-    applyFlaggedEffectToTokens
+    applyEffectsToTokens
 } from "./flagged-effects.js";
 import {
     addGlobalBonus,
     removeGlobalBonus,
     removeConstantBonus
 } from "./genericBonuses.js";
+import { openItemBrowserDialog } from "./misc-tools.js";
 
 /**
- * Open a searchable item browser dialog and return the selected item's LID.
- * Simplified from the reaction editor's _openItemBrowser.
- * @param {jQuery} targetInput - The input element to populate with the selected LID
+ * Open item browser and populate targetInput with the selected LID.
+ * @param {jQuery} targetInput
  */
 export async function openItemBrowser(targetInput) {
-    const items = [];
-    for (const pack of game.packs) {
-        if (pack.documentName !== "Item")
-            continue;
-        const index = await pack.getIndex({
-            fields: ["system.lid", "type"]
-        });
-        for (const entry of index) {
-            if (entry.system?.lid) {
-                items.push({
-                    name: entry.name,
-                    lid: entry.system.lid,
-                    type: entry.type
-                });
-            }
-        }
-    }
-
-    items.sort((a, b) => a.name.localeCompare(b.name));
-
-    const itemListHtml = items.map(item =>
-        `<div class="item-browser-entry lancer-list-item" data-lid="${item.lid}">
-            <strong>${item.name}</strong> <span style="color: #444; font-size: 0.85em;">(${item.type}) [${item.lid}]</span>
-        </div>`
-    ).join('');
-
-    return new Promise((resolve) => {
-        new Dialog({
-            title: "Find Item",
-            content: `
-                <div class="lancer-dialog-base">
-                <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">Find Item</div>
-                </div>
-                <div class="lancer-search-container">
-                    <i class="fas fa-search lancer-search-icon"></i>
-                    <input type="text" id="item-search" placeholder="Search by name or LID...">
-                </div>
-                <div id="item-list" style="max-height: 300px; overflow-y: auto;">
-                    ${itemListHtml}
-                </div>
-                </div>
-            `,
-            buttons: {
-                cancel: {
-                    label: "Cancel",
-                    callback: () => resolve(null)
-                }
-            },
-            render: (html) => {
-                const searchInput = html.find('#item-search');
-                const listContainer = html.find('#item-list');
-
-                searchInput.on('input', () => {
-                    const query = searchInput.val().toLowerCase();
-                    listContainer.find('.item-browser-entry').each((i, el) => {
-                        const text = $(el).text().toLowerCase();
-                        $(el).toggle(text.includes(query));
-                    });
-                });
-
-                listContainer.on('click', '.item-browser-entry', (ev) => {
-                    const lid = $(ev.currentTarget).data('lid');
-                    if (targetInput)
-                        targetInput.val(lid);
-                    resolve(lid);
-                    html.closest('.dialog').find('.header-button.close').click();
-                });
-            },
-            default: "cancel"
-        }, {
-            width: 400
-        }).render(true);
-    });
+    const result = await openItemBrowserDialog();
+    if (result && targetInput)
+        targetInput.val(result.lid);
+    return result?.lid ?? null;
 }
 
 const CONSUMPTION_TRIGGER_OPTIONS = `
@@ -102,6 +32,7 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onMove">On Move</option>
     <option value="onPreMove">On Pre Move</option>
     <option value="onActivation">On Activation</option>
+    <option value="onDeploy">On Deploy</option>
     <option value="onCheck">On Check</option>
     <option value="onHeat">On Heat</option>
     <option value="onHpLoss">On HP Loss</option>
@@ -119,6 +50,7 @@ const CONSUMPTION_FILTER_MAP = {
     onMove: ['cfilter-boost'],
     onPreMove: ['cfilter-boost'],
     onActivation: ['cfilter-actionName'],
+    onDeploy: ['cfilter-itemLid'],
     onCheck: ['cfilter-check']
 };
 
@@ -271,9 +203,52 @@ async function pushRemoveEffect(targetID, effectID) {
     }
 }
 
+// Helper: Fetch all tags from loaded Lancer compendiums
+async function fetchAvailableTags() {
+    let tags = [];
+    // The Lancer core tags are typically in 'lancer-data.tags' or we can check all packs
+    for (const pack of game.packs) {
+        if (pack.metadata.type === "Item" && pack.metadata.packageName === "lancer-data") {
+            const index = pack.index || await pack.getIndex({ fields: ["type", "system.lid", "system.val"] });
+            for (const item of index) {
+                if (item.type === "tag") {
+                    tags.push({
+                        id: item.system?.lid || item._id, // Use LID if available, fallback to ID
+                        name: item.name,
+                        val: item.system?.val || 0
+                    });
+                }
+            }
+        }
+    }
+    // Sort alphabetically
+    tags.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Fallback if none found (e.g. system not fully loaded or different pack structure)
+    if (tags.length === 0) {
+        tags = [
+            { id: "tg_accurate", name: "Accurate" },
+            { id: "tg_inaccurate", name: "Inaccurate" },
+            { id: "tg_reliable", name: "Reliable" },
+            { id: "tg_ap", name: "Armor Piercing" },
+            { id: "tg_knockback", name: "Knockback" },
+            { id: "tg_overkill", name: "Overkill" },
+            { id: "tg_heat_self", name: "Heat (Self)" },
+            { id: "tg_burn", name: "Burn" },
+            { id: "tg_smart", name: "Smart" },
+            { id: "tg_seeking", name: "Seeking" },
+            { id: "tg_arcing", name: "Arcing" }
+        ];
+    }
+    return tags;
+}
+
 // Main Function: executeEffectManager
 export async function executeEffectManager(options = {}) {
     console.log('lancer-automations | Executing Effect Manager');
+
+    const availableTags = await fetchAvailableTags();
+
 
     let defaultTarget = null;
     if (canvas.tokens.controlled.length > 0)
@@ -355,6 +330,10 @@ export async function executeEffectManager(options = {}) {
     }, {
         value: "onActivation",
         label: "On Activation"
+    },
+    {
+        value: "onDeploy",
+        label: "On Deploy"
     },
     {
         value: "onCheck",
@@ -447,12 +426,12 @@ export async function executeEffectManager(options = {}) {
                 <input type="hidden" id="std-effect" value="Bolster">
                 <div id="std-effect-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
                      ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(s => {
-                        const label = game.i18n.localize(s.name);
-                        return `
+        const label = game.i18n.localize(s.name);
+        return `
                         <div class="std-effect-option" data-id="${s.name}" data-name="${label}" data-icon="${s.img || s.icon}" title="${label}" style="cursor:pointer; width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ccc; border-radius:4px; background:#1a1a1a; transition: all 0.2s;">
                             <img src="${s.img || s.icon}" width="28" height="28" style="object-fit: contain; pointer-events:none;" title="${label}">
                         </div>`;
-                     }).join('')}
+    }).join('')}
                 </div>
             </div>
             <div class="form-group">
@@ -635,6 +614,7 @@ export async function executeEffectManager(options = {}) {
                     <option value="stat">Stat</option>
                     <option value="roll">Roll (Acc/Diff)</option>
                     <option value="damage">Damage</option>
+                    <option value="tag">Tag</option>
                 </select>
             </div>
             <div id="bonus-type-stat">
@@ -695,6 +675,27 @@ export async function executeEffectManager(options = {}) {
                 </div>
                 <div style="display:flex; gap:8px; margin-top:6px;">
                     <button type="button" class="te-btn" id="bonus-add-dmg-entry" style="flex:1;"><i class="fas fa-plus"></i> Add Damage Entry</button>
+                </div>
+            </div>
+            <div id="bonus-type-tag" style="display:none;">
+                <div class="form-group">
+                    <label>Tag:</label>
+                    <select id="bonus-tagSelect">
+                        ${availableTags.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="justify-content:center;">
+                    <label>Mode:</label>
+                    <select id="bonus-tagMode" style="flex:0.6;">
+                        <option value="add">Add Value</option>
+                        <option value="override">Override Value</option>
+                    </select>
+                    <label style="margin-left: 10px;">Value:</label>
+                    <input type="number" id="bonus-tagVal" value="1" style="width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                </div>
+                <div class="form-group" style="justify-content:flex-start;">
+                    <label style="width: auto; margin-right: 5px;">Remove Tag instead:</label>
+                    <input type="checkbox" id="bonus-removeTag" style="width: auto;">
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
@@ -891,7 +892,7 @@ export async function executeEffectManager(options = {}) {
                     if (!token)
                         return ui.notifications.error("Target token not found!");
 
-                    await applyFlaggedEffectToTokens({
+                    await applyEffectsToTokens({
                         tokens: [token],
                         effectNames: effectName,
                         note: note,
@@ -951,7 +952,7 @@ export async function executeEffectManager(options = {}) {
                         isCustom: true
                     };
 
-                    await applyFlaggedEffectToTokens({
+                    await applyEffectsToTokens({
                         tokens: [token],
                         effectNames: effectData,
                         note: note,
@@ -1064,6 +1065,12 @@ export async function executeEffectManager(options = {}) {
                         details = `(${statLabel} ${parseInt(b.val) >= 0 ? '+' : ''}${b.val})`;
                     } else if (b.type === 'damage') {
                         details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
+                    } else if (b.type === 'tag') { // Added block
+                        if (b.removeTag) {
+                            details = `(Remove Tag: ${b.tagName})`;
+                        } else {
+                            details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
+                        }
                     }
 
                     let usesInfo = '';
@@ -1104,6 +1111,12 @@ export async function executeEffectManager(options = {}) {
                             details = `(${statLabel} ${parseInt(b.val) >= 0 ? '+' : ''}${b.val})`;
                         } else if (b.type === 'damage') {
                             details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
+                        } else if (b.type === 'tag') { // Added block
+                            if (b.removeTag) {
+                                details = `(Remove Tag: ${b.tagName})`;
+                            } else {
+                                details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
+                            }
                         }
                         const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
                         const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
@@ -1150,6 +1163,7 @@ export async function executeEffectManager(options = {}) {
                 onMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onPreMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onActivation: ['bonus-filter-actionName'],
+                onDeploy: ['bonus-filter-itemLid'],
                 onCheck: ['bonus-filter-check', 'bonus-filter-checkValues']
             };
 
@@ -1257,6 +1271,13 @@ export async function executeEffectManager(options = {}) {
                         val: "1d6",
                         type: "Kinetic"
                     }];
+                } else if (type === 'tag') {
+                    const selectEl = html.find('#bonus-tagSelect')[0];
+                    bonusData.tagId = selectEl.options[selectEl.selectedIndex].value;
+                    bonusData.tagName = selectEl.options[selectEl.selectedIndex].text;
+                    bonusData.tagMode = html.find('#bonus-tagMode').val();
+                    bonusData.val = html.find('#bonus-tagVal').val() || "0";
+                    bonusData.removeTag = html.find('#bonus-removeTag').is(':checked');
                 } else {
                     bonusData.val = html.find('#bonus-accDiffVal').val() || "1";
                 }
@@ -1307,10 +1328,10 @@ export async function executeEffectManager(options = {}) {
             // Bonus type selector - show/hide relevant inputs
             html.find('#bonus-type').on('change', function () {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag').hide();
                 html.find(`#bonus-type-${type}`).show();
 
-                const showItems = type === 'roll' || type === 'damage';
+                const showItems = type === 'roll' || type === 'damage' || type === 'tag';
                 html.find('#bonus-items-row').toggle(showItems);
                 if (showItems) {
                     html.find('#row-bonus-rollTypes-roll').toggle(type === 'roll');
@@ -1375,8 +1396,14 @@ export async function executeEffectManager(options = {}) {
     }, {
         width: 'auto',
         height: 'auto',
-        left: 100
+        left: 100,
+        classes: ['lancer-effect-manager', 'lancer-no-title']
     });
 
     dialog.render(true);
 }
+
+export const EffectManagerAPI = {
+    executeEffectManager,
+    openItemBrowser
+};

@@ -1,6 +1,7 @@
 /*global game, FormApplication, mergeObject, foundry, TextEditor */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
+import { openItemBrowserDialog } from "./misc-tools.js";
 
 const scriptCache = new Map();
 
@@ -303,6 +304,7 @@ export class ReactionConfig extends FormApplication {
         return mergeObject(super.defaultOptions, {
             title: "Activation Manager",
             id: "reaction-manager-config",
+            classes: [...super.defaultOptions.classes, "lancer-no-title"],
             template: `modules/lancer-automations/templates/reaction-config.html`,
             width: 800,
             height: 850,
@@ -1215,6 +1217,7 @@ export class ReactionEditor extends FormApplication {
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
             onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
             onKnockback: "{ triggeringToken, range, pushedActors: [Actor], actionName, item, distanceToTrigger }",
+            onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger }",
             onUpdate: "{ triggeringToken, document, change, options }"
         };
 
@@ -1297,15 +1300,21 @@ export class ReactionEditor extends FormApplication {
         const sourceMatchTriggers = [
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation',
-            'onInitAttack', 'onInitTechAttack', 'onKnockback'
+            'onInitAttack', 'onInitTechAttack', 'onKnockback', 'onDeploy'
         ];
 
         const toggleSourceMatchTriggers = () => {
             const isSourceMatch = onlyOnSourceMatchCheckbox.filter(':checked').length > 0;
+            const isGeneral = generalCheckbox.prop('checked');
 
             triggerCheckboxes.each(function () {
                 const triggerName = $(this).attr('name').replace('trigger.', '');
-                const isCompatible = sourceMatchTriggers.includes(triggerName);
+                let isCompatible = sourceMatchTriggers.includes(triggerName);
+
+                // onDeploy source matching only makes sense for Item reactions, not General
+                if (triggerName === 'onDeploy' && isGeneral) {
+                    isCompatible = false;
+                }
 
                 if (isSourceMatch && !isCompatible) {
                     $(this).prop('disabled', true);
@@ -1628,6 +1637,12 @@ export class ReactionEditor extends FormApplication {
             await this._openActionBrowser(lidInput.val(), pathInput, updatePreview);
         });
 
+        html.find('.find-deployable-btn').on('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            await this._openDeployableBrowser();
+        });
+
         html.find('.expand-editor').on('click', this._onExpandEditor.bind(this));
     }
 
@@ -1760,130 +1775,7 @@ export class ReactionEditor extends FormApplication {
     }
 
     async _openItemBrowser(lidInput, pathInput, updatePreview, previewContainer) {
-        const items = [];
-        const itemTypes = new Set();
-        for (const pack of game.packs) {
-            if (pack.documentName !== "Item")
-                continue;
-            const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
-            for (const entry of index) {
-                if (entry.system?.lid) {
-                    let actionCount = 0;
-                    if (entry.type === "npc_feature") {
-                        if (entry.system?.trigger) {
-                            actionCount++;
-                        }
-                        if (entry.system?.actions) {
-                            actionCount += entry.system.actions.length;
-                        }
-                    } else {
-                        if (entry.system?.ranks) {
-                            entry.system.ranks.forEach(r => actionCount += (r.actions?.length || 0));
-                        }
-                        if (entry.system?.profiles) {
-                            entry.system.profiles.forEach(p => actionCount += (p.actions?.length || 0));
-                        }
-                        if (entry.system?.actions) {
-                            actionCount += entry.system.actions.length;
-                        }
-                    }
-                    // If no sub-actions are found, it defaults to the item itself (1 action)
-                    if (actionCount === 0) {
-                        actionCount = 1;
-                    }
-
-                    items.push({
-                        name: entry.name,
-                        lid: entry.system.lid,
-                        type: entry.type,
-                        uuid: entry.uuid,
-                        actionCount: actionCount
-                    });
-                    itemTypes.add(entry.type);
-                }
-            }
-        }
-
-        items.sort((a, b) => a.name.localeCompare(b.name));
-        const sortedTypes = Array.from(itemTypes).sort();
-
-        const typeOptions = sortedTypes.map(t => `<option value="${t}">${game.i18n.localize(CONFIG.Item.typeLabels[t]) || t}</option>`).join('');
-
-        const itemListHtml = items.map(item => {
-            const countLabel = item.actionCount > 1 ? `<span style="font-size: 0.8em; opacity: 0.7; font-weight: normal;">(${item.actionCount} actions)</span>` : '';
-            return `<div class="lancer-item-card item-browser-entry" data-lid="${item.lid}" data-uuid="${item.uuid}" data-type="${item.type}" style="margin-bottom: 6px; padding: 10px;">
-                <div class="lancer-item-icon"><i class="fas fa-cube"></i></div>
-                <div class="lancer-item-content">
-                    <div class="lancer-item-name">${item.name} ${countLabel}</div>
-                    <div class="lancer-item-details">${item.type} | LID: ${item.lid}</div>
-                </div>
-            </div>`;
-        }).join('');
-
-        const selectedItem = await new Promise((resolve) => {
-            const dialog = new Dialog({
-                title: "Find Item",
-                content: `
-                    <div class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
-                        <h1 class="lancer-dialog-title">Find Item</h1>
-                        <p class="lancer-dialog-subtitle">Search for an item by name or filter by category.</p>
-                    </div>
-                    <div class="lancer-search-container" style="margin-bottom: 8px; display: flex; gap: 6px;">
-                        <div style="flex: 2; position: relative;">
-                            <i class="fas fa-search lancer-search-icon"></i>
-                            <input type="text" id="item-search" placeholder="Search by name..." style="padding-left: 35px;">
-                        </div>
-                        <select id="type-filter" style="flex: 1;">
-                            <option value="">All Types</option>
-                            ${typeOptions}
-                        </select>
-                    </div>
-                    <div id="item-list" style="max-height: 400px; overflow-y: auto; padding: 4px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px;">
-                        ${itemListHtml}
-                    </div>
-                `,
-                buttons: {
-                    cancel: {
-                        label: '<i class="fas fa-times"></i> Cancel',
-                        callback: () => resolve(null)
-                    }
-                },
-                render: (html) => {
-                    const searchInput = html.find('#item-search');
-                    const typeFilter = html.find('#type-filter');
-                    const listContainer = html.find('#item-list');
-
-                    const filterItems = () => {
-                        const query = searchInput.val().toLowerCase();
-                        const type = typeFilter.val();
-                        listContainer.find('.item-browser-entry').each((i, el) => {
-                            const name = $(el).find('.lancer-item-name').text().toLowerCase();
-                            const itemType = $(el).data('type');
-                            const matchesSearch = name.includes(query);
-                            const matchesType = !type || itemType === type;
-                            $(el).toggle(matchesSearch && matchesType);
-                        });
-                    };
-
-                    searchInput.on('input', filterItems);
-                    typeFilter.on('change', filterItems);
-
-                    listContainer.on('click', '.item-browser-entry', (ev) => {
-                        const entry = $(ev.currentTarget);
-                        resolve({
-                            lid: entry.data('lid'),
-                            uuid: entry.data('uuid')
-                        });
-                        dialog.close();
-                    });
-                },
-                default: "cancel"
-            }, {
-                width: 500,
-                classes: ["lancer-dialog-base", "lancer-item-browser-dialog"]
-            });
-            dialog.render(true);
-        });
+        const selectedItem = await openItemBrowserDialog();
 
         if (!selectedItem)
             return;
@@ -2048,7 +1940,7 @@ export class ReactionEditor extends FormApplication {
             "onPreMove", "onMove", "onKnockback",
             "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
             "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
-            "onActivation",
+            "onActivation", "onDeploy",
             "onInitCheck", "onCheck",
             "onStatusApplied", "onStatusRemoved",
             "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
@@ -2170,5 +2062,146 @@ export class ReactionEditor extends FormApplication {
             if (w.id === "reaction-manager-config")
                 w.render();
         });
+    }
+
+    /**
+     * Open a dialog that lets the user browse deployable actors from compendium packs and world.
+     * Each entry shows the actor name, LID, and a copy button.
+     */
+    async _openDeployableBrowser() {
+        const deployables = [];
+        for (const pack of game.packs) {
+            if (pack.documentName !== 'Actor')
+                continue;
+            const index = await pack.getIndex({ fields: ['system.lid', 'type', 'img'] });
+            for (const entry of index) {
+                const lid = entry.system?.lid;
+                if (!lid)
+                    continue;
+                deployables.push({
+                    name: entry.name,
+                    lid,
+                    type: entry.type || 'unknown',
+                    img: entry.img || 'icons/svg/mystery-man.svg',
+                    uuid: entry.uuid,
+                    pack: pack.metadata.label
+                });
+            }
+        }
+
+        for (const actor of game.actors) {
+            const lid = actor.system?.lid;
+            if (lid) {
+                deployables.push({
+                    name: actor.name,
+                    lid,
+                    type: actor.type || 'unknown',
+                    img: actor.img || 'icons/svg/mystery-man.svg',
+                    uuid: actor.uuid,
+                    pack: 'World'
+                });
+            }
+        }
+
+        deployables.sort((a, b) => a.name.localeCompare(b.name));
+        const MAX_RESULTS = 50;
+
+        const buildEntry = (d) => `
+            <div class="deployable-entry" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;transition:background 0.15s;" data-lid="${d.lid}">
+                <img src="${d.img}" style="width:32px;height:32px;border-radius:4px;border:1px solid #ccc;object-fit:cover;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:bold;font-size:0.9em;">${d.name}</div>
+                    <div style="font-size:0.78em;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.type} | <code style="background:rgba(153,30,42,0.08);color:#991e2a;padding:1px 4px;border-radius:3px;font-size:0.9em;">${d.lid}</code> <span style="opacity:0.5;">\u2014 ${d.pack}</span></div>
+                </div>
+                <a class="copy-lid-btn" title="Copy LID" style="color:#991e2a;cursor:pointer;font-size:1.1em;"><i class="fas fa-copy"></i></a>
+            </div>`;
+
+        new Dialog({
+            title: 'Find Deployable',
+            content: `
+                <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                    <h1 class="lancer-dialog-title">Find Deployable</h1>
+                    <p class="lancer-dialog-subtitle">Search for a deployable actor by name or LID. Click <i class="fas fa-copy"></i> to copy.</p>
+                </div>
+                <div style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
+                    <div style="flex:1;position:relative;">
+                        <i class="fas fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#888;"></i>
+                        <input type="text" id="deploy-search" placeholder="Search by name or LID..." style="padding-left:35px;width:100%;">
+                    </div>
+                    <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:0.85em;cursor:pointer;">
+                        <input type="checkbox" id="deploy-show-all"> Show all
+                    </label>
+                </div>
+                <div id="deploy-list" style="height:380px;overflow-y:auto;padding:4px;border:1px solid #ddd;background:#fafafa;border-radius:4px;">
+                    <div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search deployables\u2026</div>
+                </div>
+            `,
+            buttons: {
+                close: { label: '<i class="fas fa-times"></i> Close' }
+            },
+            render: (html) => {
+                const searchInput = html.find('#deploy-search');
+                const showAllCb = html.find('#deploy-show-all');
+                const listContainer = html.find('#deploy-list');
+
+                const updateList = () => {
+                    const query = searchInput.val().toLowerCase().trim();
+                    const showAll = showAllCb.is(':checked');
+
+                    if (!query && !showAll) {
+                        listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search deployables\u2026</div>');
+                        return;
+                    }
+
+                    const matched = deployables.filter(d => {
+                        if (!query)
+                            return true;
+                        return d.name.toLowerCase().includes(query) || d.lid.toLowerCase().includes(query);
+                    });
+
+                    if (matched.length === 0) {
+                        listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No deployables found.</div>');
+                        return;
+                    }
+
+                    const slice = showAll ? matched : matched.slice(0, MAX_RESULTS);
+                    const more = matched.length - slice.length;
+                    let resultHtml = slice.map(buildEntry).join('');
+                    if (more > 0) {
+                        resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more \u2014 keep typing or check 'Show all'</div>`;
+                    }
+                    listContainer.html(resultHtml);
+                };
+
+                let timer;
+                searchInput.on('input', () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(updateList, 200);
+                });
+                showAllCb.on('change', updateList);
+
+                listContainer.on('click', '.copy-lid-btn', async function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const lid = $(this).closest('.deployable-entry').data('lid');
+                    if (lid) {
+                        await navigator.clipboard.writeText(lid);
+                        ui.notifications.info(`Copied LID: ${lid}`);
+                    }
+                });
+
+                listContainer.on('contextmenu', '.deployable-entry', async function (ev) {
+                    ev.preventDefault();
+                    const entry = deployables.find(d => d.lid === $(this).data('lid'));
+                    if (entry) {
+                        const actor = await fromUuid(entry.uuid);
+                        if (actor)
+                            actor.sheet.render(true);
+                    }
+                });
+
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        }, { width: 600, height: 560, classes: ['lancer-reaction-editor', 'lancer-deployable-browser', 'lancer-no-title'] }).render(true);
     }
 }

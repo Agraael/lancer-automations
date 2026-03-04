@@ -1,4 +1,4 @@
-import { applyFlaggedEffectToTokens } from "./flagged-effects.js";
+import { applyEffectsToTokens } from "./flagged-effects.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "./reaction-manager.js";
 
@@ -20,6 +20,53 @@ async function delegateSetActorFlag(actor, ns, key, value) {
     }
 }
 
+
+/**
+ * Mutates state.data.tags based on a tag bonus payload.
+ */
+function applyTagBonus(state, bonus) {
+    if (!state.data)
+        state.data = {};
+    if (!state.data.tags)
+        state.data.tags = [];
+
+    const tagName = bonus.tagName || bonus.name; // In effect manager, we'll store tag id/name
+    const tagId = bonus.tagId;
+    const isRemove = !!bonus.removeTag;
+
+    if (isRemove) {
+        // Filter out tag by LID or ID
+        state.data.tags = state.data.tags.filter(t => t.id !== tagId && t.lid !== tagId);
+        return;
+    }
+
+    // Adding or Overriding
+    const existingIdx = state.data.tags.findIndex(t => t.id === tagId || t.lid === tagId);
+    if (existingIdx !== -1) {
+        // Tag exists. Modify it.
+        const tag = { ...state.data.tags[existingIdx] }; // Clone so we don't mutate the base definition
+        const isOverride = bonus.tagMode === 'override';
+        const val = parseInt(bonus.val) || 0;
+
+        if (isOverride) {
+            tag.val = String(val);
+        } else {
+            // Add
+            const currentVal = parseInt(tag.val) || parseInt(tag.num_val) || 0;
+            tag.val = String(currentVal + val);
+        }
+        state.data.tags[existingIdx] = tag;
+    } else {
+        // Tag does not exist. Push a stub.
+        state.data.tags.push({
+            id: tagId,
+            lid: tagId,
+            val: String(parseInt(bonus.val) || 0),
+            name: tagName,
+            description: `Granted by bonus: ${bonus.name}`
+        });
+    }
+}
 
 /**
  * Creates a generic bonus step for a specific flow type
@@ -60,6 +107,12 @@ function createGenericBonusStep(flowType) {
 
                     if (bonus.type === 'stat')
                         continue;
+
+                    if (bonus.type === 'tag') {
+                        applyTagBonus(state, bonus);
+                        activeBonuses.push(bonus);
+                        continue;
+                    }
 
                     const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
 
@@ -105,6 +158,15 @@ function createGenericBonusStep(flowType) {
                 for (const bonus of ephemeralBonuses) {
                     if (await isBonusApplicable(bonus, tags, state)) {
                         const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+
+                        if (bonus.type === 'tag') {
+                            applyTagBonus(state, bonus);
+                            activeBonuses.push({ ...bonus });
+                            if (bonus.name)
+                                consumedEphemeralNames.push(bonus.name);
+                            ephemeralChanged = true;
+                            continue;
+                        }
 
                         if (bonus.type === 'damage') {
                             if (flowType === 'damage') {
@@ -171,6 +233,12 @@ function createGenericBonusStep(flowType) {
                     if (bonus.type === 'stat')
                         continue;
 
+                    if (bonus.type === 'tag') {
+                        applyTagBonus(state, bonus);
+                        activeBonuses.push(bonus);
+                        continue;
+                    }
+
                     const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
 
                     if (bonus.type === 'damage') {
@@ -224,6 +292,11 @@ function createGenericBonusStep(flowType) {
                     if (bonus.type === 'damage') {
                         if (flowType === 'damage' && isSourceTargeted)
                             targetedDamageBonuses.push(injected);
+                        return;
+                    }
+                    if (bonus.type === 'tag') {
+                        applyTagBonus(state, bonus);
+                        activeBonuses.push(injected);
                         return;
                     }
                     allTargetedBonuses.push(injected);
@@ -1226,6 +1299,111 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
     });
 }
 
+/**
+ * Inject a Knockback checkbox into the damage HUD options grid.
+ * Pre-fills from the weapon's knockback tag if present; otherwise unchecked but visible.
+ * Stores the enabled/value state on state.data._csmKnockback for the knockback damage step.
+ */
+export function injectKnockbackCheckbox(state) {
+    if (!state.data)
+        state.data = {};
+
+    // Read weapon tag to pre-fill
+    const item = state.item;
+    const tags = state.data?.tags || item?.system?.tags || [];
+    const kbTag = tags.find(t => t.id === "knockback" || t.lid === "tg_knockback");
+    const hasTag = !!kbTag;
+    let tagVal = hasTag ? (parseInt(kbTag.val) || parseInt(kbTag.num_val) || 1) : 1;
+
+    // Shared state that the knockbackDamageStep will read
+    state.data._csmKnockback = { enabled: hasTag, value: tagVal };
+
+    const doInject = () => {
+        const $form = $('#damage-hud');
+        if ($form.length === 0)
+            return false;
+
+        const $configGrid = $form.find('.damage-hud-options-grid');
+        if ($configGrid.length === 0)
+            return false;
+
+        // Don't double-inject
+        if ($configGrid.find('.csm-knockback-row').length > 0)
+            return true;
+        const currentAreas = $configGrid.css('grid-template-areas');
+        if (currentAreas && currentAreas.includes('empty')) {
+            $configGrid.css('grid-template-areas', currentAreas.replace('empty', 'knockback'));
+        } else {
+            $configGrid.css('grid-template-areas',
+                '"title title" "ap overkill" "paracausal reliable" "halfdamage knockback"'
+            );
+        }
+
+        const checked = state.data._csmKnockback.enabled;
+        const val = state.data._csmKnockback.value;
+
+        // Build the HTML matching the Reliable checkbox pattern
+        const $row = $(`
+            <div class="csm-knockback-row" style="grid-area: knockback; display: flex; align-items: center; gap: 4px;">
+                <label class="container svelte-wt0sk2" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
+                    <input type="checkbox" class="csm-knockback-checkbox svelte-wt0sk2" ${checked ? 'checked' : ''}>
+                    <i class="mdi mdi-arrow-expand-all i--s svelte-wt0sk2"></i>
+                    <span style="text-wrap: nowrap;">Knockback</span>
+                </label>
+                <input class="csm-knockback-value reliable-value svelte-1tnd08e"
+                       type="number" value="${val}" min="1"
+                       style="width: 3em; ${checked ? '' : 'display:none;'}">
+            </div>
+        `);
+
+        $configGrid.append($row);
+
+        // Bind checkbox toggle
+        $row.find('.csm-knockback-checkbox').on('change', function () {
+            const isChecked = $(this).is(':checked');
+            state.data._csmKnockback.enabled = isChecked;
+            $row.find('.csm-knockback-value').toggle(isChecked);
+        });
+
+        // Bind value input
+        $row.find('.csm-knockback-value').on('input change', function () {
+            state.data._csmKnockback.value = parseInt($(this).val()) || 1;
+        });
+
+        return true;
+    };
+
+    // Try immediately
+    doInject();
+
+    // MutationObserver to re-inject on Svelte re-renders
+    let reinjectPending = false;
+    const observer = new MutationObserver(() => {
+        const $form = $('#damage-hud');
+        if ($form.length === 0) {
+            observer.disconnect();
+            return;
+        }
+        if ($form.find('.csm-knockback-row').length === 0 && !reinjectPending) {
+            reinjectPending = true;
+            setTimeout(() => {
+                doInject();
+                reinjectPending = false;
+            }, 50);
+        }
+    });
+
+    const $hudzone = $('#hudzone');
+    if ($hudzone.length > 0) {
+        observer.observe($hudzone[0], { childList: true, subtree: true });
+    } else {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Safety disconnect after 10 minutes
+    setTimeout(() => observer.disconnect(), 600000);
+}
+
 export const genericAccuracyStepAttack = createGenericBonusStep("attack");
 export const genericAccuracyStepTechAttack = createGenericBonusStep("tech_attack");
 export const genericAccuracyStepWeaponAttack = createGenericBonusStep("weapon_attack");
@@ -1327,7 +1505,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 }
             }
 
-            await applyFlaggedEffectToTokens(
+            await applyEffectsToTokens(
                 {
                     tokens: [token],
                     effectNames: {
@@ -1520,3 +1698,14 @@ export async function removeConstantBonus(actor, bonusId) {
 export function executeGenericBonusMenu() {
     executeEffectManager({ initialTab: 'bonus' });
 }
+
+export const BonusesAPI = {
+    addGlobalBonus,
+    removeGlobalBonus,
+    getGlobalBonuses,
+    addConstantBonus,
+    removeConstantBonus,
+    getConstantBonuses,
+    executeGenericBonusMenu,
+    injectBonusToNextRoll
+};

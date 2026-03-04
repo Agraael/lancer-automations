@@ -482,8 +482,8 @@ export function canEngage(token1, token2) {
         if (statusName === "hidden" && token.document.hidden)
             return true;
 
-        if (api && api.findFlaggedEffectOnToken) {
-            if (api.findFlaggedEffectOnToken(token, statusName))
+        if (api && api.findEffectOnToken) {
+            if (api.findEffectOnToken(token, statusName))
                 return true;
         }
 
@@ -513,7 +513,7 @@ export async function updateAllEngagements() {
 
     // Check who is currently flagged as engaged
     const currentlyEngaged = new Set(
-        allTokens.filter(t => !!api.findFlaggedEffectOnToken(t, "lancer.statusIconsNames.engaged")).map(t => t.id)
+        allTokens.filter(t => !!api.findEffectOnToken(t, "lancer.statusIconsNames.engaged")).map(t => t.id)
     );
 
     const shouldBeEngaged = new Set();
@@ -541,14 +541,14 @@ export async function updateAllEngagements() {
         const needsStatus = shouldBeEngaged.has(token.id);
 
         if (needsStatus && !hasStatus) {
-            await api.applyFlaggedEffectToTokens({
+            await api.applyEffectsToTokens({
                 tokens: [token],
                 effectNames: ["lancer.statusIconsNames.engaged"],
                 notify: false,
                 useTokenAsOrigin: false
             });
         } else if (!needsStatus && hasStatus) {
-            await api.removeFlaggedEffectToTokens({
+            await api.removeEffectsByNameFromTokens({
                 tokens: [token],
                 effectNames: ["lancer.statusIconsNames.engaged"],
                 notify: false
@@ -556,3 +556,16 @@ export async function updateAllEngagements() {
         }
     }
 }
+
+export const OverwatchAPI = {
+    drawThreatDebug,
+    drawDistanceDebug,
+    getTokenDistance,
+    checkOverwatchCondition,
+    isHostile,
+    isFriendly,
+    getActorMaxThreat,
+    getMinGridDistance,
+    canEngage,
+    updateAllEngagements
+};

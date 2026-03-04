@@ -58,7 +58,7 @@
 
     <!-- Item Preview (dynamically updated) -->
     <div class="form-group item-only item-preview-container"
-        style="{{#if isGeneral}}display:none{{/if}}; background: rgba(0,150,0,0.1); padding: 4px 10px; border-radius: 4px; margin-bottom: 8px;">
+        style="{{#if isGeneral}}display:none{{/if}}; background: rgba(0,150,0,0.1); padding: 4px 10px; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
         <span style="font-size: 0.85em;">
             <span id="preview-item-name">{{#if foundItemName}}<strong>Item:</strong> {{foundItemName}}{{else}}<em>No
                     item found</em>{{/if}}</span>
@@ -73,6 +73,10 @@
             <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #991e2a; cursor: pointer;"><i
                     class="fas fa-search"></i></a>
         </span>
+        <a class="find-deployable-btn" title="Find Deployable LID"
+            style="color: #991e2a; cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
+            <i class="fas fa-rocket"></i> Deployable Finder
+        </a>
     </div>
 
     <!-- Action Path (Item-based only) -->

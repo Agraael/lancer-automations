@@ -2,7 +2,7 @@
 
 I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) (and borrows some of its code).
 
-So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. For now both modules work side by side, but some features do overlap.
+So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. some feature  might not work together or be duplicated.
 
 ## Installation
 
@@ -27,8 +27,9 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Gives you syntax highlighting in the evaluate/activation code editors |
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Allow scripting on measurement templates, i have added tools for Dangerous Zone and Area of Effect |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
-| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) | Required for the experimental boost detection feature (you can also try [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)|
+| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) | Required for the experimental boost detection feature (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)|
 | [Token Factions](https://github.com/Agraael/token-factions) | My Fork of the original module containing a multi-team disposition filtering system |
+| [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required createAura and deleteAuras functions |
 
 ## How It Works
 

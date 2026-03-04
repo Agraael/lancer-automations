@@ -211,14 +211,18 @@ export async function performSystemScan(target, createJournal = false, customNam
                 coreBonuses.forEach(cb => {
                     let cb_name = cb.name;
                     let cb_desc = "";
-                    if (cb.system.effect) cb_desc += `<strong>Effect:</strong> ${cb.system.effect}<br>`;
-                    if (cb.system.description) cb_desc += cb.system.description;
-                    if (!cb_desc.startsWith("<p>") && !cb_desc.startsWith("<P>")) cb_desc = `<p>${cb_desc}</p>`;
+                    if (cb.system.effect)
+                        cb_desc += `<strong>Effect:</strong> ${cb.system.effect}<br>`;
+                    if (cb.system.description)
+                        cb_desc += cb.system.description;
+                    if (!cb_desc.startsWith("<p>") && !cb_desc.startsWith("<P>"))
+                        cb_desc = `<p>${cb_desc}</p>`;
                     sc_core_bonuses += `<details><summary>${cb_name}</summary>${cb_desc}</details>`;
                 });
             }
         }
-        if (!sc_core_bonuses) sc_core_bonuses = "<p>NONE</p>";
+        if (!sc_core_bonuses)
+            sc_core_bonuses = "<p>NONE</p>";
 
         if (frameData && frameData.system.traits && frameData.system.traits.length > 0) {
             frameData.system.traits.forEach(trait => {
@@ -227,16 +231,21 @@ export async function performSystemScan(target, createJournal = false, customNam
                 if (trait.actions && trait.actions.length > 0) {
                     trait.actions.forEach(action => {
                         trait_desc += `<br><br><strong>${action.name}</strong>`;
-                        if (action.activation) trait_desc += ` (${action.activation})`;
-                        if (action.trigger) trait_desc += `<br><em>Trigger:</em> ${action.trigger}`;
-                        if (action.detail) trait_desc += `<br>${action.detail}`;
+                        if (action.activation)
+                            trait_desc += ` (${action.activation})`;
+                        if (action.trigger)
+                            trait_desc += `<br><em>Trigger:</em> ${action.trigger}`;
+                        if (action.detail)
+                            trait_desc += `<br>${action.detail}`;
                     });
                 }
-                if (!trait_desc.startsWith("<p>") && !trait_desc.startsWith("<P>")) trait_desc = `<p>${trait_desc}</p>`;
+                if (!trait_desc.startsWith("<p>") && !trait_desc.startsWith("<P>"))
+                    trait_desc = `<p>${trait_desc}</p>`;
                 sc_traits += `<details><summary>${trait_name}</summary>${trait_desc}</details>`;
             });
         }
-        if (!sc_traits) sc_traits = "<p>NONE</p>";
+        if (!sc_traits)
+            sc_traits = "<p>NONE</p>";
 
         if (actor.system.loadout.weapon_mounts && actor.system.loadout.weapon_mounts.length > 0) {
             actor.system.loadout.weapon_mounts.forEach(mount => {
@@ -248,23 +257,30 @@ export async function performSystemScan(target, createJournal = false, customNam
                             let wpn_name = weaponData.name;
                             let wpn_details = "";
                             let ranges = "";
-                            if (profile.range && profile.range.length > 0) ranges = profile.range.map(r => `${r.type} ${r.val}`).join(", ");
-                            if (ranges) wpn_details += `<strong>Range:</strong> ${ranges}<br>`;
+                            if (profile.range && profile.range.length > 0)
+                                ranges = profile.range.map(r => `${r.type} ${r.val}`).join(", ");
+                            if (ranges)
+                                wpn_details += `<strong>Range:</strong> ${ranges}<br>`;
                             let damages = "";
-                            if (profile.damage && profile.damage.length > 0) damages = profile.damage.map(d => `${d.val} ${d.type}`).join(", ");
-                            if (damages) wpn_details += `<strong>Damage:</strong> ${damages}<br>`;
+                            if (profile.damage && profile.damage.length > 0)
+                                damages = profile.damage.map(d => `${d.val} ${d.type}`).join(", ");
+                            if (damages)
+                                wpn_details += `<strong>Damage:</strong> ${damages}<br>`;
                             if (profile.tags && profile.tags.length > 0) {
                                 const tagStr = profile.tags.map(t => t.val ? `${t.lid.replace('tg_', '')} ${t.val}` : t.lid.replace('tg_', '')).join(", ");
                                 wpn_details += `<strong>Tags:</strong> ${tagStr}<br>`;
                             }
-                            if (profile.effect) wpn_details += `<strong>Effect:</strong> ${profile.effect}`;
-                            if (!wpn_details.startsWith("<p>") && !wpn_details.startsWith("<P>")) wpn_details = `<p>${wpn_details}</p>`;
+                            if (profile.effect)
+                                wpn_details += `<strong>Effect:</strong> ${profile.effect}`;
+                            if (!wpn_details.startsWith("<p>") && !wpn_details.startsWith("<P>"))
+                                wpn_details = `<p>${wpn_details}</p>`;
                             sc_weapons += `<details><summary>${wpn_name}</summary>${wpn_details}</details>`;
 
                             if (slot.mod && slot.mod.value) {
                                 const modData = slot.mod.value;
                                 let mod_details = "";
-                                if (modData.system.effect) mod_details += `${modData.system.effect}<br>`;
+                                if (modData.system.effect)
+                                    mod_details += `${modData.system.effect}<br>`;
                                 if (modData.system.added_tags && modData.system.added_tags.length > 0) {
                                     const addedTagStr = modData.system.added_tags.map(t => t.val ? `${t.lid.replace('tg_', '')} ${t.val}` : t.lid.replace('tg_', '')).join(", ");
                                     mod_details += `<strong>Added Tags:</strong> ${addedTagStr}<br>`;
@@ -272,11 +288,13 @@ export async function performSystemScan(target, createJournal = false, customNam
                                 if (modData.system.actions && modData.system.actions.length > 0) {
                                     modData.system.actions.forEach(action => {
                                         mod_details += `<strong>${action.name}</strong> (${action.activation})`;
-                                        if (action.detail) mod_details += `: ${action.detail}`;
+                                        if (action.detail)
+                                            mod_details += `: ${action.detail}`;
                                         mod_details += `<br>`;
                                     });
                                 }
-                                if (!mod_details.startsWith("<p>") && !mod_details.startsWith("<P>")) mod_details = `<p>${mod_details}</p>`;
+                                if (!mod_details.startsWith("<p>") && !mod_details.startsWith("<P>"))
+                                    mod_details = `<p>${mod_details}</p>`;
                                 sc_weapons += `<details><summary>↳ MOD: ${modData.name}</summary>${mod_details}</details>`;
                             }
                         }
@@ -284,7 +302,8 @@ export async function performSystemScan(target, createJournal = false, customNam
                 });
             });
         }
-        if (!sc_weapons) sc_weapons = "<p>NONE</p>";
+        if (!sc_weapons)
+            sc_weapons = "<p>NONE</p>";
 
         if (actor.system.loadout.systems && actor.system.loadout.systems.length > 0) {
             actor.system.loadout.systems.forEach(sysObj => {
@@ -294,10 +313,12 @@ export async function performSystemScan(target, createJournal = false, customNam
                     let sys_desc = sysData.system.effect || "No description given.";
                     if (sysData.system.actions && sysData.system.actions.length > 0) {
                         sysData.system.actions.forEach(action => {
-                            if (action.detail) sys_desc += `<br><strong>${action.name}:</strong> ${action.detail}`;
+                            if (action.detail)
+                                sys_desc += `<br><strong>${action.name}:</strong> ${action.detail}`;
                         });
                     }
-                    if (!sys_desc.startsWith("<p>") && !sys_desc.startsWith("<P>")) sys_desc = `<p>${sys_desc}</p>`;
+                    if (!sys_desc.startsWith("<p>") && !sys_desc.startsWith("<P>"))
+                        sys_desc = `<p>${sys_desc}</p>`;
                     sc_list += `<details><summary>${sys_name}</summary>${sys_desc}</details>`;
                 }
             });
@@ -322,7 +343,8 @@ export async function performSystemScan(target, createJournal = false, customNam
             let sc_origins = [];
             features.forEach(f => {
                 let origin = f.system.origin.name;
-                if (!sc_origins.includes(origin)) sc_origins.push(origin);
+                if (!sc_origins.includes(origin))
+                    sc_origins.push(origin);
             });
             sc_origins.forEach(origin => {
                 sc_list += construct_features(features, origin);
@@ -343,9 +365,12 @@ export async function performSystemScan(target, createJournal = false, customNam
             content += `<h3>Class: ${sc_class}, Tier ${sc_tier}</h3>`;
         }
         content += hase_table_html + stat_table_html;
-        if (sc_templates) content += `<h3>Templates:</h3>` + sc_templates;
-        if (sc_traits) content += `<h3>Frame Traits:</h3>` + sc_traits;
-        if (sc_core_bonuses) content += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
+        if (sc_templates)
+            content += `<h3>Templates:</h3>` + sc_templates;
+        if (sc_traits)
+            content += `<h3>Frame Traits:</h3>` + sc_traits;
+        if (sc_core_bonuses)
+            content += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
         content += `<h3>Weapons:</h3>` + sc_weapons;
         content += `<h3>Systems:</h3>` + sc_list;
 
@@ -405,9 +430,12 @@ async function createScanJournalEntry(target, actor, hase_table_html, stat_table
     }
     scanContent += hase_table_with_image + stat_table_html;
     scanContent += `</div><div style="color: #000000; width: 100%; float: right; text-align: left;">`;
-    if (sc_templates) scanContent += `<h3>Templates:</h3>` + sc_templates;
-    if (sc_traits) scanContent += `<h3>Frame Traits:</h3>` + sc_traits;
-    if (sc_core_bonuses) scanContent += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
+    if (sc_templates)
+        scanContent += `<h3>Templates:</h3>` + sc_templates;
+    if (sc_traits)
+        scanContent += `<h3>Frame Traits:</h3>` + sc_traits;
+    if (sc_core_bonuses)
+        scanContent += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
     scanContent += `<h3>Weapons:</h3>` + sc_weapons;
     scanContent += `<h3>Systems:</h3>` + sc_list;
     scanContent += `</div>`;
@@ -523,7 +551,8 @@ function showSystemScanDialog(targets) {
                             game.socket.emit("module.lancer-automations", {
                                 action: "scanSystemJournalRequest",
                                 payload: {
-                                    targetId: target.id, targetName: target.name,
+                                    targetId: target.id,
+                                    targetName: target.name,
                                     customName: customName,
                                     requestingUserId: game.user.id,
                                     requestingUserName: game.user.name
@@ -574,7 +603,8 @@ function showSystemScanDialog(targets) {
  */
 export async function executeScanOnActivation(reactorToken) {
     const targets = Array.from(game.user.targets);
-    if (!targets.length) return;
+    if (!targets.length)
+        return;
 
     const targetNames = targets.map(t => t.name).join(', ');
 
@@ -654,3 +684,7 @@ export async function executeScanOnActivation(reactorToken) {
         default: "scan"
     }, { classes: ["lancer-dialog-base"], width: 500 }).render(true);
 }
+
+export const ScanAPI = {
+    executeScanOnActivation
+};

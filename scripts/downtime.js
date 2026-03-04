@@ -747,3 +747,7 @@ export async function executeDowntime() {
         default: "submit"
     }, { width: 500, height: "auto" }).render(true);
 }
+
+export const DowntimeAPI = {
+    executeDowntime
+};

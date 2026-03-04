@@ -98,7 +98,7 @@ async function dispatchNotifications() {
     }
 }
 
-export function pushFlaggedEffect(targetID, effect, duration, note, originID) {
+export function pushEffect(targetID, effect, duration, note, originID) {
     if (game.users.filter(x => x.role === 4 && x.active).length < 1) {
         log('There is no active GM.');
         return ui.notifications.error('There must be an active GM for this to work.');
@@ -106,11 +106,11 @@ export function pushFlaggedEffect(targetID, effect, duration, note, originID) {
     if (game.user.isGM) {
         // You are a GM, let's just set it.
         log(`Local setFlaggedEffect ${effect}`);
-        setFlaggedEffect(targetID, effect, duration, note, originID);
+        setEffect(targetID, effect, duration, note, originID);
     } else {
         // You are a user, ask a GM to do it.
         log(`Pushing setFlaggedEffect ${effect}`);
-        game.socket.emit('module.lancer-automations', { action: "setFlaggedEffect", payload: { targetID, effect, duration, note, originID } });
+        game.socket.emit('module.lancer-automations', { action: "setEffect", payload: { targetID, effect, duration, note, originID } });
     }
 }
 
@@ -130,8 +130,8 @@ function _sameIdentity(extraOptions, existingEffect) {
     return identityKeys.every(k => storedFlags[k] === extraOptions[k]);
 }
 
-export async function setFlaggedEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}) {
-    log('**setFlaggedEffect**');
+export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}) {
+    log('**setEffect**');
     const target = canvas.tokens.placeables.find(x => x.id === targetID);
     if (!target)
         return;
@@ -395,8 +395,8 @@ export async function setFlaggedEffect(targetID, effectOrData, duration, note, o
     }
 }
 
-export async function removeFlaggedEffect(targetID, effectName, originID = null, extraFlags = null) {
-    log('**removeFlaggedEffect**');
+export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null) {
+    log('**removeEffectsByName**');
     const target = canvas.tokens.placeables.find(x => x.id === targetID);
     if (!target)
         return;
@@ -441,7 +441,6 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null,
         await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(e => e.id));
     }
 }
-
 /**
  * Apply flagged effect(s) to a list of tokens with combat tracking
  * @param {Object} options - Configuration options
@@ -455,7 +454,7 @@ export async function removeFlaggedEffect(targetID, effectName, originID = null,
  * @param {Object} [options.notify] - Optional notification options
  * @returns {Array} Array of valid tokens that received the effect(s)
  */
-export async function applyFlaggedEffectToTokens(options = {notify: true}, extraOptions = {}) {
+export async function applyEffectsToTokens(options = {notify: true}, extraOptions = {}) {
     const {
         tokens,
         effectNames,
@@ -545,6 +544,16 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
                     return _sameIdentity(extraOptions, e);
                 });
 
+                // If the found effect is unflagged (player-added) but the new application carries
+                // managed settings (duration or explicit origin), they are distinct — allow the new one.
+                if (existingEffect &&
+                    !existingEffect.flags?.['lancer-automations']?.effect &&
+                    !existingEffect.flags?.['temporary-custom-statuses']?.originalName &&
+                    !existingEffect.flags?.['csm-lancer-qol']?.effect &&
+                    (duration?.label || customOriginId)) {
+                    existingEffect = null;
+                }
+
                 // If it exists, check if stacking is allowed
                 if (existingEffect) {
                     const allowStack = extraOptions?.allowStack;
@@ -589,11 +598,11 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
         for (const effect of effectsToApplyToToken) {
             if (game.user.isGM) {
                 // GM applies directly
-                setFlaggedEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
+                setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
             } else {
                 // Non-GM uses socket
                 game.socket.emit('module.lancer-automations', {
-                    action: "setFlaggedEffect",
+                    action: "setEffect",
                     payload: { targetID: tokenID, effect: effect, duration: adjustedDuration, note, originID, extraOptions }
                 });
             }
@@ -618,7 +627,7 @@ export async function applyFlaggedEffectToTokens(options = {notify: true}, extra
  * @param {Object} [options.notify] - Optional notification options
  * @returns {Array} Array of tokens processed
  */
-export async function removeFlaggedEffectToTokens(options = {notify: true}) {
+export async function removeEffectsByNameFromTokens(options = {notify: true}) {
     const {
         tokens,
         effectNames,
@@ -667,15 +676,15 @@ export async function removeFlaggedEffectToTokens(options = {notify: true}) {
             }
 
             if (options.notify) {
-                const existing = findFlaggedEffectOnToken(token, effectNameVal);
+                const existing = findEffectOnToken(token, effectNameVal);
                 icon = existing?.img || existing?.icon || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
             if (game.user.isGM) {
-                removeFlaggedEffect(tokenID, effectNameVal, originId, extraFlags);
+                removeEffectsByName(tokenID, effectNameVal, originId, extraFlags);
             } else {
                 game.socket.emit('module.lancer-automations', {
-                    action: "removeFlaggedEffect",
+                    action: "removeEffect",
                     payload: { targetID: tokenID, effect: effectNameVal, originID: originId, extraFlags }
                 });
             }
@@ -694,7 +703,7 @@ export async function removeFlaggedEffectToTokens(options = {notify: true}) {
  * @param {string|Function} identifier - Effect name (string) or predicate function (e => boolean)
  * @returns {ActiveEffect|undefined} The found effect or undefined
  */
-export function findFlaggedEffectOnToken(token, identifier) {
+export function findEffectOnToken(token, identifier) {
     const actor = token?.actor;
     if (!actor)
         return undefined;
@@ -932,7 +941,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
  * @param {Item|string} source - The item or text describing the source of immunity
  * @param {boolean} [notify=true] - Whether to show a chat notification
  */
-export async function triggerFlaggedEffectImmunity(token, effectNames, source = "", notify = true) {
+export async function triggerEffectImmunity(token, effectNames, source = "", notify = true) {
     const actor = token?.actor;
     if (!actor)
         return;
@@ -961,7 +970,7 @@ export async function triggerFlaggedEffectImmunity(token, effectNames, source = 
             prefixText: 'Immunity to'
         } : false;
 
-        await removeFlaggedEffectToTokens({
+        await removeEffectsByNameFromTokens({
             tokens: [token],
             effectNames: targets,
             notify: notifyOptions
@@ -974,32 +983,21 @@ export async function triggerFlaggedEffectImmunity(token, effectNames, source = 
  * @param {Array<Token|TokenDocument>} tokens - List of tokens to process
  * @param {boolean} [allEffects=false] - If true, removes ALL effects instead of just flagged ones.
  */
-export async function executeDeleteAllFlaggedEffect(tokens, allEffects = false) {
+export async function deleteAllEffects(tokens) {
     if (!tokens || tokens.length === 0) {
         return ui.notifications.error('No tokens provided for effect removal!');
     }
 
-    ui.notifications.info(`Removing ${allEffects ? 'ALL' : 'flagged'} effects from ${tokens.length} tokens...`);
+    ui.notifications.info(`Removing all effects from ${tokens.length} tokens...`);
 
     for (const token of tokens) {
         if (!token.actor)
             continue;
 
-        let effectsToDelete;
-        if (allEffects) {
-            effectsToDelete = token.actor.effects;
-        } else {
-            effectsToDelete = token.actor.effects.filter(e =>
-                e.getFlag('lancer-automations', 'effect') ||
-                e.getFlag('temporary-custom-statuses', 'originalName') ||
-                e.getFlag('csm-lancer-qol', 'effect')
-            );
-        }
-
-        const ids = effectsToDelete.map(e => e.id.toString());
+        const ids = token.actor.effects.map(e => e.id.toString());
         if (ids.length > 0) {
             await token.actor.deleteEmbeddedDocuments("ActiveEffect", ids);
-            log(`Removed ${ids.length} ${allEffects ? '' : 'flagged '}effects from ${token.name}`);
+            log(`Removed ${ids.length} effects from ${token.name}`);
         }
     }
 }
@@ -1051,13 +1049,18 @@ function _collapseRemoveDuplicates(token) {
             spriteMap.set(temporaryEffects[zIdx].id, child);
     }
 
+    // Collect names managed by lancer-automations so we can include HUD effects with the same name.
+    const managedNames = new Set(
+        temporaryEffects.filter(e => e.flags?.['lancer-automations'] && e.name).map(e => e.name)
+    );
+
     // Walk effects in order; keep the first sprite for each name, destroy the rest.
     const seenPrimary = new Set();
     for (const e of temporaryEffects) {
-        if (!e.flags?.['lancer-automations'] || !spriteMap.has(e.id))
+        if (!spriteMap.has(e.id))
             continue;
         const name = e.name;
-        if (!name)
+        if (!name || !managedNames.has(name))
             continue;
         if (seenPrimary.has(name)) {
             const sprite = spriteMap.get(e.id);
@@ -1096,13 +1099,15 @@ function _collapseAddBadges(token) {
             spriteMap.set(temporaryEffects[zIdx].id, child);
     }
 
-    // Count ALL lancer-automations effects by name (including those whose sprites were removed).
+    // Collect names managed by lancer-automations, then count ALL effects (flagged or HUD) sharing those names.
+    const managedNames = new Set(
+        temporaryEffects.filter(e => e.flags?.['lancer-automations'] && e.name).map(e => e.name)
+    );
+
     const effectCountByName = new Map();
     for (const e of temporaryEffects) {
-        if (!e.flags?.['lancer-automations'])
-            continue;
         const name = e.name;
-        if (!name)
+        if (!name || !managedNames.has(name))
             continue;
         effectCountByName.set(name, (effectCountByName.get(name) ?? 0) + 1);
     }
@@ -1114,8 +1119,7 @@ function _collapseAddBadges(token) {
         if (count <= 1)
             continue;
         // Find the first effect with this name that still has a sprite (the primary).
-        const primaryEffect = temporaryEffects.find(e =>
-            e.flags?.['lancer-automations'] && e.name === name && spriteMap.has(e.id));
+        const primaryEffect = temporaryEffects.find(e => e.name === name && spriteMap.has(e.id));
         if (!primaryEffect)
             continue;
         const sprite = spriteMap.get(primaryEffect.id);
@@ -1151,3 +1155,119 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count) {
     text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
     token.effectCounters.addChild(text);
 }
+
+/**
+ * Get all flagged effects on a token or actor.
+ * Flagged effects are those managed by lancer-automations, temporary-custom-statuses, or csm-lancer-qol.
+ * @param {Token|TokenDocument|Actor} target - The target to search effects on
+ * @returns {Array<ActiveEffect>} Array of flagged effects
+ */
+export function getAllEffects(target) {
+    const actor = target?.actor || (target instanceof Actor ? target : target); // Simple normalization
+    if (!actor || !actor.effects)
+        return [];
+
+    return [...actor.effects];
+}
+
+/**
+ * Delete a specific active effect from a token by ID, with GM socket routing for non-GM users.
+ * @param {Token|TokenDocument|string} token - The token (or its ID) that owns the effect
+ * @param {ActiveEffect|string} effect - The effect (or its ID) to delete
+ */
+export function deleteEffect(token, effect) {
+    const tokenID = token?.id ?? token;
+    const effectID = effect?.id ?? effect;
+    if (game.user.isGM) {
+        const target = canvas.tokens.get(tokenID);
+        if (target?.actor) {
+            target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
+        }
+    } else {
+        game.socket.emit('module.lancer-automations', {
+            action: "removeEffect",
+            payload: { targetID: tokenID, effectID }
+        });
+    }
+}
+
+// --- Deprecation Layer ---
+
+/** @deprecated use pushEffect */
+export function pushFlaggedEffect(...args) {
+    console.warn("lancer-automations | pushFlaggedEffect is deprecated, use pushEffect instead");
+    return pushEffect(...args);
+}
+
+/** @deprecated use setEffect */
+export function setFlaggedEffect(...args) {
+    console.warn("lancer-automations | setFlaggedEffect is deprecated, use setEffect instead");
+    return setEffect(...args);
+}
+
+/** @deprecated use applyEffectsToTokens */
+export function applyFlaggedEffectToTokens(...args) {
+    console.warn("lancer-automations | applyFlaggedEffectToTokens is deprecated, use applyEffectsToTokens instead");
+    return applyEffectsToTokens(...args);
+}
+
+/** @deprecated use removeEffectsByNameFromTokens */
+export function removeFlaggedEffectFromTokens(...args) {
+    console.warn("lancer-automations | removeFlaggedEffectFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
+    return removeEffectsByNameFromTokens(...args);
+}
+
+/** @deprecated use removeEffectsByNameFromTokens */
+export function removeEffectsFromTokens(...args) {
+    console.warn("lancer-automations | removeEffectsFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
+    return removeEffectsByNameFromTokens(...args);
+}
+
+/** @deprecated use findEffectOnToken */
+export function findFlaggedEffectOnToken(...args) {
+    console.warn("lancer-automations | findFlaggedEffectOnToken is deprecated, use findEffectOnToken instead");
+    return findEffectOnToken(...args);
+}
+
+/** @deprecated use triggerEffectImmunity */
+export function triggerFlaggedEffectImmunity(...args) {
+    console.warn("lancer-automations | triggerFlaggedEffectImmunity is deprecated, use triggerEffectImmunity instead");
+    return triggerEffectImmunity(...args);
+}
+
+/** @deprecated use deleteAllEffects */
+export function executeDeleteAllFlaggedEffect(...args) {
+    console.warn("lancer-automations | executeDeleteAllFlaggedEffect is deprecated, use deleteAllEffects instead");
+    return deleteAllEffects(...args);
+}
+
+/** @deprecated use getAllEffects */
+export function getAllFlaggedEffects(...args) {
+    console.warn("lancer-automations | getAllFlaggedEffects is deprecated, use getAllEffects instead");
+    return getAllEffects(...args);
+}
+
+
+export const EffectsAPI = {
+    applyEffectsToTokens,
+    removeEffectsByNameFromTokens,
+    findEffectOnToken,
+    getAllEffects,
+    deleteEffect,
+    consumeEffectCharge,
+    processDurationEffects,
+    deleteAllEffects,
+    triggerEffectImmunity,
+    // Deprecated
+    pushFlaggedEffect,
+    setFlaggedEffect,
+    applyFlaggedEffectToTokens,
+    removeFlaggedEffectFromTokens,
+    removeEffectsFromTokens,
+    findFlaggedEffectOnToken,
+    triggerFlaggedEffectImmunity,
+    executeDeleteAllFlaggedEffect,
+    getAllFlaggedEffects,
+    pushEffect,
+    setEffect
+};

@@ -235,7 +235,11 @@ function _createInfoCard(type, opts) {
                 <!-- Populated dynamically -->
             </div>`;
     } else if (type === "placeToken") {
+        const selectorHtml = opts.isMultiActor ? `
+            <h3 class="la-section-header lancer-border-primary">Select Actor</h3>
+            <div class="la-actor-selector" data-role="actor-selector" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px;"></div>` : '';
         dynamicHtml = `
+            ${selectorHtml}
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
             <div class="la-placed-tokens" data-role="token-list">
                 <div class="la-empty-state">No tokens placed</div>
@@ -352,6 +356,35 @@ function _updateInfoCard(cardEl, type, data) {
             });
         }
     } else if (type === "placeToken") {
+        // --- Actor selector ---
+        if (data.isMultiActor && data.actorEntries) {
+            const selectorEl = cardEl.find('[data-role="actor-selector"]');
+            selectorEl.empty();
+            data.actorEntries.forEach((entry, idx) => {
+                const isActive = idx === data.activeActorIndex;
+                const borderColor = isActive ? '#ff6400' : '#555';
+                const opacity = isActive ? '1' : '0.6';
+                const imgSrc = entry.texture || entry.actor?.img || '';
+                const imgHtml = imgSrc
+                    ? `<img src="${imgSrc}" style="width:32px; height:32px; object-fit:contain;">`
+                    : `<i class="fas fa-user" style="font-size:20px; color:#ccc;"></i>`;
+                selectorEl.append(`
+                    <div class="la-actor-entry" data-actor-index="${idx}" title="${entry.name}"
+                         style="cursor:pointer; padding:3px; border:2px solid ${borderColor}; border-radius:4px;
+                                background:${isActive ? 'rgba(255,100,0,0.15)' : 'transparent'}; opacity:${opacity};
+                                display:flex; align-items:center; gap:4px; transition:all 0.15s;">
+                        ${imgHtml}
+                        <span style="font-size:0.8em; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;">${entry.name}</span>
+                    </div>`);
+            });
+            selectorEl.find('.la-actor-entry').on('click', function () {
+                const idx = $(this).data('actor-index');
+                if (data.onSelectActor)
+                    data.onSelectActor(idx);
+            });
+        }
+
+        // --- Placements list ---
         const listEl = cardEl.find('[data-role="token-list"]');
         listEl.empty();
 
@@ -359,14 +392,16 @@ function _updateInfoCard(cardEl, type, data) {
             listEl.html('<div class="la-empty-state">No tokens placed</div>');
         } else {
             data.placements.forEach((placement, idx) => {
-                const imgSrc = data.prototypeTexture || "";
+                const entry = data.actorEntries?.[placement.actorIndex ?? 0];
+                const imgSrc = entry?.texture || "";
+                const tokenName = entry?.name || `Token ${idx + 1}`;
                 const imgHtml = imgSrc
                     ? `<img src="${imgSrc}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
                     : `<i class="fas fa-user" style="color:#ff6400; font-size:16px; margin-right:8px;"></i>`;
                 listEl.append(`
                     <div class="la-selected-target" data-placement-index="${idx}">
                         ${imgHtml}
-                        <span class="la-selected-target-name">Token ${idx + 1}</span>
+                        <span class="la-selected-target-name">${tokenName} #${idx + 1}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
                     </div>`);
             });
@@ -390,7 +425,7 @@ function _updateInfoCard(cardEl, type, data) {
 
             let immovableIcon = "";
             const api = game.modules.get('lancer-automations')?.api;
-            if (api?.findFlaggedEffectOnToken(token, "immovable")) {
+            if (api?.findEffectOnToken(token, "immovable")) {
                 immovableIcon = '<i class="cci cci-immovable" title="Immovable" style="color:#ff6400; margin-left: 8px;"></i>';
             }
 
@@ -682,26 +717,19 @@ export function chooseToken(casterToken, options = {}) {
 
         const drawCursorHighlight = (tx, ty) => {
             cursorPreview.clear();
-            let isInRange = true;
-            if (range !== null && casterToken) {
-                const dist = getDistanceTokenToPoint({ x: tx, y: ty }, casterToken);
-                isInRange = dist <= range;
-            }
 
-            let hoveredToken = null;
-            if (isInRange) {
-                hoveredToken = allTokens.find(token => {
-                    const bounds = token.bounds;
-                    if (tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom) {
-                        if (range !== null && casterToken) {
-                            const dist = getMinGridDistance(casterToken, token);
-                            return dist <= range;
-                        }
-                        return true;
+            // Check for a token under cursor first — supports tokens partially overlapping the range
+            let hoveredToken = allTokens.find(token => {
+                const bounds = token.bounds;
+                if (tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom) {
+                    if (range !== null && casterToken) {
+                        const dist = getMinGridDistance(casterToken, token);
+                        return dist <= range;
                     }
-                    return false;
-                }) || null;
-            }
+                    return true;
+                }
+                return false;
+            }) || null;
 
             const hoveringValid = hoveredToken !== null;
             const color = hoveringValid ? 0x0088ff : 0xff0000;
@@ -755,13 +783,6 @@ export function chooseToken(casterToken, options = {}) {
             const t = canvas.stage.worldTransform;
             const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
             const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
-
-            // Check range first
-            if (range !== null && casterToken) {
-                const dist = getDistanceTokenToPoint({ x: tx, y: ty }, casterToken);
-                if (dist > range)
-                    return; // Ignore clicks out of range
-            }
 
             // Find clicked token
             const clickedToken = allTokens.find(token => {
@@ -839,7 +860,24 @@ export function chooseToken(casterToken, options = {}) {
 }
 
 /**
- * Place a Blast zone template on the map using Lancer's WeaponRangeTemplate
+ * Place a template zone on the map using Lancer's WeaponRangeTemplate.
+ * Delegates to templatemacro's `placeZone`, which supports three specialized zone types via options:
+ *
+ * **Dangerous zone** (triggers ENG check on entry/turn start, deals damage on failure):
+ * ```js
+ * placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
+ * ```
+ *
+ * **Status effect zone** (applies active effects to tokens inside):
+ * ```js
+ * placeZone(token, { size: 2, statusEffects: ["impaired", "lockon"] });
+ * ```
+ *
+ * **Difficult terrain zone** (imposes movement penalty via ElevationRuler):
+ * ```js
+ * placeZone(token, { size: 2, difficultTerrain: { movementPenalty: 1, isFlatPenalty: true } });
+ * ```
+ *
  * @param {Token} casterToken - The token placing the zone
  * @param {Object} options - Configuration options
  * @param {number} [options.range] - Maximum range in grid units (null = unlimited)
@@ -848,6 +886,10 @@ export function chooseToken(casterToken, options = {}) {
  * @param {string} [options.fillColor="#ff6400"] - Fill color as hex string
  * @param {string} [options.texture] - Texture file path
  * @param {number} [options.count=1] - Number of zones to place. -1 for infinite.
+ * @param {Object} [options.hooks={}] - templatemacro hooks (created, deleted, entered, left, turnStart, turnEnd, ...)
+ * @param {Object} [options.dangerous] - Shortcut: `{ damageType, damageValue }` — triggers ENG check on entry/turn start
+ * @param {string[]} [options.statusEffects] - Shortcut: array of status effect IDs to apply to tokens inside
+ * @param {Object} [options.difficultTerrain] - Shortcut: `{ movementPenalty, isFlatPenalty }` — sets ElevationRuler movement cost
  * @returns {Promise<Array<{x: number, y: number, template: MeasuredTemplate}>|null>} Zone positions and templates, or null if cancelled
  */
 export function placeZone(casterToken, options = {}) {
@@ -1536,12 +1578,14 @@ export function knockBackToken(tokens, distance, options = {}) {
 /**
  * Interactive tool to place tokens on the map with visual preview.
  * @param {Object} options - Configuration options
- * @param {Actor} [options.actor=null] - The actor to link spawned tokens to
- * @param {Object} options.prototypeToken - Prototype token data (e.g. from actor.prototypeToken.toObject())
+ * @param {Actor|Array<Actor>|Array<{actor:Actor, extraData?:Object}>} [options.actor=null] - The actor(s) to place.
+ *   Single Actor: places that actor's token. Array of Actors or {actor, extraData} objects: shows an actor selector
+ *   in the card, allowing the user to pick which actor to place at each click.
  * @param {number} [options.range=null] - Maximum placement range in grid units (null = unlimited)
- * @param {number} [options.count=1] - Number of tokens to place (-1 for infinite)
- * @param {Object} [options.extraData={}] - Extra data to inject into each spawned token document
- * @param {Token|{x:number,y:number}} [options.origin=null] - Origin point: a Token, or a pixel position (snapped to nearest hex, treated as size 1)
+ * @param {number} [options.count=1] - Total number of tokens to place (-1 for infinite)
+ * @param {Object} [options.extraData={}] - Default overrides for spawned token data (e.g. name, width, height).
+ *   Applied to all actors unless overridden per-entry. Flags are shallow-merged with the actor's prototype token flags.
+ * @param {Token|{x:number,y:number}} [options.origin=null] - Origin point: a Token, or a pixel position
  * @param {Function} [options.onSpawn=null] - Async callback(newTokenDoc, originToken) called after each spawn
  * @param {string} [options.title] - Card title
  * @param {string} [options.description=""] - Card description
@@ -1554,29 +1598,78 @@ export function placeToken(options = {}) {
     const _title = options.title || 'PLACE TOKEN';
     return _queueCard(() => new Promise((resolve) => {
         const {
-            actor = null,
-            prototypeToken,
+            actor: actorInput = null,
             range = null,
             count = 1,
-            extraData = {},
+            extraData: defaultExtraData = {},
             origin = null,
             onSpawn = null,
             title,
             description = "",
             icon,
             headerClass = "",
-            noCard = false
+            noCard = false,
+            disposition = null,
+            team = null
         } = options;
+
+        // --- Normalize actor input into actorEntries ---
+        // Each entry: { actor, extraData, prototypeToken, texture }
+        const actorEntries = [];
+        if (Array.isArray(actorInput)) {
+            for (const item of actorInput) {
+                const a = item.actor || item;
+                const ed = item.extraData || {};
+                const merged = { ...defaultExtraData, ...ed, flags: { ...(defaultExtraData.flags || {}), ...(ed.flags || {}) } };
+                const proto = a.prototypeToken ? a.prototypeToken.toObject() : {};
+                actorEntries.push({
+                    actor: a,
+                    extraData: merged,
+                    prototypeToken: proto,
+                    texture: merged.texture?.src ?? (proto.texture?.src || ""),
+                    width: merged.width ?? proto.width ?? 1,
+                    height: merged.height ?? proto.height ?? 1,
+                    name: merged.name ?? proto.name ?? a.name ?? "Token"
+                });
+            }
+        } else if (actorInput) {
+            const proto = actorInput.prototypeToken ? actorInput.prototypeToken.toObject() : {};
+            actorEntries.push({
+                actor: actorInput,
+                extraData: defaultExtraData,
+                prototypeToken: proto,
+                texture: defaultExtraData.texture?.src ?? (proto.texture?.src || ""),
+                width: defaultExtraData.width ?? proto.width ?? 1,
+                height: defaultExtraData.height ?? proto.height ?? 1,
+                name: defaultExtraData.name ?? proto.name ?? actorInput.name ?? "Token"
+            });
+        } else {
+            // No actor — empty proto
+            actorEntries.push({
+                actor: null,
+                extraData: defaultExtraData,
+                prototypeToken: {},
+                texture: defaultExtraData.texture?.src || "",
+                width: defaultExtraData.width ?? 1,
+                height: defaultExtraData.height ?? 1,
+                name: defaultExtraData.name ?? "Token"
+            });
+        }
+
+        const isMultiActor = actorEntries.length > 1;
+        let activeActorIndex = 0;
+
+        const getActiveEntry = () => actorEntries[activeActorIndex];
 
         const originToken = (origin && origin.document) ? origin : null;
         const originOffset = (!originToken && origin)
             ? pixelToOffset(origin.x, origin.y)
             : null;
 
-        const protoWidth = prototypeToken.width ?? 1;
-        const protoHeight = prototypeToken.height ?? 1;
+        // Use the first entry's dimensions for preview (all entries should be similar size for hex snapping)
+        const protoWidth = getActiveEntry().width;
+        const protoHeight = getActiveEntry().height;
         const gridSize = canvas.grid.size;
-        const protoTexture = prototypeToken.texture?.src || "";
 
         // Reference token with matching dimensions for pixel-perfect hex shapes
         const refToken = (originToken && originToken.document.width === protoWidth && originToken.document.height === protoHeight)
@@ -1646,7 +1739,6 @@ export function placeToken(options = {}) {
             if (range === null || !origin)
                 return true;
             if (originToken) {
-                // Match drawRangeHighlight: min distance from any occupied cell of the origin token
                 const targetCube = offsetToCube(col, row);
                 return getOccupiedOffsets(originToken).some(o =>
                     cubeDistance(offsetToCube(o.col, o.row), targetCube) <= range
@@ -1721,7 +1813,13 @@ export function placeToken(options = {}) {
                 return;
             _updateInfoCard(cardEl, "placeToken", {
                 placements,
-                prototypeTexture: protoTexture,
+                actorEntries,
+                activeActorIndex,
+                isMultiActor,
+                onSelectActor: (idx) => {
+                    activeActorIndex = idx;
+                    refreshCard();
+                },
                 onDeletePlacement: (idx) => {
                     const removed = placements.splice(idx, 1);
                     if (removed[0]?.graphics) {
@@ -1738,15 +1836,26 @@ export function placeToken(options = {}) {
             const spawnedTokens = [];
             const allTokenData = [];
             for (const p of placements) {
+                const entry = actorEntries[p.actorIndex ?? 0];
                 const pos = getSpawnPosition(p.col, p.row);
-                const tokenData = {
-                    ...prototypeToken,
-                    ...extraData,
-                    x: pos.x,
-                    y: pos.y
-                };
-                if (actor)
-                    tokenData.actorId = actor.id;
+                const tokenData = foundry.utils.mergeObject(
+                    foundry.utils.deepClone(entry.prototypeToken || {}),
+                    entry.extraData || {}
+                );
+
+                if (disposition !== null) {
+                    tokenData.disposition = disposition;
+                }
+                if (team !== null) {
+                    tokenData.flags = tokenData.flags || {};
+                    tokenData.flags['token-factions'] = tokenData.flags['token-factions'] || {};
+                    tokenData.flags['token-factions'].team = team;
+                }
+
+                tokenData.x = pos.x;
+                tokenData.y = pos.y;
+                if (entry.actor)
+                    tokenData.actorId = entry.actor.id;
                 allTokenData.push(tokenData);
             }
 
@@ -1771,7 +1880,9 @@ export function placeToken(options = {}) {
                 });
             }
 
-            for (const id of createdIds) {
+            for (let i = 0; i < createdIds.length; i++) {
+                const id = createdIds[i];
+                const entry = actorEntries[placements[i]?.actorIndex ?? 0];
                 const doc = canvas.scene.tokens.get(id);
                 if (doc) {
                     spawnedTokens.push(doc);
@@ -1783,7 +1894,7 @@ export function placeToken(options = {}) {
                                 .effect()
                                 .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
                                 .atLocation(tokenObj)
-                                .scale(protoWidth / 2)
+                                .scale(entry.width / 2)
                                 .play();
                         }
                     }
@@ -1804,6 +1915,7 @@ export function placeToken(options = {}) {
             description,
             range,
             count,
+            isMultiActor,
             onConfirm: doConfirm,
             onCancel: () => {
                 doCleanup();
@@ -1849,17 +1961,16 @@ export function placeToken(options = {}) {
 
             const cursorOffset = snapCursor(tx, ty);
 
-            if (!checkInRange(cursorOffset.col, cursorOffset.row)) {
+            if (!checkInRange(cursorOffset.col, cursorOffset.row))
                 ui.notifications.warn("Target is out of range!");
-                return;
-            }
+
             if (count !== -1 && placements.length >= count) {
                 ui.notifications.warn(`Maximum of ${count} tokens already placed.`);
                 return;
             }
 
             const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row);
-            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics });
+            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics, actorIndex: activeActorIndex });
             refreshCard();
 
             if (noCard && (count === -1 || placements.length >= count)) {
@@ -2222,13 +2333,10 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
     }
 
-    const protoToken = templateActor.prototypeToken.toObject();
-    protoToken.name = weapon.name;
-
     const extraData = {
+        name: weapon.name,
         actorData: { name: `${weapon.name} [${ownerName}]` },
         flags: {
-            ...protoToken.flags,
             'lancer-automations': {
                 thrownWeapon: true,
                 weaponName: weapon.name,
@@ -2240,7 +2348,6 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     };
     const result = await placeToken({
         actor: templateActor,
-        prototypeToken: protoToken,
         range,
         count: 1,
         origin: at || originToken,
@@ -2252,6 +2359,19 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
             await weapon.update({ 'system.disabled': true });
         }
     });
+
+    // Fire onDeploy trigger
+    if (result) {
+        const api = game.modules.get('lancer-automations')?.api;
+        if (api?.handleTrigger) {
+            await api.handleTrigger('onDeploy', {
+                triggeringToken: originToken || ownerActor.getActiveTokens()?.[0] || null,
+                item: weapon,
+                deployedTokens: Array.isArray(result) ? result : [result],
+                deployType: "throw"
+            });
+        }
+    }
 
     return result;
 }
@@ -2336,11 +2456,16 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
         return { deployable: null, source: null };
 
     // First, look in actor folder owned by this actor
-    let deployable = game.actors.contents.find(a =>
-        a.type === 'deployable' &&
-        a.system?.lid === lid &&
-        a.system?.owner?.id === ownerActor?.uuid
-    );
+    let deployable = game.actors.contents.find(a => {
+        if (a.type !== 'deployable' || a.system?.lid !== lid) {
+            return false;
+        }
+        const ownerVal = a.system?.owner;
+        return ownerVal === ownerActor?.uuid ||
+               ownerVal === ownerActor?.id ||
+               ownerVal?.id === ownerActor?.uuid ||
+               ownerVal?.id === ownerActor?.id;
+    });
 
     if (deployable) {
         return { deployable, source: 'actor' };
@@ -2365,7 +2490,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 /**
  * Place a deployable token on the scene with interactive placement.
  * @param {Object} options
- * @param {Actor|string} options.deployable - A deployable Actor or LID string
+ * @param {Actor|string|Array<Actor|string>} options.deployable - A deployable Actor, LID string, or array of them
  * @param {Actor} options.ownerActor - The actor that owns the deployable
  * @param {Object|null} [options.systemItem=null] - The system/item that grants the deployable (for use consumption)
  * @param {boolean} [options.consumeUse=false] - Whether to consume a use from systemItem
@@ -2373,8 +2498,8 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
  * @param {number|null} [options.width=null] - Token width override (defaults to deployable.prototypeToken.width)
  * @param {number|null} [options.height=null] - Token height override (defaults to deployable.prototypeToken.height)
  * @param {number} [options.range=1] - Placement range (null for unlimited)
- * @param {number} [options.count=1] - Number of tokens to place (-1 for unlimited)
- * @param {Token|Object|null} [options.at=null] - Origin override for range measurement (token or {x,y} position). When null, uses ownerActor's active token.
+ * @param {number} [options.count=1] - Total number of tokens to place (-1 for unlimited)
+ * @param {Token|Object|null} [options.at=null] - Origin override for range measurement
  * @param {string} [options.title="DEPLOY"] - Card title
  * @param {string} [options.description=""] - Card description
  * @param {boolean} [options.noCard=false] - Whether to skip rendering the card
@@ -2389,107 +2514,161 @@ export async function placeDeployable(options = {}) {
         fromCompendium = false,
         width = null,
         height = null,
-        range = 1,
+        range: rangeOpt = null,
         at = null,
-        count = 1,
+        count: countOpt = null,
         title = "DEPLOY",
         description = "",
-        noCard = false
+        noCard = false,
+        disposition: dispositionOpt = null,
+        team: teamOpt = null
     } = options;
+
+    // Read deploy flags from systemItem if not explicitly provided in options
+    const itemFlags = systemItem ? getItemFlags(systemItem) : {};
+    const range = rangeOpt ?? itemFlags.deployRange ?? 1;
+    const count = countOpt ?? itemFlags.deployCount ?? 1;
 
     if (!ownerActor) {
         ui.notifications.error("No owner actor specified.");
         return null;
     }
 
-    // Resolve deployable
-    const resolved = await resolveDeployable(deployableOrLid, ownerActor);
-    let actualDeployable = resolved.deployable;
-    const isFromCompendium = fromCompendium || resolved.source === 'compendium';
-
-    if (!actualDeployable) {
-        ui.notifications.error(`Deployable not found: ${deployableOrLid}`);
-        return null;
-    }
-
-    // If from compendium, create a new actor first
-    if (isFromCompendium) {
-        const actorData = actualDeployable.toObject();
-
-        let ownerName = ownerActor.name;
-        if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
-            ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
-        }
-
-        actorData.system.owner = ownerActor.uuid;
-        actorData.name = `${actualDeployable.name} [${ownerName}]`;
-        actorData.folder = ownerActor.folder?.id;
-        actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
-
-        const LancerActor = game.lancer?.LancerActor || Actor;
-        actualDeployable = await LancerActor.create(actorData);
-        if (!actualDeployable) {
-            ui.notifications.error("Failed to create deployable actor.");
-            return null;
-        }
-        ui.notifications.info(`Created ${actorData.name}`);
-    }
-
-    // Determine token dimensions
-    const tokenWidth = width ?? actualDeployable.prototypeToken?.width ?? 1;
-    const tokenHeight = height ?? actualDeployable.prototypeToken?.height ?? 1;
-
-    // Build prototype token data
-    const protoToken = actualDeployable.prototypeToken.toObject();
-    protoToken.width = tokenWidth;
-    protoToken.height = tokenHeight;
-
-    // Determine origin
-    const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
-
     let ownerName = ownerActor.name;
     if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
         ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
     }
 
-    const extraData = {
-        actorData: { name: `${actualDeployable.name}` },
-        flags: {
-            ...protoToken.flags,
-            'lancer-automations': {
-                deployedItem: true,
-                deployableName: actualDeployable.name,
-                deployableId: actualDeployable.id,
-                ownerActorUuid: ownerActor.uuid,
-                ownerName: ownerName,
-                systemItemId: systemItem?.id || null
-            }
+    // Determine defaults for disposition and team from owner
+    const disposition = dispositionOpt ?? ownerActor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
+    const team = teamOpt ?? ownerActor.getFlag('token-factions', 'team') ?? null;
+
+    // Determine origin
+    const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
+
+    // --- Normalize deployable input to array ---
+    const deployableInputs = Array.isArray(deployableOrLid) ? deployableOrLid : [deployableOrLid];
+
+    // Resolve all deployables and build actor entries
+    const actorEntries = [];
+    for (const input of deployableInputs) {
+        const resolved = await resolveDeployable(input, ownerActor);
+        let actualDeployable = resolved.deployable;
+        const isFromCompendium = fromCompendium || resolved.source === 'compendium';
+
+        if (!actualDeployable) {
+            ui.notifications.warn(`Deployable not found: ${input}`);
+            continue;
         }
-    };
+
+        // If from compendium, create a new actor first
+        if (isFromCompendium) {
+            const actorData = actualDeployable.toObject();
+            const ownerBaseActor = ownerActor.token?.baseActor ?? ownerActor;
+            actorData.system.owner = ownerBaseActor.uuid;
+            actorData.name = `${actualDeployable.name} [${ownerName}]`;
+            actorData.folder = ownerActor.folder?.id;
+            actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
+
+            // Inherit disposition and team for the new actor
+            actorData.prototypeToken = actorData.prototypeToken || {};
+            actorData.prototypeToken.disposition = disposition;
+            if (team !== null) {
+                actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
+                actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
+                actorData.prototypeToken.flags['token-factions'].team = team;
+            }
+            actorData.flags = actorData.flags || {};
+            const LancerActor = game.lancer?.LancerActor || Actor;
+            actualDeployable = await LancerActor.create(actorData);
+            if (!actualDeployable) {
+                ui.notifications.error(`Failed to create deployable actor for: ${input}`);
+                continue;
+            }
+            ui.notifications.info(`Created ${actorData.name}`);
+        }
+
+        const tokenWidth = width ?? actualDeployable.prototypeToken?.width ?? 1;
+        const tokenHeight = height ?? actualDeployable.prototypeToken?.height ?? 1;
+
+        actorEntries.push({
+            actor: actualDeployable,
+            extraData: {
+                width: tokenWidth,
+                height: tokenHeight,
+                actorData: { name: `${actualDeployable.name}` },
+                flags: {
+                    'lancer-automations': {
+                        deployedItem: true,
+                        deployableName: actualDeployable.name,
+                        deployableId: actualDeployable.id,
+                        ownerActorUuid: ownerActor.uuid,
+                        ownerName: ownerName,
+                        systemItemId: systemItem?.id || null
+                    }
+                }
+            }
+        });
+    }
+
+    if (actorEntries.length === 0) {
+        ui.notifications.error("No valid deployables found.");
+        return null;
+    }
+
+    // Single deployable → pass actor directly; multiple → pass array for actor selector
+    const actorParam = actorEntries.length === 1
+        ? actorEntries[0].actor
+        : actorEntries;
+
+    const extraDataParam = actorEntries.length === 1
+        ? actorEntries[0].extraData
+        : {};
 
     const result = await placeToken({
-        actor: actualDeployable,
-        prototypeToken: protoToken,
+        actor: actorParam,
         range,
         count,
         origin: originToken,
         title,
         description,
         icon: "cci cci-deployable",
-        extraData,
+        extraData: extraDataParam,
         noCard: noCard,
-        onSpawn: async () => {
-            if (consumeUse && systemItem) {
-                const uses = systemItem.system?.uses;
-                if (uses && typeof uses.value === 'number') {
-                    const minUses = uses.min ?? 0;
-                    const newUses = Math.max(uses.value - 1, minUses);
-                    await systemItem.update({ "system.uses.value": newUses });
-                    ui.notifications.info(`${systemItem.name} used. ${newUses} uses remaining.`);
-                }
+        disposition,
+        team
+    });
+
+    if (result && systemItem) {
+        const updates = {};
+
+        if (consumeUse) {
+            const uses = systemItem.system?.uses;
+            if (uses && typeof uses.value === 'number') {
+                const minUses = uses.min ?? 0;
+                updates["system.uses.value"] = Math.max(uses.value - 1, minUses);
+            }
+            if (systemItem.system?.charged) {
+                updates["system.charged"] = false;
+            }
+            if (Object.keys(updates).length > 0) {
+                await systemItem.update(updates);
             }
         }
-    });
+    }
+
+    // Fire onDeploy trigger
+    if (result) {
+        const api = game.modules.get('lancer-automations')?.api;
+        if (api?.handleTrigger) {
+            await api.handleTrigger('onDeploy', {
+                triggeringToken: originToken,
+                item: systemItem,
+                deployedTokens: Array.isArray(result) ? result : [result],
+                deployType: "deployable"
+            });
+        }
+    }
 
     return result;
 }
@@ -2511,172 +2690,199 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
 }
 
 /**
- * Show a deployment card for a specific item's deployables. Clicking a deployable
- * triggers placeDeployable with noCard. The card stays open until the user confirms or cancels.
+ * Add or update lancer-automations flags on an item document.
+ * Uses setFlag for reliable persistence (bypasses TypeDataModel restrictions).
+ * Known flag keys:
+ *   - deployRange {number}  — default range when placing this item's deployables
+ *   - deployCount {number}  — default count when placing this item's deployables
+ * @param {Item} item       The Foundry Item document to flag
+ * @param {Object} flags    Key/value pairs to set in the lancer-automations namespace
+ * @returns {Promise<Item>} The updated item
+ */
+export async function addItemFlags(item, flags) {
+    if (!item || typeof flags !== 'object') {
+        ui.notifications.error("addItemFlags: item and flags object are required.");
+        return null;
+    }
+    for (const [key, val] of Object.entries(flags)) {
+        await item.setFlag('lancer-automations', key, val);
+    }
+    return item;
+}
+
+/**
+ * Add extra deployable LIDs to an item via flags (system.deployables is read-only due to Lancer's TypeDataModel).
+ * Stores extra LIDs in the 'lancer-automations.extraDeployables' flag, deduplicating against existing entries.
+ * @param {Item} item                   The Foundry Item document to update
+ * @param {string|Array<string>} lids   A single LID string or array of LID strings to add
+ * @returns {Promise<Item|null>} The updated item, or null on failure
+ */
+export async function addExtraDeploymentLids(item, lids) {
+    if (!item) {
+        ui.notifications.error("addExtraDeploymentLids: item is required.");
+        return null;
+    }
+    const newLids = Array.isArray(lids) ? lids : [lids];
+    if (newLids.length === 0 || newLids.some(l => typeof l !== 'string')) {
+        ui.notifications.error("addExtraDeploymentLids: lids must be a string or array of strings.");
+        return null;
+    }
+
+    const existingFlags = item.getFlag('lancer-automations', 'extraDeployables') || [];
+    const merged = [...new Set([...existingFlags, ...newLids])];
+
+    // Skip if nothing new to add
+    if (merged.length === existingFlags.length) {
+        return item;
+    }
+
+    await item.setFlag('lancer-automations', 'extraDeployables', merged);
+    console.log(`lancer-automations | addExtraDeploymentLids: Added LID(s) to ${item.name}:`, newLids);
+    return item;
+}
+
+/**
+ * Get the effective deployable LIDs for an item, merging system.deployables with
+ * extra LIDs from the lancer-automations.extraDeployables flag.
+ * For NPC actors, applies tier-based selection (1 entry = all tiers, 3 entries = pick by tier).
+ * @param {Item} item    The item document
+ * @param {Actor} [actor] The owner actor (needed for NPC tier selection)
+ * @returns {string[]} Array of deployable LID strings
+ */
+export function getItemDeployables(item, actor = null) {
+    if (!item)
+        return [];
+
+    const isFrameCore = item.type === 'frame';
+    const systemDeployables = isFrameCore
+        ? item.system?.core_system?.deployables || []
+        : item.system?.deployables || [];
+    const extraDeployables = item.getFlag?.('lancer-automations', 'extraDeployables') || [];
+    let deployablesArray = [...systemDeployables, ...extraDeployables];
+
+    if (deployablesArray.length === 0)
+        return [];
+
+    // NPC tier-based selection: pick the tier-appropriate deployable
+    if (actor && actor.type === 'npc') {
+        const tier = actor.system?.tier ?? 1;
+        const tierIndex = Math.max(0, Math.min(2, tier - 1));
+
+        if (deployablesArray.length > 3) {
+            console.warn(`lancer-automations | ${item.name} has ${deployablesArray.length} deployables (expected 1 or 3 for NPC tier selection).`);
+        }
+
+        if (deployablesArray.length === 1) {
+            // Single deployable — same for all tiers
+            deployablesArray = [deployablesArray[0]];
+        } else if (deployablesArray.length >= 3) {
+            // Pick by tier index (0=T1, 1=T2, 2=T3)
+            deployablesArray = [deployablesArray[tierIndex]];
+        }
+    }
+
+    return deployablesArray;
+}
+
+
+
+/**
+ * Retrieve lancer-automations flags from an item document.
+ * @param {Item} item          The Foundry Item document
+ * @param {string} [flagName]  Optional specific flag key to retrieve.
+ * @returns {any}              The requested flag value, or an object containing all lancer-automations flags if no key was provided.
+ */
+export function getItemFlags(item, flagName = null) {
+    if (!item) {
+        ui.notifications.error("getItemFlags: item is required.");
+        return null;
+    }
+    if (flagName) {
+        return item.getFlag('lancer-automations', flagName);
+    }
+    return item.flags?.['lancer-automations'] || {};
+}
+
+/**
+ * Show a deployment card for a specific item's deployables. Resolves all deployable LIDs and
+ * opens a single placeDeployable session with the actor selector for multi-deployable placement.
  * @param {Object} options
  * @param {Actor} options.actor - The owner actor
  * @param {Object} options.item - The system/frame item that has deployables
  * @param {Array} [options.deployableOptions=[]] - Per-index options overrides for placeDeployable. e.g. [{ range: 3, count: 2 }, { range: 1 }]
  * @returns {Promise<boolean>} true if confirmed, null if cancelled
  */
-export function beginDeploymentCard(options = {}) {
-    const _title = options.item?.name || 'DEPLOY';
-    return _queueCard(() => new Promise(async (resolve) => {
-        const {
-            actor,
-            item,
-            deployableOptions = []
-        } = options;
+export async function beginDeploymentCard(options = {}) {
+    const {
+        actor,
+        item,
+        deployableOptions = []
+    } = options;
 
-        if (!actor || !item) {
-            ui.notifications.warn("Actor and item are required.");
-            resolve(null);
-            return;
+    if (!actor || !item) {
+        ui.notifications.warn("Actor and item are required.");
+        return null;
+    }
+
+    // Get deployable LIDs (handles system.deployables + extra flags + NPC tier selection)
+    const deployablesArray = getItemDeployables(item, actor);
+
+    if (deployablesArray.length === 0) {
+        ui.notifications.warn(`No deployables found on ${item.name}.`);
+        return null;
+    }
+
+    // Compute uses/charge info
+    const isFrameCore = item.type === 'frame';
+    let hasUses = false;
+    let hasRechargeTag = false;
+    let isUncharged = false;
+
+    if (!isFrameCore) {
+        const uses = item.system?.uses;
+        hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
+        if (hasUses && uses.value <= 0) {
+            ui.notifications.warn(`${item.name} has no uses remaining.`);
+            return null;
         }
 
-        // Determine deployable LIDs from the item
-        const isFrameCore = item.type === 'frame';
-        const deployablesArray = isFrameCore
-            ? item.system?.core_system?.deployables || []
-            : item.system?.deployables || [];
-
-        if (deployablesArray.length === 0) {
-            ui.notifications.warn(`No deployables found on ${item.name}.`);
-            resolve(null);
-            return;
+        hasRechargeTag = item.system?.tags?.some(tag => tag.lid === "tg_recharge");
+        isUncharged = hasRechargeTag && item.system?.charged === false;
+        if (isUncharged) {
+            ui.notifications.warn(`${item.name} is uncharged. You must reload or recharge it before deploying.`);
+            return null;
         }
+    }
 
-        // Resolve all deployables (each array entry is separate, duplicates allowed)
-        const deployables = [];
-        for (let i = 0; i < deployablesArray.length; i++) {
-            const lid = deployablesArray[i];
-            const { deployable, source } = await resolveDeployable(lid, actor);
-            const idxOpts = deployableOptions[i] || {};
-            const depCount = idxOpts.count || 1;
+    // Collect all deployable LIDs (duplicates allowed)
+    const allLids = [];
+    let totalCount = 0;
 
-            if (deployable) {
-                deployables.push({
-                    lid,
-                    index: i,
-                    deployable,
-                    source,
-                    name: deployable.name,
-                    displayName: depCount > 1 ? `${deployable.name} (x${depCount})` : deployable.name,
-                    img: deployable.img,
-                    fromCompendium: source === 'compendium',
-                    opts: idxOpts
-                });
-            } else {
-                deployables.push({
-                    lid,
-                    index: i,
-                    deployable: null,
-                    source: null,
-                    name: `Not found: ${lid}`,
-                    displayName: `Not found: ${lid}`,
-                    img: 'icons/svg/hazard.svg',
-                    fromCompendium: false,
-                    notFound: true,
-                    opts: idxOpts
-                });
-            }
+    // Read per-index options for range and count; use the first range found, sum all counts
+    let rangeOpt = null;
+    for (let i = 0; i < deployablesArray.length; i++) {
+        const lid = deployablesArray[i];
+        const idxOpts = deployableOptions[i] || {};
+        const depCount = idxOpts.count || 1;
+        totalCount += depCount;
+        if (idxOpts.range !== undefined && rangeOpt === null) {
+            rangeOpt = idxOpts.range;
         }
+        // Push the LID once per deployable entry
+        allLids.push(lid);
+    }
 
-        // Compute uses and charges info
-        let uses, hasUses, noUsesLeft;
-        if (isFrameCore) {
-            uses = null;
-            hasUses = false;
-            noUsesLeft = false;
-        } else {
-            uses = item.system?.uses;
-            hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
-            noUsesLeft = hasUses && uses.value <= 0;
-        }
+    const result = await placeDeployable({
+        deployable: allLids,
+        ownerActor: actor,
+        systemItem: item,
+        consumeUse: hasUses,
+        range: rangeOpt,
+        title: item.name,
+        description: ""
+    });
 
-        const charges = item.system?.derived?.mm_charges || item.system?.charges;
-        const hasCharges = charges && typeof charges.max === 'number' && charges.max > 0;
-
-        const buildCardData = () => {
-            const currentUses = hasUses ? item.system.uses : null;
-            const currentNoUsesLeft = hasUses && currentUses.value <= 0;
-            const currentCharges = hasCharges ? (item.system?.derived?.mm_charges || item.system?.charges) : null;
-
-            return deployables.map(dep => ({
-                name: dep.displayName,
-                img: dep.img,
-                fromCompendium: dep.fromCompendium,
-                disabled: dep.notFound || currentNoUsesLeft,
-                usesText: hasUses ? `${currentUses.value}/${currentUses.max}` : '',
-                chargesText: hasCharges ? `${currentCharges.value}/${currentCharges.max}` : ''
-            }));
-        };
-
-        let cancelled = false;
-
-        const doCleanup = () => {
-            document.removeEventListener('keydown', keyHandler);
-            _removeInfoCard(cardEl);
-        };
-
-        const refreshCard = () => {
-            _updateInfoCard(cardEl, "deploymentCard", {
-                deployables: buildCardData(),
-                onDeploy: async (idx) => {
-                    if (cancelled)
-                        return;
-                    const dep = deployables[idx];
-                    if (!dep || dep.notFound || !dep.deployable)
-                        return;
-
-                    cardEl.hide();
-                    await placeDeployable({
-                        deployable: dep.deployable,
-                        ownerActor: actor,
-                        systemItem: item,
-                        consumeUse: hasUses,
-                        fromCompendium: dep.fromCompendium,
-                        range: 1,
-                        noCard: true,
-                        title: `DEPLOY ${dep.name}`,
-                        description: "",
-                        ...dep.opts
-                    });
-                    if (cancelled)
-                        return;
-                    cardEl.show();
-                    refreshCard();
-                }
-            });
-        };
-
-        const cardEl = _createInfoCard("deploymentCard", {
-            title: item.name,
-            icon: "cci cci-deployable",
-            headerClass: "",
-            description: "",
-            onConfirm: () => {
-                doCleanup();
-                resolve(true);
-            },
-            onCancel: () => {
-                cancelled = true;
-                doCleanup();
-                resolve(null);
-            }
-        });
-
-        const keyHandler = (event) => {
-            if (event.key === "Escape") {
-                cancelled = true;
-                doCleanup();
-                resolve(null);
-            }
-        };
-
-        document.addEventListener('keydown', keyHandler);
-        refreshCard();
-    }), _title);
+    return result ? true : null;
 }
 
 /**
@@ -2691,22 +2897,10 @@ export async function openDeployableMenu(actor) {
         return;
     }
 
-    // Get all systems with deployables from the mech
-    const systemsWithDeployables = actor.items.filter(item =>
-        item.system?.deployables &&
-        Array.isArray(item.system.deployables) &&
-        item.system.deployables.length > 0
+    // Get all items that have deployables (system field or extra flags)
+    const allSystemsWithDeployables = actor.items.filter(item =>
+        getItemDeployables(item, actor).length > 0
     );
-
-    // Also check for deployables in frame core_system
-    const framesWithCoreDeployables = actor.items.filter(item =>
-        item.type === 'frame' &&
-        item.system?.core_system?.deployables &&
-        Array.isArray(item.system.core_system.deployables) &&
-        item.system.core_system.deployables.length > 0
-    );
-
-    const allSystemsWithDeployables = [...systemsWithDeployables, ...framesWithCoreDeployables];
 
     if (allSystemsWithDeployables.length === 0) {
         ui.notifications.warn(`No systems with deployables found for ${actor.name}.`);
@@ -2718,17 +2912,21 @@ export async function openDeployableMenu(actor) {
 
     for (const system of allSystemsWithDeployables) {
         const isFrameCore = system.type === 'frame';
-        const deployablesArray = isFrameCore ? system.system.core_system.deployables : system.system.deployables;
+        const deployablesArray = getItemDeployables(system, actor);
 
-        let uses, hasUses, noUsesLeft;
+        let uses, hasUses, noUsesLeft, hasRechargeTag, needsRecharge;
         if (isFrameCore) {
             uses = null;
             hasUses = false;
             noUsesLeft = false;
+            hasRechargeTag = false;
+            needsRecharge = false;
         } else {
             uses = system.system.uses;
             hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
             noUsesLeft = hasUses && uses.value <= 0;
+            hasRechargeTag = system.system.tags?.some(tag => tag.lid === "tg_recharge");
+            needsRecharge = hasRechargeTag && system.system.charged === false;
         }
 
         for (const lid of deployablesArray) {
@@ -2736,6 +2934,7 @@ export async function openDeployableMenu(actor) {
 
             if (deployable) {
                 const usesText = hasUses ? `${uses.value}/${uses.max}` : '';
+                const chargesText = hasRechargeTag ? (needsRecharge ? "Uncharged" : "Charged") : "";
                 const isFromCompendium = source === 'compendium';
                 const systemDisplayName = isFrameCore ? `${system.name} - Core System` : system.name;
                 items.push({
@@ -2748,7 +2947,9 @@ export async function openDeployableMenu(actor) {
                     deployableImg: deployable.img,
                     deployableData: deployable,
                     usesText: usesText,
-                    disabled: noUsesLeft,
+                    chargesText: chargesText,
+                    disabled: noUsesLeft || needsRecharge,
+                    needsRecharge: needsRecharge,
                     hasUses: hasUses,
                     fromCompendium: isFromCompendium,
                     tokenWidth: deployable.prototypeToken?.width || 1,
@@ -2765,7 +2966,9 @@ export async function openDeployableMenu(actor) {
                     deployableName: `Not found: ${lid}`,
                     deployableImg: 'icons/svg/hazard.svg',
                     usesText: '',
+                    chargesText: '',
                     disabled: true,
+                    needsRecharge: false,
                     hasUses: false,
                     notFound: true,
                     fromCompendium: false,
@@ -2902,7 +3105,7 @@ export async function openDeployableMenu(actor) {
                 ${items.map(item => `
                     <div class="lancer-item-card ${item.disabled ? 'disabled' : ''} ${item.id === selectedId ? 'selected' : ''}"
                          data-item-id="${item.id}"
-                         title="${item.disabled ? (item.notFound ? 'Deployable not found' : 'No uses remaining') : item.deployableName}">
+                         title="${item.disabled ? (item.notFound ? 'Deployable not found' : (item.needsRecharge ? 'Uncharged' : 'No uses remaining')) : item.deployableName}">
                         ${item.fromCompendium ? '<div class="lancer-item-badge">Compendium</div>' : ''}
                         <div class="lancer-item-header">
                             <img src="${item.deployableImg}" class="lancer-item-icon" />
@@ -2914,6 +3117,7 @@ export async function openDeployableMenu(actor) {
                             <i class="cci cci-system i--sm"></i> ${item.systemName}
                         </div>
                         ${item.usesText ? `<div class="lancer-item-uses"><i class="fas fa-battery-three-quarters"></i> ${item.usesText}</div>` : ''}
+                        ${item.chargesText ? `<div class="lancer-item-uses" style="color:#4488ff"><i class="fas fa-bolt"></i> ${item.chargesText}</div>` : ''}
                         ${item.fromCompendium ? `
                             <button class="lancer-item-generate" data-item-id="${item.id}" ${!isGM ? 'disabled' : ''}>
                                 ${isGM ? '<i class="fas fa-plus"></i> Generate' : '<i class="fas fa-lock"></i> GM Only'}
@@ -2989,11 +3193,22 @@ export async function openDeployableMenu(actor) {
                     ownerName = actor.system.pilot.value.system.callsign || actor.system.pilot.value.name;
                 }
 
-                actorData.system.owner = actor.uuid;
+                const ownerBaseActor = actor.token?.baseActor ?? actor;
+                actorData.system.owner = ownerBaseActor.uuid;
                 actorData.name = `${item.deployableName} [${ownerName}]`;
                 actorData.folder = actor.folder?.id;
                 actorData.ownership = foundry.utils.duplicate(actor.ownership);
 
+                // Inherit disposition and team for the new actor
+                actorData.prototypeToken = actorData.prototypeToken || {};
+                actorData.prototypeToken.disposition = actor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
+                const actorTeam = actor.getFlag('token-factions', 'team');
+                if (actorTeam !== null) {
+                    actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
+                    actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
+                    actorData.prototypeToken.flags['token-factions'].team = actorTeam;
+                }
+                actorData.flags = actorData.flags || {};
                 const LancerActor = game.lancer?.LancerActor || Actor;
                 const newActor = await LancerActor.create(actorData);
                 if (newActor) {
@@ -3353,3 +3568,28 @@ export async function clearMovementHistory(tokens, revert = false) {
     const tokenNames = tokenList.map(t => t.name).join(", ");
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
 }
+
+export const InteractiveAPI = {
+    chooseToken,
+    placeZone,
+    knockBackToken,
+    placeToken,
+    startChoiceCard,
+    deployWeaponToken,
+    pickupWeaponToken,
+    resolveDeployable,
+    placeDeployable,
+    deployDeployable,
+    beginDeploymentCard,
+    openDeployableMenu,
+    recallDeployable,
+    addItemFlags,
+    addExtraDeploymentLids,
+    getItemDeployables,
+    getItemFlags,
+    openThrowMenu,
+    getGridDistance,
+    drawRangeHighlight,
+    revertMovement,
+    clearMovementHistory
+};

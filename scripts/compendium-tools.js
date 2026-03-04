@@ -4,10 +4,12 @@
 export async function executePackMacro(macroName, scope = {}) {
     const packKey = "lancer-automations.macros";
     const pack = game.packs.get(packKey);
-    if (!pack) return ui.notifications.error(`lancer-automations macro pack not found`);
+    if (!pack)
+        return ui.notifications.error(`lancer-automations macro pack not found`);
     const index = await pack.getIndex();
     const entry = index.find(e => e.name === macroName);
-    if (!entry) return ui.notifications.error(`Macro "${macroName}" not found in lancer-automations pack`);
+    if (!entry)
+        return ui.notifications.error(`Macro "${macroName}" not found in lancer-automations pack`);
     const macro = await pack.getDocument(entry._id);
     await macro.execute({ ParamActor: null, ...scope });
 }
@@ -84,3 +86,8 @@ export async function packMacros() {
         ui.notifications.error("An error occurred while packing macros. Check the console for details.");
     }
 }
+
+export const CompendiumToolsAPI = {
+    packMacros,
+    executePackMacro
+};

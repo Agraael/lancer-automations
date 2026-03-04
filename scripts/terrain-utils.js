@@ -74,3 +74,8 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
 
     return maxGroundHeight;
 }
+
+export const TerrainAPI = {
+    getTokenCells,
+    getMaxGroundHeightUnderToken
+};

@@ -75,21 +75,21 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
     await setGrappleState(grappledToken, { ...state, immobilizedSide: newImmobilizedSide });
 
     if (newImmobilizedSide === "grappled") {
-        await api.applyFlaggedEffectToTokens({
+        await api.applyEffectsToTokens({
             tokens: [grappledToken],
             effectNames: ['lancer.statusIconsNames.immobilized'],
             note: 'Grapple',
             customOriginId: state.grapplerIds[0]
-        });
-        await api.removeFlaggedEffectToTokens({ tokens: grapplerTokens, effectNames: ['lancer.statusIconsNames.immobilized'] });
+        }, { grappleSource: true });
+        await api.removeEffectsByNameFromTokens({ tokens: grapplerTokens, effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
     } else if (newImmobilizedSide === "grapplers") {
-        await api.applyFlaggedEffectToTokens({
+        await api.applyEffectsToTokens({
             tokens: grapplerTokens,
             effectNames: ['lancer.statusIconsNames.immobilized'],
             note: 'Grapple',
             customOriginId: grappledToken.id
-        });
-        await api.removeFlaggedEffectToTokens({ tokens: [grappledToken], effectNames: ['lancer.statusIconsNames.immobilized'] });
+        }, { grappleSource: true });
+        await api.removeEffectsByNameFromTokens({ tokens: [grappledToken], effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
     }
 }
 
@@ -118,20 +118,20 @@ async function establishGrapples(api, grappler, grappledTokens) {
             });
         } else {
             await setGrappleState(grappledToken, { grapplerIds: [grappler.id], immobilizedSide: null });
-            await api.applyFlaggedEffectToTokens({
+            await api.applyEffectsToTokens({
                 tokens: [grappledToken],
                 effectNames: ['grappled'],
                 note: `Grappled by ${grappler.name}`,
                 customOriginId: grappler.id
-            });
+            }, { grappleSource: true });
         }
 
-        await api.applyFlaggedEffectToTokens({
+        await api.applyEffectsToTokens({
             tokens: [grappler],
             effectNames: ['grappling'],
             note: `Grappling ${grappledToken.name}`,
             customOriginId: grappledToken.id
-        });
+        }, { grappleSource: true });
 
         await updateImmobilized(api, grappledToken, true);
     }
@@ -147,9 +147,10 @@ async function releaseGrappler(api, grappler, grappledToken) {
         await cancelGrappleForToken(api, grappledToken);
     } else {
         await setGrappleState(grappledToken, { grapplerIds: newGrapplerIds, immobilizedSide: grappledState.immobilizedSide });
-        await api.removeFlaggedEffectToTokens({
+        await api.removeEffectsByNameFromTokens({
             tokens: [grappler],
-            effectNames: ['grappling', 'lancer.statusIconsNames.immobilized']
+            effectNames: ['grappling', 'lancer.statusIconsNames.immobilized'],
+            extraFlags: { grappleSource: true }
         });
         await updateImmobilized(api, grappledToken);
     }
@@ -175,14 +176,16 @@ async function cancelGrappleForToken(api, token) {
     } else if (state.grapplerIds?.length > 0) {
         const grapplerTokens = state.grapplerIds.map(id => canvas.tokens.get(id)).filter(Boolean);
 
-        await api.removeFlaggedEffectToTokens({
+        await api.removeEffectsByNameFromTokens({
             tokens: [token],
-            effectNames: ['grappled', 'lancer.statusIconsNames.immobilized']
+            effectNames: ['grappled', 'lancer.statusIconsNames.immobilized'],
+            extraFlags: { grappleSource: true }
         });
         if (grapplerTokens.length > 0) {
-            await api.removeFlaggedEffectToTokens({
+            await api.removeEffectsByNameFromTokens({
                 tokens: grapplerTokens,
-                effectNames: ['grappling', 'lancer.statusIconsNames.immobilized']
+                effectNames: ['grappling', 'lancer.statusIconsNames.immobilized'],
+                extraFlags: { grappleSource: true }
             });
         }
 
