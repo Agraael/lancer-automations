@@ -398,6 +398,9 @@ api.deleteEffect(target, effects[0]);
 #### `triggerEffectImmunity(token, effectNames, source, notify)`
 - **Returns**: `Promise<void>` (Removes effects and announces immunity in chat)
 
+#### `checkEffectImmunities(actor, effectName)`
+- **Returns**: `Array<string>` — returns an array of source names (e.g. ["Immunity Bonus", "Armor Plating"]) if the actor is immune to the named effect.
+
 #### `deleteAllEffects(tokens)`
 Removes **all** active effects from the provided tokens.
 - **tokens**: `Array<Token|TokenDocument>` (Required)
@@ -418,7 +421,10 @@ Removes **all** active effects from the provided tokens.
 | `id` | `string` | Optional custom ID |
 | `name` | `string` | Display name |
 | `val` | `number` | Value |
-| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"` |
+| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"` |
+| `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"` |
+| `effects` | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
+| `damageTypes` | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 | `uses` | `number` | Stack count |
 | `stat` | `string` | Property path (e.g. `system.hp.max`) |
 | `rollTypes` | `Array` | `["attack"]`, `["check"]`, etc. |
@@ -440,6 +446,14 @@ Removes **all** active effects from the provided tokens.
 #### `getConstantBonuses(actor)`
 #### `removeConstantBonus(actor, bonusId)`
 #### `injectBonusToNextRoll(actor, bonus)`
+#### `getImmunityBonuses(actor, subtype)`
+- **Returns**: `Array<object>` — returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`) for the actor.
+
+#### `applyDamageImmunities(actor, damages)`
+- **Returns**: `Array<object>` — takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out.
+
+#### `hasCritImmunity(actor)`
+- **Returns**: `boolean` — returns true if the actor has any "crit" subtype immunity bonuses.
 
 ---
 
@@ -824,9 +838,28 @@ Removes a tag from an item by its ID.
 
 ## Movement Tracking
 
-- **`clearMoveData(tokenDocId)`**
-- **`getCumulativeMoveData(tokenDocId)`**
+These functions accept either a string `tokenId` or a `Token` document/object.
+
+- **`clearMoveData(tokenOrId)`**
+- **`getCumulativeMoveData(tokenOrId)`**
+- **`getIntentionalMoveData(tokenOrId)`**
 - **`clearMovementHistory(tokens, revert)`**
+- **`getMovementHistory(tokenOrId)`**
+  Returns an object detailing the token's movement history in the current turn:
+  ```javascript
+  {
+      exists: boolean,
+      totalMoved: number,
+      intentional: {
+          total: number,
+          regular: number,
+          free: number
+      },
+      unintentional: number,
+      nbBoostUsed: number,
+      startPosition: { x, y }
+  }
+  ```
 
 ---
 

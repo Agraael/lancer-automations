@@ -1465,6 +1465,8 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 icon = "systems/lancer/assets/icons/white/melee.svg";
             } else if (bonusData.type === 'stat') {
                 icon = "systems/lancer/assets/icons/white/generic_item.svg";
+            } else if (bonusData.type === 'immunity') {
+                icon = "modules/lancer-automations/icons/immunity.svg";
             } else if (!isPositive) {
                 icon = "systems/lancer/assets/icons/white/difficulty.svg";
             }
@@ -1492,7 +1494,6 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 };
             }
 
-            // For stat bonuses, differentiate between current resources and max/flat stats
             if (bonusData.type === 'stat' && bonusData.stat) {
                 if (CURRENT_RESOURCE_STATS.has(bonusData.stat)) {
                     // Direct modification for current resources - stored in flags for manual reversal
@@ -1509,6 +1510,23 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                         value: String(parseInt(bonusData.val) || 0),
                         mode: CONST.ACTIVE_EFFECT_MODES.ADD
                     }];
+                }
+            }
+
+            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes) {
+                if (!extraOptions.changes) {
+                    extraOptions.changes = [];
+                }
+                const resTypes = bonusData.damageTypes;
+                for (const rt of resTypes) {
+                    const lcType = rt.toLowerCase().trim();
+                    if (lcType) {
+                        extraOptions.changes.push({
+                            key: `system.resistances.${lcType}`,
+                            mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE,
+                            value: "true"
+                        });
+                    }
                 }
             }
 
@@ -1698,12 +1716,132 @@ export async function removeConstantBonus(actor, bonusId) {
         return;
     const bonuses = duplicate(actor.getFlag("lancer-automations", "constant_bonuses") || []);
     const filtered = bonuses.filter(b => b.id !== bonusId);
-    if (filtered.length !== bonuses.length)
+    if (filtered.length !== bonuses.length) {
         await delegateSetActorFlag(actor, "lancer-automations", "constant_bonuses", filtered);
+    }
 }
 
-export function executeGenericBonusMenu() {
-    executeEffectManager({ initialTab: 'bonus' });
+export function executeGenericBonusMenu(actor = null) {
+    executeEffectManager({ initialTab: 'bonus', actor });
+}
+
+export function getImmunityBonuses(actor, subtype) {
+    if (!actor) {
+        return [];
+    }
+
+    const constants = actor.getFlag("lancer-automations", "constant_bonuses") || [];
+    const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
+    const ephemerals = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+
+    return [...constants, ...globals, ...ephemerals].filter(b => b.type === "immunity" && b.subtype === subtype);
+}
+
+export function checkEffectImmunities(actor, effectIdOrName, effect = null) {
+    if (!actor || !effectIdOrName) {
+        return [];
+    }
+
+    const effectImmunities = getImmunityBonuses(actor, "effect");
+    const matchedSources = [];
+
+    const incomingLower = effectIdOrName.toLowerCase();
+    const incomingTail = incomingLower.split('.').pop();
+
+    for (const b of effectImmunities) {
+        if (!b.effects || !Array.isArray(b.effects)) {
+            continue;
+        }
+
+        const isImmune = b.effects.some(immuneName => {
+            const immuneLower = immuneName.toLowerCase();
+            const immuneTail = immuneLower.split('.').pop();
+
+            // 1. Exact string matches
+            if (immuneLower === incomingLower || immuneTail === incomingTail) {
+                return true;
+            }
+
+            // 2. Inclusion checks (handles path-based vs simple names)
+            if (immuneLower.includes(incomingTail) || incomingLower.includes(immuneTail)) {
+                return true;
+            }
+
+            // 3. If ActiveEffect is provided, check its native statuses and flags
+            if (effect) {
+                if (effect.statuses?.has(immuneTail) || effect.statuses?.has(immuneLower)) {
+                    return true;
+                }
+
+                const flagName = effect.getFlag('lancer-automations', 'effect') || effect.getFlag('csm-lancer-qol', 'effect');
+                if (flagName) {
+                    const flagLower = flagName.toLowerCase();
+                    if (flagLower === immuneLower || flagLower.includes(immuneTail)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
+
+        if (isImmune) {
+            matchedSources.push(b.source || b.name || "Unknown Immunity");
+        }
+    }
+
+    return matchedSources;
+}
+
+export function checkDamageResistances(actor, damageType) {
+    if (!actor || !damageType) {
+        return [];
+    }
+    const resistanceBonuses = getImmunityBonuses(actor, "resistance");
+    const incomingLower = damageType.toLowerCase();
+
+    return resistanceBonuses
+        .filter(b => b.damageTypes && b.damageTypes.some(t => t.toLowerCase() === incomingLower || t.toLowerCase() === "variable" || t.toLowerCase() === "all"))
+        .map(b => b.source || b.name || "Unknown Resistance");
+}
+
+export function applyDamageImmunities(actor, damages) {
+    if (!actor || !damages) {
+        return damages;
+    }
+
+    const damageImmunities = getImmunityBonuses(actor, "damage");
+    if (damageImmunities.length === 0) {
+        return damages;
+    }
+
+    const immuneTypes = new Set();
+    for (const b of damageImmunities) {
+        if (b.damageTypes) {
+            b.damageTypes.forEach(t => immuneTypes.add(t.toLowerCase()));
+        }
+    }
+
+    return damages.map(d => {
+        if (immuneTypes.has(d.type.toLowerCase())) {
+            const newD = { ...d };
+            if (newD.val !== undefined) {
+                newD.val = 0;
+            }
+            if (newD.amount !== undefined) {
+                newD.amount = 0;
+            }
+            return newD;
+        }
+        return d;
+    });
+}
+
+export function hasCritImmunity(actor) {
+    if (!actor) {
+        return false;
+    }
+    return getImmunityBonuses(actor, "crit").length > 0;
 }
 
 export const BonusesAPI = {
@@ -1714,5 +1852,9 @@ export const BonusesAPI = {
     removeConstantBonus,
     getConstantBonuses,
     executeGenericBonusMenu,
-    injectBonusToNextRoll
+    injectBonusToNextRoll,
+    getImmunityBonuses,
+    checkEffectImmunities,
+    applyDamageImmunities,
+    hasCritImmunity
 };

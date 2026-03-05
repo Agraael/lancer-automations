@@ -1,6 +1,6 @@
 {
     "name": "L.A - Reload One Weapon",
     "type": "script",
-    "img": "modules/lancer-automations/assets/icons/reload.svg",
+    "img": "modules/lancer-automations/icons/reload.svg",
     "command_source": "ReloadOneWeapon.js"
 }

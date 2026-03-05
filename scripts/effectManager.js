@@ -114,6 +114,7 @@ function setupTriggerUI(html, prefix) {
         } else {
             $fields.hide();
         }
+        html.closest('.dialog').css('height', 'auto');
     });
 
     html.find(`#${prefix}-trigger-fields .find-lid-btn`).on('click', function (e) {
@@ -368,6 +369,27 @@ export async function executeEffectManager(options = {}) {
     const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Variable']
         .map(t => `<option value="${t}">${t}</option>`).join('');
 
+    const statusEffectIconsHtml = [...CONFIG.statusEffects]
+        .sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name))
+        .map(e => `
+        <div class="bonus-immunity-effect-option te-icon-option" data-effect="${e.name}" title="${game.i18n.localize(e.name) || e.name}">
+            <img src="${e.img || e.icon}" width="24" height="24">
+        </div>
+    `).join('');
+
+    const damageTypes = [
+        { name: 'Kinetic', icon: 'systems/lancer/assets/icons/white/damage_kinetic.svg' },
+        { name: 'Energy', icon: 'systems/lancer/assets/icons/white/damage_energy.svg' },
+        { name: 'Explosive', icon: 'systems/lancer/assets/icons/white/damage_explosive.svg' },
+        { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
+        { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
+    ];
+    const damageTypeIconsHtml = damageTypes.map(t => `
+        <div class="bonus-immunity-damage-option te-icon-option" data-type="${t.name}" title="${t.name}">
+            <img src="${t.icon}" width="24" height="24">
+        </div>
+    `).join('');
+
     const content = `
     <style>
         .te-dialog { min-width: 440px; font-family: var(--font-primary); }
@@ -386,6 +408,10 @@ export async function executeEffectManager(options = {}) {
         .te-dialog .form-group input:focus { border-color: #991e2a; outline: none; box-shadow: 0 0 4px rgba(153,30,42,0.3); }
         .te-dialog .form-group.two-col { display: grid; grid-template-columns: 70px 1fr 70px 1fr; gap: 5px; align-items: center; }
         .te-dialog .form-group.two-col label { flex: unset; }
+        .te-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+        .te-icon-option { cursor: pointer; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc; border-radius: 4px; background: #1a1a1a; transition: all 0.2s; }
+        .te-icon-option img { object-fit: contain; pointer-events: none; }
+        .te-icon-option.selected { border: 2px solid #991e2a; box-shadow: 0 0 5px rgba(153,30,42,0.5); }
         .te-effect-list { max-height: 200px; overflow-y: auto; padding: 4px; margin-bottom: 8px; }
         .te-effect-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background: #f5f5f5; border: 2px solid #999; border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; transition: all 0.2s ease; }
         .te-effect-item:hover { border-color: #991e2a; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
@@ -625,6 +651,7 @@ export async function executeEffectManager(options = {}) {
                     <option value="roll">Roll (Acc/Diff)</option>
                     <option value="damage">Damage</option>
                     <option value="tag">Tag</option>
+                    <option value="immunity">Immunity</option>
                 </select>
             </div>
             <div id="bonus-type-stat">
@@ -706,6 +733,29 @@ export async function executeEffectManager(options = {}) {
                 <div class="form-group" style="justify-content:flex-start;">
                     <label style="width: auto; margin-right: 5px;">Remove Tag instead:</label>
                     <input type="checkbox" id="bonus-removeTag" style="width: auto;">
+                </div>
+            </div>
+            <div id="bonus-type-immunity" style="display:none;">
+                <div class="form-group">
+                    <label>Immunity Subtype:</label>
+                    <select id="bonus-immunity-subtype">
+                        <option value="effect">Effect</option>
+                        <option value="damage">Damage</option>
+                        <option value="resistance">Resistance</option>
+                        <option value="crit">Critical Hit</option>
+                    </select>
+                </div>
+                <div id="bonus-immunity-effects-row">
+                    <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Status Effects:</label>
+                    <div class="te-icon-grid" id="bonus-immunity-effects">
+                        ${statusEffectIconsHtml}
+                    </div>
+                </div>
+                <div id="bonus-immunity-damage-row" style="display:none;">
+                    <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Damage Types:</label>
+                    <div class="te-icon-grid" id="bonus-immunity-damageTypes">
+                        ${damageTypeIconsHtml}
+                    </div>
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
@@ -791,7 +841,9 @@ export async function executeEffectManager(options = {}) {
                     updateManageList();
                 if (tab === 'bonus')
                     updateBonusList();
-                html.closest('.dialog').css('height', 'auto');
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
             });
 
             // Duration toggle
@@ -801,6 +853,9 @@ export async function executeEffectManager(options = {}) {
                     html.find(`#${prefix}-duration`).siblings('.dur-opts').hide();
                 } else {
                     html.find(`#${prefix}-duration`).siblings('.dur-opts').show();
+                }
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
             };
             html.find('#std-duration').change(() => toggleDurOpts('std'));
@@ -838,6 +893,9 @@ export async function executeEffectManager(options = {}) {
                     }
                 } else {
                     html.find('#cust-saved-icon').hide();
+                }
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
             });
 
@@ -1048,6 +1106,10 @@ export async function executeEffectManager(options = {}) {
 
                     list.append(item);
                 });
+
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
             };
 
             html.find('#manage-target').change(updateManageList);
@@ -1087,6 +1149,14 @@ export async function executeEffectManager(options = {}) {
                             details = `(Remove Tag: ${b.tagName})`;
                         } else {
                             details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
+                        }
+                    } else if (b.type === 'immunity') {
+                        details = `(${b.subtype})`;
+                        if (b.subtype === 'effect' && b.effects) {
+                            details = `(Effect: ${b.effects.join(', ')})`;
+                        }
+                        if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes) {
+                            details = `(${b.subtype}: ${b.damageTypes.join(', ')})`;
                         }
                     }
 
@@ -1134,6 +1204,14 @@ export async function executeEffectManager(options = {}) {
                             } else {
                                 details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
                             }
+                        } else if (b.type === 'immunity') {
+                            details = `(${b.subtype})`;
+                            if (b.subtype === 'effect' && b.effects) {
+                                details = `(Effect: ${b.effects.join(', ')})`;
+                            }
+                            if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes) {
+                                details = `(${b.subtype}: ${b.damageTypes.join(', ')})`;
+                            }
                         }
                         const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
                         const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
@@ -1153,6 +1231,10 @@ export async function executeEffectManager(options = {}) {
                         list.append(item);
                     });
                 }
+
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
             };
 
             html.find('#bonus-target').change(updateBonusList);
@@ -1164,6 +1246,9 @@ export async function executeEffectManager(options = {}) {
                     html.find('.bonus-dur-opts').hide();
                 } else {
                     html.find('.bonus-dur-opts').show();
+                }
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
             };
             html.find('#bonus-duration').on('change', toggleBonusDurOpts);
@@ -1194,6 +1279,9 @@ export async function executeEffectManager(options = {}) {
                     bonusFilterMap[trigger].forEach(cls => $fields.find(`.${cls}`).show());
                 } else {
                     $fields.hide();
+                }
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
             });
 
@@ -1375,6 +1463,19 @@ export async function executeEffectManager(options = {}) {
                     bonusData.tagMode = html.find('#bonus-tagMode').val();
                     bonusData.val = html.find('#bonus-tagVal').val() || "0";
                     bonusData.removeTag = html.find('#bonus-removeTag').is(':checked');
+                } else if (type === 'immunity') {
+                    bonusData.subtype = html.find('#bonus-immunity-subtype').val();
+                    if (bonusData.subtype === 'effect') {
+                        bonusData.effects = [];
+                        html.find('.bonus-immunity-effect-option.selected').each(function() {
+                            bonusData.effects.push($(this).data('effect'));
+                        });
+                    } else if (bonusData.subtype === 'damage' || bonusData.subtype === 'resistance') {
+                        bonusData.damageTypes = [];
+                        html.find('.bonus-immunity-damage-option.selected').each(function() {
+                            bonusData.damageTypes.push($(this).data('type'));
+                        });
+                    }
                 } else {
                     bonusData.val = html.find('#bonus-accDiffVal').val() || "1";
                 }
@@ -1425,7 +1526,7 @@ export async function executeEffectManager(options = {}) {
             // Bonus type selector - show/hide relevant inputs
             html.find('#bonus-type').on('change', function () {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-immunity').hide();
                 html.find(`#bonus-type-${type}`).show();
 
                 const showItems = type === 'roll' || type === 'damage' || type === 'tag';
@@ -1435,7 +1536,22 @@ export async function executeEffectManager(options = {}) {
                     html.find('#row-bonus-rollTypes-damage').toggle(type === 'damage');
                 }
 
-                html.closest('.dialog').css('height', 'auto');
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
+            });
+
+            html.find('#bonus-immunity-subtype').on('change', function () {
+                const subtype = $(this).val();
+                html.find('#bonus-immunity-effects-row').toggle(subtype === 'effect');
+                html.find('#bonus-immunity-damage-row').toggle(subtype === 'damage' || subtype === 'resistance');
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
+            });
+
+            html.find('.bonus-immunity-effect-option, .bonus-immunity-damage-option').on('click', function() {
+                $(this).toggleClass('selected');
             });
 
             html.find('#bonus-add').click(() => {
@@ -1459,12 +1575,18 @@ export async function executeEffectManager(options = {}) {
                     </div>
                 `);
                 html.find('#bonus-damage-list').append(newEntry);
+                if (dialog.position) {
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                }
             });
 
             html.on('click', '.bonus-remove-dmg', function () {
                 const $list = html.find('#bonus-damage-list');
                 if ($list.find('.bonus-damage-entry').length > 1) {
                     $(this).closest('.bonus-damage-entry').remove();
+                    if (dialog.position) {
+                        dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                    }
                 }
             });
 

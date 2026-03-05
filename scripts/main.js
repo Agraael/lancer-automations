@@ -19,14 +19,20 @@ import {
     isHexGrid, getOccupiedOffsets, drawHexAt
 } from "./grid-helpers.js";
 import {
-    BonusesAPI,
+    genericBonusStepDamage,
+    injectKnockbackCheckbox,
+    getImmunityBonuses,
+    checkEffectImmunities,
+    checkDamageResistances,
+    applyDamageImmunities,
+    hasCritImmunity,
     executeGenericBonusMenu,
+
     genericAccuracyStepAttack,
     genericAccuracyStepTechAttack,
     genericAccuracyStepWeaponAttack,
     genericAccuracyStepStatRoll,
-    genericBonusStepDamage,
-    injectKnockbackCheckbox
+    BonusesAPI
 } from "./genericBonuses.js";
 import { EffectManagerAPI } from "./effectManager.js";
 import { TerrainAPI } from "./terrain-utils.js";
@@ -1142,13 +1148,17 @@ async function handleSocketEvent({ action, payload }) {
 
 const cumulativeMoveData = new Map();
 const intentionalMoveData = new Map();
+const fullMoveData = new Map();
 
-function clearMoveData(tokenId) {
+function clearMoveData(tokenOrId) {
+    const tokenId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
     cumulativeMoveData.delete(tokenId);
     intentionalMoveData.delete(tokenId);
+    fullMoveData.delete(tokenId);
 }
 
-function undoMoveData(tokenId, distance) {
+function undoMoveData(tokenOrId, distance) {
+    const tokenId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
     const current = cumulativeMoveData.get(tokenId) || 0;
     const newVal = Math.max(0, current - distance);
     cumulativeMoveData.set(tokenId, newVal);
@@ -1156,14 +1166,64 @@ function undoMoveData(tokenId, distance) {
     const currentIntentional = intentionalMoveData.get(tokenId) || 0;
     const newIntentional = Math.max(0, currentIntentional - distance);
     intentionalMoveData.set(tokenId, newIntentional);
+
+    const history = fullMoveData.get(tokenId);
+    if (history && history.length > 0) {
+        history.pop();
+    }
 }
 
-function getCumulativeMoveData(tokenDocId) {
+function getCumulativeMoveData(tokenOrId) {
+    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
     return cumulativeMoveData.get(tokenDocId) || 0;
 }
 
-function getIntentionalMoveData(tokenDocId) {
+function getIntentionalMoveData(tokenOrId) {
+    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
     return intentionalMoveData.get(tokenDocId) || 0;
+}
+
+function getMovementHistory(tokenOrId) {
+    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
+    const history = fullMoveData.get(tokenDocId);
+    if (!history || history.length === 0) {
+        return { exists: false };
+    }
+    let totalMoved = 0;
+    let intentionalRegular = 0;
+    let intentionalFree = 0;
+    let unintentional = 0;
+    let nbBoostUsed = 0;
+    let startPosition = history[0].startPos;
+
+    for (const move of history) {
+        totalMoved += move.distanceMoved;
+        if (move.isDrag) {
+            if (move.isFreeMovement) {
+                intentionalFree += move.distanceMoved;
+            } else {
+                intentionalRegular += move.distanceMoved;
+            }
+            if (move.boostSet && move.boostSet.length > 0) {
+                nbBoostUsed += move.boostSet.length;
+            }
+        } else {
+            unintentional += move.distanceMoved;
+        }
+    }
+
+    return {
+        exists: true,
+        totalMoved,
+        intentional: {
+            total: intentionalRegular + intentionalFree,
+            regular: intentionalRegular,
+            free: intentionalFree
+        },
+        unintentional,
+        nbBoostUsed,
+        startPosition
+    };
 }
 
 async function handleTokenMove(document, change, options, userId) {
@@ -1253,6 +1313,16 @@ async function handleTokenMove(document, change, options, userId) {
         }
     }
 
+    const history = fullMoveData.get(document.id) || [];
+    history.push({
+        distanceMoved,
+        isDrag,
+        isFreeMovement,
+        boostSet: moveInfo.boostSet || [],
+        startPos
+    });
+    fullMoveData.set(document.id, history);
+
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
 }
 
@@ -1318,6 +1388,14 @@ async function onHitMissStep(state) {
 
         if (!targetToken)
             continue;
+
+        if (hasCritImmunity(targetToken.actor) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
+            if (hitResult)
+                hitResult.crit = false;
+            if (state.data?.attack_results?.[i])
+                state.data.attack_results[i].crit = false;
+            ui.notifications.info(`${targetToken.name} is immune to Critical Hits!`);
+        }
 
         if (hitResult?.hit) {
             hitTargets.push({
@@ -1387,7 +1465,12 @@ async function onDamageStep(state) {
         const targetToken = targetInfo.target;
         const isCrit = targetInfo.crit || false;
         const isHit = targetInfo.hit || false;
-        const targetDamages = targetInfo.damage?.map(d => d.amount) || [];
+
+        if (targetInfo.damage && targetToken.actor) {
+            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage);
+        }
+
+        const targetDamages = targetInfo.damage?.map(d => d.amount ?? d.val) || [];
         const targetTypes = targetInfo.damage?.map(d => d.type) || [];
 
         if (targetDamages.length > 0) {
@@ -2316,6 +2399,7 @@ Hooks.on('ready', () => {
         undoMoveData,
         getCumulativeMoveData,
         getIntentionalMoveData,
+        getMovementHistory,
         beginThrowWeaponFlow,
         processEffectConsumption,
         handleTrigger
@@ -2323,6 +2407,108 @@ Hooks.on('ready', () => {
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
     Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
+});
+
+Hooks.on('renderChatMessage', (app, html, data) => {
+    // Process damage cards for immunities and resistances
+    if (html.find('.lancer-damage-targets').length) {
+        // Get the damage types from the message
+        const damageTypes = html.find('.lancer-dice-formula i.cci[class*="damage--"]')
+            .map((_, el) => Array.from(el.classList)
+                .find(c => c.startsWith('damage--'))
+                ?.replace('damage--', '')
+            ).get();
+
+        if (damageTypes.length) {
+
+            // Process each target
+            html.find('.lancer-damage-target').each((_, targetEl) => {
+                const target = $(targetEl);
+                const uuid = target.data('uuid');
+                if (!uuid)
+                    return;
+
+                const actor = fromUuidSync(uuid)?.actor || fromUuidSync(uuid);
+                if (!actor)
+                    return;
+
+                // Find existing tags container or create it
+                let tagsContainer = target.find('.lancer-damage-tags');
+                let tagsContainerCreated = false;
+                if (!tagsContainer.length) {
+                    tagsContainer = $('<div class="lancer-damage-tags"></div>');
+                    tagsContainerCreated = true;
+                }
+
+                let tagsHtml = '';
+
+                // Collect all unique immunity types
+                const immuneTypes = new Set();
+                getImmunityBonuses(actor, "damage").forEach(b => {
+                    b.damageTypes?.forEach(t => immuneTypes.add(t.toLowerCase()));
+                });
+
+                immuneTypes.forEach(dtype => {
+                    if (dtype === 'variable' || dtype === 'all')
+                        return;
+                    const capitalizedType = dtype.charAt(0).toUpperCase() + dtype.slice(1);
+                    const tooltip = `Immune to ${capitalizedType}`;
+                    if (!tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length) {
+                        tagsHtml += `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="mdi mdi-shield i--xs"></i></span>`;
+                    }
+                });
+
+                // Collect all unique resistance types
+                const resistTypes = new Set();
+                getImmunityBonuses(actor, "resistance").forEach(b => {
+                    b.damageTypes?.forEach(t => resistTypes.add(t.toLowerCase()));
+                });
+
+                resistTypes.forEach(dtype => {
+                    if (dtype === 'variable' || dtype === 'all')
+                        return;
+                    const capitalizedType = dtype.charAt(0).toUpperCase() + dtype.slice(1);
+                    const tooltip = `Resist ${capitalizedType}`;
+                    if (!tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length && !tagsContainer.find(`span[data-tooltip="Resistance to ${capitalizedType}"]`).length) {
+                        tagsHtml += `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="mdi mdi-shield-half-full i--xs"></i></span>`;
+                    }
+                });
+
+                if (tagsHtml) {
+                    if (tagsContainerCreated) {
+                        const rollsTags = target.find('.lancer-damage-rolls-tags');
+                        if (rollsTags.length) {
+                            tagsContainer.append(tagsHtml);
+                            rollsTags.append(tagsContainer);
+                        }
+                    } else {
+                        tagsContainer.append(tagsHtml);
+                    }
+                }
+            });
+        }
+    }
+
+    // Process attack targets for crit immunity (downgraded crits)
+    html.find('.lancer-hit-target').each((_, targetEl) => {
+        const target = $(targetEl);
+        const hitChip = target.find('.lancer-hit-chip');
+
+        // If it's a regular hit, check if the roll was 20+ (which means it was downgraded)
+        if (hitChip.length && hitChip.hasClass('hit')) {
+            const rollTotalStr = target.find('.dice-total').text();
+            const rollTotal = parseInt(rollTotalStr, 10);
+
+            if (!isNaN(rollTotal) && rollTotal >= 20) {
+                hitChip.css({
+                    'background-color': '#eab308',
+                    'color': '#000',
+                    'border-color': '#ca8a04'
+                });
+                hitChip.attr('data-tooltip', 'Immune to Critical Hits');
+            }
+        }
+    });
 });
 
 Hooks.on('renderTokenHUD', (hud, html, data) => {
@@ -2435,8 +2621,59 @@ Hooks.on('createActiveEffect', async (effect, options, userId) => {
     if (!actor)
         return;
 
+    // De-duplicate execution: only the active user who matches the actor's owner should run the interactive prompt
+    let isResponsible = false;
+    if (actor.hasPlayerOwner) {
+        const activeOwners = game.users.filter(u => u.active && !u.isGM && actor.testUserPermission(u, "OWNER"));
+        isResponsible = activeOwners.length > 0 ? activeOwners[0].id === game.user.id : game.user.isGM;
+    } else {
+        const activeGMs = game.users.filter(u => u.active && u.isGM);
+        if (activeGMs.length === 0) {
+            isResponsible = true; // Fallback if no GM
+        } else {
+            isResponsible = activeGMs[0].id === game.user.id;
+        }
+    }
+
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
+
+    const immunitySources = checkEffectImmunities(actor, statusId, effect);
+    if (immunitySources.length > 0) {
+        if (isResponsible) {
+            const api = game.modules.get('lancer-automations')?.api;
+            if (api?.startChoiceCard) {
+                await api.startChoiceCard({
+                    title: "ACTIVATE IMMUNITY?",
+                    description: `<b>${actor.name}</b> affected by <b>${statusId}</b>.<hr>Immunity from: <i>${immunitySources.join(", ")}</i>. Activate?`,
+                    icon: "mdi mdi-shield",
+                    mode: "or",
+                    choices: [
+                        {
+                            text: "Yes (Resist Effect)",
+                            icon: "fas fa-check",
+                            callback: async () => {
+                                ui.notifications.info(`${actor.name} resisted ${statusId}`);
+                                await effect.delete();
+                            }
+                        },
+                        {
+                            text: "No (Allow Effect)",
+                            icon: "fas fa-times",
+                            callback: async () => {
+                                await handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
+                            }
+                        }
+                    ]
+                });
+            } else {
+                // Fallback to old behavior if API not ready
+                ui.notifications.info(`${actor.name} resisted ${statusId} (${immunitySources.join(", ")})`);
+                await effect.delete();
+            }
+        }
+        return;
+    }
 
     await handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
 });
