@@ -329,8 +329,7 @@ This is the core of the module. Everything else can plug into it.
 
 ```mermaid
 flowchart LR
-    A["Game event fires"] --> B["handleTrigger<br/>called"]
-    B --> C["Collect tokens<br/>in scene"]
+    A["Game Trigger fired<br/>with event data payload"] --> C["Collect tokens<br/>in scene"]
     C --> D{"Item or General<br/>activation match?"}
     D -- No --> Skip
     D -- Yes --> E{"onlyOnSourceMatch<br/>passes?"}
