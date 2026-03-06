@@ -73,13 +73,17 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## Effect Manager
 
-<img align="right" src="doc/img/effect-manager-hud-button.png" width="40%"/>
+<img align="right" src="doc/img/effect-manager-hud-button.png" width="30%"/>
 
 The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API.
 
+<br clear="right"/>
+
+---
+
 ### Standard Tab
 
-![Effect manager standard tab](doc/img/effect-manager-standard.png)
+<img align="right" src="doc/img/effect-manager-standard.png" width="40%"/>
 
 The standard tab works with the built-in FoundryVTT status icons plus any extras added by the Lancer system. From here you can:
 
@@ -90,9 +94,13 @@ The standard tab works with the built-in FoundryVTT status icons plus any extras
 
 When a stack reaches zero, the effect is removed automatically.
 
+<br clear="right"/>
+
+---
+
 ### Custom Tab
 
-![Effect manager custom tab](doc/img/effect-manager-custom.png)
+<img align="right" src="doc/img/effect-manager-custom.png" width="40%"/>
 
 Available when [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) is installed.
 
@@ -102,13 +110,15 @@ Custom effect templates can be saved in module settings and reused across sessio
 
 One thing to note: effects that share the same name but have different conditions are grouped under the same icon with a blue stack number. This is separate from the Status Icon Counter module's display. If an effect has both, the numbers may overlap.
 
-### Bonuses Tab
-
-![Effect manager bonuses tab](doc/img/effect-manager-bonuses.png)
-
-The Bonuses tab gives you access to general bonuses (accuracy, difficulty, damage, stat). These are documented in the next section.
+<br clear="right"/>
 
 ---
+
+### Bonuses Tab
+
+<img align="right" src="doc/img/effect-manager-bonuses.png" width="40%"/>
+
+The Bonuses tab gives you access to general bonuses (accuracy, difficulty, damage, stat). These are documented in the next section.
 
 ## Bonuses
 
@@ -126,13 +136,28 @@ General bonuses behave like standard status effects: they're visible on the toke
 - **Tag**: injects or modifies tags on weapons (e.g. adding Armor Penetration, changing range)
 - **Immunity**: grants immunity to a damage type or effect category
 
+<br clear="right"/>
+
+---
+
+<table>
+<tr>
+<td>
+
 Accuracy and difficulty bonuses are injected into the Lancer roll HUD so you can see them before confirming.
 
 ![Accuracy bonus in roll dialog](doc/img/accuracy-bonus-in-roll.png)
 
+</td>
+<td>
+
 Damage bonuses appear in the damage roll output.
 
 ![Damage bonus in roll](doc/img/damage-bonus-in-roll.png)
+
+</td>
+</tr>
+</table>
 
 ### Ephemeral Bonuses
 
@@ -150,13 +175,26 @@ Use case: the Veterancy talent gives +1 accuracy on stat checks. Apply it with `
 
 When an immunity bonus is active on a token, any incoming damage of that type triggers a **choice card** asking whether to apply the immunity.
 
+<table>
+<tr>
+<td>
+
 ![Damage immunity integration](doc/img/damage-immunity.png)
 
+</td>
+<td>
+
 ![Immunity choice card](doc/img/immunity-choice-card.png)
+
+</td>
+</tr>
+</table>
 
 ### Tag Injection
 
 Tag bonuses let you inject or modify tags on a weapon mid-flow. Useful for abilities that temporarily grant a property, for example adding the `Armor Penetration` tag before an attack. You can also remove existing tags.
+
+<br clear="right"/>
 
 ---
 
@@ -176,13 +214,17 @@ When the knockback feature is enabled, a **Knockback** checkbox appears in the d
 
 ### Choice Card
 
-![Choice card](doc/img/choice-card.png)
+<img align="right" src="doc/img/choice-card.png" width="40%"/>
 
 `api.startChoiceCard(options)`: displays a popup card with multiple options. Supports:
 - **OR mode**: the player picks exactly one option
 - **AND mode**: all options are shown and each can be confirmed or skipped individually
 
 Multiple cards can be spawned simultaneously. The card system serializes them in a queue and shows a pending count so nothing gets lost.
+
+<br clear="right"/>
+
+---
 
 ### Choose Token
 
@@ -239,7 +281,7 @@ You can also call these directly:
 
 [TemplateMacro](https://github.com/Agraael/templatemacro) is a fork of a dead module that I fixed for FoundryVTT v12. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
 
-![TemplateMacro Lancer tool buttons](doc/img/templateMacro-lancer-tools.png)
+<img align="right" src="doc/img/templateMacro-lancer-tools.png" width="40%"/>
 
 ### Place Effect Zone
 
@@ -252,6 +294,8 @@ A zone that deals damage to tokens on entry or at specific trigger points (e.g. 
 ### Difficult Terrain
 
 A zone that imposes a movement penalty on tokens moving through it. When used with the [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork), the penalty is factored into the movement cost display in real time, so you can see exactly how much movement is consumed.
+
+<br clear="right"/>
 
 ---
 
@@ -275,39 +319,45 @@ These deployables are recognized and read by the deploy macro just like native o
 
 ![Deployable finder tool](doc/img/deployable-finder.png)
 
----
-
 ## Automation System
 
 This is the core of the module. Everything else can plug into it.
 
 ### How It Works
 
+<details>
+<summary>Expand flow diagram</summary>
+
 ```mermaid
 flowchart TD
-    A["Game event fires\n(move, attack, damage, status change, etc.)"] --> B["handleTrigger called\nwith event data payload"]
-    B --> C["Collect all tokens in scene\n(or combat tokens for combat-only triggers)"]
+    A["Game event fires<br/>(move, attack, damage, status change, etc.)"] --> B["handleTrigger called<br/>with event data payload"]
+    B --> C["Collect all tokens in scene<br/>(or combat tokens for combat-only triggers)"]
     C --> D{"For each potential reactor token"}
-    D --> E["Check Item Activations\n(items the token owns)"]
-    D --> F["Check General Activations\n(no item required)"]
-    E --> G{"Trigger type\nmatch?"}
+    D --> E["Check Item Activations<br/>(items the token owns)"]
+    D --> F["Check General Activations<br/>(no item required)"]
+    E --> G{"Trigger type<br/>match?"}
     F --> G
     G -- No --> H["Skip"]
-    G -- Yes --> I{"onlyOnSourceMatch\ncheck"}
+    G -- Yes --> I{"onlyOnSourceMatch<br/>check"}
     I -- Fail --> H
-    I -- Pass --> J{"Disposition /\nDistance /\nother filters"}
+    I -- Pass --> J{"Disposition /<br/>Distance /<br/>other filters"}
     J -- Fail --> H
     J -- Pass --> K["Run evaluate()"]
     K -- false --> H
     K -- true --> L{"autoActivate?"}
-    L -- Yes --> M["Run activation code\nimmediately"]
+    L -- Yes --> M["Run activation code<br/>immediately"]
     L -- No --> N["Queue for popup"]
-    N --> O["Activation Popup\nshown to GM\n(and optionally players)"]
+    N --> O["Activation Popup<br/>shown to GM<br/>(and optionally players)"]
     O --> P["User clicks Activate"]
     P --> M
 ```
 
+</details>
+
 ### Trigger Reference
+
+<details>
+<summary>Expand trigger table</summary>
 
 | Trigger | When it fires |
 |---------|---------------|
@@ -342,6 +392,8 @@ flowchart TD
 
 ![Trigger list](doc/img/trigger-list.png)
 
+</details>
+
 Each trigger carries a data payload. The full schema for each trigger is in the [API Reference](API_REFERENCE.md).
 
 ### Activation Types
@@ -352,6 +404,10 @@ There are two ways to set up an activation:
 - **General:** Not tied to any item. Any token in the scene can react, filtered by the rules you set up.
 
 ### Filters
+
+<table>
+<tr>
+<td>
 
 **Only On Source Match**
 
@@ -379,6 +435,9 @@ Controls how the activation is labeled in the popup (Reaction, Quick Action, Ful
 
 ![Action type selector](doc/img/action-types.png)
 
+</td>
+<td>
+
 **Trigger / Effect Description**
 
 Lets you override the description text shown in the activation popup.
@@ -396,6 +455,10 @@ By default, some triggers only fire during combat. Enable this flag to allow the
 A built-in tool in the activation config that lets you browse your world's compendiums and copy an item's LID directly.
 
 ![Item LID finder](doc/img/item-finder.png)
+
+</td>
+</tr>
+</table>
 
 ### Evaluate, Activate & Init
 
@@ -517,6 +580,9 @@ When configured in module settings, a token's vision radius is reduced during dr
 
 The module ships with a compendium of macros for common Lancer actions:
 
+<details>
+<summary>Expand macro list</summary>
+
 | Macro | What it does |
 |-------|-------------|
 | **Overwatch** | Declare Overwatch |
@@ -536,6 +602,8 @@ The module ships with a compendium of macros for common Lancer actions:
 | **Reactor Explosion / Meltdown** | NPC and scenario tools |
 | **Downtime** | Downtime activity card |
 | **Frag Signal** | Scenario-specific macro |
+
+</details>
 
 ---
 
@@ -558,6 +626,9 @@ These are real examples from active sessions.
 ### Dispersal Shield (Priest)
 
 Grants all-damage resistance for the next `1d3` attacks to a friendly target in sensor range.
+
+<details>
+<summary>Expand code</summary>
 
 ```javascript
 "npcf_dispersal_shield_priest": {
@@ -614,9 +685,14 @@ Grants all-damage resistance for the next `1d3` attacks to a friendly target in 
 }
 ```
 
+</details>
+
 ### Sapper Kit: Smoke Launcher (Strider)
 
 Places a smoke zone (soft cover) that persists until the start of the Strider's next turn.
+
+<details>
+<summary>Expand code</summary>
 
 ```javascript
 "nrfaw-npc_carrier_SmokeLaunchers": {
@@ -666,6 +742,8 @@ Places a smoke zone (soft cover) that persists until the start of the Strider's 
     }]
 }
 ```
+
+</details>
 
 ---
 
