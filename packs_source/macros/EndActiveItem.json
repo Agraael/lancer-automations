@@ -1,0 +1,6 @@
+{
+    "name": "L.A - End Active Item",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/pause-button.svg",
+    "command_source": "EndActiveItem.js"
+}

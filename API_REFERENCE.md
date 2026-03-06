@@ -200,19 +200,23 @@ Fires *before* movement is finalized. Allows interception.
 #### Stat & Activation Triggers
 - **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal }`.
 - **`onCheck`**: Result. `{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal }`.
-- **`onActivation`**: Item/Action fired. `{ triggeringToken, actionType, actionName, item, actionData }`.
+- **`onActivation`**: Item/Action fired. `{ triggeringToken, actionType, actionName, item, actionData, endActivation }`.
 - **`onUpdate`**: **WARNING**: Generic document update (High frequency).
 
 ---
 
 ### Evaluate & Activate Signatures
 
-#### `evaluate(triggerType, triggerData, reactorToken, item, name)`
+#### `evaluate(triggerType, triggerData, reactorToken, item, name, api)`
 Determines if an activation should trigger. Called for every potential reactor.
 - **Returns**: `boolean`.
 
-#### `activate(triggerType, triggerData, reactorToken, item, name)`
+#### `activationCode(triggerType, triggerData, reactorToken, item, name, api)`
 Code to run when activated.
+- **Returns**: `Promise<void>`.
+
+#### `onInit(token, item, api)`
+Code to run when a token is created on the scene.
 - **Returns**: `Promise<void>`.
 
 ---
@@ -420,11 +424,15 @@ Removes **all** active effects from the provided tokens.
 |----------|------|-------------|
 | `id` | `string` | Optional custom ID |
 | `name` | `string` | Display name |
-| `val` | `number` | Value |
-| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"` |
+| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"multi"` |
 | `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"` |
 | `effects` | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | `damageTypes` | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
+| `tagName` | `string` | Only for `type: "tag"`. Name of the custom tag being added (e.g. `"Inaccurate"`) |
+| `val` | `number\|string`| Value for stat, accuracy, difficulty, or tag bonuses |
+| `tagMode` | `string` | `"add"`, `"override"`. For `type: "tag"`. Determines if the tag adds to a value or overrides it. |
+| `removeTag` | `boolean` | For `type: "tag"`. If true, negates the tag instead of adding it. |
+| `bonuses` | `Array` | Only for `type: "multi"`. Array of sub-bonus objects to be grouped under this single bonus entry. |
 | `uses` | `number` | Stack count |
 | `stat` | `string` | Property path (e.g. `system.hp.max`) |
 | `rollTypes` | `Array` | `["attack"]`, `["check"]`, etc. |
@@ -882,8 +890,8 @@ Hooks.on('lancer-automations.ready', (api) => {
     api.registerDefaultGeneralReactions({
         "Custom Reaction": {
             triggers: ["onDamage"],
-            evaluate: (triggerType, data, reactor) => data.target?.id === reactor.id,
-            activationCode: async (type, data, reactor) => {
+            evaluate: (triggerType, data, reactor, item, name, api) => data.target?.id === reactor.id,
+            activationCode: async (triggerType, data, reactor, item, name, api) => {
                 // ... logic
             }
         }

@@ -559,7 +559,15 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
     if (!SimpleActivationFlow) {
         return { completed: false };
     }
-    const flow = new SimpleActivationFlow(actor.uuid, options);
+    const item = extraData?.item;
+    const uuid = item?.uuid || actor.uuid;
+    const flow = new SimpleActivationFlow(uuid, options);
+
+    // // Ensure state.item is correctly populated for the flow steps
+    // if (item) {
+    //     flow.state.item = item;
+    // }
+
     if (extraData && typeof extraData === 'object') {
         globalThis.mergeObject(flow.state.data, extraData);
     }

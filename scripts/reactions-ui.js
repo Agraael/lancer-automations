@@ -20,11 +20,12 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
         const code = source?.activationCode;
         if (code) {
             try {
+                const api = game.modules.get('lancer-automations')?.api;
                 if (typeof code === 'function') {
-                    return code(triggerType, triggerData, token, item, activationName);
+                    return code(triggerType, triggerData, token, item, activationName, api);
                 } else if (typeof code === 'string') {
-                    const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName"]);
-                    return fn(triggerType, triggerData, token, item, activationName);
+                    const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"]);
+                    return fn(triggerType, triggerData, token, item, activationName, api);
                 }
             } catch (e) {
                 console.error(`lancer-automations | Error executing activation code:`, e);

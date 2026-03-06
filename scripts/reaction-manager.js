@@ -1212,7 +1212,7 @@ export class ReactionEditor extends FormApplication {
             onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, distanceToTrigger }",
             onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, distanceToTrigger }",
             onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
-            onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger }",
+            onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger, endActivation }",
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
             onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
@@ -1405,7 +1405,7 @@ export class ReactionEditor extends FormApplication {
             const reactionPath = pathInput.val()?.trim() || "";
 
             if (!lid) {
-                previewContainer.hide();
+                //previewContainer.show();
                 return;
             }
 
@@ -1425,7 +1425,7 @@ export class ReactionEditor extends FormApplication {
             }
 
             if (!foundItemUuid) {
-                previewContainer.hide();
+                //previewContainer.show();
                 return;
             }
 

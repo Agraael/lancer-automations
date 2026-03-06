@@ -30,8 +30,7 @@ export function getDefaultGeneralReactionRegistry() {
             actionType: "Reaction",
             outOfCombat: true,
             frequency: "Other",
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const mover = triggerData.triggeringToken;
                 if (!mover)
                     return false;
@@ -39,8 +38,7 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.executeSimpleActivation(reactorToken.actor, {
                     title: "Overwatch",
                     action: {
@@ -79,9 +77,7 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
-
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     await api.executeSimpleActivation(reactorToken.actor, {
                         title: "Brace",
                         action: {
@@ -106,8 +102,7 @@ export function getDefaultGeneralReactionRegistry() {
                 consumesReaction: true,
                 triggerSelf: true,
                 triggerOther: false,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "brace",
@@ -151,8 +146,7 @@ export function getDefaultGeneralReactionRegistry() {
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
                     return triggerData.statusId === 'brace';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const BRACE_BONUS_ID = 'brace-difficulty-applyToTargetter';
 
                     if (triggerType === 'onStatusApplied') {
@@ -209,9 +203,7 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
-
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === 'onStatusApplied') {
                     if (triggerData.statusId === 'prone') {
                         await api.triggerEffectImmunity(reactorToken, ["Prone"], "Flying");
@@ -241,8 +233,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const targets = Array.from(game.user.targets);
 
                 if (targets.length === 0) {
@@ -296,8 +287,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: reactorToken.actor.system.sensor_range,
@@ -353,12 +343,10 @@ export function getDefaultGeneralReactionRegistry() {
                 forceSynchronous: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     return !!api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.bolster");
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (triggerType === 'onInitCheck') {
                         await api.injectBonusToNextRoll(reactorToken.actor, {
                             name: "Bolster",
@@ -386,7 +374,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const targets = triggerData.targets;
                 if (!targets || targets.length === 0)
                     return;
@@ -397,7 +385,6 @@ export function getDefaultGeneralReactionRegistry() {
                     ? ["lancer.statusIconsNames.impaired"]
                     : ["lancer.statusIconsNames.slow", "lancer.statusIconsNames.impaired"];
 
-                const api = game.modules.get('lancer-automations').api;
                 await api.applyEffectsToTokens({
                     tokens: targetTokens,
                     effectNames: effects,
@@ -419,8 +406,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
@@ -444,8 +430,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const targets = triggerData.targets;
                     if (!targets || targets.length === 0)
                         return;
@@ -475,9 +460,8 @@ export function getDefaultGeneralReactionRegistry() {
                 autoActivate: false,
                 triggerSelf: true,
                 triggerOther: false,
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const terrainAPI = globalThis.terrainHeightTools;
-                    const api = game.modules.get('lancer-automations').api;
                     const elevation = reactorToken.document?.elevation || 0;
                     const maxGroundHeight = terrainAPI ? api.getMaxGroundHeightUnderToken(reactorToken, terrainAPI) : 0;
 
@@ -494,8 +478,7 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (api.executeFall) {
                         await api.executeFall(reactorToken);
                     }
@@ -555,7 +538,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onUpdate") {
                     const c = triggerData.change || {};
                     if (c.x !== undefined || c.y !== undefined || c.elevation !== undefined) {
@@ -571,7 +554,6 @@ export function getDefaultGeneralReactionRegistry() {
                     if (moveInfo.isTeleport || moveInfo.isModified)
                         return false;
 
-                    const api = game.modules.get('lancer-automations')?.api;
                     if (api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.hidden") ||
                         api.findEffectOnToken(reactorToken, "disengage") ||
                         api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.intangible") ||
@@ -590,15 +572,13 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onUpdate") {
-                    const api = game.modules.get('lancer-automations')?.api;
                     api.updateAllEngagements();
                     return;
                 }
 
                 if (triggerType === "onPreMove") {
-                    const api = game.modules.get('lancer-automations')?.api;
                     const moveInfo = triggerData.moveInfo;
                     const allTokens = canvas.tokens.placeables;
                     const mover = reactorToken;
@@ -648,8 +628,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["Disengage"],
@@ -677,8 +656,7 @@ export function getDefaultGeneralReactionRegistry() {
                     }
                     return true;
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const selectedTurns = triggerData.actionData.stateData.selectedTurns;
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
@@ -701,8 +679,7 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken) {
-                    const api = game.modules.get('lancer-automations').api;
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     await api.startChoiceCard({
                         mode: "or",
                         title: "Reactor Explosion",
@@ -753,8 +730,7 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const mechActor = reactorToken.actor;
 
                 const pilotRef = mechActor.system.pilot;
@@ -795,8 +771,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"],
@@ -828,8 +803,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.removeEffectsByNameFromTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
@@ -848,8 +822,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["hidden"],
@@ -882,8 +855,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const squeezeProne = api.findEffectOnToken(reactorToken, e =>
                     e.statuses?.has("prone") &&
                     e.flags?.['lancer-automations']?.squeezeSource === reactorToken.id
@@ -932,8 +904,7 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const mechActor = reactorToken.actor;
                 const pilotRef = mechActor.system.pilot;
                 const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
@@ -959,8 +930,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 await api.executeScanOnActivation(reactorToken);
             }
         },
@@ -975,8 +945,7 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken) {
-                const api = game.modules.get('lancer-automations').api;
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const targets = await api.chooseToken(reactorToken, {
                     title: "SEARCH",
                     count: 1,

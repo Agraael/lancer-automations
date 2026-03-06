@@ -78,7 +78,7 @@ An activation fires when a trigger occurs. You decide who reacts: the actor itse
 
 ### Evaluate, Activate & Init Functions
 
-**Evaluate** is a code block (or macro) that validates the activation. It receives the trigger type, trigger data, reactor token, item, and activation name. Return `true` to proceed, `false` to skip.
+**Evaluate** is a code block (or macro) that validates the activation. It receives the trigger type, trigger data, reactor token, item, activation name, and the lancer-automations `api`. Return `true` to proceed, `false` to skip.
 
 **Activation popup (manual mode):** Non-auto activations show up in a summary popup listing all triggered activations and which tokens can respond.
 
@@ -132,7 +132,7 @@ In the module settings, you can export and import your activations as JSON. Make
 
 ### Tips
 
-In code editor blocks, you can write a full function signature like `async function(triggerType, triggerData, reactorToken, item, activationName) { ... }` instead of just the function body. The module strips the wrapper automatically. Looks much nicer with CodeMirror highlighting.
+In code editor blocks, you can write a full function signature like `async function(triggerType, triggerData, reactorToken, item, activationName, api) { ... }` instead of just the function body. The module strips the wrapper automatically. Looks much nicer with CodeMirror highlighting.
 
 You can also register default activations by code. See the [API Reference](API_REFERENCE.md#how-to-register-default-activations-by-code) for how.
 
@@ -183,10 +183,7 @@ All-resistance for the next 1d3 attacks
         autoActivate: true,
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const lancerAutomations = game.modules.get('lancer-automations');
-            const api = lancerAutomations?.api;
-
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             if (!api?.applyFlaggedEffectToTokens) {
                 ui.notifications.error("lancer-automations module required");
                 return;
@@ -251,8 +248,7 @@ Places a smoke zone that last until the end of next turn.
         autoActivate: true,
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const api = game.modules.get('lancer-automations')?.api;
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             if (!api?.placeZone) {
                 ui.notifications.warn("lancer-automations module required for smoke placement");
                 return;

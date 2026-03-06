@@ -191,6 +191,7 @@ function getAllSceneTokens() {
 }
 
 async function checkOnInitReactions(token) {
+    const api = game.modules.get('lancer-automations').api;
     // 1. Check Item-based onInit
     const items = getReactionItems(token);
 
@@ -215,10 +216,10 @@ async function checkOnInitReactions(token) {
 
             try {
                 if (typeof reaction.onInit === 'function') {
-                    await reaction.onInit(token, item);
+                    await reaction.onInit(token, item, api);
                 } else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '') {
-                    const onInitFunc = stringToFunction(reaction.onInit, ["token", "item"]);
-                    await onInitFunc(token, item);
+                    const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"]);
+                    await onInitFunc(token, item, api);
                 }
             } catch (error) {
                 console.error(`lancer-automations | Error executing onInit for ${item.name}:`, error);
@@ -236,10 +237,10 @@ async function checkOnInitReactions(token) {
 
         try {
             if (typeof reaction.onInit === 'function') {
-                await reaction.onInit(token, null);
+                await reaction.onInit(token, null, api);
             } else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '') {
-                const onInitFunc = stringToFunction(reaction.onInit, ["token", "item"]);
-                await onInitFunc(token, null);
+                const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"]);
+                await onInitFunc(token, null, api);
             }
         } catch (error) {
             console.error(`lancer-automations | Error executing onInit for General Activation ${name}:`, error);
@@ -265,13 +266,14 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         return null;
 
     try {
+        const api = game.modules.get('lancer-automations').api;
         const sourceToken = data.triggeringToken;
         const distanceToTrigger = (sourceToken && token) ? getTokenDistance(token, sourceToken) : null;
         const enrichedData = { ...data, distanceToTrigger };
 
         let shouldTrigger = false;
         if (typeof reaction.evaluate === 'function') {
-            const result = reaction.evaluate(triggerType, enrichedData, token, null, reactionName);
+            const result = reaction.evaluate(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
                 console.warn(`lancer-automations | evaluate for "${reactionName}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
                 result.then(val => { /* fire-and-forget async evaluate */ });
@@ -280,8 +282,8 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
                 shouldTrigger = result;
             }
         } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
-            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"], reaction);
-            const result = evalFunc(triggerType, enrichedData, token, null, reactionName);
+            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
+            const result = evalFunc(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
                 console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancel().`);
                 shouldTrigger = false;
@@ -420,10 +422,11 @@ async function checkReactions(triggerType, data) {
                         }
                     }
 
+                    const api = game.modules.get('lancer-automations').api;
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
-                        const result = reaction.evaluate(triggerType, enrichedData, token, item, activationName);
+                        const result = reaction.evaluate(triggerType, enrichedData, token, item, activationName, api);
                         if (result instanceof Promise) {
                             console.warn(`lancer-automations | evaluate for "${item.name}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
                             result.then(val => { /* fire-and-forget */ });
@@ -433,8 +436,8 @@ async function checkReactions(triggerType, data) {
                         }
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
-                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName"], reaction);
-                            const result = evalFunc(triggerType, enrichedData, token, item, activationName);
+                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
+                            const result = evalFunc(triggerType, enrichedData, token, item, activationName, api);
                             if (result instanceof Promise) {
                                 console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancel().`);
                                 shouldTrigger = false;
@@ -1768,7 +1771,8 @@ async function onActivationStep(state) {
         actionType: actionType,
         actionName: actionName,
         item,
-        actionData
+        actionData,
+        endActivation: state.data?.endActivation || false
     });
 
     if (token) {

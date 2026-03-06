@@ -2695,6 +2695,7 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
  * Known flag keys:
  *   - deployRange {number}  — default range when placing this item's deployables
  *   - deployCount {number}  — default count when placing this item's deployables
+ *   - activeStateData {Object} — contains { active: boolean, endAction: string, endActionDescription: string }
  * @param {Item} item       The Foundry Item document to flag
  * @param {Object} flags    Key/value pairs to set in the lancer-automations namespace
  * @returns {Promise<Item>} The updated item
@@ -2709,6 +2710,136 @@ export async function addItemFlags(item, flags) {
     }
     return item;
 }
+
+/**
+ * Removes flags from an item document.
+ * @param {Item} item       The Foundry Item document to flag
+ * @param {Object} flags    Key/value pairs to set in the lancer-automations namespace
+ * @returns {Promise<Item>} The updated item
+ */
+export async function removeItemFlags(item, flags) {
+    if (!item || typeof flags !== 'object') {
+        ui.notifications.error("removeItemFlags: item and flags object are required.");
+        return null;
+    }
+    for (const [key, val] of Object.entries(flags)) {
+        await item.unsetFlag('lancer-automations', key);
+    }
+    return item;
+}
+
+/**
+ * Marks an item as activated.
+ * @param {Item} item - The item to mark natively
+ * @param {Token} token - The token that owns the item (kept for signature compatibility)
+ * @param {string} endAction - A string defining what action is used to end the activation (e.g. "Quick", "Full")
+ * @param {string} [endActionDescription=""] - Optional text description shown when ending the activation
+ * @returns {Promise<Item>} The updated item
+ */
+export async function setItemAsActivated(item, token, endAction, endActionDescription = "") {
+    if (!item) {
+        ui.notifications.warn("No item provided to setItemAsActivated.");
+        return null;
+    }
+    return await addItemFlags(item, {
+        activeStateData: {
+            active: true,
+            endAction: endAction,
+            endActionDescription: endActionDescription
+        }
+    });
+}
+
+/**
+ * Gets all activated items for a token.
+ * @param {Token} token
+ * @returns {Array<Item>} Array of activated items.
+ */
+export function getActivatedItems(token) {
+    if (!token?.actor) {
+        return [];
+    }
+    const allItems = token.actor.items;
+    return allItems.filter(item => {
+        const flags = getItemFlags(item);
+        return flags?.activeStateData?.active === true;
+    });
+}
+
+/**
+ * Ends an item's activation. Removes the activated flags and posts a chat message (via SimpleActivationFlow).
+ * @param {Item} item - The activated item
+ * @param {Token} token - The token (needed for the flow)
+ * @returns {Promise<boolean>} Whether the flow completed
+ */
+export async function endItemActivation(item, token) {
+    if (!item || !token?.actor) {
+        return false;
+    }
+
+    const flags = getItemFlags(item);
+    if (!flags?.activeStateData?.active) {
+        return false;
+    }
+
+    const endAction = flags.activeStateData.endAction || "Unknown";
+    const endActionDescription = flags.activeStateData.endActionDescription || "";
+
+    // Unset the activation flag
+    await removeItemFlags(item, { activeStateData: true });
+
+    const api = game.modules.get('lancer-automations')?.api;
+    if (api?.executeSimpleActivation) {
+        const result = await api.executeSimpleActivation(token.actor, {
+            title: `End ${item.name}`,
+            action: { name: item.name, activation: endAction },
+            detail: endActionDescription,
+            tags: item.system?.tags || []
+        }, {
+            item: item,
+            endActivation: true
+        });
+        return result.completed;
+    }
+    return false;
+}
+
+/**
+ * Opens a prompt to choose an activated item to end.
+ * @param {Token} token - The token that has the activated items.
+ * @returns {Promise<Item|null>} The item that was selected and ended, or null if canceled.
+ */
+export async function openEndActivationMenu(token) {
+    if (!token?.actor) {
+        ui.notifications.warn("No valid token selected.");
+        return null;
+    }
+
+    const activatedItems = getActivatedItems(token);
+    if (activatedItems.length === 0) {
+        ui.notifications.warn(`No activated items found for ${token.name}.`);
+        return null;
+    }
+
+    const chosenItem = await pickItem(activatedItems, {
+        title: "END ITEM ACTIVATION",
+        description: `Select an activated item to end for ${token.name}:`,
+        icon: "fas fa-power-off",
+        formatText: (w) => {
+            const flags = getItemFlags(w);
+            const actionText = flags?.activeStateData?.endAction ? ` [${flags.activeStateData.endAction}]` : "";
+            return `End ${w.name}${actionText}`;
+        }
+    });
+
+    if (chosenItem) {
+        await endItemActivation(chosenItem, token);
+        return chosenItem;
+    }
+
+    return null;
+}
+
 
 /**
  * Add extra deployable LIDs to an item via flags (system.deployables is read-only due to Lancer's TypeDataModel).
@@ -3697,5 +3828,9 @@ export const InteractiveAPI = {
     pickItem,
     reloadOneWeapon,
     getWeapons,
-    findItemByLid
+    findItemByLid,
+    setItemAsActivated,
+    getActivatedItems,
+    endItemActivation,
+    openEndActivationMenu
 };

@@ -1049,7 +1049,11 @@ export async function executeEffectManager(options = {}) {
                 if (!target || !target.actor)
                     return;
 
-                const effects = target.actor.effects.filter(e => !e.disabled && (e.icon || e.img));
+                const effects = target.actor.effects.filter(e =>
+                    !e.disabled &&
+                    (e.icon || e.img) &&
+                    !e.getFlag("lancer-automations", "linkedBonusId")
+                );
 
                 if (effects.length === 0) {
                     list.html('<p style="text-align:center; color:#ccc">No effects found.</p>');
@@ -1133,32 +1137,43 @@ export async function executeEffectManager(options = {}) {
                     return;
                 }
 
-                bonuses.forEach(b => {
-                    let details = "";
-                    if (b.type === 'accuracy')
-                        details = `(Accuracy +${b.val})`;
-                    else if (b.type === 'difficulty')
-                        details = `(Difficulty +${b.val})`;
-                    else if (b.type === 'stat') {
-                        const statLabel = b.stat?.split('.').pop() || b.stat;
-                        details = `(${statLabel} ${parseInt(b.val) >= 0 ? '+' : ''}${b.val})`;
-                    } else if (b.type === 'damage') {
-                        details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
-                    } else if (b.type === 'tag') { // Added block
-                        if (b.removeTag) {
-                            details = `(Remove Tag: ${b.tagName})`;
-                        } else {
-                            details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
-                        }
-                    } else if (b.type === 'immunity') {
-                        details = `(${b.subtype})`;
-                        if (b.subtype === 'effect' && b.effects) {
-                            details = `(Effect: ${b.effects.join(', ')})`;
-                        }
-                        if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes) {
-                            details = `(${b.subtype}: ${b.damageTypes.join(', ')})`;
-                        }
+                const getBonusDetailString = (subB) => {
+                    if (subB.type === 'accuracy') {
+                        return `Accuracy +${subB.val}`;
                     }
+                    if (subB.type === 'difficulty') {
+                        return `Difficulty +${subB.val}`;
+                    }
+                    if (subB.type === 'stat') {
+                        return `${subB.stat?.split('.').pop() || subB.stat} ${parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
+                    }
+                    if (subB.type === 'damage') {
+                        return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
+                    }
+                    if (subB.type === 'tag') {
+                        return subB.removeTag ? `Remove Tag: ${subB.tagName}` : `${subB.tagMode === 'override' ? 'Set' : 'Add'} ${subB.tagName} ${subB.val}`;
+                    }
+                    if (subB.type === 'immunity') {
+                        if (subB.subtype === 'effect' && subB.effects) {
+                            return `Immunity: ${subB.effects.join(', ')}`;
+                        }
+                        if ((subB.subtype === 'damage' || subB.subtype === 'resistance') && subB.damageTypes) {
+                            return `${subB.subtype}: ${subB.damageTypes.join(', ')}`;
+                        }
+                        return subB.subtype;
+                    }
+                    return subB.type || "Unknown";
+                };
+
+                const renderBonusDetails = (b) => {
+                    if (b.type === 'multi' && Array.isArray(b.bonuses)) {
+                        return `[${b.bonuses.map(getBonusDetailString).join(' | ')}]`;
+                    }
+                    return `(${getBonusDetailString(b)})`;
+                };
+
+                bonuses.forEach(b => {
+                    let details = renderBonusDetails(b);
 
                     let usesInfo = '';
                     if (b.uses !== undefined) {
@@ -1188,31 +1203,7 @@ export async function executeEffectManager(options = {}) {
                     const constantBonuses = constantBonusesCheck;
                     list.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid #555; padding-top:6px;">Constant Bonuses</p>'));
                     constantBonuses.forEach(b => {
-                        let details = "";
-                        if (b.type === 'accuracy')
-                            details = `(Accuracy +${b.val})`;
-                        else if (b.type === 'difficulty')
-                            details = `(Difficulty +${b.val})`;
-                        else if (b.type === 'stat') {
-                            const statLabel = b.stat?.split('.').pop() || b.stat;
-                            details = `(${statLabel} ${parseInt(b.val) >= 0 ? '+' : ''}${b.val})`;
-                        } else if (b.type === 'damage') {
-                            details = '(' + (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ') + ')';
-                        } else if (b.type === 'tag') { // Added block
-                            if (b.removeTag) {
-                                details = `(Remove Tag: ${b.tagName})`;
-                            } else {
-                                details = `(${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val})`;
-                            }
-                        } else if (b.type === 'immunity') {
-                            details = `(${b.subtype})`;
-                            if (b.subtype === 'effect' && b.effects) {
-                                details = `(Effect: ${b.effects.join(', ')})`;
-                            }
-                            if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes) {
-                                details = `(${b.subtype}: ${b.damageTypes.join(', ')})`;
-                            }
-                        }
+                        let details = renderBonusDetails(b);
                         const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
                         const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
 

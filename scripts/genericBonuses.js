@@ -9,6 +9,37 @@ const CURRENT_RESOURCE_STATS = new Set([
     'system.burn', 'system.repairs.value'
 ]);
 
+export function flattenBonuses(bonuses) {
+    if (!bonuses) {
+        return [];
+    }
+    const arr = Array.isArray(bonuses) ? bonuses : [bonuses];
+    const flattened = [];
+    for (const b of arr) {
+        if (b.type === 'multi' && Array.isArray(b.bonuses)) {
+            b.bonuses.forEach((sub, idx) => {
+                const flatSub = { ...sub };
+                if (!flatSub.id) {
+                    flatSub.id = `${b.id || 'multi'}_sub_${idx}`;
+                }
+                if (b.applyTo && !flatSub.applyTo) {
+                    flatSub.applyTo = b.applyTo;
+                }
+                if (!flatSub.source && b.source) {
+                    flatSub.source = b.source;
+                }
+                if (!flatSub.name && b.name) {
+                    flatSub.name = b.name;
+                }
+                flattened.push(flatSub);
+            });
+        } else {
+            flattened.push(b);
+        }
+    }
+    return flattened;
+}
+
 async function delegateSetActorFlag(actor, ns, key, value) {
     if (game.user.isGM || actor.isOwner) {
         await actor.setFlag(ns, key, value);
@@ -88,7 +119,7 @@ function createGenericBonusStep(flowType) {
 
             let netBonus = legacyAcc - legacyDiff;
 
-            const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
+            const bonuses = flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses") || []);
 
             const activeBonuses = [];       // pure global acc/diff bonuses (no applyTo)
             const damageBonuses = [];
@@ -1467,6 +1498,28 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 icon = "systems/lancer/assets/icons/white/generic_item.svg";
             } else if (bonusData.type === 'immunity') {
                 icon = "modules/lancer-automations/icons/immunity.svg";
+            } else if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses)) {
+                const counts = {};
+                let maxCount = 0;
+                let maxType = null;
+                for (const sub of bonusData.bonuses) {
+                    counts[sub.type] = (counts[sub.type] || 0) + 1;
+                    if (counts[sub.type] > maxCount) {
+                        maxCount = counts[sub.type];
+                        maxType = sub.type;
+                    }
+                }
+                if (maxType === 'accuracy') {
+                    icon = "systems/lancer/assets/icons/white/accuracy.svg";
+                } else if (maxType === 'difficulty') {
+                    icon = "systems/lancer/assets/icons/white/difficulty.svg";
+                } else if (maxType === 'damage') {
+                    icon = "systems/lancer/assets/icons/white/melee.svg";
+                } else if (maxType === 'immunity') {
+                    icon = "modules/lancer-automations/icons/immunity.svg";
+                } else {
+                    icon = "systems/lancer/assets/icons/white/generic_item.svg";
+                }
             } else if (!isPositive) {
                 icon = "systems/lancer/assets/icons/white/difficulty.svg";
             }
@@ -1734,7 +1787,7 @@ export function getImmunityBonuses(actor, subtype) {
     const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
     const ephemerals = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
 
-    return [...constants, ...globals, ...ephemerals].filter(b => b.type === "immunity" && b.subtype === subtype);
+    return flattenBonuses([...constants, ...globals, ...ephemerals]).filter(b => b.type === "immunity" && b.subtype === subtype);
 }
 
 export function checkEffectImmunities(actor, effectIdOrName, effect = null) {
