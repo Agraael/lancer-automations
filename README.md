@@ -325,11 +325,8 @@ This is the core of the module. Everything else can plug into it.
 
 ### How It Works
 
-<details>
-<summary>Expand flow diagram</summary>
-
 ```mermaid
-flowchart TD
+flowchart LR
     A["Game event fires<br/>(move, attack, damage, status change, etc.)"] --> B["handleTrigger called<br/>with event data payload"]
     B --> C["Collect all tokens in scene<br/>(or combat tokens for combat-only triggers)"]
     C --> D{"For each potential reactor token"}
@@ -351,8 +348,6 @@ flowchart TD
     O --> P["User clicks Activate"]
     P --> M
 ```
-
-</details>
 
 ### Trigger Reference
 
