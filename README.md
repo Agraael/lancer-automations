@@ -1,8 +1,33 @@
 # Lancer Automations
 
-I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) (and borrows some of its code).
+I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
 
-So what is Lancer Automations? It's a framework to automate and script as many things as possible for Lancer. The system is designed to be scalable: you can add your own activations, effects, and bonuses without touching the module code. The end goal is to eventually replace Lancer QoL entirely. some feature  might not work together or be duplicated.
+At its core, this module is an event-driven automation engine. Almost anything that happens during a Lancer session can fire a trigger: movement, attacks, damage, status changes, turn transitions. On top of that engine sit tools for managing effects with duration, building complex bonuses, running interactive prompts during play (choose a target, knock a token back, place a zone), and more.
+
+The end goal is to move everything I need for my campaign into this module, so it functions as a full extension of the Lancer system for FoundryVTT v12.
+
+> Some features may overlap or not fully integrate with each other. This is a work in progress.
+
+---
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Features Overview](#features-overview)
+- [Effect Manager](#effect-manager)
+- [Bonuses](#bonuses)
+- [Interactive Tools](#interactive-tools)
+- [TemplateMacro: Lancer Tools](#templatemacro-lancer-tools)
+- [Item Flags & Injection](#item-flags--injection)
+- [Automation System](#automation-system)
+- [Optional Features](#optional-features)
+- [Built-in Macros](#built-in-macros)
+- [API Reference](#api-reference)
+- [NPC Implementation Examples](#npc-implementation-examples)
+- [Planned Features](#planned-features)
+- [Support](#support)
+
+---
 
 ## Installation
 
@@ -16,158 +41,523 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | Module | Description |
 |--------|-------------|
 | [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT |
-| FoundryVTT v12 | Current version i'm working on |
+| FoundryVTT v12 | The version I'm currently working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 
 ### Optional
 
-| Module | Why |
-|--------|-----|
-| [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Gives you syntax highlighting in the evaluate/activation code editors |
-| [TemplateMacro](https://github.com/Agraael/templatemacro) | Allow scripting on measurement templates, i have added tools for Dangerous Zone and Area of Effect |
+| Module | Why you'd want it |
+|--------|-------------------|
+| [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Syntax highlighting in the evaluate/activation code editors |
+| [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
-| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) | Required for the experimental boost detection feature (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)|
-| [Token Factions](https://github.com/Agraael/token-factions) | My Fork of the original module containing a multi-team disposition filtering system |
-| [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required createAura and deleteAuras functions |
+| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)) | Required for boost detection, movement history accuracy, and difficult terrain penalty calculation |
+| [Token Factions](https://github.com/Agraael/token-factions) | My fork that adds a multi-team disposition matrix so you can have more than two sides |
+| [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 
-## How It Works
+---
 
-Everything revolves around **gameplay triggers**. Triggers cover pretty much anything that happens during play: `onMove`, `onAttack`, `onHit`, `onDamage`, `onTurnStart`, and many more. Each trigger carries its own data payload describing what just happened.
+## Features Overview
 
-![Trigger list](images/trigger-list.png)
+- **Automation System**: event-driven engine that fires on gameplay triggers (`onMove`, `onHit`, `onDamage`, and ~25 more) and runs reactions tied to items or global rules
+- **Effect Manager**: status effects with turn-based duration and consumable stacks
+- **Bonus System**: accuracy, difficulty, damage, stat, immunity, and tag bonuses that attach to active effects
+- **Interactive Tools**: knockback, token picker, zone placement, deploy/throw weapons, choice cards, movement history and revert
+- **TemplateMacro Integration**: Lancer-specific zone tools: effect zones, dangerous zones, difficult terrain
+- **Item Flags & Injection**: attach deployables to any item, add custom flags read by the automation system
+- **Built-in Activations**: Overwatch, Brace, Flight, Fall, ready to use out of the box
+- **Built-in Macros**: Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, and more
 
-Each time an actor does something that matches a trigger, it fires. Other tokens (including the actor itself) can then react through **Item activations**, **General activations**, **Bonuses**, or **Status effects**.
-
-### Example: Overwatch
-
-When any token moves (`onMove`), every other token checks if it should react. The Overwatch activation evaluates whether the mover started within one of the reactor's weapons' threat range. If so, the reactor can Skirmish as a reaction.
-
-![Overwatch implementation](images/overwatch-implementation.png)
-
-## Activations
-
-These are activations. Let's break them down.
-
-Fair warning: the system can be a bit overwhelming at first. Don't hesitate to ask questions on the [Pilot NET Discord](https://discord.com/invite/lancer).
-
-An activation fires when a trigger occurs. You decide who reacts: the actor itself, other tokens, or both. There are two types:
-
-- **Item-based (LID):** Only tokens that possess the item (matched by Lancer Item ID) can react.
-- **Name-based (General):** All tokens can react, no item required.
-
-### Filters
-
-**Only On Source Match** restricts when the activation is valid:
-- For **Item-based** activations: only fires if the triggering token actually possesses the item.
-- For **General** activations: only fires if the triggering action name matches the activation name.
-
-![Action types](images/action-types.png)
-
-**Item LID Finder** is a built-in tool to help you find Lancer Item IDs in your world.
-
-**Action Path** lets you point to a specific action inside an item to associate with the activation. Useful for reactions that come from a weapon or a specific talent rank. Format: `system.actions.0` or `ranks[0].actions[0]`.
-
-![Item finder](images/item-finder.png)
-
-**Trigger / Effect Description** lets you override the text shown in the activation popup.
-
-**Action Type** controls the formatting (Reaction, Free Action, Quick Action, Full Action, Protocol, Other).
-
-**Other built-in filters** include disposition (friendly, hostile, neutral), distance checks, stat check type, and more. No coding needed for those.
-
-### Evaluate, Activate & Init Functions
-
-**Evaluate** is a code block (or macro) that validates the activation. It receives the trigger type, trigger data, reactor token, item, activation name, and the lancer-automations `api`. Return `true` to proceed, `false` to skip.
-
-**Activation popup (manual mode):** Non-auto activations show up in a summary popup listing all triggered activations and which tokens can respond.
-
-![Activation popup](images/activation-popup.png)
-
-Click an entry to see its details, then click Activate. In settings you can let players who own the token see and interact with these popups too.
-
-**Auto mode:** When checked, the code executes directly when the trigger fires. No popup, no confirmation.
-
-By default, activating prints the item/action card to chat and then runs your activation code. You can change the activation mode to run code **instead of** the default flow (skipping the chat card).
-
-**onInit Code** runs when a token is created in the scene. Handy for setting up initial state or effects.
-
-For the full reference of what data each trigger provides, check the [API Reference](API_REFERENCE.md).
-
-![Trigger tooltip](images/trigger-tooltip.png)
-
-### Boost Detection (Experimental)
-
-When enabled (requires [Elevation Ruler](https://foundryvtt.com/packages/elevationruler)), the module tracks cumulative drag movement for each token during a turn. When movement exceeds the token's base speed, a boost is detected. The `onMove` trigger data then includes:
-
-- `moveInfo.isBoost` - `true` if this move crossed a boost threshold
-- `moveInfo.boostSet` - Array of boost numbers crossed (e.g., `[1]` for first boost)
-
-Cumulative movement resets automatically at the start of each token's turn. You can also manually reset it: `api.clearMoveData(tokenDocumentId)`.
-
-This is still experimental.
-
-### Built-in Activations
-
-The module ships with these defaults:
-
-- **Overwatch** - Reacts to `onMove` when a hostile enters your weapon threat range
-- **Brace** - Reacts to `onDamage` when damage would kill you or deal half your HP
-- **Flight** - Reacts to `onStatusApplied` / `onStructure` / `onStress` to handle flying immunity and fall saves
-- **Fall** - Reacts to `onTurnEnd` to check if an airborne token should fall
-
-### Stat Roll Targeting
-
-Go to **Module Settings > Lancer Automations > Enable Stat Roll Target Selection** to enable this feature.
-
-When enabled, any Stat Roll (HULL, AGI, SYS, ENG) will prompt you for an optional target.
-
--   **Difficulty**: The roll will automatically use the target's Save (for NPCs) or the same Stat (for Mechs) as the difficulty.
--   **Automation**: The target token is passed into the flow data, allowing other automations (like macros or modifications) to use it.
--   **Self-Targeting**: You can select yourself if needed.
-
-### Export / Import
-
-In the module settings, you can export and import your activations as JSON. Makes it easy to share setups with other GMs or just back things up.
-
-### Tips
-
-In code editor blocks, you can write a full function signature like `async function(triggerType, triggerData, reactorToken, item, activationName, api) { ... }` instead of just the function body. The module strips the wrapper automatically. Looks much nicer with CodeMirror highlighting.
-
-You can also register default activations by code. See the [API Reference](API_REFERENCE.md#how-to-register-default-activations-by-code) for how.
+---
 
 ## Effect Manager
 
-Combined with [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) and code originally from Lancer QoL, the Effect Manager gives you extended status effects with turn-based duration and stack consumption.
+<img src="doc/img/effect-manager-hud-button.png" width="40%"/>
 
-![Effect Manager](images/effect-manager.png)
+The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API.
 
-- Effects can have a **duration** (start/end of turn countdown) AND **consumable stacks**
-- Stack consumption is tied to automation triggers (e.g., Soft Cover consumes a stack when the token boosts)
-- Works with custom statuses: create temporary statuses on the fly, or save them for reuse
-- Supports evaluation lambdas for consumption conditions, same syntax as activation evaluate functions
+### Standard Tab
+
+![Effect manager standard tab](doc/img/effect-manager-standard.png)
+
+The standard tab works with the built-in FoundryVTT status icons plus any extras added by the Lancer system. From here you can:
+
+- Apply an effect with a **duration**: the countdown starts at either the beginning or end of the token's turn, or you can set it to indefinite
+- Set a **stack count** (number of charges)
+- Set a **consumption trigger**: the event that burns one stack. On attack, on hit, on damage, on move, on activation, and more
+- Add a **consumption filter**: for example, only consume when a specific item is used
+
+When a stack reaches zero, the effect is removed automatically.
+
+### Custom Tab
+
+![Effect manager custom tab](doc/img/effect-manager-custom.png)
+
+Available when [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) is installed.
+
+The custom tab lets you create effects with any name and icon, not limited to the predefined status list. This is especially useful for automating specific items: markers, counters, item-specific state tracking. All the same duration and consumption options apply.
+
+Custom effect templates can be saved in module settings and reused across sessions.
+
+One thing to note: effects that share the same name but have different conditions are grouped under the same icon with a blue stack number. This is separate from the Status Icon Counter module's display. If an effect has both, the numbers may overlap.
+
+### Bonuses Tab
+
+![Effect manager bonuses tab](doc/img/effect-manager-bonuses.png)
+
+The Bonuses tab gives you access to general bonuses (accuracy, difficulty, damage, stat). These are documented in the next section.
+
+---
 
 ## Bonuses
 
-The Effect Manager also lets you create **Bonuses and Maluses** tied to custom effects.
+Bonuses let you attach mechanical effects to tokens that integrate directly into Lancer's roll flows. There are three persistence modes.
 
-Four types:
-- **Accuracy** - Adds accuracy dice to rolls
-- **Difficulty** - Adds difficulty dice to rolls
-- **Damage** - Adds bonus damage (by type)
-- **Stat** - Modifies actor stats directly (HP, Heat Cap, Speed, Evasion, etc.)
+### General Bonuses
 
-Each bonus can have duration and stack consumption, just like effects. By code, you can add evaluation lambdas for fine-grained control over when stacks are consumed.
+General bonuses behave like standard status effects: they're visible on the token, have optional duration and stack consumption, and integrate into rolls automatically.
 
-![Bonus system](images/bonus-system.png)
+**Types:**
+- **Accuracy**: adds accuracy dice to the next matching roll
+- **Difficulty**: adds difficulty dice
+- **Damage**: adds bonus damage (by type, e.g. +2 Energy) applied on the next damage roll
+- **Stat**: modifies an actor stat directly (HP, Heat Cap, Speed, Evasion, E-Defense, Save, etc.)
+- **Tag**: injects or modifies tags on weapons (e.g. adding Armor Penetration, changing range)
+- **Immunity**: grants immunity to a damage type or effect category
 
-### NPC Implementation Examples
+Accuracy and difficulty bonuses are injected into the Lancer roll HUD so you can see them before confirming.
 
-Here are some real examples
+![Accuracy bonus in roll dialog](doc/img/accuracy-bonus-in-roll.png)
 
-**Dispersal Shield (Priest):**
+Damage bonuses appear in the damage roll output.
 
-All-resistance for the next 1d3 attacks
+![Damage bonus in roll](doc/img/damage-bonus-in-roll.png)
+
+### Ephemeral Bonuses
+
+Ephemeral bonuses are short-lived by design. They are injected just before a roll (accuracy, difficulty, or damage) and consumed regardless of whether the roll is completed or cancelled. This means you can systematically add an ephemeral bonus before every roll without worrying about accumulation.
+
+Use case: an ability that grants +1 accuracy on the next attack. Set it as ephemeral, inject it with `api.injectBonusToNextRoll(...)`, and it will be gone after the roll resolves no matter what.
+
+### Constant Bonuses
+
+Constant bonuses are invisible to the player and persist until manually removed. They are used for baseline stat modifications and immunities, things that need to always be active but shouldn't clutter the token's status display.
+
+Use case: the Veterancy talent gives +1 accuracy on stat checks. Apply it with `api.addConstantBonus(...)` in the `onInit` code, and it silently adds to every stat roll without cluttering the token's status display.
+
+### Immunity System
+
+When an immunity bonus is active on a token, any incoming damage of that type triggers a **choice card** asking whether to apply the immunity.
+
+![Damage immunity integration](doc/img/damage-immunity.png)
+
+![Immunity choice card](doc/img/immunity-choice-card.png)
+
+### Tag Injection
+
+Tag bonuses let you inject or modify tags on a weapon mid-flow. Useful for abilities that temporarily grant a property, for example adding the `Armor Penetration` tag before an attack. You can also remove existing tags.
+
+---
+
+## Interactive Tools
+
+These are the building blocks for complex automation flows. Most are available from macros and from activation code via the API.
+
+### Knockback
+
+![Knockback checkbox in damage roll](doc/img/knockback-in-damage.png)
+
+When the knockback feature is enabled, a **Knockback** checkbox appears in the damage roll dialog. If checked, the module reads the Knockback tag from the attacking item and automatically triggers the knockback interaction after damage resolves.
+
+![Knockback interactive tool](doc/img/knockback-interactive.png)
+
+`api.knockBackToken(tokens, distance, options)`: you can also call this directly. It pushes or pulls a token along the grid, respecting obstacles.
+
+### Choice Card
+
+![Choice card](doc/img/choice-card.png)
+
+`api.startChoiceCard(options)`: displays a popup card with multiple options. Supports:
+- **OR mode**: the player picks exactly one option
+- **AND mode**: all options are shown and each can be confirmed or skipped individually
+
+Multiple cards can be spawned simultaneously. The card system serializes them in a queue and shows a pending count so nothing gets lost.
+
+### Choose Token
+
+![Choose token picker](doc/img/choose-token.png)
+
+`api.chooseToken(token, options)`: highlights valid tokens in range and asks the user to select one or more. Options include:
+- `count`: how many tokens to select
+- `range`: maximum distance (highlights eligible tokens)
+- `includeSelf`: whether the caster can target itself
+- `filter`: a callback to restrict valid targets (e.g. `api.isFriendly(reactor, t)`)
+
+### Place Zone
+
+![Zone placement tool](doc/img/place-zone.png)
+
+`api.placeZone(token, options, duration)`: interactive zone placement using the [TemplateMacro](https://github.com/Agraael/templatemacro) module. Supports Blast, Cone, Line, and other template types.
+
+Zones can have `statusEffects` assigned so any token inside automatically gains those effects: soft cover, difficult terrain, damage zones, etc. See the [TemplateMacro section](#templatemacro-lancer-tools) for the full Lancer-specific zone tools.
+
+### Deploy Token / Throw Weapon
+
+![Deploy token](doc/img/deploy-token.png)
+
+Several functions handle deploying tokens or weapons onto the scene:
+
+- `api.placeDeployable(options)`: interactive placement of a deployable token (compendium lookup, use counter, visual preview)
+- `api.beginDeploymentCard(options)`: shows a card for choosing which deployable to place from an item
+- `api.openDeployableMenu(actor)`: dialog listing all of an actor's deployables
+- `api.recallDeployable(ownerToken)`: removes a deployed token from the scene
+- `api.deployWeaponToken(weapon, actor, token, options)`: places a thrown weapon as a token on the ground
+- `api.pickupWeaponToken(ownerToken)`: retrieves a thrown weapon token
+- `api.beginThrowWeaponFlow(weapon)`: starts a weapon attack flow pre-configured for throwing
+- `api.openThrowMenu(actor)`: dialog listing all throwable weapons for an actor
+
+### Movement History & Revert
+
+The module optionally tracks each token's movement path during their turn. This is most accurate when used with the [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork).
+
+To open the movement history dialog, press **R** (default keybinding, configurable in FoundryVTT's keybinding settings) with a token selected, or right-click the revert button in the token HUD.
+
+![Movement history dialog](doc/img/movement-history-dialog.png)
+
+The dialog gives you two options:
+- **Reset History**: wipes the stored path without moving the token
+- **Reset & Revert Movement**: wipes the path and teleports the token back to where it started that turn
+
+You can also call these directly:
+- `api.revertMovement(token)`: moves the token back to its turn-start position
+- `api.clearMovementHistory(token)`: clears the stored path
+
+---
+
+## TemplateMacro: Lancer Tools
+
+[TemplateMacro](https://github.com/Agraael/templatemacro) is a fork of a dead module that I fixed for FoundryVTT v12. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
+
+![TemplateMacro Lancer tool buttons](doc/img/templateMacro-lancer-tools.png)
+
+### Place Effect Zone
+
+A measurement template that applies one or more status effects to any token inside it. When a token enters or the zone is placed, the effects are applied automatically. Effects are removed when the token leaves.
+
+### Dangerous Zone
+
+A zone that deals damage to tokens on entry or at specific trigger points (e.g. turn start). Configurable damage type and amount. Used for things like fire fields, electrical zones, or area denial.
+
+### Difficult Terrain
+
+A zone that imposes a movement penalty on tokens moving through it. When used with the [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork), the penalty is factored into the movement cost display in real time, so you can see exactly how much movement is consumed.
+
+---
+
+## Item Flags & Injection
+
+Beyond the bonus system, you can attach custom data directly to items. The module reads certain flags by default and uses them in macros and automation flows.
+
+### Built-in Flags
+
+| Flag | Effect |
+|------|--------|
+| `deployRange` | Max range for placing a deployable from this item |
+| `deployCount` | Number of uses before the deployable is exhausted |
+| `activeState` | Marks the item as having an active/inactive toggle. When activated, the "End Activation" flow lets you pick this item to deactivate. You can also specify which action type is required (quick, full, free, etc.) |
+
+### Extra Deployables
+
+The module lets you attach additional deployables to any item, including NPC features. This is useful when an NPC ability should spawn something on the field but the base Lancer system doesn't natively support it on that item type.
+
+These deployables are recognized and read by the deploy macro just like native ones.
+
+![Deployable finder tool](doc/img/deployable-finder.png)
+
+---
+
+## Automation System
+
+This is the core of the module. Everything else can plug into it.
+
+### How It Works
+
+```mermaid
+flowchart TD
+    A["Game event fires\n(move, attack, damage, status change, etc.)"] --> B["handleTrigger called\nwith event data payload"]
+    B --> C["Collect all tokens in scene\n(or combat tokens for combat-only triggers)"]
+    C --> D{"For each potential reactor token"}
+    D --> E["Check Item Activations\n(items the token owns)"]
+    D --> F["Check General Activations\n(no item required)"]
+    E --> G{"Trigger type\nmatch?"}
+    F --> G
+    G -- No --> H["Skip"]
+    G -- Yes --> I{"onlyOnSourceMatch\ncheck"}
+    I -- Fail --> H
+    I -- Pass --> J{"Disposition /\nDistance /\nother filters"}
+    J -- Fail --> H
+    J -- Pass --> K["Run evaluate()"]
+    K -- false --> H
+    K -- true --> L{"autoActivate?"}
+    L -- Yes --> M["Run activation code\nimmediately"]
+    L -- No --> N["Queue for popup"]
+    N --> O["Activation Popup\nshown to GM\n(and optionally players)"]
+    O --> P["User clicks Activate"]
+    P --> M
+```
+
+### Trigger Reference
+
+| Trigger | When it fires |
+|---------|---------------|
+| `onMove` | After a token finishes moving |
+| `onPreMove` | Before movement executes, can cancel or redirect |
+| `onAttack` | When an attack is initiated |
+| `onInitAttack` | At the very start of an attack flow (before the HUD) |
+| `onInitTechAttack` | At the very start of a tech attack flow |
+| `onHit` | After a hit is confirmed |
+| `onMiss` | After a miss is confirmed |
+| `onTechAttack` | When a tech attack is initiated |
+| `onTechHit` | After a tech attack hits |
+| `onTechMiss` | After a tech attack misses |
+| `onDamage` | After damage is rolled |
+| `onStructure` | After a structure roll |
+| `onStress` | After an overheat roll |
+| `onCheck` | After a stat check resolves (HULL, AGI, SYS, ENG) |
+| `onInitCheck` | At the very start of a stat check flow |
+| `onActivation` | When an item or action is activated |
+| `onTurnStart` | At the start of a token's turn |
+| `onTurnEnd` | At the end of a token's turn |
+| `onEnterCombat` | When a token joins combat |
+| `onExitCombat` | When a token leaves combat |
+| `onStatusApplied` | When a status effect is applied to a token |
+| `onStatusRemoved` | When a status effect is removed from a token |
+| `onHeat` | When a token gains heat |
+| `onClearHeat` | When a token's heat is cleared |
+| `onHPRestored` | When a token regains HP |
+| `onHpLoss` | When a token loses HP |
+| `onDestroyed` | When a token is destroyed |
+| `onDeploy` | When a deployable is placed |
+
+![Trigger list](doc/img/trigger-list.png)
+
+Each trigger carries a data payload. The full schema for each trigger is in the [API Reference](API_REFERENCE.md).
+
+### Activation Types
+
+There are two ways to set up an activation:
+
+- **Item-based (LID):** Tied to a specific Lancer item by its LID. Only tokens that own that item can react.
+- **General:** Not tied to any item. Any token in the scene can react, filtered by the rules you set up.
+
+### Filters
+
+**Only On Source Match**
+
+For Item activations: the activation only fires if the token that triggered the event also owns the item.
+
+For General activations: the activation only fires if the triggering action's name matches the activation name.
+
+**Disposition Filter**
+
+Restricts the reactor's valid relationship to the triggering token: Friendly, Hostile, Neutral, or any combination. Uses Token Factions if available for multi-team support.
+
+**Distance Filter**
+
+Only activates if the triggering event occurred within a set distance from the reactor.
+
+**Action Path**
+
+Points to a specific action inside an item. Useful when you want to associate the activation with one weapon reaction or a specific talent rank rather than the whole item.
+
+Format: `system.actions.0` or `ranks[0].actions[0]`
+
+**Action Type**
+
+Controls how the activation is labeled in the popup (Reaction, Quick Action, Full Action, Protocol, etc.).
+
+![Action type selector](doc/img/action-types.png)
+
+**Trigger / Effect Description**
+
+Lets you override the description text shown in the activation popup.
+
+**Frequency**
+
+How often the activation can fire: Unlimited, 1/combat, or per-round via `usesPerRound`. For now, frequency tracking in the popup is only available for reactions, using the "consume reaction" option.
+
+**Out of Combat**
+
+By default, some triggers only fire during combat. Enable this flag to allow the activation to fire outside of combat too.
+
+**Item LID Finder**
+
+A built-in tool in the activation config that lets you browse your world's compendiums and copy an item's LID directly.
+
+![Item LID finder](doc/img/item-finder.png)
+
+### Evaluate, Activate & Init
+
+**Evaluate function**
+
+A code block that validates whether the activation should proceed. For timing-sensitive triggers, this should be synchronous (see Force Synchronous below). Return `true` to allow, `false` to skip.
+
+```javascript
+function(triggerType, triggerData, reactorToken, item, activationName, api) {
+    return triggerData.target?.id === reactorToken.id;
+}
+```
+
+**Activation code**
+
+Runs when the activation is confirmed, either automatically or after the user clicks Activate in the popup. Can be async. Has full access to the `api`.
+
+**onInit code**
+
+Runs once when a token is created in the scene. Useful for applying initial constant bonuses, creating auras, or setting up baseline state.
+
+### Auto Mode vs Popup Mode
+
+**Popup mode (default):** Non-auto activations are queued and displayed in a summary popup showing all triggered activations for the current event. Each entry shows which token can react and what the activation is.
+
+![Activation popup](doc/img/activation-popup.png)
+
+Click an entry to expand its details, then click Activate to run it. In module settings, you can allow players (not just the GM) to see and interact with popups for tokens they own.
+
+**Auto mode:** When enabled, the activation code runs immediately when the trigger fires, with no popup or confirmation. Use this for things that should always happen automatically (applying a status on hit, for example).
+
+By default, activating an LID-based activation prints the item card to chat and then runs your code. Setting the mode to **instead** skips the chat card entirely.
+
+### Force Synchronous
+
+For `onPreMove`, `onInitAttack`, and `onInitCheck` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, or `injectBonusToNextRoll` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
+
+### Movement Cancel & Redirect (onPreMove)
+
+`onPreMove` fires before movement is executed. From inside the evaluate or activation code, you can:
+
+- `triggerData.cancelTriggeredMove()`: stop the movement entirely
+- `triggerData.changeTriggeredMove(newPos)`: redirect the token to a different destination
+
+For example, when a token tries to move away, check if it's within an enemy's engagement range and cancel or redirect the move.
+
+![Movement cancel example](doc/img/movement-cancel.png)
+
+### Built-in Activations
+
+| Name | Trigger | What it does |
+|------|---------|--------------|
+| **Overwatch** | `onMove` | A hostile starts movement inside your weapon THREAT, prompts a Skirmish reaction |
+| **Brace** | `onDamage` | Damage would kill you or deal 50%+ of your current HP, prompts a Brace reaction |
+| **Flight** | `onStatusApplied` / `onStructure` / `onStress` | Handles flying immunity and fall save logic |
+| **Fall** | `onTurnEnd` | Checks if an airborne token should begin falling |
+
+### Export / Import
+
+In **Module Settings > Lancer Automations**, you can export and import your full activation setup as JSON. Useful for sharing builds with other GMs or keeping backups.
+
+### Code Editor Tips
+
+In any code block (evaluate, activate, init), you can write a full function signature instead of just the body:
+
+```javascript
+async function(triggerType, triggerData, reactorToken, item, activationName, api) {
+    // your code here
+}
+```
+
+The module strips the wrapper automatically. Much more readable, especially with CodeMirror installed.
+
+You can also register default activations by code instead of through the UI. See [API Reference: Registering Default Activations](API_REFERENCE.md#how-to-register-default-activations-by-code).
+
+---
+
+## Optional Features
+
+### Boost Detection (Experimental)
+
+Requires [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork). Enable in module settings.
+
+The module tracks cumulative drag movement for each token during their turn. When movement exceeds the token's base Speed, a boost is detected. The `onMove` trigger data gains:
+
+- `moveInfo.isBoost`: `true` if this move crossed a boost threshold
+- `moveInfo.boostSet`: array of boost numbers crossed (e.g. `[1]` for first boost)
+
+Cumulative movement resets automatically at the start of each token's turn. You can also reset it manually: `api.clearMoveData(tokenDocumentId)`.
+
+### Stat Roll Targeting
+
+Enable in **Module Settings > Lancer Automations > Enable Stat Roll Target Selection**.
+
+When enabled, any Stat Roll (HULL, AGI, SYS, ENG) prompts you to optionally pick a target before rolling:
+
+- **Difficulty**: uses the target's Save (for NPCs) or the same stat (for Mechs) as the roll difficulty
+- **Automation**: the target token is passed into the flow data for other automations to use
+- **Self-targeting**: you can target yourself if needed
+
+### Token Factions Integration
+
+When [Token Factions (my fork)](https://github.com/Agraael/token-factions) is installed, the disposition filter in activations uses the full faction matrix instead of the standard three-way friendly/neutral/hostile. This lets you have multiple teams with custom disposition relationships between them.
+
+### Grid-Aware Auras Integration
+
+When [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) is installed, the following API functions are available:
+
+- `api.createAura(owner, config)`: creates an aura on a token. Accepts lambda functions as macro callbacks, the module intercepts and routes them transparently with no need to create actual macro documents.
+- `api.deleteAuras(owner)`: removes all auras from a token
+
+### Drag Vision Mitigation
+
+When configured in module settings, a token's vision radius is reduced during drag. This is useful to prevent accidentally revealing too much of the map while moving a token. The reduction is a multiplier you set. `1.0` means no change, lower values shrink the vision radius during the drag.
+
+---
+
+## Built-in Macros
+
+The module ships with a compendium of macros for common Lancer actions:
+
+| Macro | What it does |
+|-------|-------------|
+| **Overwatch** | Declare Overwatch |
+| **Brace** | Declare Brace |
+| **Knockback** | Interactive knockback tool |
+| **Ram** | Execute a Ram action |
+| **Grapple** | Execute a Grapple action |
+| **Disengage** | Execute a Disengage |
+| **Eject** | Execute an Eject |
+| **Lock On** | Apply Lock On to a target |
+| **Throw Weapon** | Open the throw weapon menu for the selected token |
+| **Deploy Item** | Open the deployable menu for the selected token |
+| **Pickup Weapon** | Retrieve a thrown weapon from the scene |
+| **Boot Up / Shut Down** | Handle mech boot and shutdown flows |
+| **Scan** | Perform a System Scan on an NPC |
+| **Aid / Bolster / Search / Handle / Interact / Squeeze / Hide / Dismount** | Standard pilot and mech actions |
+| **Reactor Explosion / Meltdown** | NPC and scenario tools |
+| **Downtime** | Downtime activity card |
+| **Frag Signal** | Scenario-specific macro |
+
+---
+
+## API Reference
+
+All API functions are accessible at:
+
+```javascript
+const api = game.modules.get('lancer-automations').api;
+```
+
+For full function signatures, trigger data schemas, bonus types, and code examples, see the [API Reference](API_REFERENCE.md).
+
+---
+
+## NPC Implementation Examples
+
+These are real examples from active sessions.
+
+### Dispersal Shield (Priest)
+
+Grants all-damage resistance for the next `1d3` attacks to a friendly target in sensor range.
 
 ```javascript
 "npcf_dispersal_shield_priest": {
@@ -184,11 +574,6 @@ All-resistance for the next 1d3 attacks
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            if (!api?.applyFlaggedEffectToTokens) {
-                ui.notifications.error("lancer-automations module required");
-                return;
-            }
-
             const targets = await api.chooseToken(reactorToken, {
                 count: 1,
                 range: reactorToken.actor.system.sensor_range,
@@ -209,7 +594,6 @@ All-resistance for the next 1d3 attacks
                 "lancer.statusIconsNames.resistance_burn",
                 "lancer.statusIconsNames.resistance_energy"
             ];
-
             await api.applyFlaggedEffectToTokens({
                 tokens: [target],
                 effectNames: resistances,
@@ -230,9 +614,9 @@ All-resistance for the next 1d3 attacks
 }
 ```
 
-**Sapper Kit - Smoke Launcher (Strider):**
+### Sapper Kit: Smoke Launcher (Strider)
 
-Places a smoke zone that last until the end of next turn.
+Places a smoke zone (soft cover) that persists until the start of the Strider's next turn.
 
 ```javascript
 "nrfaw-npc_carrier_SmokeLaunchers": {
@@ -249,10 +633,6 @@ Places a smoke zone that last until the end of next turn.
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            if (!api?.placeZone) {
-                ui.notifications.warn("lancer-automations module required for smoke placement");
-                return;
-            }
             const result = await api.placeZone(reactorToken, {
                 range: 5,
                 size: 2,
@@ -261,7 +641,6 @@ Places a smoke zone that last until the end of next turn.
                 borderColor: "#ffffff",
                 statusEffects: ["cover_soft"]
             }, 2);
-
             if (result?.template) {
                 const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
                 existing.push(result.template.id);
@@ -277,49 +656,25 @@ Places a smoke zone that last until the end of next turn.
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
             const templates = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
-            if (!templates.length)
-                return;
-
+            if (!templates.length) return;
             for (const id of templates) {
                 const template = canvas.scene.templates.get(id);
-                if (template)
-                    await template.delete();
+                if (template) await template.delete();
             }
-
             await reactorToken.actor.unsetFlag("lancer-automations", "smokeTemplates");
         }
     }]
 }
 ```
 
-## Useful Tools & API
+---
 
-There are many utility functions exposed for scripting. Two notable ones for macros are:
+## Planned Features
 
--   `api.chooseToken(token, options)`: Interactive token picker. Range highlights, disposition filters, and multi-select support.
--   `api.placeZone(token, options)`: Interactive zone placement (Blast, Cone, Line, etc.) with preview.
--   `api.placeToken(options)`: Interactive token placement with visual preview and spawn effects.
--   `api.startChoiceCard(options)`: Interactive choice card. Supports "OR" (pick one) and "AND" (pick all) modes.
--   `api.knockBackToken(tokens, distance, options)`: Interactive tool to push/pull tokens on the grid.
--   `api.deployWeaponToken(weapon, actor, token, options)`: Deploy a weapon as a ground token (for Thrown weapons).
--   `api.pickupWeaponToken(ownerToken)`: Pick up a thrown weapon token from the scene.
--   `api.beginThrowWeaponFlow(weapon)`: Start a weapon attack flow with throw pre-set.
--   `api.placeDeployable(options)`: Place a deployable token with interactive placement, use consumption, and compendium support.
--   `api.beginDeploymentCard(options)`: Show a deployment card for an item's deployables with per-deployable options.
--   `api.openDeployableMenu(actor)`: Open a dialog listing all of an actor's deployables for deployment.
--   `api.recallDeployable(ownerToken)`: Recall a deployed token from the scene.
--   `api.openThrowMenu(actor)`: Opens a dialog listing all of an actor's throwable weapons for attack.
--   `api.executeStatRoll(actor, stat, ...)`: Perform a stat roll (HULL, AGI, SYS, ENG, GRIT) with optional target selection.
--   `api.executeDamageRoll(attacker, targets, ...)`: Perform a damage roll with full Lancer flow support.
--   `api.executeBasicAttack(actor, ...)` / `api.executeTechAttack(actor, ...)`: Programmatically trigger core attack flows.
--   `api.executeSimpleActivation(actor, ...)`: Post a flavored action card and trigger related onActivation events.
+- **Token Action HUD** built for Lancer Automations. Currently using a custom HUD in my sessions, eventually I'll make a proper integration for this module.
 
-For the full list with signatures, trigger data schemas, and code examples, see the [API Reference](API_REFERENCE.md).
-
-```javascript
-const api = game.modules.get('lancer-automations').api;
-```
+---
 
 ## Support
 
-For help or questions, ask on the [Pilot NET Discord](https://discord.com/invite/lancer).
+For help or questions, drop by the [Pilot NET Discord](https://discord.com/invite/lancer).
