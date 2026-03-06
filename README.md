@@ -325,28 +325,32 @@ This is the core of the module. Everything else can plug into it.
 
 ### How It Works
 
+**1. Event fanout and filtering**
+
 ```mermaid
 flowchart LR
-    A["Game event fires<br/>(move, attack, damage, status change, etc.)"] --> B["handleTrigger called<br/>with event data payload"]
-    B --> C["Collect all tokens in scene<br/>(or combat tokens for combat-only triggers)"]
-    C --> D{"For each potential reactor token"}
-    D --> E["Check Item Activations<br/>(items the token owns)"]
-    D --> F["Check General Activations<br/>(no item required)"]
-    E --> G{"Trigger type<br/>match?"}
-    F --> G
-    G -- No --> H["Skip"]
-    G -- Yes --> I{"onlyOnSourceMatch<br/>check"}
-    I -- Fail --> H
-    I -- Pass --> J{"Disposition /<br/>Distance /<br/>other filters"}
-    J -- Fail --> H
-    J -- Pass --> K["Run evaluate()"]
-    K -- false --> H
-    K -- true --> L{"autoActivate?"}
-    L -- Yes --> M["Run activation code<br/>immediately"]
-    L -- No --> N["Queue for popup"]
-    N --> O["Activation Popup<br/>shown to GM<br/>(and optionally players)"]
-    O --> P["User clicks Activate"]
-    P --> M
+    A["Game event fires"] --> B["handleTrigger<br/>called"]
+    B --> C["Collect tokens<br/>in scene"]
+    C --> D{"Item or General<br/>activation match?"}
+    D -- No --> Skip
+    D -- Yes --> E{"onlyOnSourceMatch<br/>passes?"}
+    E -- No --> Skip
+    E -- Yes --> F{"Disposition /<br/>Distance<br/>filters pass?"}
+    F -- No --> Skip
+    F -- Yes --> G["Run evaluate()"]
+```
+
+**2. Evaluate to execution**
+
+```mermaid
+flowchart LR
+    G["evaluate()"] -- false --> Skip
+    G -- true --> H{"autoActivate?"}
+    H -- Yes --> I["Run activation<br/>code immediately"]
+    H -- No --> J["Queue for popup"]
+    J --> K["Activation Popup<br/>(GM + optional players)"]
+    K --> L["User clicks Activate"]
+    L --> I
 ```
 
 ### Trigger Reference
