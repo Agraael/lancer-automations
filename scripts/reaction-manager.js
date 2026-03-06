@@ -1916,6 +1916,10 @@ export class ReactionEditor extends FormApplication {
                     </div>
                 `,
                 buttons: {
+                    noAction: {
+                        label: '<i class="fas fa-minus"></i> No specific action',
+                        callback: () => resolve("")
+                    },
                     cancel: {
                         label: '<i class="fas fa-times"></i> Cancel',
                         callback: () => resolve(null)

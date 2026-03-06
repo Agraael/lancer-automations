@@ -1,23 +1,8 @@
-2026/03/06-14:42:57.561 35c0 Recovering log #101
-2026/03/06-14:42:57.561 35c0 Level-0 table #103: started
-2026/03/06-14:42:57.563 35c0 Level-0 table #103: 15095 bytes OK
-2026/03/06-14:42:57.570 35c0 Delete type=0 #101
-2026/03/06-14:42:57.570 35c0 Delete type=3 #100
-2026/03/06-18:17:53.666 1d04 Level-0 table #106: started
-2026/03/06-18:17:53.666 1d04 Level-0 table #106: 0 bytes OK
-2026/03/06-18:17:53.670 1d04 Delete type=0 #104
-2026/03/06-18:17:53.674 1d04 Manual compaction at level-0 from '!macros!6ilHGAMWymqNH4Bt' @ 72057594037927935 : 1 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at '!macros!yqKfgJq5AZYnEMNT' @ 613 : 0
-2026/03/06-18:17:53.674 1d04 Compacting 1@0 + 0@1 files
-2026/03/06-18:17:53.678 1d04 Generated table #107@0: 57 keys, 15035 bytes
-2026/03/06-18:17:53.678 1d04 Compacted 1@0 + 0@1 files => 15035 bytes
-2026/03/06-18:17:53.681 1d04 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/03/06-18:17:53.681 1d04 Delete type=2 #103
-2026/03/06-18:17:53.686 1d04 Manual compaction at level-0 from '!macros!yqKfgJq5AZYnEMNT' @ 613 : 0 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at (end)
-2026/03/06-18:17:53.690 1d04 Manual compaction at level-1 from '!macros!6ilHGAMWymqNH4Bt' @ 72057594037927935 : 1 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at '!macros!yqKfgJq5AZYnEMNT' @ 613 : 0
-2026/03/06-18:17:53.690 1d04 Compacting 1@1 + 1@2 files
-2026/03/06-18:17:53.695 1d04 Generated table #108@1: 29 keys, 13691 bytes
-2026/03/06-18:17:53.695 1d04 Compacted 1@1 + 1@2 files => 13691 bytes
-2026/03/06-18:17:53.698 1d04 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/03/06-18:17:53.698 1d04 Delete type=2 #99
-2026/03/06-18:17:53.698 1d04 Delete type=2 #107
-2026/03/06-18:17:53.698 1d04 Manual compaction at level-1 from '!macros!yqKfgJq5AZYnEMNT' @ 613 : 0 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at (end)
+2026/03/06-20:06:00.233 b618 Recovering log #105
+2026/03/06-20:06:00.240 b618 Delete type=0 #105
+2026/03/06-20:06:00.240 b618 Delete type=3 #102
+2026/03/06-20:51:48.875 1d04 Level-0 table #112: started
+2026/03/06-20:51:48.875 1d04 Level-0 table #112: 0 bytes OK
+2026/03/06-20:51:48.877 1d04 Delete type=0 #110
+2026/03/06-20:51:48.877 1d04 Manual compaction at level-0 from '!macros!6ilHGAMWymqNH4Bt' @ 72057594037927935 : 1 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at (end)
+2026/03/06-20:51:48.877 1d04 Manual compaction at level-1 from '!macros!6ilHGAMWymqNH4Bt' @ 72057594037927935 : 1 .. '!macros!ylWS6zzJ8VYp0CEO' @ 0 : 0; will stop at (end)
