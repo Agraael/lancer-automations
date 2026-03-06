@@ -73,7 +73,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## Effect Manager
 
-<img src="doc/img/effect-manager-hud-button.png" width="40%"/>
+<img align="right" src="doc/img/effect-manager-hud-button.png" width="40%"/>
 
 The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API.
 
