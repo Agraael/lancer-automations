@@ -2,6 +2,15 @@ import { applyEffectsToTokens } from "./flagged-effects.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "./reaction-manager.js";
 
+/**
+ * Session cache for compiled lambda conditions.
+ * When a bonus `condition` field starts with `@@fn:`, the remainder is the serialized function source.
+ * Compiled functions are cached here (keyed on source string) to avoid recompiling on every evaluation.
+ * The source itself lives in the actor flag and survives page reloads — this cache is purely a
+ * performance optimization and is rebuilt on demand.
+ */
+const serializedConditionCache = new Map();
+
 // Current resource stats use direct actor.update() instead of ActiveEffect changes,
 // because AE changes get re-applied on every data refresh (breaking consumable resources like overshield).
 const CURRENT_RESOURCE_STATS = new Set([
@@ -30,6 +39,12 @@ export function flattenBonuses(bonuses) {
                 }
                 if (!flatSub.name && b.name) {
                     flatSub.name = b.name;
+                }
+                if (b.context && !flatSub.context) {
+                    flatSub.context = b.context;
+                }
+                if (!flatSub.context && b.context) {
+                    flatSub.context = b.context;
                 }
                 flattened.push(flatSub);
             });
@@ -133,6 +148,10 @@ function createGenericBonusStep(flowType) {
                 const tags = getFlowTags(flowType, state);
 
                 for (const bonus of bonuses) {
+                    // applyToTargetter bonuses are applied to attackers via the targetter scan below, not here
+                    if (bonus.applyToTargetter)
+                        continue;
+
                     if (!await isBonusApplicable(bonus, tags, state))
                         continue;
 
@@ -343,7 +362,7 @@ function createGenericBonusStep(flowType) {
                     return bonus.type !== 'stat';
                 };
 
-                for (const bonus of (sourceActor.getFlag("lancer-automations", "global_bonuses") || [])) {
+                for (const bonus of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses") || [])) {
                     if (await passesTargeterFilter(bonus))
                         routeTargeterBonus(bonus);
                 }
@@ -401,7 +420,7 @@ function createGenericBonusStep(flowType) {
             const appliedMode = new Map();
 
             const applyTargetedBonuses = (accDiff) => {
-                const count = accDiff.targets.length;
+                const count = accDiff.targets?.length || 0;
                 const base = accDiff.base;
                 for (const bonus of allTargetedBonuses) {
                     const val = parseInt(bonus.val) || 0;
@@ -427,7 +446,7 @@ function createGenericBonusStep(flowType) {
                     }
 
                     // Find matching targets in the new list
-                    const matching = accDiff.targets.filter(t => bonus.applyTo.includes(t.target?.id));
+                    const matching = accDiff.targets?.filter(t => bonus.applyTo.includes(t.target?.id)) ?? [];
                     if (!matching.length) {
                         appliedMode.set(bonus.id, null);
                         continue;
@@ -578,8 +597,25 @@ async function isBonusApplicable(bonus, flowTags, state) {
             if (typeof bonus.condition === 'function') {
                 result = await bonus.condition(state, state.actor, state.data, context);
             } else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
-                const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
-                result = await fn(state, state.actor, state.data, context);
+                if (bonus.condition.startsWith('@@fn:')) {
+                    const src = bonus.condition.slice('@@fn:'.length);
+                    let fn = serializedConditionCache.get(src);
+                    if (!fn) {
+                        fn = new Function('state', 'actor', 'data', 'context',
+                            `const api=game.modules.get('lancer-automations')?.api;` +
+                            `const ownerTokenId=context?.ownerTokenId;` +
+                            `const reactorToken=ownerTokenId` +
+                            `?canvas.tokens.get(ownerTokenId)??canvas.tokens.placeables.find(t=>t.id===ownerTokenId)` +
+                            `:null;` +
+                            `return(${src})(state,actor,data,context);`
+                        );
+                        serializedConditionCache.set(src, fn);
+                    }
+                    result = await fn(state, state.actor, state.data, context);
+                } else {
+                    const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
+                    result = await fn(state, state.actor, state.data, context);
+                }
             }
             if (!result)
                 return false;
@@ -1458,6 +1494,23 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
     if (!bonusData.name)
         bonusData.name = "Unnamed Bonus";
 
+    // Lambda condition support — serialize function source into the condition field
+    if (typeof bonusData.condition === 'function') {
+        bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
+    }
+
+    // Also handle lambda conditions on sub-bonuses (multi type)
+    if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses)) {
+        bonusData = {
+            ...bonusData,
+            bonuses: bonusData.bonuses.map(sub => {
+                if (typeof sub.condition !== 'function')
+                    return sub;
+                return { ...sub, condition: '@@fn:' + sub.condition.toString() };
+            })
+        };
+    }
+
     const existingIdx = bonuses.findIndex(b => b.id === bonusData.id);
     if (existingIdx !== -1) {
         bonuses[existingIdx] = bonusData;
@@ -1538,6 +1591,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                     groupId: options.consumption.groupId || null,
                     evaluate: options.consumption.evaluate || null,
                     itemLid: options.consumption.itemLid || null,
+                    itemId: options.consumption.itemId || null,
                     actionName: options.consumption.actionName || null,
                     isBoost: options.consumption.isBoost ?? null,
                     minDistance: options.consumption.minDistance ?? null,
@@ -1619,29 +1673,37 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
     return bonusData.id;
 }
 
-export async function removeGlobalBonus(actor, bonusId, skipEffectRemoval = false) {
+/**
+ * @param {string|function(bonus): boolean} bonusIdOrPredicate - Bonus ID string, or a predicate
+ *   to remove all matching bonuses in a single flag update.
+ */
+export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false) {
     if (!actor)
         return;
     let bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
     const initialLength = bonuses.length;
 
-    const bonusToRemove = bonuses.find(b => b.id === bonusId);
-    bonuses = bonuses.filter(b => b.id !== bonusId);
+    const predicate = typeof bonusIdOrPredicate === 'function'
+        ? bonusIdOrPredicate
+        : b => b.id === bonusIdOrPredicate;
+
+    const bonusesToRemove = bonuses.filter(predicate);
+    bonuses = bonuses.filter(b => !predicate(b));
+
+
 
     if (bonuses.length !== initialLength) {
         await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
 
-        // Only remove the specific linked effect, not all effects with the same name
-        if (!skipEffectRemoval && bonusToRemove && bonusToRemove.name) {
+        if (!skipEffectRemoval && bonusesToRemove.length > 0) {
             const token = actor.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
             if (token && token.actor) {
-                // Find only the effect linked to THIS specific bonus, not all with the same name
-                const linkedEffect = token.actor.effects.find(e =>
-                    e.getFlag('lancer-automations', 'linkedBonusId') === bonusId
+                const removedIds = new Set(bonusesToRemove.map(b => b.id));
+                const linkedEffects = token.actor.effects.filter(e =>
+                    removedIds.has(e.getFlag('lancer-automations', 'linkedBonusId'))
                 );
-                if (linkedEffect) {
-                    await linkedEffect.delete();
-                }
+                for (const e of linkedEffects)
+                    await e.delete();
             }
         }
 
@@ -1750,6 +1812,12 @@ export async function addConstantBonus(actor, bonusData) {
     const bonuses = duplicate(actor.getFlag("lancer-automations", "constant_bonuses") || []);
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();
+
+    // If condition is a function, serialize its source into the condition field so it survives reloads.
+    if (typeof bonusData.condition === 'function') {
+        bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
+    }
+
     const existingIndex = bonuses.findIndex(b => b.id === bonusData.id);
     if (existingIndex >= 0)
         bonuses[existingIndex] = bonusData;
@@ -1764,11 +1832,20 @@ export function getConstantBonuses(actor) {
     return actor.getFlag("lancer-automations", "constant_bonuses") || [];
 }
 
-export async function removeConstantBonus(actor, bonusId) {
+/**
+ * Remove constant bonus(es) from an actor.
+ * @param {Actor} actor
+ * @param {string|function(bonus): boolean} bonusIdOrPredicate - Bonus ID string to remove one,
+ *   or a predicate function to remove all matching bonuses in a single flag update.
+ */
+export async function removeConstantBonus(actor, bonusIdOrPredicate) {
     if (!actor)
         return;
     const bonuses = duplicate(actor.getFlag("lancer-automations", "constant_bonuses") || []);
-    const filtered = bonuses.filter(b => b.id !== bonusId);
+    const predicate = typeof bonusIdOrPredicate === 'function'
+        ? bonusIdOrPredicate
+        : b => b.id === bonusIdOrPredicate;
+    const filtered = bonuses.filter(b => !predicate(b));
     if (filtered.length !== bonuses.length) {
         await delegateSetActorFlag(actor, "lancer-automations", "constant_bonuses", filtered);
     }
@@ -1890,11 +1967,20 @@ export function applyDamageImmunities(actor, damages) {
     });
 }
 
-export function hasCritImmunity(actor) {
-    if (!actor) {
+export async function hasCritImmunity(actor, attackerActor = null) {
+    if (!actor)
         return false;
+    const candidates = getImmunityBonuses(actor, "crit");
+    if (candidates.length === 0)
+        return false;
+    if (!attackerActor)
+        return true;
+    const attackerState = { actor: attackerActor };
+    for (const b of candidates) {
+        if (await isBonusApplicable(b, new Set(), attackerState))
+            return true;
     }
-    return getImmunityBonuses(actor, "crit").length > 0;
+    return false;
 }
 
 export const BonusesAPI = {

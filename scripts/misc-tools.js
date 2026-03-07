@@ -105,6 +105,16 @@ export function getItemLID(item) {
     return item.system?.lid || null;
 }
 
+/**
+ * Find an item on an actor by its LID.
+ * @param {Actor} actor
+ * @param {string} lid
+ * @returns {Item|null}
+ */
+export function findItemByLid(actor, lid) {
+    return actor?.items?.find(i => i.system?.lid === lid) ?? null;
+}
+
 export function isItemAvailable(item, reactionPath) {
     if (!item || item.system?.destroyed || item.system?.disabled) {
         return false;
@@ -778,5 +788,6 @@ export const MiscAPI = {
     executeReactorMeltdown,
     executeReactorExplosion,
     addItemTag,
-    removeItemTag
+    removeItemTag,
+    findItemByLid
 };

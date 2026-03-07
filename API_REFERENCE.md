@@ -64,6 +64,7 @@
   - [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon)
 - [Movement Tracking](#movement-tracking)
 - [Registration & Logic](#registration--logic)
+  - [User Helpers](#user-helpers)
   - [Registration Functions](#registration-functions)
   - [How-To: Register Activations](#how-to-register-activations)
   - [How-To: Advanced Consumption](#how-to-advanced-consumption)
@@ -873,7 +874,26 @@ These functions accept either a string `tokenId` or a `Token` document/object.
 
 ## Registration & Logic
 
-#### Registration Functions
+### User Helpers
+
+#### `registerUserHelper(name, fn)`
+Registers a custom utility function that can be retrieved globally. Useful for sharing logic between separate activation scripts.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | Unique name for the helper |
+| `fn` | `Function` | The function to register |
+
+#### `getUserHelper(name)`
+Retrieves a previously registered helper function by name.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | Name of the helper to retrieve |
+
+**Returns:** `Function|null`
+
+### Registration Functions
 
 #### `registerDefaultItemReactions(reactions)`
 Registers reaction logic for specific item LIDs.

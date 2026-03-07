@@ -84,6 +84,10 @@ export class ReactionManager {
         return "activationFolders";
     }
 
+    static get SETTING_STARTUP_SCRIPTS() {
+        return "startupScripts";
+    }
+
     static initialize() {
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {
             name: "Custom Activations",
@@ -120,6 +124,25 @@ export class ReactionManager {
             type: Array,
             default: []
         });
+
+        game.settings.register(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, {
+            name: "Startup Scripts",
+            hint: "JS scripts that run on module ready.",
+            scope: "world",
+            config: false,
+            type: Array,
+            default: []
+        });
+
+        game.settings.register(ReactionManager.ID, "enableLaSossisItems", {
+            name: "LaSossis's Items",
+            hint: "Those are the item activations i made for myself, it wil create a startup script that registers them as default item activations.",
+            scope: "world",
+            config: true,
+            type: Boolean,
+            default: false,
+            requiresReload: true
+        });
     }
 
     static getFolders() {
@@ -128,6 +151,14 @@ export class ReactionManager {
 
     static async saveFolders(folders) {
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_FOLDERS, folders);
+    }
+
+    static getStartupScripts() {
+        return game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+    }
+
+    static async saveStartupScripts(scripts) {
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, scripts);
     }
 
     static async createFolder(name) {
@@ -300,6 +331,10 @@ export class ReactionManager {
 }
 
 export class ReactionConfig extends FormApplication {
+    constructor(object, options) {
+        super(object, options);
+        this._needsReload = false;
+    }
     static get defaultOptions() {
         return mergeObject(super.defaultOptions, {
             title: "Activation Manager",
@@ -330,22 +365,40 @@ export class ReactionConfig extends FormApplication {
 
         const itemMap = new Map();
 
-        for (const pack of game.packs) {
-            if (pack.documentName !== "Item")
-                continue;
-            if (midsToLookup.size === 0)
-                break;
+        // 1. Check World Items (Instant)
+        for (const item of game.items) {
+            const lid = item.system?.lid;
+            if (lid && midsToLookup.has(lid)) {
+                itemMap.set(lid, {
+                    name: item.name,
+                    system: item.system
+                });
+                midsToLookup.delete(lid);
+            }
+        }
 
-            const index = await pack.getIndex({ fields: ["system.lid"] });
-            for (const entry of index) {
-                if (entry.system?.lid && midsToLookup.has(entry.system.lid)) {
-                    const itemDoc = await fromUuid(entry.uuid);
-                    if (itemDoc) {
-                        itemMap.set(entry.system.lid, {
-                            name: itemDoc.name,
-                            system: itemDoc.system
+        // 2. Check Compendiums in Parallel (Cold Load Optimization)
+        if (midsToLookup.size > 0) {
+            const itemPacks = game.packs.filter(p => p.documentName === "Item");
+            const indices = await Promise.all(itemPacks.map(pack => pack.getIndex({
+                fields: ["system.lid", "system.actions", "system.ranks", "system.profiles"]
+            })));
+
+            for (const index of indices) {
+                if (midsToLookup.size === 0) {
+                    break;
+                }
+                for (const entry of index) {
+                    const lid = entry.system?.lid;
+                    if (lid && midsToLookup.has(lid)) {
+                        itemMap.set(lid, {
+                            name: entry.name,
+                            system: entry.system
                         });
-                        midsToLookup.delete(entry.system.lid);
+                        midsToLookup.delete(lid);
+                        if (midsToLookup.size === 0) {
+                            break;
+                        }
                     }
                 }
             }
@@ -677,7 +730,8 @@ export class ReactionConfig extends FormApplication {
             customFolders: customFolders,
             defaultReactions: defaultList,
             defaultFolders: defaultFolders,
-            allTriggers: allTriggers
+            allTriggers: allTriggers,
+            startupScripts: ReactionManager.getStartupScripts()
         };
     }
 
@@ -689,6 +743,10 @@ export class ReactionConfig extends FormApplication {
         html.find('.copy-default').click(this._onCopyDefault.bind(this));
         html.find('.reaction-enabled').change(this._onToggleEnabled.bind(this));
         html.find('.help-btn').click(this._onHelp.bind(this));
+        html.find('.add-script').click(this._onAddScript.bind(this));
+        html.find('.edit-script').click(this._onEditScript.bind(this));
+        html.find('.delete-script').click(this._onDeleteScript.bind(this));
+        html.find('.script-enabled').change(this._onToggleScript.bind(this));
 
         // Group expand/collapse
         html.find('.group-header').click((ev) => {
@@ -813,13 +871,26 @@ export class ReactionConfig extends FormApplication {
             const name = await new Promise(resolve => {
                 new Dialog({
                     title: "Create Folder",
-                    content: `<div class="form-group"><label>Folder Name</label><input type="text" name="folderName" placeholder="Enter folder name..." autofocus></div>`,
+                    content: `
+                        <div class="form-group">
+                            <label>Folder Name</label>
+                            <input type="text" name="folderName" placeholder="Enter folder name..." autofocus>
+                        </div>
+                    `,
                     buttons: {
-                        ok: { label: "Create", callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) },
-                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                        ok: { 
+                            label: "Create", 
+                            icon: '<i class="fas fa-folder-plus"></i>',
+                            callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) 
+                        },
+                        cancel: { 
+                            label: "Cancel", 
+                            icon: '<i class="fas fa-times"></i>',
+                            callback: () => resolve(null) 
+                        }
                     },
                     default: "ok"
-                }).render(true);
+                }, { classes: ["lancer-automations-dialog"] }).render(true);
             });
             if (name) {
                 await ReactionManager.createFolder(name);
@@ -833,13 +904,26 @@ export class ReactionConfig extends FormApplication {
             const newName = await new Promise(resolve => {
                 new Dialog({
                     title: "Rename Folder",
-                    content: `<div class="form-group"><label>New Name</label><input type="text" name="folderName" value="${oldName}" autofocus></div>`,
+                    content: `
+                        <div class="form-group">
+                            <label>New Name</label>
+                            <input type="text" name="folderName" value="${oldName}" autofocus>
+                        </div>
+                    `,
                     buttons: {
-                        ok: { label: "Rename", callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) },
-                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                        ok: { 
+                            label: "Rename", 
+                            icon: '<i class="fas fa-pen"></i>',
+                            callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) 
+                        },
+                        cancel: { 
+                            label: "Cancel", 
+                            icon: '<i class="fas fa-times"></i>',
+                            callback: () => resolve(null) 
+                        }
                     },
                     default: "ok"
-                }).render(true);
+                }, { classes: ["lancer-automations-dialog"] }).render(true);
             });
             if (newName && newName !== oldName) {
                 await ReactionManager.renameFolder(oldName, newName);
@@ -853,14 +937,31 @@ export class ReactionConfig extends FormApplication {
             const result = await new Promise(resolve => {
                 new Dialog({
                     title: "Delete Folder",
-                    content: `<p>Delete folder "<strong>${folderName}</strong>"?</p>`,
+                    content: `
+                        <div class="form-group">
+                            <p style="margin-bottom: 10px;">Are you sure you want to delete folder "<strong>${folderName}</strong>"?</p>
+                            <p class="notes">Choose whether to keep the activations inside the folder (unfiled) or delete them entirely.</p>
+                        </div>
+                    `,
                     buttons: {
-                        keep: { label: "Keep Items", icon: '<i class="fas fa-inbox"></i>', callback: () => resolve("keep") },
-                        all: { label: "Delete All", icon: '<i class="fas fa-trash"></i>', callback: () => resolve("all") },
-                        cancel: { label: "Cancel", callback: () => resolve(null) }
+                        keep: { 
+                            label: "Keep Items", 
+                            icon: '<i class="fas fa-inbox"></i>', 
+                            callback: () => resolve("keep") 
+                        },
+                        all: { 
+                            label: "Delete All", 
+                            icon: '<i class="fas fa-trash"></i>', 
+                            callback: () => resolve("all") 
+                        },
+                        cancel: { 
+                            label: "Cancel", 
+                            icon: '<i class="fas fa-times"></i>',
+                            callback: () => resolve(null) 
+                        }
                     },
                     default: "keep"
-                }).render(true);
+                }, { classes: ["lancer-automations-dialog"] }).render(true);
             });
             if (!result)
                 return;
@@ -1027,6 +1128,7 @@ export class ReactionConfig extends FormApplication {
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
             }
         }
+        this._needsReload = true;
         clearScriptCache();
         this.render();
     }
@@ -1107,11 +1209,185 @@ export class ReactionConfig extends FormApplication {
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userItemSettings);
         }
+        this._needsReload = true;
         clearScriptCache();
         this.render();
     }
 
+    _onAddScript(event) {
+        event.preventDefault();
+        this._openScriptEditor(null);
+    }
+
+    _onEditScript(event) {
+        event.preventDefault();
+        const li = $(event.currentTarget).closest('.script-item');
+        const id = li.data('id');
+        const scripts = ReactionManager.getStartupScripts();
+        const script = scripts.find(s => s.id === id);
+        if (!script)
+            return;
+        this._openScriptEditor(script);
+    }
+
+    async _onDeleteScript(event) {
+        event.preventDefault();
+        const li = $(event.currentTarget).closest('.script-item');
+        const id = li.data('id');
+        const scripts = ReactionManager.getStartupScripts();
+        const idx = scripts.findIndex(s => s.id === id);
+        if (idx === -1)
+            return;
+        const confirmed = await Dialog.confirm({
+            title: 'Delete Startup Script',
+            content: `<p>Delete script "<strong>${scripts[idx].name}</strong>"?</p>`
+        });
+        if (!confirmed)
+            return;
+        scripts.splice(idx, 1);
+        await ReactionManager.saveStartupScripts(scripts);
+        this._needsReload = true;
+        this.render();
+    }
+
+    async _onToggleScript(event) {
+        const checkbox = $(event.currentTarget);
+        const li = checkbox.closest('.script-item');
+        const id = li.data('id');
+        const scripts = ReactionManager.getStartupScripts();
+        const script = scripts.find(s => s.id === id);
+        if (!script)
+            return;
+        script.enabled = checkbox.prop('checked');
+        await ReactionManager.saveStartupScripts(scripts);
+        this._needsReload = true;
+    }
+
+    _openScriptEditor(script) {
+        new StartupScriptEditor({ script, manager: this }).render(true);
+    }
+
     async _updateObject(event, formData) {
+    }
+
+    async close(options = {}) {
+        if (this._needsReload) {
+            const reload = await Dialog.confirm({
+                title: "Reload Required",
+                content: "<p>Changes made to activations or startup scripts require a reload to apply. Reload now?</p>",
+                yes: () => true,
+                no: () => false,
+                defaultYes: false
+            });
+            if (reload)
+                foundry.utils.debouncedReload();
+        }
+        return super.close(options);
+    }
+}
+
+export class StartupScriptEditor extends FormApplication {
+    constructor(object, options) {
+        super(object, options);
+        this._codeEditor = null;
+    }
+
+    static get defaultOptions() {
+        return mergeObject(super.defaultOptions, {
+            title: "Startup Script",
+            id: "startup-script-editor",
+            template: `modules/lancer-automations/templates/startup-script-editor.html`,
+            width: 700,
+            height: 580,
+            resizable: true,
+            classes: ["lancer-reaction-editor"]
+        });
+    }
+
+    get title() {
+        const script = this.object?.script;
+        if (!script)
+            return "New Startup Script";
+        return script.builtin ? `View: ${script.name}` : `Edit: ${script.name}`;
+    }
+
+    async getData() {
+        const script = this.object?.script;
+        return {
+            id: script?.id ?? foundry.utils.randomID(),
+            name: script?.name ?? "",
+            description: script?.description ?? "",
+            enabled: script?.enabled !== false,
+            code: script?.code ?? "",
+            builtin: !!script?.builtin
+        };
+    }
+
+    activateListeners(html) {
+        super.activateListeners(html);
+
+        const isBuiltin = !!this.object?.script?.builtin;
+        const host = html.find('.sse-codemirror-host')[0];
+        const textarea = html.find('textarea[name="code"]')[0];
+        if (host && typeof CodeMirror !== 'undefined') {
+            const initialValue = textarea?.value ?? "";
+            this._codeEditor = CodeMirror(host, {
+                value: initialValue,
+                mode: 'javascript',
+                theme: 'monokai',
+                lineNumbers: true,
+                matchBrackets: true,
+                indentUnit: 4,
+                lineWrapping: false,
+                scrollbarStyle: 'native',
+                readOnly: isBuiltin
+            });
+            if (!isBuiltin) {
+                this._codeEditor.on('change', (cm) => {
+                    if (textarea)
+                        textarea.value = cm.getValue();
+                });
+            }
+            setTimeout(() => this._codeEditor.refresh(), 100);
+        }
+    }
+
+    async _updateObject(event, formData) {
+        if (this.object?.script?.builtin)
+            return;
+
+        const id = formData.id ?? foundry.utils.randomID();
+        const name = (formData.name ?? "").trim();
+        if (!name) {
+            ui.notifications.warn('Script name is required.');
+            return;
+        }
+
+        const entry = {
+            id,
+            name,
+            description: (formData.description ?? "").trim(),
+            enabled: !!formData.enabled,
+            code: formData.code ?? ""
+        };
+
+        const scripts = ReactionManager.getStartupScripts();
+        const isNew = !this.object?.script;
+        if (isNew) {
+            scripts.push(entry);
+        } else {
+            const idx = scripts.findIndex(s => s.id === id);
+            if (idx >= 0)
+                scripts[idx] = entry;
+            else
+                scripts.push(entry);
+        }
+
+        await ReactionManager.saveStartupScripts(scripts);
+        if (this.object?.manager) {
+            this.object.manager._needsReload = true;
+            this.object.manager.render();
+        }
     }
 }
 
@@ -1671,64 +1947,46 @@ export class ReactionEditor extends FormApplication {
         const content = editorInstance.getValue();
 
         const dialogContent = `
-            <div class="editor-wrapper">
-                <textarea id="expanded-code-editor"></textarea>
-            </div>
+            <div class="expanded-cm-host"></div>
             <style>
                 .expanded-editor-dialog .window-content {
                     padding: 0 !important;
-                    margin: 0 !important;
-                    height: 100% !important;
                     overflow: hidden !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    background: #272822; /* Monokai background */
-                }
-                .expanded-editor-dialog .window-content .editor-wrapper {
-                    flex: 1;
-                    overflow: hidden;
-                    position: relative;
-                    height: 100%;
-                }
-                .expanded-editor-dialog .CodeMirror {
-                    height: 100% !important;
-                    width: 100% !important;
+                    background: #272822;
                 }
                 .expanded-editor-dialog .dialog-buttons {
-                    flex: 0 0 50px;
-                    height: 50px;
-                    background: #333;
-                    border-top: 1px solid #111;
+                    height: 40px !important;
+                    min-height: 40px !important;
+                    max-height: 40px !important;
+                    background: #333 !important;
+                    border-top: 1px solid #111 !important;
                     padding: 0 !important;
                     margin: 0 !important;
-                    display: flex;
-                    flex-direction: row;
+                    display: flex !important;
+                    overflow: hidden !important;
                 }
                 .expanded-editor-dialog button.dialog-button {
-                    background: #444;
-                    color: #fff;
-                    border: none;
-                    border-right: 1px solid #222;
-                    width: 100%;
-                    height: 100%;
-                    margin: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 1.2em;
-                    border-radius: 0;
+                    background: #444 !important;
+                    color: #fff !important;
+                    border: none !important;
+                    border-right: 1px solid #222 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    margin: 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: 1em !important;
+                    border-radius: 0 !important;
+                    box-shadow: none !important;
                 }
-                .expanded-editor-dialog button.dialog-button:last-child {
-                    border-right: none;
-                }
-                .expanded-editor-dialog button.dialog-button:hover {
-                    background: #555;
-                    box-shadow: none;
-                }
+                .expanded-editor-dialog button.dialog-button:last-child { border-right: none !important; }
+                .expanded-editor-dialog button.dialog-button:hover { background: #555 !important; }
             </style>
         `;
 
         let expandedEditor;
+        let resizeObserver;
 
         new Dialog({
             title: `Edit ${title}`,
@@ -1737,19 +1995,16 @@ export class ReactionEditor extends FormApplication {
                 save: {
                     label: "Save & Close",
                     icon: '<i class="fas fa-save" style="margin-right: 8px;"></i>',
-                    callback: (html) => {
-                        const newContent = expandedEditor.getValue();
-                        editorInstance.setValue(newContent);
+                    callback: () => {
+                        editorInstance.setValue(expandedEditor.getValue());
                     }
                 }
             },
             default: "save",
             render: (html) => {
-                const textarea = html.find('#expanded-code-editor')[0];
-                // Safe content setting
-                textarea.value = content;
-
-                expandedEditor = CodeMirror.fromTextArea(textarea, {
+                const host = html.find('.expanded-cm-host')[0];
+                expandedEditor = CodeMirror(host, {
+                    value: content,
                     mode: 'javascript',
                     theme: 'monokai',
                     lineNumbers: true,
@@ -1760,13 +2015,22 @@ export class ReactionEditor extends FormApplication {
                     scrollbarStyle: "native"
                 });
 
-                // Refresh to ensure layout is correct after render
-                setTimeout(() => {
+                const windowEl = html.closest('.window-app')[0];
+                const updateSize = () => {
+                    if (!windowEl)
+                        return;
+                    const headerH = windowEl.querySelector('.window-header')?.offsetHeight ?? 34;
+                    const buttonH = 40; // fixed: matches forced CSS height on .dialog-buttons
+                    expandedEditor.setSize(null, windowEl.offsetHeight - headerH - buttonH);
                     expandedEditor.refresh();
-                }, 50);
-            },
+                };
 
+                setTimeout(updateSize, 50);
+                resizeObserver = new ResizeObserver(updateSize);
+                resizeObserver.observe(windowEl);
+            },
             close: () => {
+                resizeObserver?.disconnect();
             }
         }, {
             width: 800,
@@ -2065,8 +2329,10 @@ export class ReactionEditor extends FormApplication {
         clearScriptCache();
 
         Object.values(ui.windows).forEach(w => {
-            if (w.id === "reaction-manager-config")
+            if (w.id === "reaction-manager-config") {
+                w._needsReload = true;
                 w.render();
+            }
         });
     }
 

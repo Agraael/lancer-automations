@@ -11,6 +11,7 @@
     <nav class="sheet-tabs tabs" data-group="primary">
         <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Activations</a>
         <a class="item" data-tab="defaults"><i class="fas fa-book"></i> Defaults</a>
+        <a class="item" data-tab="startup"><i class="fas fa-play"></i> Startup</a>
     </nav>
 
     <div class="content">
@@ -51,12 +52,12 @@
                                 <i class="fas fa-folder folder-expand-icon"></i>
                             </span>
                             <span class="col-type" style="flex: 0.3;"></span>
-                            <span class="col-name" style="flex: 3;">
+                            <span class="col-name" style="flex: 4;">
                                 <strong>{{this.folderName}}</strong>
                                 <span
                                     style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.items.length}})</span>
                             </span>
-                            <span class="col-triggers" style="flex: 2;"></span>
+                            <span class="col-triggers" style="flex: 1;"></span>
                             <span class="col-controls" style="flex: 0.5; text-align: right;">
                                 <a class="rename-folder-btn" title="Rename"><i class="fas fa-pen"
                                         style="font-size: 0.75em;"></i></a>
@@ -378,6 +379,59 @@
                 </div>
             </div>
         </div>
+
+        <!-- STARTUP TAB -->
+        <div class="tab" data-tab="startup">
+            <div class="lancer-action-buttons" style="margin: 0 0 8px 0;">
+                <button type="button" class="lancer-action-btn add-script"><i class="fas fa-plus"></i> Add
+                    Script</button>
+            </div>
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">
+                Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable
+                helpers, then access them in activations via <code>api.getUserHelper(name)</code>.
+            </p>
+            <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div class="reaction-header flexrow">
+                    <span class="col-enabled" title="Enabled"></span>
+                    <span class="col-type">Type</span>
+                    <span class="col-name">Name / Description</span>
+                    <span class="col-triggers">When</span>
+                    <span class="col-controls">Controls</span>
+                </div>
+                <div class="scrollable">
+                    {{#each startupScripts}}
+                    <div class="reaction-item flexrow script-item" data-id="{{this.id}}">
+                        <span class="col-enabled">
+                            <input type="checkbox" class="script-enabled" {{checked this.enabled}}>
+                        </span>
+                        <span class="col-type">
+                            {{#if this.builtin}}
+                            <i class="fas fa-cube" title="Built-in Script" style="color: #991e2a;"></i>
+                            {{else}}
+                            <i class="fas fa-code" title="Startup Script"></i>
+                            {{/if}}
+                        </span>
+                        <span class="col-name">
+                            <strong>{{this.name}}</strong>
+                            {{#if this.builtin}}<span class="script-builtin-badge">built-in</span>{{/if}}
+                            {{#if this.description}}<span
+                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.description}})</span>{{/if}}
+                        </span>
+                        <span class="col-triggers">On Ready</span>
+                        <span class="col-controls">
+                            <a class="edit-script" title="{{#if this.builtin}}View Code{{else}}Edit{{/if}}"><i
+                                    class="fas fa-{{#if this.builtin}}eye{{else}}edit{{/if}}"></i></a>
+                            {{#unless this.builtin}}<a class="delete-script" title="Delete"><i
+                                    class="fas fa-trash"></i></a>{{/unless}}
+                        </span>
+                    </div>
+                    {{else}}
+                    <p class="notes" style="text-align: center; color: #666; padding: 16px;">No startup scripts defined.
+                    </p>
+                    {{/each}}
+                </div>
+            </div>
+        </div>
     </div>
 </form>
 
@@ -570,13 +624,30 @@
     }
 
     /* ===== Checkbox ===== */
-    .reaction-enabled {
+    .reaction-enabled,
+    .script-enabled {
         accent-color: #991e2a;
     }
 
     /* ===== Type Icons ===== */
     .col-type i {
         color: #991e2a;
+    }
+
+    /* ===== Built-in badge ===== */
+    .script-builtin-badge {
+        display: inline-block;
+        font-size: 0.7em;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #991e2a;
+        border: 1px solid #991e2a;
+        border-radius: 3px;
+        padding: 0 4px;
+        margin-left: 5px;
+        vertical-align: middle;
+        opacity: 0.75;
     }
 
     /* ===== Notes ===== */

@@ -43,16 +43,16 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
 `;
 
 const CONSUMPTION_FILTER_MAP = {
-    onAttack: ['cfilter-itemLid'],
-    onHit: ['cfilter-itemLid'],
-    onMiss: ['cfilter-itemLid'],
-    onDamage: ['cfilter-itemLid'],
-    onTechAttack: ['cfilter-itemLid'],
-    onTechHit: ['cfilter-itemLid'],
+    onAttack: ['cfilter-itemLid', 'cfilter-itemId'],
+    onHit: ['cfilter-itemLid', 'cfilter-itemId'],
+    onMiss: ['cfilter-itemLid', 'cfilter-itemId'],
+    onDamage: ['cfilter-itemLid', 'cfilter-itemId'],
+    onTechAttack: ['cfilter-itemLid', 'cfilter-itemId'],
+    onTechHit: ['cfilter-itemLid', 'cfilter-itemId'],
     onMove: ['cfilter-boost'],
     onPreMove: ['cfilter-boost'],
     onActivation: ['cfilter-actionName'],
-    onDeploy: ['cfilter-itemLid'],
+    onDeploy: ['cfilter-itemLid', 'cfilter-itemId'],
     onCheck: ['cfilter-check']
 };
 
@@ -81,6 +81,13 @@ function triggerFieldsHtml(prefix, tokensHtml) {
                 <div style="flex:1; display:flex; gap:3px;">
                     <input type="text" id="${prefix}-filter-itemLid" placeholder="e.g. mw_assault_rifle, mw_pistol" style="flex:1;">
                     <button type="button" class="find-lid-btn" data-target="${prefix}-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+            <div class="form-group cfilter-itemId" style="display:none;">
+                <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Consume on item ID:</label>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <input type="text" id="${prefix}-filter-itemId" placeholder="Item ID" style="flex:1;">
+                    <button type="button" class="item-picker-btn" data-target="${prefix}-filter-itemId" data-token-source="${prefix}-target" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                 </div>
             </div>
             <div class="form-group cfilter-actionName" style="display:none;">
@@ -122,6 +129,74 @@ function setupTriggerUI(html, prefix) {
         const targetId = $(this).data('target');
         openItemBrowser(html.find(`#${targetId}`));
     });
+
+    html.find(`#${prefix}-trigger-fields .item-picker-btn`).on('click', async function (e) {
+        e.preventDefault();
+        const targetId = $(this).data('target');
+        const tokenSourceId = $(this).data('token-source');
+
+        let targetToken = null;
+        if (tokenSourceId) {
+            const tokenId = html.find(`#${tokenSourceId}`).val();
+            targetToken = canvas.tokens.get(tokenId);
+        }
+        if (!targetToken)
+            targetToken = canvas.tokens.controlled[0];
+
+        if (!targetToken || !targetToken.actor) {
+            ui.notifications.warn("Please select a target token first.");
+            return;
+        }
+
+        const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
+        if (items.length === 0) {
+            ui.notifications.warn(`${targetToken.name} has no valid items.`);
+            return;
+        }
+
+        items.sort((a, b) => {
+            if (a.type !== b.type)
+                return a.type.localeCompare(b.type);
+            return a.name.localeCompare(b.name);
+        });
+
+        const buildItemHtml = (item) => {
+            const icon = item.img || "systems/lancer/assets/icons/white/generic_item.svg";
+            const displayType = item.system?.type ? `${item.type.toUpperCase()} - ${item.system.type.toUpperCase()}` : item.type.toUpperCase();
+            return `<div class="lancer-item-card actor-item-entry" data-id="${item.id}" style="margin-bottom:6px;padding:10px;cursor:pointer;display:flex;gap:10px;">
+                <div style="width:32px;height:32px;background:url('${icon}') no-repeat center/contain;flex-shrink:0;"></div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:bold;">${item.name}</div>
+                    <div style="font-size:0.85em;opacity:0.8;">[${displayType}]</div>
+                </div>
+            </div>`;
+        };
+
+        const pickerDialog = new Dialog({
+            title: `Select Item on ${targetToken.name}`,
+            content: `
+                <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                    <h1 class="lancer-dialog-title">Select Item on ${targetToken.name.toUpperCase()}</h1>
+                    <p class="lancer-dialog-subtitle">Choose which item to filter consumption by.</p>
+                </div>
+                <div style="height:350px;overflow-y:auto;padding:4px;border:1px solid #ddd;background:#fafafa;border-radius:4px;">
+                    ${items.map(buildItemHtml).join('')}
+                </div>
+            `,
+            buttons: {
+                cancel: { label: '<i class="fas fa-times"></i> Cancel', callback: () => {} }
+            },
+            render: (htmlContent) => {
+                htmlContent.find('.actor-item-entry').on('click', (ev) => {
+                    const id = $(ev.currentTarget).data('id');
+                    html.find(`#${targetId}`).val(id).change();
+                    pickerDialog.close();
+                });
+            },
+            default: "cancel"
+        }, { width: 500, classes: ["lancer-dialog-base", "lancer-no-title"] });
+        pickerDialog.render(true);
+    });
 }
 
 /**
@@ -142,6 +217,9 @@ function getTriggerConfig(html, prefix) {
     const itemLid = html.find(`#${prefix}-filter-itemLid`).val()?.trim();
     if (itemLid)
         consumption.itemLid = itemLid;
+    const itemId = html.find(`#${prefix}-filter-itemId`).val()?.trim();
+    if (itemId)
+        consumption.itemId = itemId;
     const actionName = html.find(`#${prefix}-filter-actionName`).val()?.trim();
     if (actionName)
         consumption.actionName = actionName;
@@ -438,7 +516,7 @@ export async function executeEffectManager(options = {}) {
             <div class="te-tab active" data-tab="standard">Standard</div>
             ${hasCustomStatus ? '<div class="te-tab" data-tab="custom">Custom</div>' : ''}
             <div class="te-tab" data-tab="bonus">Bonus</div>
-            <div class="te-tab" data-tab="manage">Manage</div>
+            <div class="te-tab" data-tab="manage">Manage <span id="manage-tab-count" style="font-size:0.75em; opacity:0.7;"></span></div>
         </div>
 
         <!-- STANDARD TAB -->
@@ -560,6 +638,7 @@ export async function executeEffectManager(options = {}) {
             <div class="te-effect-list" id="manage-list">
                 <p style="text-align:center">Loading...</p>
             </div>
+            <div id="manage-bonus-list"></div>
             <div class="te-btn-group">
                 <button type="button" class="te-btn manage-close"><i class="fas fa-times"></i> Close</button>
             </div>
@@ -574,9 +653,7 @@ export async function executeEffectManager(options = {}) {
                     <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                 </div>
             </div>
-            <div class="te-effect-list" id="bonus-list">
-                <p style="text-align:center; color:#666; font-style:italic;">No active bonuses.</p>
-            </div>
+            <div id="bonus-summary" style="padding:4px 0 8px; font-size:0.85em; color:#aaa; font-style:italic;">No active bonuses.</div>
             <hr class="te-divider">
             <div class="te-section-title">Add New Bonus</div>
             <div class="form-group">
@@ -620,6 +697,13 @@ export async function executeEffectManager(options = {}) {
                     <div style="flex:1; display:flex; gap:3px;">
                         <input type="text" id="bonus-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
                         <button type="button" class="find-lid-btn" data-target="bonus-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
+                    </div>
+                </div>
+                <div class="form-group bonus-filter-itemId" style="display:none;">
+                    <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Consume on item ID:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-filter-itemId" placeholder="Item ID" style="flex:1;">
+                        <button type="button" class="item-picker-btn" data-target="bonus-filter-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                     </div>
                 </div>
                 <div class="form-group bonus-filter-actionName" style="display:none;">
@@ -976,6 +1060,7 @@ export async function executeEffectManager(options = {}) {
                         customOriginId: originID
                     }, extraOptions);
                     ui.notifications.info(`Applied ${effectName} to ${token.name}.`);
+                    setTimeout(updateManageTabCount, 200);
 
                 } else if (tab === 'custom') {
                     const targetID = html.find('#cust-target').val();
@@ -1036,10 +1121,55 @@ export async function executeEffectManager(options = {}) {
                         customOriginId: originID
                     }, extraOptions);
                     ui.notifications.info(`Applied ${name} to ${token.name}.`);
+                    setTimeout(updateManageTabCount, 200);
                 }
             });
 
+            // Shared bonus detail helpers
+            const getBonusDetailString = (subB) => {
+                if (subB.type === 'accuracy')
+                    return `Accuracy +${subB.val}`;
+                if (subB.type === 'difficulty')
+                    return `Difficulty +${subB.val}`;
+                if (subB.type === 'stat')
+                    return `${subB.stat?.split('.').pop() || subB.stat} ${parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
+                if (subB.type === 'damage')
+                    return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
+                if (subB.type === 'tag')
+                    return subB.removeTag ? `Remove Tag: ${subB.tagName}` : `${subB.tagMode === 'override' ? 'Set' : 'Add'} ${subB.tagName} ${subB.val}`;
+                if (subB.type === 'immunity') {
+                    if (subB.subtype === 'effect' && subB.effects)
+                        return `Immunity: ${subB.effects.join(', ')}`;
+                    if ((subB.subtype === 'damage' || subB.subtype === 'resistance') && subB.damageTypes)
+                        return `${subB.subtype}: ${subB.damageTypes.join(', ')}`;
+                    return subB.subtype;
+                }
+                return subB.type || 'Unknown';
+            };
+            const renderBonusDetails = (b) => {
+                if (b.type === 'multi' && Array.isArray(b.bonuses))
+                    return `[${b.bonuses.map(getBonusDetailString).join(' | ')}]`;
+                return `(${getBonusDetailString(b)})`;
+            };
+
             // Manage Tab
+            const updateManageTabCount = () => {
+                const targetID = html.find('#manage-target').val();
+                const target = canvas.tokens.get(targetID);
+                if (!target || !target.actor) {
+                    html.find('#manage-tab-count').text('');
+                    return;
+                }
+                const actor = target.actor;
+                const effectCount = actor.effects.filter(e =>
+                    !e.disabled && (e.icon || e.img) && !e.getFlag("lancer-automations", "linkedBonusId")
+                ).length;
+                const bonusCount = (actor.getFlag("lancer-automations", "global_bonuses") || []).length
+                    + (actor.getFlag("lancer-automations", "constant_bonuses") || []).length;
+                const total = effectCount + bonusCount;
+                html.find('#manage-tab-count').text(total > 0 ? `(${total})` : '');
+            };
+
             const updateManageList = () => {
                 const targetID = html.find('#manage-target').val();
                 const target = canvas.tokens.get(targetID);
@@ -1057,7 +1187,6 @@ export async function executeEffectManager(options = {}) {
 
                 if (effects.length === 0) {
                     list.html('<p style="text-align:center; color:#ccc">No effects found.</p>');
-                    return;
                 }
 
                 effects.forEach(e => {
@@ -1073,7 +1202,12 @@ export async function executeEffectManager(options = {}) {
 
                     let consumptionText = '';
                     if (consumption?.trigger) {
-                        consumptionText = `<span style="font-size:0.75em; color:#991e2a; margin-left:4px;">[${consumption.trigger}]</span>`;
+                        let cLabel = consumption.trigger;
+                        if (consumption.itemId)
+                            cLabel += ` ID:${consumption.itemId}`;
+                        else if (consumption.itemLid)
+                            cLabel += ` ${consumption.itemLid}`;
+                        consumptionText = `<span style="font-size:0.75em; color:#991e2a; margin-left:4px;">[${cLabel}]</span>`;
                     }
 
                     const item = $(`
@@ -1111,6 +1245,54 @@ export async function executeEffectManager(options = {}) {
                     list.append(item);
                 });
 
+                // Bonuses section
+                const bonusList = html.find('#manage-bonus-list');
+                bonusList.empty();
+                const actor = target.actor;
+                const globalBonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
+                const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
+                const allBonuses = [
+                    ...globalBonuses.map(b => ({ ...b, _kind: 'global' })),
+                    ...constantBonuses.map(b => ({ ...b, _kind: 'constant' }))
+                ];
+
+                updateManageTabCount();
+
+                if (allBonuses.length > 0) {
+                    bonusList.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid #555; padding-top:6px;">Bonuses</p>'));
+                    allBonuses.forEach(b => {
+                        const details = renderBonusDetails(b);
+                        const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
+                        const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
+                        const itemIdInfo = b.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${b.itemId}]</span>` : '';
+                        const kindLabel = b._kind === 'constant' ? ' <span style="font-size:0.75em; color:#aaa;">(constant)</span>' : '';
+
+                        let usesInfo = '';
+                        if (b.uses !== undefined) {
+                            const linkedEffect = actor.effects.find(e => e.getFlag("lancer-automations", "linkedBonusId") === b.id);
+                            const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
+                            usesInfo = remaining !== null ? ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>` : ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>`;
+                        }
+
+                        const item = $(`
+                            <div class="te-bonus-item">
+                                <span><strong>${b.name}</strong>${kindLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
+                                <div class="te-delete-btn manage-bonus-remove-btn" data-id="${b.id}" data-kind="${b._kind}" title="Remove"><i class="fas fa-trash"></i></div>
+                            </div>
+                        `);
+
+                        item.find('.manage-bonus-remove-btn').click(async () => {
+                            if (b._kind === 'constant')
+                                await removeConstantBonus(actor, b.id);
+                            else
+                                await removeGlobalBonus(actor, b.id);
+                            setTimeout(updateManageList, 200);
+                        });
+
+                        bonusList.append(item);
+                    });
+                }
+
                 if (dialog.position) {
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
@@ -1123,105 +1305,17 @@ export async function executeEffectManager(options = {}) {
             const updateBonusList = () => {
                 const targetID = html.find('#bonus-target').val();
                 const target = canvas.tokens.get(targetID);
-                const list = html.find('#bonus-list');
-                list.empty();
+                const summary = html.find('#bonus-summary');
 
-                if (!target || !target.actor)
+                if (!target || !target.actor) {
+                    summary.text('No active bonuses.');
                     return;
+                }
                 const actor = target.actor;
                 const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
-                const constantBonusesCheck = actor.getFlag("lancer-automations", "constant_bonuses") || [];
-
-                if (bonuses.length === 0 && constantBonusesCheck.length === 0) {
-                    list.html('<p style="text-align:center; color:#666; font-style:italic; padding:8px;">No active bonuses.</p>');
-                    return;
-                }
-
-                const getBonusDetailString = (subB) => {
-                    if (subB.type === 'accuracy') {
-                        return `Accuracy +${subB.val}`;
-                    }
-                    if (subB.type === 'difficulty') {
-                        return `Difficulty +${subB.val}`;
-                    }
-                    if (subB.type === 'stat') {
-                        return `${subB.stat?.split('.').pop() || subB.stat} ${parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
-                    }
-                    if (subB.type === 'damage') {
-                        return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
-                    }
-                    if (subB.type === 'tag') {
-                        return subB.removeTag ? `Remove Tag: ${subB.tagName}` : `${subB.tagMode === 'override' ? 'Set' : 'Add'} ${subB.tagName} ${subB.val}`;
-                    }
-                    if (subB.type === 'immunity') {
-                        if (subB.subtype === 'effect' && subB.effects) {
-                            return `Immunity: ${subB.effects.join(', ')}`;
-                        }
-                        if ((subB.subtype === 'damage' || subB.subtype === 'resistance') && subB.damageTypes) {
-                            return `${subB.subtype}: ${subB.damageTypes.join(', ')}`;
-                        }
-                        return subB.subtype;
-                    }
-                    return subB.type || "Unknown";
-                };
-
-                const renderBonusDetails = (b) => {
-                    if (b.type === 'multi' && Array.isArray(b.bonuses)) {
-                        return `[${b.bonuses.map(getBonusDetailString).join(' | ')}]`;
-                    }
-                    return `(${getBonusDetailString(b)})`;
-                };
-
-                bonuses.forEach(b => {
-                    let details = renderBonusDetails(b);
-
-                    let usesInfo = '';
-                    if (b.uses !== undefined) {
-                        const effect = actor.effects.find(e => e.getFlag("lancer-automations", "linkedBonusId") === b.id);
-                        const remaining = effect ? (effect.flags?.statuscounter?.value ?? null) : null;
-                        usesInfo = remaining !== null ? ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>` : ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>`;
-                    }
-                    const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
-                    const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
-
-                    const item = $(`
-                        <div class="te-bonus-item">
-                            <span><strong>${b.name}</strong> ${details}${usesInfo}${lids}${types}</span>
-                            <div class="te-delete-btn bonus-remove-btn" data-id="${b.id}" title="Remove"><i class="fas fa-trash"></i></div>
-                        </div>
-                    `);
-
-                    item.find('.bonus-remove-btn').click(async () => {
-                        await removeGlobalBonus(actor, b.id);
-                        setTimeout(updateBonusList, 200);
-                    });
-
-                    list.append(item);
-                });
-
-                if (constantBonusesCheck.length > 0) {
-                    const constantBonuses = constantBonusesCheck;
-                    list.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid #555; padding-top:6px;">Constant Bonuses</p>'));
-                    constantBonuses.forEach(b => {
-                        let details = renderBonusDetails(b);
-                        const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
-                        const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
-
-                        const item = $(`
-                            <div class="te-bonus-item">
-                                <span><strong>${b.name}</strong> ${details}${lids}${types}</span>
-                                <div class="te-delete-btn constant-remove-btn" data-id="${b.id}" title="Remove"><i class="fas fa-trash"></i></div>
-                            </div>
-                        `);
-
-                        item.find('.constant-remove-btn').click(async () => {
-                            await removeConstantBonus(actor, b.id);
-                            setTimeout(updateBonusList, 200);
-                        });
-
-                        list.append(item);
-                    });
-                }
+                const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
+                const total = bonuses.length + constantBonuses.length;
+                summary.text(total > 0 ? `${total} active bonus${total > 1 ? 'es' : ''} — see Manage tab.` : 'No active bonuses.');
 
                 if (dialog.position) {
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
@@ -1247,16 +1341,16 @@ export async function executeEffectManager(options = {}) {
 
             // Bonus consumption trigger filter toggle
             const bonusFilterMap = {
-                onAttack: ['bonus-filter-itemLid'],
-                onHit: ['bonus-filter-itemLid'],
-                onMiss: ['bonus-filter-itemLid'],
-                onDamage: ['bonus-filter-itemLid'],
-                onTechAttack: ['bonus-filter-itemLid'],
-                onTechHit: ['bonus-filter-itemLid'],
+                onAttack: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
+                onHit: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
+                onMiss: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
+                onDamage: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
+                onTechAttack: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
+                onTechHit: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
                 onMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onPreMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onActivation: ['bonus-filter-actionName'],
-                onDeploy: ['bonus-filter-itemLid'],
+                onDeploy: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
                 onCheck: ['bonus-filter-check', 'bonus-filter-checkValues']
             };
 
@@ -1489,6 +1583,9 @@ export async function executeEffectManager(options = {}) {
                     const filterItemLid = html.find('#bonus-filter-itemLid').val()?.trim();
                     if (filterItemLid)
                         consumption.itemLid = filterItemLid;
+                    const filterItemId = html.find('#bonus-filter-itemId').val()?.trim();
+                    if (filterItemId)
+                        consumption.itemId = filterItemId;
                     const filterActionName = html.find('#bonus-filter-actionName').val()?.trim();
                     if (filterActionName)
                         consumption.actionName = filterActionName;
@@ -1512,6 +1609,7 @@ export async function executeEffectManager(options = {}) {
 
                 await addGlobalBonus(actor, bonusData, addOptions);
                 setTimeout(updateBonusList, 200);
+                setTimeout(updateManageTabCount, 200);
             };
 
             // Bonus type selector - show/hide relevant inputs
@@ -1589,6 +1687,7 @@ export async function executeEffectManager(options = {}) {
                     return;
                 await target.actor.unsetFlag("lancer-automations", "global_bonuses");
                 setTimeout(updateBonusList, 200);
+                setTimeout(updateManageTabCount, 200);
             });
 
             // Initial tab selection
@@ -1602,11 +1701,13 @@ export async function executeEffectManager(options = {}) {
                 if (options.initialTab === 'manage')
                     updateManageList();
             }
+            updateManageTabCount();
         }
     }, {
         width: 'auto',
         height: 'auto',
         left: 100,
+        top: 60,
         classes: ['lancer-effect-manager', 'lancer-no-title']
     });
 

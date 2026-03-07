@@ -1,5 +1,5 @@
 import { OverwatchAPI, getTokenDistance } from "./overwatch.js";
-import { ReactionManager, stringToFunction, ReactionConfig } from "./reaction-manager.js";
+import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./reaction-manager.js";
 import { CompendiumToolsAPI } from "./compendium-tools.js";
 import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
@@ -644,6 +644,14 @@ function passesBuiltInFilters(consumption, triggerType, data) {
 
         const validLids = consumption.itemLid.split(',').map(s => s.trim()).filter(s => s);
         if (!validLids.includes(currentLid))
+            return false;
+    }
+    if (consumption.itemId) {
+        const triggeringItem = data.weapon || data.techItem || data.item;
+        if (!triggeringItem)
+            return false;
+        const id = triggeringItem.id || triggeringItem._id;
+        if (id !== consumption.itemId)
             return false;
     }
     if (consumption.actionName) {
@@ -1392,7 +1400,7 @@ async function onHitMissStep(state) {
         if (!targetToken)
             continue;
 
-        if (hasCritImmunity(targetToken.actor) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
+        if (await hasCritImmunity(targetToken.actor, state.actor) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
             if (hitResult)
                 hitResult.crit = false;
             if (state.data?.attack_results?.[i])
@@ -1956,7 +1964,6 @@ async function knockbackInjectStep(state) {
 async function knockbackDamageStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
-
     const kb = state.data?._csmKnockback;
     if (!kb || !kb.enabled)
         return true;
@@ -2379,7 +2386,82 @@ Hooks.on('lancer.statusesReady', () => {
     });
 });
 
-Hooks.on('ready', () => {
+const userHelpers = new Map();
+
+function registerUserHelper(name, fn) {
+    if (typeof fn !== 'function') {
+        console.warn(`lancer-automations | registerUserHelper: "${name}" is not a function.`);
+        return;
+    }
+    userHelpers.set(name, fn);
+}
+
+function getUserHelper(name) {
+    return userHelpers.get(name) ?? null;
+}
+
+// Built-in startup scripts (pre-populated into the Startup tab on first load)
+const builtinStartups = [];
+
+function registerBuiltinStartup(entry) {
+    builtinStartups.push(entry);
+}
+
+async function syncBuiltinStartups() {
+    const scripts = ReactionManager.getStartupScripts();
+    let changed = false;
+    for (const entry of builtinStartups) {
+        const settingEnabled = entry.settingKey
+            ? (game.settings.get(ReactionManager.ID, entry.settingKey) ?? true)
+            : true;
+        if (!settingEnabled)
+            continue;
+        if (scripts.some(s => s.id === entry.id))
+            continue;
+        try {
+            const response = await fetch(`/modules/lancer-automations/${entry.filePath}`);
+            const code = await response.text();
+            scripts.push({
+                id: entry.id,
+                name: entry.name,
+                description: entry.description,
+                enabled: true,
+                code,
+                builtin: true
+            });
+            changed = true;
+            console.log(`lancer-automations | Registered built-in startup: ${entry.name}`);
+        } catch (e) {
+            console.error(`lancer-automations | Failed to load built-in startup "${entry.name}":`, e);
+        }
+    }
+    if (changed)
+        await ReactionManager.saveStartupScripts(scripts);
+}
+
+function runStartupScripts(api) {
+    const scripts = ReactionManager.getStartupScripts();
+    for (const script of scripts) {
+        if (!script.enabled)
+            continue;
+        try {
+            const fn = stringToAsyncFunction(script.code, ['api']);
+            fn(api);
+        } catch (e) {
+            console.error(`lancer-automations | Startup script "${script.name}" failed:`, e);
+        }
+    }
+}
+
+registerBuiltinStartup({
+    id: 'builtin-lasossis-items',
+    settingKey: 'enableLaSossisItems',
+    name: "LaSossis's Items",
+    description: "Activations from the module author",
+    filePath: 'startups/itemActivations.js'
+});
+
+Hooks.on('ready', async () => {
     console.log('lancer-automations | Ready');
 
     ReactionManager.initialize();
@@ -2406,10 +2488,14 @@ Hooks.on('ready', () => {
         getMovementHistory,
         beginThrowWeaponFlow,
         processEffectConsumption,
-        handleTrigger
+        handleTrigger,
+        registerUserHelper,
+        getUserHelper
     };
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
+    await syncBuiltinStartups();
+    runStartupScripts(game.modules.get('lancer-automations').api);
     Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
 });
 

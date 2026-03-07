@@ -1,0 +1,192 @@
+<form autocomplete="off" class="sse-form">
+    <input type="hidden" name="id" value="{{id}}">
+
+    <!-- Fixed top section: Name, Description, Enabled -->
+    <div class="sse-top">
+        <!-- Name & Description -->
+        <div class="form-group">
+            <div class="form-fields flexrow" style="gap: 10px;">
+                <div style="flex: 2;">
+                    <label style="font-weight: bold;">Name</label>
+                    <input type="text" name="name" value="{{name}}" placeholder="e.g. My Helper Library" {{#if builtin}}readonly{{/if}}>
+                    <p class="notes">A unique name for this startup script.</p>
+                </div>
+                <div style="flex: 3;">
+                    <label style="font-weight: bold;">Description <span class="optional">(optional)</span></label>
+                    <input type="text" name="description" value="{{description}}" placeholder="Brief notes shown in the list..." {{#if builtin}}readonly{{/if}}>
+                    <p class="notes">Shown in the Startup tab list.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enabled Toggle -->
+        <div class="form-group" style="margin-bottom: 10px; padding: 8px 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+            <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold; margin: 0;">
+                <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}} {{#if builtin}}disabled{{/if}}>
+                <span>Enabled</span>
+                <span style="font-weight: normal; font-size: 0.85em; color: #666;">(disabled scripts are skipped on startup)</span>
+            </label>
+        </div>
+
+        <label style="font-weight: bold; display: block; margin-bottom: 4px;">Code</label>
+    </div>
+
+    <!-- Stretchy code editor -->
+    <div class="sse-editor">
+        <textarea name="code" style="font-family: monospace; white-space: pre; display: none;">{{code}}</textarea>
+        <div class="sse-codemirror-host"></div>
+    </div>
+
+    <!-- Fixed bottom: notes + save -->
+    <div class="sse-bottom">
+        <p class="notes" style="margin: 6px 0 8px;">
+            JavaScript code executed on module ready.
+            Available: <code>api</code> — use <code>api.registerUserHelper(name, fn)</code> to register reusable
+            helpers, then access them in activations via <code>api.getUserHelper(name)</code>.
+        </p>
+        {{#if builtin}}
+        <button type="button" onclick="this.closest('.app')?.querySelector('.close')?.click()">
+            <i class="fas fa-times"></i> Close
+        </button>
+        {{else}}
+        <button type="submit">
+            <i class="far fa-save"></i> Save Script
+        </button>
+        {{/if}}
+    </div>
+</form>
+
+<style>
+    /* ===== Window Chrome ===== */
+    #startup-script-editor {
+        background: #991e2a;
+    }
+
+    #startup-script-editor .window-header {
+        background: #991e2a;
+        color: #fff;
+        border-bottom: none;
+    }
+
+    #startup-script-editor .window-header .window-title {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: bold;
+    }
+
+    #startup-script-editor .window-header .close { color: #fff; }
+    #startup-script-editor .window-header .close:hover { color: #ffc0c0; }
+
+    #startup-script-editor .window-content {
+        background: #f5f5f5;
+        color: #000;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* ===== Flex layout ===== */
+    .sse-form {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .sse-top {
+        flex: 0 0 auto;
+        padding: 10px 10px 0;
+    }
+
+    .sse-editor {
+        flex: 1 1 0;
+        min-height: 0;
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .sse-codemirror-host {
+        flex: 1 1 0;
+        min-height: 0;
+        border: 2px solid #999;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .sse-codemirror-host .CodeMirror {
+        height: 100% !important;
+    }
+
+    .sse-bottom {
+        flex: 0 0 auto;
+        padding: 6px 10px 10px;
+        border-top: 1px solid #ccc;
+        background: #f5f5f5;
+    }
+
+    .sse-bottom button[type="submit"] {
+        width: 100%;
+        background: #991e2a;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sse-bottom button[type="submit"]:hover {
+        background: #7a1822;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ===== Form Inputs ===== */
+    #startup-script-editor input[type="text"] {
+        border: 2px solid #999;
+        background: #fff;
+        color: #000;
+        border-radius: 4px;
+    }
+
+    #startup-script-editor input[type="text"]:focus {
+        border-color: #991e2a;
+        outline: none;
+        box-shadow: 0 0 6px rgba(153, 30, 42, 0.25);
+    }
+
+    #startup-script-editor input[type="checkbox"] {
+        accent-color: #991e2a;
+    }
+
+    /* ===== Labels & Notes ===== */
+    #startup-script-editor label { color: #333; }
+    #startup-script-editor .notes { color: #555; font-size: 11px; }
+
+    #startup-script-editor code {
+        background: rgba(153, 30, 42, 0.08);
+        color: #991e2a;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+
+    /* ===== Utility ===== */
+    .optional {
+        font-weight: normal;
+        font-size: 0.8em;
+        color: #888;
+        margin-left: 4px;
+    }
+
+    label.checkbox {
+        margin: 0;
+        padding: 0;
+        align-items: center;
+    }
+</style>

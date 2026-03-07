@@ -514,6 +514,16 @@ For example, when a token tries to move away, check if it's within an enemy's en
 | **Flight** | `onStatusApplied` / `onStructure` / `onStress` | Handles flying immunity and fall save logic |
 | **Fall** | `onTurnEnd` | Checks if an airborne token should begin falling |
 
+### Startups
+
+Startups allow you to add code upon VTT Foundry initiation. This allows for mainly registering your own helper functions that you can use in your activations, or even outside in macros and stuff.
+
+![Startup Tab](doc/img/startup-tab.png)
+
+### Personal Activation Set
+
+In the module configuration, there is an option to activate my personal set of item activations. These are the ones I use and make for my games; here's my way to share them. Not all items are included, in no particular order. This list will grow as I implement stuff I need.
+
 ### Export / Import
 
 In **Module Settings > Lancer Automations**, you can export and import your full activation setup as JSON. Useful for sharing builds with other GMs or keeping backups.

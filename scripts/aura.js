@@ -3,7 +3,8 @@
  * This utilizes libWrapper to intercept macro execution calls dynamically without modifying the original GAA codebase.
  */
 export class LAAuras {
-    static callbacks = new Map();
+    /** Session cache of compiled aura macro callbacks, keyed on serialized source string. */
+    static callbackCache = new Map();
     static _initialized = false;
 
     /**
@@ -16,20 +17,30 @@ export class LAAuras {
         if (typeof libWrapper === "function") {
             libWrapper.register('lancer-automations', 'Macros.prototype.get', function (wrapped, ...args) {
                 const id = args[0];
-                if (typeof id === 'string' && id.startsWith('la_cb_')) {
-                    const callback = LAAuras.callbacks.get(id);
-                    if (callback) {
-                        return {
-                            canExecute: true,
-                            execute: (params) => {
-                                try {
-                                    callback(params.token, params.parent, params.aura, params.options);
-                                } catch (e) {
-                                    console.error(`lancer-automations | Error executing Aura lambda function for aura '${params.aura?.name}':`, e);
-                                }
-                            }
-                        };
+                if (typeof id === 'string' && id.startsWith('@@fn:')) {
+                    const src = id.slice('@@fn:'.length);
+                    let fn = LAAuras.callbackCache.get(src);
+                    if (!fn) {
+                        try {
+                            fn = new Function('token', 'parent', 'aura', 'options',
+                                `return (${src})(token, parent, aura, options);`
+                            );
+                            LAAuras.callbackCache.set(src, fn);
+                        } catch (e) {
+                            console.error(`lancer-automations | Failed to reconstruct Aura callback from source:`, e);
+                            return wrapped(...args);
+                        }
                     }
+                    return {
+                        canExecute: true,
+                        execute: (params) => {
+                            try {
+                                fn(params.token, params.parent, params.aura, params.options);
+                            } catch (e) {
+                                console.error(`lancer-automations | Error executing Aura lambda function for aura '${params.aura?.name}':`, e);
+                            }
+                        }
+                    };
                 }
                 return wrapped(...args);
             }, 'MIXED');
@@ -108,9 +119,9 @@ export class LAAuras {
         if (configToPass.macros && Array.isArray(configToPass.macros)) {
             for (let macro of configToPass.macros) {
                 if (typeof macro.function === 'function') {
-                    const cbId = `la_cb_${foundry.utils.randomID()}`;
-                    LAAuras.callbacks.set(cbId, macro.function);
-                    macro.macroId = cbId;
+                    const src = macro.function.toString();
+                    macro.macroId = '@@fn:' + src;
+                    LAAuras.callbackCache.set(src, macro.function);
                     delete macro.function; // Strip the function so GAA doesn't get confused
                 }
             }
@@ -121,24 +132,12 @@ export class LAAuras {
 
     /**
      * Passthrough wrapper for Grid-Aware Auras `deleteAuras`.
-     * Also cleans up any registered callbacks attached to these auras to prevent memory leaks.
      */
     static async deleteAuras(owner, filter, options = {}) {
         const gaa = game.modules.get("grid-aware-auras");
         if (!gaa?.api?.deleteAuras)
             return [];
         const deletedAuras = await gaa.api.deleteAuras(owner, filter, options);
-
-        // Cleanup associated callbacks
-        for (const aura of deletedAuras) {
-            if (aura.macros) {
-                for (const macro of aura.macros) {
-                    if (macro.macroId && String(macro.macroId).startsWith('la_cb_')) {
-                        LAAuras.callbacks.delete(macro.macroId);
-                    }
-                }
-            }
-        }
 
         return deletedAuras;
     }
