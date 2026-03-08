@@ -6,6 +6,7 @@ import {
     getOccupiedOffsets, getOccupiedCenters, getMinGridDistance,
     measureGridDistance
 } from "./grid-helpers.js";
+import { hasReactionAvailable } from "./misc-tools.js";
 
 export { getMinGridDistance };
 
@@ -52,8 +53,7 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
     if (!isHostile(reactor, mover))
         return false;
 
-    const reaction = reactor.actor?.system?.action_tracker?.reaction;
-    if (!reaction || reaction <= 0)
+    if (!hasReactionAvailable(reactor))
         return false;
 
     const auraLayer = canvas.gaaAuraLayer;
@@ -94,8 +94,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         if (!t.isOwner)
             return false;
 
-        const reaction = t.actor.system.action_tracker?.reaction;
-        if (!reaction || reaction <= 0)
+        if (!hasReactionAvailable(t))
             return false;
 
         const tokenFactions = game.modules.get("token-factions")?.api;
@@ -243,7 +242,7 @@ export function displayOverwatch(reactors, target) {
         }, { top: 450, left: 150 }).render(true);
     } else if (mode === 'c') {
         ChatMessage.create({
-            user: game.userId,
+            author: game.userId,
             content: html,
             whisper: [game.userId]
         });

@@ -1,4 +1,4 @@
-/*global game, FormApplication, mergeObject, foundry, TextEditor */
+/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, FileReader, CodeMirror */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { openItemBrowserDialog } from "./misc-tools.js";
@@ -303,7 +303,7 @@ export class ReactionManager {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 try {
-                    const data = JSON.parse(event.target.result);
+                    const data = JSON.parse(/** @type {string} */ (event.target.result));
 
                     if (!data.itemReactions && !data.generalReactions) {
                         throw new Error("Invalid activation file format.");
@@ -799,7 +799,7 @@ export class ReactionConfig extends FormApplication {
             const triggerFilter = container.find('.trigger-filter');
             const scrollable = container.find('.scrollable');
 
-            const searchVal = (searchInput.val() || '').toLowerCase();
+            const searchVal = String(searchInput.val() || '').toLowerCase();
             const triggerVal = triggerFilter.val() || '';
 
             // For folder-based (defaults) tab
@@ -891,15 +891,15 @@ export class ReactionConfig extends FormApplication {
                         </div>
                     `,
                     buttons: {
-                        ok: { 
-                            label: "Create", 
+                        ok: {
+                            label: "Create",
                             icon: '<i class="fas fa-folder-plus"></i>',
-                            callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) 
+                            callback: (dlg) => resolve(String(dlg.find('[name=folderName]').val() ?? '').trim())
                         },
-                        cancel: { 
-                            label: "Cancel", 
+                        cancel: {
+                            label: "Cancel",
                             icon: '<i class="fas fa-times"></i>',
-                            callback: () => resolve(null) 
+                            callback: () => resolve(null)
                         }
                     },
                     default: "ok"
@@ -924,15 +924,15 @@ export class ReactionConfig extends FormApplication {
                         </div>
                     `,
                     buttons: {
-                        ok: { 
-                            label: "Rename", 
+                        ok: {
+                            label: "Rename",
                             icon: '<i class="fas fa-pen"></i>',
-                            callback: (dlg) => resolve(dlg.find('[name=folderName]').val()?.trim()) 
+                            callback: (dlg) => resolve(String(dlg.find('[name=folderName]').val() ?? '').trim())
                         },
-                        cancel: { 
-                            label: "Cancel", 
+                        cancel: {
+                            label: "Cancel",
                             icon: '<i class="fas fa-times"></i>',
-                            callback: () => resolve(null) 
+                            callback: () => resolve(null)
                         }
                     },
                     default: "ok"
@@ -957,20 +957,20 @@ export class ReactionConfig extends FormApplication {
                         </div>
                     `,
                     buttons: {
-                        keep: { 
-                            label: "Keep Items", 
-                            icon: '<i class="fas fa-inbox"></i>', 
-                            callback: () => resolve("keep") 
+                        keep: {
+                            label: "Keep Items",
+                            icon: '<i class="fas fa-inbox"></i>',
+                            callback: () => resolve("keep")
                         },
-                        all: { 
-                            label: "Delete All", 
-                            icon: '<i class="fas fa-trash"></i>', 
-                            callback: () => resolve("all") 
+                        all: {
+                            label: "Delete All",
+                            icon: '<i class="fas fa-trash"></i>',
+                            callback: () => resolve("all")
                         },
-                        cancel: { 
-                            label: "Cancel", 
+                        cancel: {
+                            label: "Cancel",
                             icon: '<i class="fas fa-times"></i>',
-                            callback: () => resolve(null) 
+                            callback: () => resolve(null)
                         }
                     },
                     default: "keep"
@@ -1648,7 +1648,7 @@ export class ReactionEditor extends FormApplication {
             ev.preventDefault();
             const uuid = $(ev.currentTarget).data('uuid');
             if (uuid) {
-                const item = await fromUuid(uuid);
+                const item = /** @type {Item} */ (await fromUuid(uuid));
                 if (item)
                     item.sheet.render(true);
             }
@@ -2035,7 +2035,7 @@ export class ReactionEditor extends FormApplication {
                 const updateSize = () => {
                     if (!windowEl)
                         return;
-                    const headerH = windowEl.querySelector('.window-header')?.offsetHeight ?? 34;
+                    const headerH = /** @type {HTMLElement | null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
                     const buttonH = 40; // fixed: matches forced CSS height on .dialog-buttons
                     expandedEditor.setSize(null, windowEl.offsetHeight - headerH - buttonH);
                     expandedEditor.refresh();
@@ -2434,7 +2434,7 @@ export class ReactionEditor extends FormApplication {
                 const listContainer = html.find('#deploy-list');
 
                 const updateList = () => {
-                    const query = searchInput.val().toLowerCase().trim();
+                    const query = String(searchInput.val() || '').toLowerCase().trim();
                     const showAll = showAllCb.is(':checked');
 
                     if (!query && !showAll) {
@@ -2483,7 +2483,7 @@ export class ReactionEditor extends FormApplication {
                     ev.preventDefault();
                     const entry = deployables.find(d => d.lid === $(this).data('lid'));
                     if (entry) {
-                        const actor = await fromUuid(entry.uuid);
+                        const actor = /** @type {Actor} */(await fromUuid(entry.uuid));
                         if (actor)
                             actor.sheet.render(true);
                     }

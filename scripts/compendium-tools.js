@@ -1,3 +1,5 @@
+/*global FilePicker */
+
 /**
  * Looks up a macro by name in the lancer-automations compendium and executes it.
  */
@@ -71,7 +73,7 @@ export async function packMacros() {
                 name: metadata.name,
                 type: metadata.type || "script",
                 img: metadata.img || "icons/svg/dice-target.svg",
-                command: command,
+                command: /** @type {any} */ (command),
                 ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER }
             });
 

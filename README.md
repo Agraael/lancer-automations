@@ -1,5 +1,11 @@
 # Lancer Automations
 
+[![Latest module version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2Flancer-automations%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.version&prefix=v&style=for-the-badge&label=module%20version)](https://github.com/Agraael/lancer-automations/releases/latest)
+![Latest Foundry version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2FAgraael%2Flancer-automations%2Freleases%2Flatest%2Fdownload%2Fmodule.json&query=%24.compatibility.verified&style=for-the-badge&label=foundry%20version&color=fe6a1f)
+<br/>
+[![GitHub downloads (total)](https://img.shields.io/github/downloads/Agraael/lancer-automations/module.zip?style=for-the-badge&label=downloads%20(total))](https://github.com/Agraael/lancer-automations/releases/latest)
+[![GitHub downloads (latest version)](https://img.shields.io/github/downloads/Agraael/lancer-automations/latest/module.zip?style=for-the-badge&label=downloads%20(latest))](https://github.com/Agraael/lancer-automations/releases/latest)
+
 I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
 
 At its core, this module is an event-driven automation engine. Almost anything that happens during a Lancer session can fire a trigger: movement, attacks, damage, status changes, turn transitions. On top of that engine sit tools for managing effects with duration, building complex bonuses, running interactive prompts during play (choose a target, knock a token back, place a zone), and more.
@@ -374,7 +380,7 @@ flowchart LR
 | `onStress` | After an overheat roll |
 | `onCheck` | After a stat check resolves (HULL, AGI, SYS, ENG) |
 | `onInitCheck` | At the very start of a stat check flow, can cancel |
-| `onInitActivation` | Before an item or action is activated (before resource use) |
+| `onInitActivation` | Before an item or action is activated, can cancel |
 | `onActivation` | When an item or action is activated |
 | `onTurnStart` | At the start of a token's turn |
 | `onTurnEnd` | At the end of a token's turn |

@@ -1,0 +1,30 @@
+{
+    "compilerOptions": {
+        "checkJs": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "strictNullChecks": false,
+        "target": "esnext",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": [
+            "esnext",
+            "dom"
+        ],
+        "types": [
+            "@league-of-foundry-developers/foundry-vtt-types"
+        ],
+        "skipLibCheck": true
+    },
+    "include": [
+        "scripts/**/*.js",
+        "scripts/**/*.d.ts",
+        "startups/**/*.js"
+    ],
+    "exclude": [
+        "node_modules",
+        "packs_source"
+    ]
+}

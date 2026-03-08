@@ -1,3 +1,5 @@
+/*global PIXI, libWrapper */
+
 import { OverwatchAPI, getTokenDistance } from "./overwatch.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./reaction-manager.js";
 import { CompendiumToolsAPI } from "./compendium-tools.js";
@@ -1086,11 +1088,11 @@ async function handleSocketEvent({ action, payload }) {
         const token = scene.tokens.get(payload.tokenId);
         if (token)
             await token.delete();
-        const ownerActor = await fromUuid(payload.ownerActorUuid);
+        const ownerActor = /** @type {Actor} */(await fromUuid(payload.ownerActorUuid));
         if (ownerActor) {
             const weapon = ownerActor.items.get(payload.weaponId);
             if (weapon)
-                await weapon.update({ 'system.disabled': false });
+                await weapon.update(/** @type {any} */({ 'system.disabled': false }));
         }
     } else if (action === 'recallDeployable') {
         if (!game.user.isGM)
@@ -1137,7 +1139,7 @@ async function handleSocketEvent({ action, payload }) {
                     icon: '<i class="fas fa-check"></i>',
                     label: "Create Journal Entry",
                     callback: async (html) => {
-                        const customName = html.find('[name="custom-journal-name"]').val().trim();
+                        const customName = (String)(html.find('[name="custom-journal-name"]').val()).trim();
                         await performSystemScan(target, true, customName);
                         ui.notifications.info(`Journal entry created for ${payload.targetName}`);
                     }
@@ -1171,6 +1173,12 @@ async function handleSocketEvent({ action, payload }) {
         if (payload.requestingUserId !== game.userId)
             return;
         resolveGMChoiceCard(payload.cardId, payload.choiceIdx);
+    } else if (action === 'updateActorSystem') {
+        if (!game.user.isGM)
+            return;
+        const actor = game.actors.get(payload.actorId);
+        if (actor)
+            await actor.update(payload.data);
     }
 }
 
@@ -1273,13 +1281,7 @@ async function handleTokenMove(document, change, options, userId) {
     const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
     const elevationMoved = change.elevation ?? document.elevation;
 
-    let distanceMoved = 0;
-    if (canvas.grid.measurePath) {
-        distanceMoved = canvas.grid.measurePath([startPos, endPos]).distance;
-    } else {
-        distanceMoved = canvas.grid.measureDistance(startPos, endPos);
-    }
-    distanceMoved = Math.round(distanceMoved / canvas.scene.grid.distance);
+    const distanceMoved = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
 
     const isDrag = 'rulerSegment' in options || options.isDrag;
     const isTeleport = !!options.teleport;
@@ -1676,7 +1678,7 @@ async function onInitCheckStep(state) {
 
     let cancelCheckTriggered = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     const cancelCheck = (reasonText = "This check has been canceled.", title = "CHECK CANCELED", showCard = true, gmControl = true) => {
@@ -1775,7 +1777,7 @@ async function onInitAttackStep(state) {
 
     let cancelAttackTriggered = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     const cancelAttack = (reasonText = "This attack has been canceled.", title = "ATTACK CANCELED", showCard = true, gmControl = true) => {
@@ -1878,7 +1880,7 @@ async function onInitTechAttackStep(state) {
 
     let cancelTechAttackTriggered = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     const cancelTechAttack = (reasonText = "This tech attack has been canceled.", title = "TECH ATTACK CANCELED", showCard = true, gmControl = true) => {
@@ -2048,7 +2050,7 @@ async function onInitActivationStep(state) {
 
     let cancelActivation = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     // Synchronous — sets the cancel flag immediately so it works when called from non-async evaluate functions.
@@ -2490,8 +2492,10 @@ Hooks.on('init', () => {
         editable: [{ key: 'KeyR' }],
         onDown: () => {
             const token = canvas.tokens?.controlled[0];
-            if (!token)
-                return ui.notifications.warn('Please select a token first.');
+            if (!token) {
+                ui.notifications.warn('Please select a token first.');
+                return;
+            }
             openResetMovementDialog(token);
         },
         precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
@@ -2640,13 +2644,13 @@ Hooks.on('lancer.statusesReady', () => {
         id: "resistance_all",
         name: "Resist All",
         img: "modules/lancer-automations/icons/resist_all.svg",
-        changes: [
+        changes: /** @type {any[]} */ ([
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
-        ]
+        ])
     });
 
     CONFIG.statusEffects.push({
@@ -2675,10 +2679,10 @@ Hooks.on('lancer.statusesReady', () => {
         name: "Grappling",
         img: "modules/lancer-automations/icons/grappling.svg",
         description: "You are grappling in a grapple contest",
-        changes: [
+        changes: /** @type {any[]} */ ([
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
-        ]
+        ])
     });
 
     CONFIG.statusEffects.push({
@@ -2686,10 +2690,10 @@ Hooks.on('lancer.statusesReady', () => {
         name: "Grappled",
         img: "modules/lancer-automations/icons/grappled.svg",
         description: "You are grappled in a grapple contest",
-        changes: [
+        changes: /** @type {any[]} */ ([
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
-        ]
+        ])
     });
 
     CONFIG.statusEffects.push({
@@ -2724,13 +2728,13 @@ Hooks.on('lancer.statusesReady', () => {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
-        changes: [
+        changes: /** @type {any[]} */ ([
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
-        ]
+        ])
     });
 });
 
@@ -2827,7 +2831,7 @@ Hooks.on('ready', async () => {
     ReactionManager.initialize();
     LAAuras.init();
 
-    game.modules.get('lancer-automations').api = {
+    game.modules.get('lancer-automations').api = /** @type {any} */ ({
         ...OverwatchAPI,
         ...ReactionsAPI,
         ...EffectsAPI,
@@ -2851,7 +2855,7 @@ Hooks.on('ready', async () => {
         handleTrigger,
         registerUserHelper,
         getUserHelper
-    };
+    });
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
     await syncBuiltinStartups();
@@ -2878,7 +2882,7 @@ Hooks.on('renderChatMessage', (app, html, data) => {
                 if (!uuid)
                     return;
 
-                const actor = fromUuidSync(uuid)?.actor || fromUuidSync(uuid);
+                const actor = /** @type {Actor} */ (/** @type {any} */ (fromUuidSync(uuid))?.actor || fromUuidSync(uuid));
                 if (!actor)
                     return;
 
@@ -3120,7 +3124,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
 
     let cancelChange = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     const cancelChangeFn = (reasonText = "This status change has been blocked.", title = "STATUS BLOCKED", showCard = true, gmControl = true) => {
@@ -3183,7 +3187,7 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
 
     let cancelChange = false;
     let cancelCardPending = false;
-    let cancelCardPromise = null;
+    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
     const cancelChangeFn = (reasonText = "This status removal has been blocked.", title = "REMOVAL BLOCKED", showCard = true, gmControl = true) => {
@@ -3452,13 +3456,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
         const elevationToMove = change.elevation ?? document.elevation;
 
-        let distanceToMove = 0;
-        if (canvas.grid.measurePath) {
-            distanceToMove = canvas.grid.measurePath([startPos, endPos]).distance;
-        } else {
-            distanceToMove = canvas.grid.measureDistance(startPos, endPos);
-        }
-        distanceToMove = Math.round(distanceToMove / canvas.scene.grid.distance);
+        const distanceToMove = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
 
         const isTeleport = !!options.teleport;
         const shouldCalculatePath = game.settings.get('lancer-automations', 'enablePathHexCalculation');
@@ -3467,7 +3465,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             isTeleport,
             isUndo: options.isUndo,
             isModified: options.isModified,
-            pathHexes: shouldCalculatePath ? getMovementPathHexes(token, change) : []
+            pathHexes: shouldCalculatePath ? getMovementPathHexes(token, change) : /** @type {PathHexArray} */ (/** @type {any} */ ([]))
         };
         options.lancerPathHexes = moveInfo.pathHexes;
 
@@ -3548,7 +3546,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                         updateData.elevation = extraData.elevation;
                     }
                     const contextData = { isDrag: true, isUndo: false, isModified: true, ...extraData };
-                    token.document.update(updateData, contextData);
+                    token.document.update(updateData, /** @type {any} */ (contextData));
                 }, 50);
             };
 

@@ -1,10 +1,10 @@
-/*global FormApplication, mergeObject, Dialog */
+/*global FormApplication, Dialog */
 
 import { ReactionManager } from "./reaction-manager.js";
 
 export class ReactionExport extends FormApplication {
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-export",
             title: "Export Activations",
             width: 400,
@@ -12,14 +12,17 @@ export class ReactionExport extends FormApplication {
         });
     }
 
-    render() {
+    async _updateObject(_event, _formData) {}
+
+    render(force = false, options = {}) {
         ReactionManager.exportReactions();
+        return this;
     }
 }
 
 export class ReactionImport extends FormApplication {
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-import",
             title: "Import Activations",
             width: 400,
@@ -27,7 +30,9 @@ export class ReactionImport extends FormApplication {
         });
     }
 
-    render() {
+    async _updateObject(_event, _formData) {}
+
+    render(force = false, options = {}) {
         new Dialog({
             title: "Import Activations",
             content: `
@@ -50,8 +55,8 @@ export class ReactionImport extends FormApplication {
                     icon: '<i class="fas fa-file-import"></i>',
                     label: "Import",
                     callback: async (html) => {
-                        const fileInput = html.find('input[name="importFile"]')[0];
-                        const mode = html.find('select[name="importMode"]').val();
+                        const fileInput = /** @type {HTMLInputElement} */ (html.find('input[name="importFile"]')[0]);
+                        const mode = String(html.find('select[name="importMode"]').val());
 
                         if (!fileInput.files.length) {
                             ui.notifications.warn("Please select a file to import.");
@@ -68,5 +73,6 @@ export class ReactionImport extends FormApplication {
             },
             default: "import"
         }, { width: 400 }).render(true);
+        return this;
     }
 }

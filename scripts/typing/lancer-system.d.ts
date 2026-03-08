@@ -1,0 +1,138 @@
+/**
+ * Minimal Lancer actor system type declarations.
+ */
+
+interface LancerActorSystem {
+    // ─── Common properties ───────────────────────────────────────────────────
+    activations: number;
+    agi: number;
+    armor: number;
+    bonuses: { flat: object; weapon_bonuses: any[] };
+    burn: number;
+    custom_counters: any[];
+    edef: number;
+    eng: number;
+    evasion: number;
+    grit?: number;
+    hp: { min: number; max: number; value: number };
+    hull: number;
+    inherited_effects: any;
+    lid: string;
+    overshield: { min: number; max: number; value: number };
+    resistances: { burn: boolean; energy: boolean; explosive: boolean; heat: boolean; kinetic: boolean; variable: boolean };
+    save: number;
+    sensor_range: number;
+    size: number;
+    speed: number;
+    statuses: Record<string, boolean>;
+    sys: number;
+    tech_attack: number;
+    action_tracker: { protocol: boolean; move: number; full: boolean; quick: boolean; reaction: boolean | number };
+
+    // ─── NPC / Mech / Deployable / Pilot specific (optional) ───────────────
+    tier?: number;
+    level?: number;
+    heat?: { min: number; max: number; value: number };
+    stress?: { min: number; max: number; value: number };
+    structure?: { min: number; max: number; value: number };
+    repairs?: { min: number; max: number; value: number };
+    core_active?: boolean;
+    core_energy?: number;
+    overcharge?: number;
+    overcharge_sequence?: string;
+    meltdown_timer?: number | null;
+    loadout?: any;
+    pilot?: any;
+    notes?: string;
+    stress_repair_cost?: number;
+    structure_repair_cost?: number;
+    destroyed?: boolean;
+    disabled?: boolean;
+    class?: any;
+    templates?: any[];
+    actions?: any[];
+    activation?: string;
+    deactivation?: string | null;
+    recall?: string | null;
+    redeploy?: string | null;
+    avail_mounted?: boolean;
+    avail_unmounted?: boolean;
+    cost?: number;
+    counters?: any[];
+    deployer?: any | null;
+    detail?: string;
+    hp_bonus?: number;
+    instances?: number;
+    owner?: any;
+    stats?: any;
+    synergies?: any[];
+    tags?: any[];
+    type?: string;
+    active_mech?: any;
+    background?: string;
+    bond?: any | null;
+    bond_state?: any;
+    callsign?: string;
+    cloud_id?: string;
+    history?: string;
+    last_cloud_update?: string;
+    mounted?: boolean;
+    player_name?: string;
+    status?: string;
+    text_appearance?: string;
+
+    [key: string]: any;
+}
+
+/**
+ * Minimal Lancer item system type declarations.
+ * Single interface covering all item types — properties are optional where not universal.
+ * Extend as new item types / properties are encountered.
+ */
+interface LancerItemSystem {
+    // ─── Universal ───────────────────────────────────────────────────────────
+    lid: string;
+    equipped?: boolean;
+
+    // ─── Text / display ──────────────────────────────────────────────────────
+    description?: string;
+    effect?: string;
+    flavor?: string;
+    tactics?: string;
+    detail?: string;
+
+    // ─── Tags / synergies / actions ──────────────────────────────────────────
+    tags?: any[];
+    synergies?: any[];
+    actions?: any[];
+    counters?: any[];
+    bonuses?: any[];
+
+    // ─── NPC class (npc_class) ───────────────────────────────────────────────
+    role?: string;
+    base_features?: Set<string> | string[];
+    optional_features?: Set<string> | string[];
+    base_stats?: any[];
+
+    // ─── NPC feature / weapon / system (npc_feature) ─────────────────────────
+    type?: string;
+    activation?: string;
+    recharge?: number | null;
+    charged?: boolean;
+    uses?: { min: number; max: number; value: number };
+    accuracy?: number;
+    attack_bonus?: number;
+    range?: any[];
+    damage?: any[];
+    on_hit?: string;
+    on_crit?: string;
+
+    // ─── Pilot / mech gear ───────────────────────────────────────────────────
+    license?: string;
+    license_level?: number;
+    cost?: number;
+    limited?: number;
+    pilot?: boolean;
+
+    [key: string]: any;
+}

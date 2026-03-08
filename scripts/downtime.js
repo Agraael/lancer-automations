@@ -333,10 +333,10 @@ export async function executeDowntime() {
             submit: {
                 label: "Proceed",
                 callback: (html) => {
-                    pilotData.name = html.find("#pilotpicker")[0].value;
+                    pilotData.name = /** @type {HTMLInputElement} */ (html.find("#pilotpicker")[0]).value;
 
                     let selectedActor = game.actors.find(n => n.name === pilotData.name);
-                    let pilotSkills = selectedActor.collections.items.filter(i => i.type === 'skill');
+                    let pilotSkills = (/** @type {any} */ (selectedActor.collections.items)).filter(/** @param {any} i */ i => i.type === 'skill');
 
                     pilotData.skills = pilotSkills
                         .map(s => {
@@ -465,19 +465,19 @@ export async function executeDowntime() {
                             Submit: {
                                 label: "Submit Downtime Request",
                                 callback: async (html2) => {
-                                    let selectedTrigger = html2.find("#triggers")[0].value;
-                                    let objective = html2.find("#objective")[0].value;
-                                    let activity = html2.find("#activity")[0].value;
-                                    let campaign = html2.find("#campaign")[0].value;
-                                    let location = html2.find("#location")[0].value;
-                                    let flatOverride = html2.find("#flatMod")[0].value;
-                                    let accOverride = html2.find("#modifierAcc")[0].value;
-                                    let staticOverride = html2.find("#staticOverride")[0].value;
-                                    let flatOverrideNote = html2.find("#flatOverrideNote")[0].value;
-                                    let modifierNote = html2.find("#modifierNote")[0].value;
-                                    let staticOverrideNote = html2.find("#staticOverrideNote")[0].value;
-                                    let manualRollEnabled = html2.find("#manualRoll")[0].checked;
-                                    let manualRollValue = html2.find("#manualRollValue")[0].value;
+                                    let selectedTrigger = /** @type {HTMLInputElement} */ (html2.find("#triggers")[0]).value;
+                                    let objective = /** @type {HTMLInputElement} */ (html2.find("#objective")[0]).value;
+                                    let activity = /** @type {HTMLInputElement} */ (html2.find("#activity")[0]).value;
+                                    let campaign = /** @type {HTMLInputElement} */ (html2.find("#campaign")[0]).value;
+                                    let location = /** @type {HTMLInputElement} */ (html2.find("#location")[0]).value;
+                                    let flatOverride = /** @type {HTMLInputElement} */ (html2.find("#flatMod")[0]).value;
+                                    let accOverride = /** @type {HTMLInputElement} */ (html2.find("#modifierAcc")[0]).value;
+                                    let staticOverride = /** @type {HTMLInputElement} */ (html2.find("#staticOverride")[0]).value;
+                                    let flatOverrideNote = /** @type {HTMLInputElement} */ (html2.find("#flatOverrideNote")[0]).value;
+                                    let modifierNote = /** @type {HTMLInputElement} */ (html2.find("#modifierNote")[0]).value;
+                                    let staticOverrideNote = /** @type {HTMLInputElement} */ (html2.find("#staticOverrideNote")[0]).value;
+                                    let manualRollEnabled = /** @type {HTMLInputElement} */ (html2.find("#manualRoll")[0]).checked;
+                                    let manualRollValue = /** @type {HTMLInputElement} */ (html2.find("#manualRollValue")[0]).value;
 
                                     if (manualRollEnabled && !manualRollValue) {
                                         ui.notifications.warn("Manual Roll Mode is enabled but no value was entered. Please enter a dice result or disable Manual Roll Mode.");
@@ -486,12 +486,12 @@ export async function executeDowntime() {
 
                                     let overrideRoll = false;
 
-                                    let accRollTerm = 0;
-                                    if (accOverride != 0) {
+                                    let accRollTerm = /** @type {string | number} */ (0);
+                                    if (Number(accOverride) !== 0) {
                                         accRollTerm = `${accOverride}d6k`;
                                     }
-                                    let flatRollTerm = 0;
-                                    if (flatOverride != 0) {
+                                    let flatRollTerm = /** @type {string | number} */ (0);
+                                    if (Number(flatOverride) !== 0) {
                                         flatRollTerm = flatOverride;
                                     }
 
@@ -521,13 +521,13 @@ export async function executeDowntime() {
                                             roll = await new Roll(rollResult.toString()).evaluate();
                                             chatMessage.rolls = roll;
                                         } else {
-                                            if (flatOverride == 0 && accOverride == 0 && staticOverride == 0) {
+                                            if (Number(flatOverride) === 0 && Number(accOverride) === 0 && Number(staticOverride) === 0) {
                                                 if (skillRank) {
                                                     rollString = `1d20 + ${2 * (skillRank)}`;
                                                 } else {
                                                     rollString = `1d20`;
                                                 }
-                                            } else if ((flatOverride != 0 || accOverride != 0) && staticOverride == 0) {
+                                            } else if ((Number(flatOverride) !== 0 || Number(accOverride) !== 0) && Number(staticOverride) === 0) {
                                                 overrideRoll = true;
                                                 if (skillRank) {
                                                     rollString = `1d20 + ${2 * (skillRank)} + ${flatRollTerm} + ${accRollTerm}`;
@@ -536,7 +536,7 @@ export async function executeDowntime() {
                                                     rollString = `1d20 + ${flatRollTerm} + ${accRollTerm}`;
                                                     console.log(rollString);
                                                 }
-                                            } else if (staticOverride != 0) {
+                                            } else if (Number(staticOverride) !== 0) {
                                                 overrideRoll = true;
                                                 rollString = staticOverride;
                                             }
@@ -548,7 +548,7 @@ export async function executeDowntime() {
                                         }
                                     }
 
-                                    let actOutcome = Activities.filter(obj => obj.Name == activity)[0].Results;
+                                    let actOutcome = Activities.filter(obj => obj.Name === activity)[0].Results;
 
                                     if (!roll) {
                                         console.log('non-rollable activity');
@@ -565,9 +565,9 @@ export async function executeDowntime() {
 
                                     let dialogContent = `
                                     <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: white; border: 3px dashed black; font-family: monospace; max-height: calc(85vh - 120px); overflow-y: auto;">
-                                        ${terms == 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color:green">(OPEN)</span></p>` : ''}
+                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color:green">(OPEN)</span></p>` : ''}
                                         <h2 class="lancer-border-primary">${pilotData.name}: Downtime Report</h2>
-                                        ${terms == 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
+                                        ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                         <br />
                                         <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign ? campaign : 'UNLISTED'}</b></h3>
                                         <div>
@@ -615,7 +615,7 @@ export async function executeDowntime() {
                                             logToJournal: {
                                                 label: "Log Downtime in Journal",
                                                 callback: async (html3) => {
-                                                    if (JournalEntry.canUserCreate(game.user) == false) {
+                                                    if (JournalEntry.canUserCreate(game.user) === false) {
                                                         ui.notifications.error(
                                                             `${game.user.name} attempted to write Downtime Activity to Downtime Journal. Please correct and try again.`
                                                         );
@@ -652,7 +652,7 @@ export async function executeDowntime() {
                                                             console.log('Attempting to create new Downtime Journal for Pilot');
 
                                                             try {
-                                                                createJournal = await JournalEntry.create(downtimeJournal);
+                                                                await JournalEntry.create(downtimeJournal);
                                                             } catch (error) {
                                                                 ui.notifications.error(
                                                                     `Error creating Journal`
@@ -661,13 +661,13 @@ export async function executeDowntime() {
                                                             }
                                                         }
 
-                                                        let pilotEvaluate = html3.find("#pilotEvaluate")[0].value;
+                                                        let pilotEvaluate = /** @type {HTMLInputElement} */ (html3.find("#pilotEvaluate")[0]).value;
 
                                                         let JournalPageContent = `
                                                         <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: white; border: 3px dashed black; font-family: monospace; max-width: 800px;">
-                                                        ${terms == 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color: red;">(CLOSED)</span></p>` : ''}
+                                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color: red;">(CLOSED)</span></p>` : ''}
                                                         <h2 class="lancer-border-primary">${pilotData.name}: Downtime Report</h2>
-                                                        ${terms == 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
+                                                        ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                                         <br />
                                                         <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign ? campaign : 'UNLISTED'}</b></h3>
                                                         <div>
@@ -701,7 +701,7 @@ export async function executeDowntime() {
                                                                 <h3 style="border:none;">Requisitions Evaluation</h3>
                                                                 <p style="font-size:10px;" class="horus--subtle"><i>${gmNoteTermName}</i></p>
                                                                 <div style="min-height: 100px; border: 5px dashed cadetblue; background-color: #5f9ea070">
-                                                                    <p style="margin: 1rem"><i>Enter evaluated asset losses or requisitions here. Include personnel assets, liquid assets, organization or institutional assets, and physical assets garnered from this activity. Also include intelligence on tracked projects (if applicable)${terms == 'diegetic' ? ' for classification by UAD Predictive Model NHPs.' : '.'}</i></p>
+                                                                    <p style="margin: 1rem"><i>Enter evaluated asset losses or requisitions here. Include personnel assets, liquid assets, organization or institutional assets, and physical assets garnered from this activity. Also include intelligence on tracked projects (if applicable)${terms === 'diegetic' ? ' for classification by UAD Predictive Model NHPs.' : '.'}</i></p>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -710,10 +710,10 @@ export async function executeDowntime() {
                                                     `;
 
                                                         let parentdata = {
-                                                            parent: game.journal.filter(a => a.name == downtimeJournal.name)[0]
+                                                            parent: game.journal.filter(a => a.name === downtimeJournal.name)[0]
                                                         };
 
-                                                        selectedJournal = game.journal.filter(a => a.name === downtimeJournal.name)[0];
+                                                        let selectedJournal = game.journal.filter(a => a.name === downtimeJournal.name)[0];
 
                                                         let journalEntryNumber = selectedJournal.pages.size + 1;
 
@@ -731,7 +731,7 @@ export async function executeDowntime() {
 
                                                         console.log("Creating a final downtime report");
 
-                                                        const createPage = await JournalEntryPage.create(entrydata, parentdata);
+                                                        const createPage = await JournalEntryPage.create(/** @type {any} */ (entrydata), parentdata);
                                                     }
                                                 }
                                             }

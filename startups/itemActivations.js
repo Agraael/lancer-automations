@@ -1,5 +1,6 @@
-/*global game, Sequencer, canvas, ui, ChatMessage, Roll, foundry, api */
+/*global game, Sequencer, canvas, ui, ChatMessage, Roll, api */
 
+/** @type {ReactionGroup} */
 const suppressArcherReaction = {
     category: "NPC",
     itemType: "npc_feature",
@@ -45,11 +46,13 @@ const suppressArcherReaction = {
 
             if (triggerType === "onActivation") {
                 // Remove existing suppress from previous activation
-                const suppressEffect = canvas.tokens.placeables.flatMap(t => t.actor?.effects.filter(e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id)).filter(Boolean);
+                const suppressEffect = canvas.tokens.placeables
+                    .map(t => api.findEffectOnToken(t, e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id))
+                    .filter(Boolean);
 
                 if (suppressEffect.length > 0) {
                     for (const effect of suppressEffect) {
-                        const token = effect.parent?.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === effect.parent?.id);
+                        const token = canvas.tokens.placeables.find(t => t.actor?.id === effect.parent?.id);
                         if (token) {
                             if (api?.removeEffectsByNameFromTokens) {
                                 await api.removeEffectsByNameFromTokens({
@@ -107,10 +110,12 @@ const suppressArcherReaction = {
                     }
                 }
             } else if (triggerType === "onStatusApplied" || triggerType === "onDestroyed") {
-                const suppressEffect = canvas.tokens.placeables.flatMap(t => t.actor?.effects.filter(e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id)).filter(Boolean);
+                const suppressEffect = canvas.tokens.placeables
+                    .map(t => api.findEffectOnToken(t, e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id))
+                    .filter(Boolean);
 
                 for (const effect of suppressEffect) {
-                    const token = effect.parent?.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === effect.parent?.id);
+                    const token = canvas.tokens.placeables.find(t => t.actor?.id === effect.parent?.id);
                     if (token) {
                         if (api?.removeEffectsByNameFromTokens) {
                             await api.removeEffectsByNameFromTokens({
@@ -125,6 +130,8 @@ const suppressArcherReaction = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const movingTargetArcherReaction = {
     category: "NPC",
     itemType: "npc_feature",
@@ -163,6 +170,8 @@ const movingTargetArcherReaction = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const sealantGunReaction = {
     category: "NPC",
     itemType: "npc_feature",
@@ -197,10 +206,8 @@ const sealantGunReaction = {
 
             if (isFriendly) {
                 // Allied Path: Clear Burn, Apply Slowed
-                const burnEffect = target.actor.effects.find(e => e.statuses?.has('burn') || e.name.toLowerCase() === 'burn');
-                if (burnEffect) {
-                    await burnEffect.delete();
-                }
+                await api.removeEffectByName(target, 'burn');
+                await api.updateTokenSystem(target, { 'system.burn': 0 });
                 await api.applyEffectsToTokens({
                     tokens: [target],
                     effectNames: ["slowed"],
@@ -231,6 +238,8 @@ const sealantGunReaction = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const veterancyVeteranReaction = {
     category: "NPC",
     itemType: "npc_feature",
@@ -242,7 +251,7 @@ const veterancyVeteranReaction = {
         activationType: "code",
         activationMode: "instead",
         evaluate: function (triggerType, triggerData, reactorToken) {
-            const bonuses = reactorToken.actor?.getFlag("lancer-automations", "constant_bonuses") || [];
+            const bonuses = api.getConstantBonuses(reactorToken.actor);
             return !bonuses.some(b => b.id === `veterancy_${reactorToken.actor.id}`);
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -293,6 +302,8 @@ const veterancyVeteranReaction = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const restockDroneSupportReaction = {
     category: "NPC",
     itemType: "npc_feature",
@@ -421,6 +432,8 @@ const restockDroneSupportReaction = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const npcInsulatedBonus = {
     category: "NPC",
     itemType: "npc_feature",
@@ -435,7 +448,7 @@ const npcInsulatedBonus = {
                 return;
             }
             const bonusId = `insulated_${item.id}`;
-            const bonuses = token.actor.getFlag("lancer-automations", "constant_bonuses") || [];
+            const bonuses = api.getConstantBonuses(token.actor);
 
             if (!bonuses.some(b => b.id === bonusId)) {
                 await api.addConstantBonus(token.actor, {
@@ -459,6 +472,8 @@ const npcInsulatedBonus = {
         }
     }]
 };
+
+/** @type {ReactionGroup} */
 const npcRegenerativeShieldingAegis = {
     category: "NPC",
     itemType: "npc_feature",
@@ -473,7 +488,7 @@ const npcRegenerativeShieldingAegis = {
                 return;
             }
             const bonusId = `regenerative_shielding_${item.id}`;
-            const bonuses = token.actor.getFlag("lancer-automations", "constant_bonuses") || [];
+            const bonuses = api.getConstantBonuses(token.actor);
 
             if (!bonuses.some(b => b.id === bonusId)) {
                 await api.addConstantBonus(token.actor, {
@@ -564,6 +579,7 @@ function buildDefenseNetAuraCallback() {
                 return !bonuses.some(b => b.context?.ownerTokenId === reactorToken.id);
             };
 
+            /** @type {any[]} */
             const subBonuses = [
                 { type: 'difficulty', val: 2, applyToTargetter: true, condition: defNetCondition },
                 { type: 'immunity', subtype: 'crit', applyToTargetter: true, condition: defNetCondition }
@@ -614,7 +630,12 @@ function buildDefenseNetAuraCallback() {
     };
 }
 
+/**
+ * @returns {ReactionGroup}
+ */
 function buildDefenseNetReaction(radius, isRebake = false) {
+
+    /** @type {ReactionConfig[]} */
     const reactions = [
         {
             triggers: ["onActivation"],
@@ -758,9 +779,6 @@ api.registerDefaultItemReactions({
             activationType: "code",
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (!api)
-                    return false;
-
                 const targetData = triggerData.targets?.[0];
                 if (!targetData)
                     return false;
@@ -999,13 +1017,10 @@ api.registerDefaultItemReactions({
                 return triggerData.moveInfo?.isBoost === true;
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const actor = reactorToken.actor;
-                if (!actor)
-                    return;
-                const hasSoftCover = actor.effects.some(e => e.statuses?.has('cover_soft'));
+                const hasSoftCover = api.findEffectOnToken(reactorToken, e => e.name === "Soft Cover");
                 if (!hasSoftCover) {
-                    if (api?.applyFlaggedEffectToTokens) {
-                        await api.applyFlaggedEffectToTokens({
+                    if (api?.applyEffectToTokens) {
+                        await api.applyEffectToTokens({
                             tokens: [reactorToken],
                             effectNames: ["cover_soft"],
                             note: "Fast Vehicle Boost",
@@ -1036,7 +1051,7 @@ api.registerDefaultItemReactions({
                     return;
                 }
 
-                const result = await api.placeZone(reactorToken, {
+                await api.placeZone(reactorToken, {
                     range: 5,
                     size: 1,
                     type: "Blast",
@@ -1102,15 +1117,15 @@ api.registerDefaultItemReactions({
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onHit") {
                     const targets = triggerData.targets?.map(t => t.target) || (triggerData.target ? [triggerData.target] : []);
-                    if (targets.length && api?.applyFlaggedEffectToTokens) {
-                        await api.applyFlaggedEffectToTokens({
+                    if (targets.length && api?.applyEffectToTokens) {
+                        await api.applyEffectToTokens({
                             tokens: targets,
                             effectNames: ["lancer.statusIconsNames.impaired"],
                             note: "Remote Machine Gun",
                             duration: { label: 'end', turns: 1, rounds: 0 },
                             checkEffectCallback: (token, effect) => {
                                 const lancerAutomations = game.modules.get('lancer-automations');
-                                return !!lancerAutomations?.api?.findFlaggedEffectOnToken(token, e =>
+                                return !!lancerAutomations?.api?.findEffectOnToken(token, e =>
                                     e.flags?.['lancer-automations']?.RemoteMachineGunID === reactorToken.id &&
                                         e.name.toLowerCase().includes("impaired")
                                 );
@@ -1124,13 +1139,12 @@ api.registerDefaultItemReactions({
                         if (!t.actor)
                             continue;
 
-                        const effects = t.actor.effects.filter(e =>
+                        const impairedEffect = api.findEffectOnToken(t, e =>
                             e.flags?.['lancer-automations']?.RemoteMachineGunID === reactorToken.id &&
-                                e.name.toLowerCase().includes("impaired")
+                            e.name.toLowerCase().includes("impaired")
                         );
-                        for (const e of effects) {
-                            await e.delete();
-                        }
+                        if (impairedEffect)
+                            await impairedEffect.delete();
                     }
                 }
             }
@@ -1146,7 +1160,7 @@ api.registerDefaultItemReactions({
             activationMode: "after",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const mover = triggerData.triggeringToken;
-                const effect = api?.findFlaggedEffectOnToken(mover, e =>
+                const effect = api?.findEffectOnToken(mover, e =>
                     e.flags?.['lancer-automations']?.RemoteMachineGunID === reactorToken.id &&
                         e.name.toLowerCase().includes("impaired")
                 );
@@ -1158,7 +1172,7 @@ api.registerDefaultItemReactions({
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const mover = triggerData.triggeringToken;
-                const effect = api?.findFlaggedEffectOnToken(mover, e =>
+                const effect = api?.findEffectOnToken(mover, e =>
                     e.flags?.['lancer-automations']?.RemoteMachineGunID === reactorToken.id &&
                         e.name.toLowerCase().includes("impaired")
                 );
@@ -1197,9 +1211,7 @@ api.registerDefaultItemReactions({
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const qol = game.modules.get('csm-lancer-qol');
-
-                if (!api?.applyFlaggedEffectToTokens) {
+                if (!api?.applyEffectToTokens) {
                     ui.notifications.error("lancer-automations module required");
                     return;
                 }
@@ -1223,10 +1235,9 @@ api.registerDefaultItemReactions({
                     flavor: `${activationName} - Resistance charges`
                 });
                 const charges = roll.total;
-                const groupId = foundry.utils.randomID();
                 const resistances = ["Resist All"];
 
-                await api.applyFlaggedEffectToTokens({
+                await api.applyEffectToTokens({
                     tokens: [target],
                     effectNames: resistances,
                     note: `Dispersal Shield (${charges} charges)`,
@@ -1358,7 +1369,7 @@ api.registerDefaultItemReactions({
                 const target = triggerData.checkAgainstToken;
                 if (!target)
                     return false;
-                const effect = api.findFlaggedEffectOnToken(target, e =>
+                const effect = api.findEffectOnToken(target, e =>
                     e.name === "Squad Leader" &&
                         e.flags?.['lancer-automations']?.originID === reactorToken.id
                 );
@@ -1368,7 +1379,7 @@ api.registerDefaultItemReactions({
                 const target = triggerData.checkAgainstToken;
                 const roller = triggerData.triggeringToken;
 
-                const effect = api.findFlaggedEffectOnToken(target, e =>
+                const effect = api.findEffectOnToken(target, e =>
                     e.name === "Squad Leader" &&
                         e.flags?.['lancer-automations']?.originID === reactorToken.id
                 );
@@ -1414,7 +1425,7 @@ api.registerDefaultItemReactions({
 
                 const round = game.combat?.round ?? 0;
                 const flagKey = `triangulation_ping_round_${round}`;
-                const existingFlags = reactorToken.actor.getFlag("csm-lancer-qol", flagKey) || [];
+                const existingFlags = reactorToken.actor.getFlag("lancer-automations", flagKey) || [];
                 if (existingFlags.includes(triggerer.id))
                     return false;
 
@@ -1426,18 +1437,18 @@ api.registerDefaultItemReactions({
 
                 if (round > 1) {
                     const prevRoundKey = `triangulation_ping_round_${round - 1}`;
-                    if (reactorToken.actor.getFlag("csm-lancer-qol", prevRoundKey)) {
-                        await reactorToken.actor.unsetFlag("csm-lancer-qol", prevRoundKey);
+                    if (reactorToken.actor.getFlag("lancer-automations", prevRoundKey)) {
+                        await reactorToken.actor.unsetFlag("lancer-automations", prevRoundKey);
                     }
                 }
 
                 const result = await api.executeStatRoll(triggerer.actor, "SYS", "Triangulation Ping Save", reactorToken);
                 if (!result.passed) {
                     const flagKey = `triangulation_ping_round_${round}`;
-                    const existingFlags = reactorToken.actor.getFlag("csm-lancer-qol", flagKey) || [];
+                    const existingFlags = reactorToken.actor.getFlag("lancer-automations", flagKey) || [];
 
-                    await reactorToken.actor.setFlag("csm-lancer-qol", flagKey, [...existingFlags, triggerer.id]);
-                    await api.applyFlaggedEffectToTokens({
+                    await reactorToken.actor.setFlag("lancer-automations", flagKey, [...existingFlags, triggerer.id]);
+                    await api.applyEffectToTokens({
                         tokens: [triggerer],
                         effectNames: ["lockon"],
                         note: "Failed Triangulation Ping Save"
@@ -1490,7 +1501,6 @@ api.registerDefaultItemReactions({
         category: "NPC",
         itemType: "npc_feature",
         reactions: [
-            // Reaction 1: on hit, apply LockOn (with marker source tracking) + Shredded (consumes when lockon removed)
             {
                 triggers: ["onHit"],
                 triggerSelf: true,
@@ -1502,12 +1512,10 @@ api.registerDefaultItemReactions({
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const targets = triggerData.targets?.map(t => t.target).filter(Boolean) || [];
                     for (const target of targets) {
-                        // LockOn with marker source identity so we can identify it later
                         await api.applyEffectsToTokens(
                             { tokens: [target], effectNames: ["lockon"] },
                             { markerRifleSource: reactorToken.id }
                         );
-                        // Shredded that auto-consumes when lockon is removed from that token
                         await api.applyEffectsToTokens(
                             { tokens: [target], effectNames: ["shredded"] },
                             { consumption: { trigger: "onStatusRemoved", statusId: "lockon" } }
@@ -1515,7 +1523,6 @@ api.registerDefaultItemReactions({
                     }
                 }
             },
-            // Reaction 2: cancel "Hide" for any token bearing this marker rifle's lockon (passive, no reaction cost)
             {
                 triggers: ["onInitActivation"],
                 triggerSelf: false,
@@ -1532,17 +1539,16 @@ api.registerDefaultItemReactions({
                     const token = triggerData.triggeringToken;
                     if (!token?.actor)
                         return false;
-                    const hasMarkerLockOn = token.actor.effects.some(e =>
+                    const hasMarkerLockOn = !!api.findEffectOnToken(token, e =>
                         (e.statuses?.first() === 'lockon' || e.name?.toLowerCase().includes('lockon')) &&
                         e.flags?.['lancer-automations']?.markerRifleSource === reactorToken.id
                     );
-                    if (hasMarkerLockOn)
-                        triggerData.cancelAction("This unit is Marked — it cannot Hide while under Marker Rifle lock.");
                     return hasMarkerLockOn;
                 },
-                activationCode: async function () { /* cancelAction already called synchronously in evaluate */ }
+                activationCode: async function (triggerType, triggerData, reactorToken) {
+                    triggerData.cancelAction("This unit is Marked — it cannot Hide while under Marker Rifle lock.");
+                }
             },
-            // Reaction 3: block stealth/invisible statuses being applied while this marker rifle's lockon is present
             {
                 triggers: ["onPreStatusApplied"],
                 triggerSelf: false,
@@ -1560,15 +1566,15 @@ api.registerDefaultItemReactions({
                     const token = triggerData.triggeringToken;
                     if (!token?.actor)
                         return false;
-                    const hasMarkerLockOn = token.actor.effects.some(e =>
+                    const hasMarkerLockOn = !!api.findEffectOnToken(token, e =>
                         (e.statuses?.first() === 'lockon' || e.name?.toLowerCase().includes('lockon')) &&
                         e.flags?.['lancer-automations']?.markerRifleSource === reactorToken.id
                     );
-                    if (hasMarkerLockOn)
-                        triggerData.cancelChange("This unit is Marked — it cannot become invisible while under Marker Rifle lock.");
                     return hasMarkerLockOn;
                 },
-                activationCode: async function () { /* cancelChange already called synchronously in evaluate */ }
+                activationCode: async function (triggerType, triggerData, reactorToken) {
+                    triggerData.cancelChange("This unit is Marked — it cannot become invisible while under Marker Rifle lock.");
+                }
             }
         ]
     },
@@ -1585,11 +1591,11 @@ api.registerDefaultItemReactions({
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 triggerData.targets.forEach(target => {
-                    api.applyFlaggedEffectToTokens({
+                    api.applyEffectToTokens({
                         tokens: [target],
                         effectNames: ["lockon"],
                     });
-                    api.applyFlaggedEffectToTokens({
+                    api.applyEffectToTokens({
                         tokens: [target],
                         effectNames: ["shredded"],
                         duration: { label: 'end', turns: 1, rounds: 0 }

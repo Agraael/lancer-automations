@@ -109,12 +109,7 @@ export function getGridDistance(pos1, pos2) {
         return cubeDistance(cube1, cube2);
     } else {
         const gridDistance = canvas.scene.grid.distance;
-        let distPixels;
-        if (canvas.grid.measurePath) {
-            distPixels = canvas.grid.measurePath([pos1, pos2]).distance;
-        } else {
-            distPixels = canvas.grid.measureDistance(pos1, pos2);
-        }
+        const distPixels = canvas.grid.measurePath([pos1, pos2], {}).distance;
         return Math.round(distPixels / gridDistance);
     }
 }
@@ -528,6 +523,23 @@ function _removeInfoCard(cardEl) {
 }
 
 
+/**
+ * Prompts the user to select one or more tokens on the canvas.
+ * @param {Token} [casterToken] - The token from which to measure range
+ * @param {Object} options - Configuration options
+ * @param {number} [options.range=null] - Maximum grid distance for selection
+ * @param {boolean} [options.includeHidden=false] - Whether to include hidden tokens
+ * @param {boolean} [options.includeSelf=false] - Whether to include the casterToken
+ * @param {Function} [options.filter=null] - Optional additional filter function
+ * @param {Array<Token>} [options.selection=null] - Restrict selection to these tokens
+ * @param {Array<Token>} [options.preSelected=[]] - Tokens initially selected
+ * @param {number} [options.count=1] - Maximum number of tokens to select
+ * @param {string} [options.title] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @param {string} [options.icon] - Card icon class
+ * @param {string} [options.headerClass=""] - Card header CSS class
+ * @returns {Promise<Token[]|null>} Array of selected tokens or null if cancelled
+ */
 export function chooseToken(casterToken, options = {}) {
     const _title = options.title || 'SELECT TARGETS';
     return _queueCard(() => new Promise((resolve) => {
@@ -543,7 +555,7 @@ export function chooseToken(casterToken, options = {}) {
             description = "",
             icon,
             headerClass = ""
-        } = options;
+        } = /** @type {any} */ (options);
 
         let selectionOnly = !!selection;
 
@@ -674,7 +686,7 @@ export function chooseToken(casterToken, options = {}) {
 
         if (selection) {
             cardEl.find('[data-role="selection-toggle"]').on('change', function () {
-                selectionOnly = this.checked;
+                selectionOnly = /** @type {HTMLInputElement} */ (this).checked;
                 allTokens = getActiveTokens();
             });
         }
@@ -884,12 +896,17 @@ export function chooseToken(casterToken, options = {}) {
  * @param {number} [options.size=1] - Zone radius in grid units (Blast size)
  * @param {string} [options.type="Blast"] - Template type (Blast, Burst, Cone, Line)
  * @param {string} [options.fillColor="#ff6400"] - Fill color as hex string
+ * @param {string} [options.borderColor="#964611ff"] - Border color as hex string
  * @param {string} [options.texture] - Texture file path
  * @param {number} [options.count=1] - Number of zones to place. -1 for infinite.
  * @param {Object} [options.hooks={}] - templatemacro hooks (created, deleted, entered, left, turnStart, turnEnd, ...)
  * @param {Object} [options.dangerous] - Shortcut: `{ damageType, damageValue }` — triggers ENG check on entry/turn start
  * @param {string[]} [options.statusEffects] - Shortcut: array of status effect IDs to apply to tokens inside
  * @param {Object} [options.difficultTerrain] - Shortcut: `{ movementPenalty, isFlatPenalty }` — sets ElevationRuler movement cost
+ * @param {string} [options.title] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @param {string} [options.icon] - Card icon class
+ * @param {string} [options.headerClass=""] - Card header CSS class
  * @returns {Promise<Array<{x: number, y: number, template: MeasuredTemplate}>|null>} Zone positions and templates, or null if cancelled
  */
 export function placeZone(casterToken, options = {}) {
@@ -908,7 +925,7 @@ export function placeZone(casterToken, options = {}) {
             description = "",
             icon,
             headerClass = ""
-        } = options;
+        } = /** @type {any} */ (options);
 
         let rangeHighlight = null;
         const placedZones = [];
@@ -1131,6 +1148,13 @@ export function cancelRulerDrag(token, moveInfo = null) {
  * @param {Array<Token>} tokens - List of tokens to knock back
  * @param {number} distance - Max knockback distance in grid units
  * @param {Object} options - UI options
+ * @param {string} [options.title="KNOCKBACK"] - Card title
+ * @param {string} [options.description] - Card description
+ * @param {string} [options.icon] - Card icon class
+ * @param {string} [options.headerClass=""] - Card header CSS class
+ * @param {Token} [options.triggeringToken=null] - Token triggering the knockback
+ * @param {string} [options.actionName=""] - Name of the action
+ * @param {Item} [options.item=null] - Item used for knockback
  * @returns {Promise<Array<{token: Token, x: number, y: number}>|null>} List of moves or null if cancelled
  */
 /**
@@ -1592,6 +1616,8 @@ export function knockBackToken(tokens, distance, options = {}) {
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
  * @param {boolean} [options.noCard=false] - Whether to skip rendering the card
+ * @param {number|null} [options.disposition=null] - Token disposition override
+ * @param {string|null} [options.team=null] - Token faction team override
  * @returns {Promise<Array<TokenDocument>|null>} Array of spawned token documents, or null if cancelled
  */
 export function placeToken(options = {}) {
@@ -1611,7 +1637,7 @@ export function placeToken(options = {}) {
             noCard = false,
             disposition = null,
             team = null
-        } = options;
+        } = /** @type {any} */ (options);
 
         // --- Normalize actor input into actorEntries ---
         // Each entry: { actor, extraData, prototypeToken, texture }
@@ -2009,11 +2035,13 @@ export function placeToken(options = {}) {
  * Interactive choice card — presents a list of choices with callbacks.
  * @param {Object} options - Configuration options
  * @param {string} [options.mode="or"] - "or" (pick one, done) or "and" (pick all sequentially)
- * @param {Array<Object>} options.choices - Array of { text, icon?, callback, data? }
+ * @param {Array<Object>} [options.choices=[]] - Array of { text, icon?, callback, data? }
  * @param {string} [options.title] - Card title
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
+ * @param {boolean} [options.gmControl=false] - Whether the card is controlled by the GM
+ * @param {Object} [options.traceData=null] - Optional trace data for the card
  * @returns {Promise<true|null>} true on completion, null if cancelled
  */
 export function startChoiceCard(options = {}) {
@@ -2027,7 +2055,7 @@ export function startChoiceCard(options = {}) {
         headerClass = "",
         gmControl = false,
         traceData = null
-    } = options;
+    } = /** @type {any} */ (options);
 
     if (gmControl && !game.user.isGM) {
         return _queueCard(() => new Promise((resolve) => {
@@ -2278,7 +2306,8 @@ export async function resolveGMChoiceCard(cardId, choiceIdx) {
  * @param {Actor} ownerActor - The actor who owns the weapon
  * @param {Token} [originToken=null] - The token placing the weapon (used for range origin)
  * @param {Object} [options={}] - Extra options
- * @param {number} [options.range=1] - Placement range in grid units
+ * @param {number|null} [options.range=1] - Placement range in grid units (null for unlimited)
+ * @param {Token|Object|null} [options.at=null] - Origin override for range measurement
  * @param {string} [options.title] - Card title override
  * @param {string} [options.description] - Card description override
  * @returns {Promise<Array<TokenDocument>|null>} Spawned token documents, or null if cancelled
@@ -2292,7 +2321,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     } = options;
 
     const templateName = "Template Throw";
-    let templateActor = game.actors.contents.find(a =>
+    let templateActor = game.actors.contents.find((/** @type {any} */ a) =>
         a.name === templateName && a.type === 'deployable'
     );
 
@@ -2330,7 +2359,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         }
     }
 
-    let ownerName = ownerActor.name;
+    let ownerName = /** @type {string} */ (ownerActor.name || "");
     if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
         ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
     }
@@ -2349,7 +2378,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         }
     };
     const result = await placeToken({
-        actor: templateActor,
+        actor: /** @type {Actor} */(templateActor),
         range,
         count: 1,
         origin: at || originToken,
@@ -2358,7 +2387,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         icon: "fas fa-hammer",
         extraData,
         onSpawn: async () => {
-            await weapon.update({ 'system.disabled': true });
+            await weapon.update(/** @type {any} */({ 'system.disabled': true }));
         }
     });
 
@@ -2414,14 +2443,14 @@ export async function pickupWeaponToken(ownerToken) {
         return null;
 
     const pickedToken = selected[0];
-    const flags = pickedToken.document?.flags?.['lancer-automations'] || pickedToken.flags?.['lancer-automations'];
+    const flags = pickedToken.document?.flags?.['lancer-automations'];
     const weaponId = flags?.weaponId;
     const weaponName = flags?.weaponName || "Weapon";
 
     if (game.user.isGM) {
         const weapon = ownerActor.items.get(weaponId);
         if (weapon)
-            await weapon.update({ 'system.disabled': false });
+            await weapon.update(/** @type {any} */({ 'system.disabled': false }));
         await pickedToken.document.delete();
     } else {
         game.socket.emit('module.lancer-automations', {
@@ -2458,7 +2487,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
         return { deployable: null, source: null };
 
     // First, look in actor folder owned by this actor
-    let deployable = game.actors.contents.find(a => {
+    let deployable = /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ a) => {
         if (a.type !== 'deployable' || a.system?.lid !== lid) {
             return false;
         }
@@ -2467,7 +2496,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
                ownerVal === ownerActor?.id ||
                ownerVal?.id === ownerActor?.uuid ||
                ownerVal?.id === ownerActor?.id;
-    });
+    }));
 
     if (deployable) {
         return { deployable, source: 'actor' };
@@ -2491,9 +2520,9 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 
 /**
  * Place a deployable token on the scene with interactive placement.
- * @param {Object} options
- * @param {Actor|string|Array<Actor|string>} options.deployable - A deployable Actor, LID string, or array of them
- * @param {Actor} options.ownerActor - The actor that owns the deployable
+ * @param {Object} [options={}]
+ * @param {Actor|string|Array<Actor|string>} [options.deployable] - A deployable Actor, LID string, or array of them
+ * @param {Actor} [options.ownerActor] - The actor that owns the deployable
  * @param {Object|null} [options.systemItem=null] - The system/item that grants the deployable (for use consumption)
  * @param {boolean} [options.consumeUse=false] - Whether to consume a use from systemItem
  * @param {boolean} [options.fromCompendium=false] - Whether the deployable is from a compendium (creates a new actor)
@@ -2505,9 +2534,11 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
  * @param {string} [options.title="DEPLOY"] - Card title
  * @param {string} [options.description=""] - Card description
  * @param {boolean} [options.noCard=false] - Whether to skip rendering the card
+ * @param {number|null} [options.disposition=null] - Token disposition override
+ * @param {string|null} [options.team=null] - Token faction team override
  * @returns {Promise<Object|null>} Placement result or null
  */
-export async function placeDeployable(options = {}) {
+export async function placeDeployable(options = /** @type {any} */({})) {
     const {
         deployable: deployableOrLid,
         ownerActor,
@@ -2524,7 +2555,7 @@ export async function placeDeployable(options = {}) {
         noCard = false,
         disposition: dispositionOpt = null,
         team: teamOpt = null
-    } = options;
+    } = /** @type {any} */(options);
 
     // Read deploy flags from systemItem if not explicitly provided in options
     const itemFlags = systemItem ? getItemFlags(systemItem) : {};
@@ -2536,7 +2567,7 @@ export async function placeDeployable(options = {}) {
         return null;
     }
 
-    let ownerName = ownerActor.name;
+    let ownerName = /** @type {string} */ (ownerActor.name || "");
     if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved") {
         ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
     }
@@ -2565,8 +2596,8 @@ export async function placeDeployable(options = {}) {
 
         // If from compendium, create a new actor first
         if (isFromCompendium) {
-            const actorData = actualDeployable.toObject();
-            const ownerBaseActor = ownerActor.token?.baseActor ?? ownerActor;
+            const actorData = /** @type {any} */(actualDeployable.toObject());
+            const ownerBaseActor = /** @type {Actor} */(ownerActor.token?.baseActor ?? ownerActor);
             actorData.system.owner = ownerBaseActor.uuid;
             actorData.name = `${actualDeployable.name} [${ownerName}]`;
             actorData.folder = ownerActor.folder?.id;
@@ -2939,13 +2970,13 @@ export function getItemFlags(item, flagName = null) {
 /**
  * Show a deployment card for a specific item's deployables. Resolves all deployable LIDs and
  * opens a single placeDeployable session with the actor selector for multi-deployable placement.
- * @param {Object} options
- * @param {Actor} options.actor - The owner actor
- * @param {Object} options.item - The system/frame item that has deployables
+ * @param {Object} [options={}]
+ * @param {Actor} [options.actor] - The owner actor
+ * @param {Object} [options.item] - The system/frame item that has deployables
  * @param {Array} [options.deployableOptions=[]] - Per-index options overrides for placeDeployable. e.g. [{ range: 3, count: 2 }, { range: 1 }]
  * @returns {Promise<boolean>} true if confirmed, null if cancelled
  */
-export async function beginDeploymentCard(options = {}) {
+export async function beginDeploymentCard(options = /** @type {any} */({})) {
     const {
         actor,
         item,
@@ -3321,7 +3352,7 @@ export async function openDeployableMenu(actor) {
 
                 const actorData = item.deployableData.toObject();
 
-                let ownerName = actor.name;
+                let ownerName = /** @type {string} */ (actor.name || "");
                 if (actor.is_mech?.() && actor.system.pilot?.status === "resolved") {
                     ownerName = actor.system.pilot.value.system.callsign || actor.system.pilot.value.name;
                 }
@@ -3435,7 +3466,7 @@ export async function recallDeployable(ownerToken) {
         return null;
 
     const pickedToken = selected[0];
-    const flags = pickedToken.document?.flags?.['lancer-automations'] || pickedToken.flags?.['lancer-automations'];
+    const flags = pickedToken.document?.flags?.['lancer-automations'];
     const deployableName = flags?.deployableName || "Deployable";
     const deployableId = flags?.deployableId;
 
@@ -3571,7 +3602,7 @@ export async function openThrowMenu(actor) {
                     const item = items.find(i => i.id === selectedId);
                     if (!item || item.disabled)
                         return;
-                    const weapon = item.weaponData;
+                    const weapon = /** @type {any} */ (item.weaponData);
                     const api = game.modules.get('lancer-automations')?.api;
                     if (api?.beginThrowWeaponFlow) {
                         await api.beginThrowWeaponFlow(weapon);
@@ -3613,11 +3644,7 @@ export async function revertMovement(token, destination = null) {
     // Helper to calculate distance
     const getDist = (p1, p2) => {
         let d = 0;
-        if (canvas.grid.measurePath) {
-            d = canvas.grid.measurePath([p1, p2]).distance;
-        } else {
-            d = canvas.grid.measureDistance(p1, p2);
-        }
+        d = canvas.grid.measurePath([p1, p2], {}).distance;
         return Math.round(d / canvas.scene.grid.distance);
     };
 
@@ -3638,7 +3665,7 @@ export async function revertMovement(token, destination = null) {
             updates.elevation = CONFIG.GeometryLib.utils.pixelsToGridUnits(newLastPoint.z);
 
             const dist = getDist(currentPos, {x: updates.x, y: updates.y});
-            await token.document.update(updates, { isUndo: true });
+            await token.document.update(updates, /** @type {any} */ ({ isUndo: true }));
             game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
 
             const newHistory = token.elevationruler?.measurementHistory;
@@ -3655,7 +3682,7 @@ export async function revertMovement(token, destination = null) {
         const currentPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, destination);
 
-        await token.document.update(destination, { isUndo: true });
+        await token.document.update(destination, /** @type {any} */ ({ isUndo: true }));
         game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
         return true;
     }
@@ -3744,7 +3771,7 @@ export function pickItem(items, options = {}) {
  * @returns {Item[]} Array of weapon items.
  */
 export function getWeapons(entity) {
-    const actor = entity?.actor || entity;
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (entity))?.actor || entity);
     if (!actor || !actor.items)
         return [];
 
@@ -3761,7 +3788,7 @@ export function getWeapons(entity) {
  * @returns {Item|null} The item, or null if not found.
  */
 export function findItemByLid(actorOrToken, lid) {
-    const actor = actorOrToken?.actor || actorOrToken;
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor || !actor.items)
         return null;
     return actor.items.find(i => i.system?.lid === lid) || null;
@@ -3774,7 +3801,7 @@ export function findItemByLid(actorOrToken, lid) {
  * @returns {Promise<Item|null>} The reloaded weapon, or null if cancelled.
  */
 export async function reloadOneWeapon(actorOrToken, targetName) {
-    const actor = actorOrToken?.actor || actorOrToken;
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     const name = targetName || actorOrToken?.name || actor?.name || "Target";
 
     if (!actor) {
@@ -3798,7 +3825,7 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
     });
 
     if (chosenWeapon) {
-        await chosenWeapon.update({ "system.loaded": true });
+        await chosenWeapon.update(/** @type {any} */({ "system.loaded": true }));
         ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
     }
     return chosenWeapon;

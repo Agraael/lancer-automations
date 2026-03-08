@@ -1,5 +1,6 @@
-/*global game, Dialog, ChatMessage, canvas, $, foundry */
+/*global console, game, Dialog, ChatMessage, canvas, $, foundry */
 import { ReactionManager, stringToAsyncFunction } from "./reaction-manager.js";
+import { hasReactionAvailable } from "./misc-tools.js";
 
 let activeReactionDialog = null;
 let activeDetailPanel = null;
@@ -84,34 +85,8 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                         onCrit: item.system.on_crit,
                         tags: item.system.tags
                     }).begin();
-                } else if (simpleActivationFlow) {
-                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
                 } else {
-                    const template = `systems/${game.system.id}/templates/chat/generic-card.hbs`;
-
-                    let fullDescription = item.system.description || "";
-                    if (item.system.trigger)
-                        fullDescription += `<br><strong>Trigger:</strong> ${item.system.trigger}`;
-                    if (item.system.effect)
-                        fullDescription += `<br><strong>Effect:</strong> ${item.system.effect}`;
-                    if (item.system.on_hit)
-                        fullDescription += `<br><strong>On Hit:</strong> ${item.system.on_hit}`;
-                    if (item.system.on_crit)
-                        fullDescription += `<br><strong>On Crit:</strong> ${item.system.on_crit}`;
-
-                    const tags = item.system.tags || [];
-                    const content = await renderTemplate(template, {
-                        title: item.name,
-                        description: fullDescription,
-                        tags: tags
-                    });
-
-                    ChatMessage.create({
-                        user: game.user.id,
-                        speaker: ChatMessage.getSpeaker({ actor: token.actor }),
-                        content: content,
-                        type: CONST.CHAT_MESSAGE_TYPES.OTHER
-                    });
+                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
                 }
             }
         };
@@ -147,6 +122,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         });
 
         const showChatActivation = async () => {
+            let flowData;
             if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
                 const actionData = triggerData.actionData;
                 flowData = {
@@ -213,7 +189,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
 
         if (shouldConsume) {
             const actor = token.actor;
-            if (actor?.system?.action_tracker?.reaction > 0) {
+            if (hasReactionAvailable(token)) {
                 const newReaction = actor.system.action_tracker.reaction - 1;
                 return actor.update({ 'system.action_tracker.reaction': newReaction });
             }
@@ -461,7 +437,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
 
-        const reactionCount = token.actor?.system?.action_tracker?.reaction || 0;
+        const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
         if (reactionCount <= 0) {
             const tokenBox = mainDialogEl.find(`.lancer-list-item[data-token-id="${token.id}"]`);
             tokenBox.addClass('reaction-exhausted');
@@ -486,7 +462,7 @@ function renderReactionDialog(popupData) {
 
     for (const [tokenId, data] of byToken) {
         const actor = data.token.actor;
-        const hasReaction = actor?.system?.action_tracker?.reaction > 0;
+        const hasReaction = hasReactionAvailable(actor);
         if (!hasReaction) {
             byToken.delete(tokenId);
         }
@@ -504,7 +480,7 @@ function renderReactionDialog(popupData) {
     let tokenItems = "";
     for (const [tokenId, data] of byToken) {
         const token = data.token;
-        const reactionCount = token.actor?.system?.action_tracker?.reaction || 0;
+        const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
 
         let reactionList = "";
         for (const r of data.reactions) {

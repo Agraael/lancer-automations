@@ -333,8 +333,11 @@ function createGenericBonusStep(flowType) {
             for (const tokenDoc of game.scenes.active?.tokens ?? []) {
                 const sourceActor = tokenDoc.actor;
                 const sourceTokenId = tokenDoc.id;
-                if (!tokenDoc || sourceTokenId === attackerTokenId)
+                if (!tokenDoc || !sourceActor || sourceTokenId === attackerTokenId)
                     continue;
+
+                const isSourceTargeted = Array.from(game.user?.targets || []).some(t => t.id === sourceTokenId);
+
                 const routeTargeterBonus = (bonus) => {
                     const injected = { ...bonus, applyTo: [sourceTokenId] };
                     if (!injected.id)
@@ -840,7 +843,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser) {
     /**
      * Click the per-target accuracy (+) or difficulty (-) button inside a target card.
-     * @param {jQuery} $card   - The .accdiff-target card element
+     * @param {JQuery} $card   - The .accdiff-target card element
      * @param {string} type    - 'accuracy' or 'difficulty'
      * @param {number} count   - Number of times to click
      * @param {boolean} reverse - If true, click the opposite button
@@ -1441,7 +1444,7 @@ export function injectKnockbackCheckbox(state) {
 
         // Bind value input
         $row.find('.csm-knockback-value').on('input change', function () {
-            state.data._csmKnockback.value = parseInt($(this).val()) || 1;
+            state.data._csmKnockback.value = parseInt(String($(this).val())) || 1;
         });
 
         return true;
@@ -1640,12 +1643,12 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
             await applyEffectsToTokens(
                 {
                     tokens: [token],
-                    effectNames: {
+                    effectNames: [{
                         name: bonusData.name,
                         icon: icon,
                         isCustom: true,
                         stack: bonusData.uses || 1
-                    },
+                    }],
                     note: `Linked to Global Bonus: ${bonusData.name}`,
                     duration: { ...durationObj, overrideTurnOriginId: options.origin?.id || options.origin || token.id },
                 },
@@ -1672,7 +1675,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
 }
 
 /**
- * @param {string|function(bonus): boolean} bonusIdOrPredicate - Bonus ID string, or a predicate
+ * @param {string|function(bonuses): boolean} bonusIdOrPredicate - Bonus ID string, or a predicate
  *   to remove all matching bonuses in a single flag update.
  */
 export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false) {
@@ -1786,7 +1789,11 @@ Hooks.on("deleteActiveEffect", (effect) => {
 });
 
 
-
+/**
+ * Inject a bonus to the next roll for an actor.
+ * @param {Actor} actor - The actor to inject the bonus for
+ * @param {Object} bonus - The bonus to inject
+ */
 export async function injectBonusToNextRoll(actor, bonus) {
     if (!actor)
         return;
@@ -1833,7 +1840,7 @@ export function getConstantBonuses(actor) {
 /**
  * Remove constant bonus(es) from an actor.
  * @param {Actor} actor
- * @param {string|function(bonus): boolean} bonusIdOrPredicate - Bonus ID string to remove one,
+ * @param {string|function(bonuses): boolean} bonusIdOrPredicate - Bonus ID string to remove one,
  *   or a predicate function to remove all matching bonuses in a single flag update.
  */
 export async function removeConstantBonus(actor, bonusIdOrPredicate) {

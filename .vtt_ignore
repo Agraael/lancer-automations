@@ -1,1 +1,11 @@
+node_modules/
+packs_source/
+scripts/typing/
+jsconfig.json
+eslint.config.js
+package.json
+package-lock.json
+.git/
+.gitignore
+.vtt_ignore
 doc/

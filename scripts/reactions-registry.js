@@ -1,4 +1,3 @@
-
 const externalItemReactions = {};
 const externalGeneralReactions = {};
 
@@ -16,9 +15,6 @@ export function getDefaultItemReactionRegistry() {
 }
 
 export function getDefaultGeneralReactionRegistry() {
-    const qol = game.modules.get('csm-lancer-qol');
-    const hasExecuteFall = qol?.active && qol.exposed?.executeFall;
-
     const builtInDefaults = {
         "Overwatch": {
             category: "General",

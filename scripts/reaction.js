@@ -5,6 +5,7 @@ import {
     getHexesInRange, getHexCenter, drawHexAt,
     getOccupiedOffsets, getMinGridDistance
 } from "./grid-helpers.js";
+import { hasReactionAvailable } from "./misc-tools.js";
 
 function getReactionNamesFromItems(items) {
     const names = [];
@@ -20,7 +21,7 @@ function getReactionNamesFromItems(items) {
 }
 
 function getReactionsOnMech(mech) {
-    const items = mech.items.filter(x => typeof x.system.tags != 'undefined');
+    const items = mech.items.filter(x => typeof x.system.tags !== 'undefined');
     const response = getReactionNamesFromItems(items);
 
     let pilot = game.actors.find(x => x.id === mech.system.pilot?.value._id);
@@ -32,7 +33,7 @@ function getReactionsOnMech(mech) {
 }
 
 function getReactionsOnUnlinkedMech(token) {
-    const items = token.document.actor.items?.filter(x => typeof x.system.tags != 'undefined');
+    const items = token.document.actor.items?.filter(x => typeof x.system.tags !== 'undefined');
     return items ? getReactionNamesFromItems(items) : [];
 }
 
@@ -54,38 +55,6 @@ function getReactionsOnPilot(pilot) {
         }
     }
     return response;
-}
-
-export function displayReactions(actor, token) {
-    let reactions = token.document.isLinked ?
-        getReactionsOnMech(actor) :
-        getReactionsOnUnlinkedMech(token);
-    if (reactions.length > 0) {
-        let html = `<h3>Someone has targeted ${actor.name}! Consider using your activations!</h3>`;
-        html += "<ul>";
-        for (let i = 0; i < reactions.length; i++) {
-            html += `<li>${reactions[i]}</li>`;
-        }
-        html += "</ul>";
-        if (game.settings.get('lancer-automations', 'reactionReminder') == 'p') {
-            new Dialog({
-                title: `Activation Reminder for ${actor.name}`,
-                content: html,
-                buttons: {
-                    ok: {
-                        label: "OK"
-                    }
-                }
-            }).render(true);
-        }
-        if (game.settings.get('lancer-automations', 'reactionReminder') == 'c') {
-            ChatMessage.create({
-                user: game.userId,
-                content: html,
-                whisper: [game.userId]
-            });
-        }
-    }
 }
 
 export async function checkOverwatch(document, change, options, userId) {
@@ -114,8 +83,7 @@ export async function checkOverwatch(document, change, options, userId) {
         if (!t.isOwner)
             return false;
 
-        const reaction = t.actor.system.action_tracker?.reaction;
-        if (!reaction || reaction <= 0)
+        if (!hasReactionAvailable(t))
             return false;
 
         const tokenFactions = game.modules.get("token-factions")?.api;
@@ -263,7 +231,7 @@ export function displayOverwatch(reactors, target) {
         }, { top: 450, left: 150 }).render(true);
     } else if (mode === 'c') {
         ChatMessage.create({
-            user: game.userId,
+            author: game.userId,
             content: html,
             whisper: [game.userId]
         });

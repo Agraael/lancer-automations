@@ -1,8 +1,10 @@
 
+/*global console, window */
+
 import { ReactionManager } from "./reaction-manager.js";
 export class ReactionReset extends FormApplication {
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-reset",
             title: "Reset Lancer Reaction Checker",
             template: "modules/lancer-automations/templates/reset-confirm.html",
@@ -11,7 +13,9 @@ export class ReactionReset extends FormApplication {
         });
     }
 
-    render() {
+    async _updateObject(_event, _formData) {}
+
+    render(force = false, options = {}) {
         new Dialog({
             title: "Reset Module Defaults",
             content: `
@@ -58,5 +62,6 @@ export class ReactionReset extends FormApplication {
             },
             default: "no"
         }).render(true);
+        return this;
     }
 }

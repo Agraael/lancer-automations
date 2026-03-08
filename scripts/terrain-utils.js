@@ -1,28 +1,13 @@
+import { getOccupiedOffsets } from "./grid-helpers.js";
+
 /**
  * Get all grid cells occupied by a token.
  * @param {Token} token - The token to get cells for
- * @returns {Array<[number, number]>} Array of [gridX, gridY] coordinates
+ * @returns {Array<[number, number]>} Array of [row, col] coordinates
  */
 export function getTokenCells(token) {
-    const grid = canvas.grid;
-    const cells = [];
-    const visitedCells = new Set();
-
-    // Use FoundryVTT's native method to get occupied spaces
-    const occupiedSpaces = token.getOccupiedSpaces();
-
-    // Convert pixel coordinates to grid coordinates
-    for (const space of occupiedSpaces) {
-        const [gridX, gridY] = grid.getGridPositionFromPixels(space.x, space.y);
-        const cellKey = `${gridX},${gridY}`;
-
-        if (!visitedCells.has(cellKey)) {
-            visitedCells.add(cellKey);
-            cells.push([gridX, gridY]);
-        }
-    }
-
-    return cells;
+    const offsets = getOccupiedOffsets(token);
+    return offsets.map(o => [o.row, o.col]);
 }
 
 // Cache for terrain types to avoid redundant API calls and array searches

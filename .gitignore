@@ -1,1 +1,14 @@
+# Build output
 module.zip
+
+# Dependencies (install with npm install)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.suo
+*.user

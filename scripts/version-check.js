@@ -1,3 +1,5 @@
+/*global game, console, fetch, Dialog, foundry, window */
+
 export async function checkModuleUpdate(moduleId) {
     if (!game.user.isGM) {
         return;
@@ -44,7 +46,7 @@ export async function checkModuleUpdate(moduleId) {
             }
         }
 
-        if (remoteVersion && isNewerVersion(remoteVersion, module.version)) {
+        if (remoteVersion && foundry.utils.isNewerVersion(remoteVersion, module.version)) {
             const lastNotified = game.settings.get(moduleId, 'lastNotifiedVersion');
             if (lastNotified !== remoteVersion) {
                 showUpdateDialog(module, remoteVersion, releaseNotes);
@@ -58,7 +60,7 @@ export async function checkModuleUpdate(moduleId) {
 function showUpdateDialog(module, newVersion, releaseNotes = "") {
     let notesHtml = "";
     if (releaseNotes) {
-        const converter = new showdown.Converter();
+        const converter = new window.showdown.Converter();
         const htmlNotes = converter.makeHtml(releaseNotes);
         notesHtml = `
             <div class="lancer-action-buttons" style="margin: 10px 0 5px 0;">

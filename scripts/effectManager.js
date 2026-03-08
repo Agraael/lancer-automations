@@ -12,7 +12,7 @@ import { openItemBrowserDialog } from "./misc-tools.js";
 
 /**
  * Open item browser and populate targetInput with the selected LID.
- * @param {jQuery} targetInput
+ * @param {JQuery} targetInput
  */
 export async function openItemBrowser(targetInput) {
     const result = await openItemBrowserDialog();
@@ -24,7 +24,7 @@ export async function openItemBrowser(targetInput) {
 /**
  * Open a status picker dialog and populate targetInput with the selected status ID.
  * Shows all CONFIG.statusEffects plus custom statuses from temporary-custom-statuses if present.
- * @param {jQuery} targetInput
+ * @param {JQuery} targetInput
  */
 function openStatusPicker(targetInput) {
     const statuses = [...(CONFIG.statusEffects || [])];
@@ -38,7 +38,7 @@ function openStatusPicker(targetInput) {
         }
     }
 
-    const currentVal = targetInput ? targetInput.val() || '' : '';
+    const currentVal = targetInput ? /** @type {string} */ (targetInput.val()) || '' : '';
     const alreadySelected = new Set(currentVal.split(',').map(s => s.trim()).filter(Boolean));
 
     const gridHtml = statuses.map(s => {
@@ -340,9 +340,9 @@ async function modifyEffectStack(targetID, effectID, delta) {
         if (effect) {
             const newStack = effect.getFlag("statuscounter", "value") || effect.getFlag("temporary-custom-statuses", "stack") || 1;
             if (newStack > 1) {
-                await effect.update({
+                await effect.update(/** @type {any} */({
                     "flags.statuscounter.visible": true
-                });
+                }));
             }
         }
     } else {
@@ -353,10 +353,10 @@ async function modifyEffectStack(targetID, effectID, delta) {
             if (newStack <= 0)
                 await effect.delete();
             else
-                await effect.update({
+                await effect.update(/** @type {any} */({
                     "flags.statuscounter.value": newStack,
                     "flags.statuscounter.visible": newStack > 1
-                });
+                }));
         }
     }
 }
@@ -1077,7 +1077,7 @@ export async function executeEffectManager(options = {}) {
                 new FilePicker({
                     type: "image",
                     callback: (path) => input.val(path)
-                }).browse(input.val());
+                }).browse(String(input.val()));
             });
 
             // Saved Status
@@ -1131,13 +1131,13 @@ export async function executeEffectManager(options = {}) {
                 const tab = $(e.currentTarget).data('tab');
 
                 if (tab === 'standard') {
-                    const targetID = html.find('#std-target').val();
+                    const targetID = String(html.find('#std-target').val());
                     const effectName = html.find('#std-effect').val();
-                    const stack = parseInt(html.find('#std-stack').val()) || 1;
-                    const durationLabel = html.find('#std-duration').val();
-                    const originID = html.find('#std-origin').val();
-                    const note = html.find('#std-note').val();
-                    const turnsInput = parseInt(html.find('#std-turns').val()) || 1;
+                    const stack = parseInt(String(html.find('#std-stack').val())) || 1;
+                    const durationLabel = String(html.find('#std-duration').val());
+                    const originID = String(html.find('#std-origin').val());
+                    const note = String(html.find('#std-note').val());
+                    const turnsInput = parseInt(String(html.find('#std-turns').val())) || 1;
 
                     let duration = {
                         label: 'indefinite',
@@ -1148,7 +1148,7 @@ export async function executeEffectManager(options = {}) {
                         duration = {
                             label: durationLabel,
                             turns: turnsInput,
-                            rounded: 0
+                            rounds: 0
                         };
                         if (game.combat?.current?.tokenId === originID)
                             duration.turns = turnsInput + 1;
@@ -1178,14 +1178,14 @@ export async function executeEffectManager(options = {}) {
                     setTimeout(updateManageTabCount, 200);
 
                 } else if (tab === 'custom') {
-                    const targetID = html.find('#cust-target').val();
+                    const targetID = String(html.find('#cust-target').val());
                     const name = html.find('#cust-name').val();
                     const icon = html.find('#cust-icon').val();
-                    const stack = parseInt(html.find('#cust-stack').val()) || 1;
-                    const durationLabel = html.find('#cust-duration').val();
-                    const originID = html.find('#cust-origin').val();
-                    const note = html.find('#cust-note').val();
-                    const turnsInput = parseInt(html.find('#cust-turns').val()) || 1;
+                    const stack = parseInt(String(html.find('#cust-stack').val())) || 1;
+                    const durationLabel = String(html.find('#cust-duration').val());
+                    const originID = String(html.find('#cust-origin').val());
+                    const note = String(html.find('#cust-note').val());
+                    const turnsInput = parseInt(String(html.find('#cust-turns').val())) || 1;
 
                     if (!name)
                         return ui.notifications.error("Name is required!");
@@ -1267,7 +1267,7 @@ export async function executeEffectManager(options = {}) {
 
             // Manage Tab
             const updateManageTabCount = () => {
-                const targetID = html.find('#manage-target').val();
+                const targetID = String(html.find('#manage-target').val());
                 const target = canvas.tokens.get(targetID);
                 if (!target || !target.actor) {
                     html.find('#manage-tab-count').text('');
@@ -1284,7 +1284,7 @@ export async function executeEffectManager(options = {}) {
             };
 
             const updateManageList = () => {
-                const targetID = html.find('#manage-target').val();
+                const targetID = String(html.find('#manage-target').val());
                 const target = canvas.tokens.get(targetID);
                 const list = html.find('#manage-list');
                 list.empty();
@@ -1416,7 +1416,7 @@ export async function executeEffectManager(options = {}) {
 
             // ========== BONUS TAB ==========
             const updateBonusList = () => {
-                const targetID = html.find('#bonus-target').val();
+                const targetID = String(html.find('#bonus-target').val());
                 const target = canvas.tokens.get(targetID);
                 const summary = html.find('#bonus-summary');
 
@@ -1503,7 +1503,7 @@ export async function executeEffectManager(options = {}) {
                 const api = game.modules.get('lancer-automations').api;
 
                 // Use currently selected token as caster for the selection tool context if possible
-                const currentVal = html.find(`#${targetId}`).val();
+                const currentVal = String(html.find(`#${targetId}`).val());
                 const caster = canvas.tokens.get(currentVal) || canvas.tokens.controlled[0];
 
                 const selected = await api.chooseToken(caster, {
@@ -1531,7 +1531,7 @@ export async function executeEffectManager(options = {}) {
                 const api = game.modules.get('lancer-automations').api;
 
                 // We need a specific token to pick an item from. Let's trace it back from `bonus-applyTo` if available, or selected token.
-                const applyToStr = html.find('#bonus-applyTo').val();
+                const applyToStr = String(html.find('#bonus-applyTo').val());
                 let targetToken = null;
 
                 if (applyToStr) {
@@ -1610,19 +1610,19 @@ export async function executeEffectManager(options = {}) {
 
             // Add bonus handler
             const addBonusFromTab = async (type) => {
-                const targetID = html.find('#bonus-target').val();
+                const targetID = String(html.find('#bonus-target').val());
                 const target = canvas.tokens.get(targetID);
                 if (!target || !target.actor)
                     return ui.notifications.error("Target token not found!");
                 const actor = target.actor;
 
-                const name = html.find('#bonus-name').val() || "Test Bonus";
-                const usesStr = html.find('#bonus-uses').val();
+                const name = String(html.find('#bonus-name').val() || "Test Bonus");
+                const usesStr = String(html.find('#bonus-uses').val());
                 const uses = usesStr ? parseInt(usesStr) : undefined;
                 const duration = html.find('#bonus-duration').val();
                 const durOrigin = html.find('#bonus-durOrigin').val();
-                const durTurns = parseInt(html.find('#bonus-durTurns').val()) || 1;
-                const itemLidsStr = html.find('#bonus-itemLids').val();
+                const durTurns = parseInt(String(html.find('#bonus-durTurns').val())) || 1;
+                const itemLidsStr = String(html.find('#bonus-itemLids').val());
                 const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
                 let rollTypes = [];
@@ -1632,10 +1632,10 @@ export async function executeEffectManager(options = {}) {
                     rollTypes = [html.find('#bonus-rollTypes-damage').val()];
                 }
 
-                const applyToStr = html.find('#bonus-applyTo').val();
+                const applyToStr = String(html.find('#bonus-applyTo').val());
                 const applyTo = applyToStr ? applyToStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
                 const applyToTargetter = html.find('#bonus-applyToTargetter').is(':checked');
-                const itemId = html.find('#bonus-itemId').val()?.trim() || undefined;
+                const itemId = String(html.find('#bonus-itemId').val())?.trim() || undefined;
 
                 const bonusData = {
                     name,
@@ -1667,7 +1667,7 @@ export async function executeEffectManager(options = {}) {
                         type: "Kinetic"
                     }];
                 } else if (type === 'tag') {
-                    const selectEl = html.find('#bonus-tagSelect')[0];
+                    const selectEl = /** @type {HTMLSelectElement} */ (html.find('#bonus-tagSelect')[0]);
                     bonusData.tagId = selectEl.options[selectEl.selectedIndex].value;
                     bonusData.tagName = selectEl.options[selectEl.selectedIndex].text;
                     bonusData.tagMode = html.find('#bonus-tagMode').val();
@@ -1705,31 +1705,31 @@ export async function executeEffectManager(options = {}) {
                     const cOrigin = html.find('#bonus-trigger-origin').val();
                     if (cOrigin)
                         consumption.originId = cOrigin;
-                    const filterItemLid = html.find('#bonus-filter-itemLid').val()?.trim();
+                    const filterItemLid = String(html.find('#bonus-filter-itemLid').val())?.trim();
                     if (filterItemLid)
                         consumption.itemLid = filterItemLid;
-                    const filterItemId = html.find('#bonus-filter-itemId').val()?.trim();
+                    const filterItemId = String(html.find('#bonus-filter-itemId').val())?.trim();
                     if (filterItemId)
                         consumption.itemId = filterItemId;
-                    const filterActionName = html.find('#bonus-filter-actionName').val()?.trim();
+                    const filterActionName = String(html.find('#bonus-filter-actionName').val())?.trim();
                     if (filterActionName)
                         consumption.actionName = filterActionName;
                     const filterIsBoost = html.find('#bonus-filter-isBoost').is(':checked');
                     if (filterIsBoost)
                         consumption.isBoost = true;
-                    const filterMinDistance = html.find('#bonus-filter-minDistance').val();
+                    const filterMinDistance = String(html.find('#bonus-filter-minDistance').val());
                     if (filterMinDistance)
                         consumption.minDistance = parseInt(filterMinDistance);
-                    const filterCheckType = html.find('#bonus-filter-checkType').val()?.trim();
+                    const filterCheckType = String(html.find('#bonus-filter-checkType').val())?.trim();
                     if (filterCheckType)
                         consumption.checkType = filterCheckType;
-                    const filterCheckAbove = html.find('#bonus-filter-checkAbove').val();
+                    const filterCheckAbove = String(html.find('#bonus-filter-checkAbove').val());
                     if (filterCheckAbove)
                         consumption.checkAbove = parseInt(filterCheckAbove);
-                    const filterCheckBelow = html.find('#bonus-filter-checkBelow').val();
+                    const filterCheckBelow = String(html.find('#bonus-filter-checkBelow').val());
                     if (filterCheckBelow)
                         consumption.checkBelow = parseInt(filterCheckBelow);
-                    const filterStatusId = html.find('#bonus-filter-statusId').val()?.trim();
+                    const filterStatusId = String(html.find('#bonus-filter-statusId').val())?.trim();
                     if (filterStatusId)
                         consumption.statusId = filterStatusId;
                     addOptions.consumption = consumption;
@@ -1809,7 +1809,7 @@ export async function executeEffectManager(options = {}) {
 
             // Clear all bonuses
             html.find('#bonus-clear-all').click(async () => {
-                const targetID = html.find('#bonus-target').val();
+                const targetID = String(html.find('#bonus-target').val());
                 const target = canvas.tokens.get(targetID);
                 if (!target || !target.actor)
                     return;
@@ -1831,13 +1831,13 @@ export async function executeEffectManager(options = {}) {
             }
             updateManageTabCount();
         }
-    }, {
+    }, /** @type {any} */ ({
         width: 'auto',
         height: 'auto',
         left: 100,
         top: 60,
         classes: ['lancer-effect-manager', 'lancer-no-title']
-    });
+    }));
 
     dialog.render(true);
 }

@@ -1,0 +1,7 @@
+{
+    "name": "lancer-automations",
+    "private": true,
+    "devDependencies": {
+        "@league-of-foundry-developers/foundry-vtt-types": "^12.0.0"
+    }
+}

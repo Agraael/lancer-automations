@@ -1,4 +1,6 @@
+/* global console, JournalEntry, ChatMessage, Folder, Dialog, Sequence, game, ui, CONST, fromUuidSync */
 // ---------------------------------------------------------------------------
+
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -185,7 +187,7 @@ export async function performSystemScan(target, createJournal = false, customNam
   </tr>
 </table>`;
 
-    console.log("Scanning", target);
+    console.log("lancer-automations | Scanning", target);
 
     let sc_class = "";
     let sc_tier = "";
@@ -199,9 +201,10 @@ export async function performSystemScan(target, createJournal = false, customNam
         const frameData = actor.system.loadout?.frame?.value;
         sc_class = frameData ? frameData.name : "UNKNOWN FRAME";
 
+        /** @type {Actor} */
         let pilotActor = null;
         if (actor.system.pilot?.id) {
-            pilotActor = fromUuidSync(actor.system.pilot.id);
+            pilotActor = /** @type {Actor} */ (fromUuidSync(actor.system.pilot.id));
         }
         sc_tier = pilotActor ? `LL${pilotActor.system.level || 0}` : "LL?";
 
@@ -375,9 +378,13 @@ export async function performSystemScan(target, createJournal = false, customNam
         content += `<h3>Systems:</h3>` + sc_list;
 
         ChatMessage.create({
-            user: game.user._id,
+            author: game.user.id,
             content: content,
-            "flags.core.canPopout": true,
+            flags: {
+                core: {
+                    canPopout: true
+                }
+            }
         });
     }
 }
@@ -445,13 +452,13 @@ async function createScanJournalEntry(target, actor, hase_table_html, stat_table
     let matchingJournalEntries = allJournals.filter(e => e.name.includes(actor.name));
 
     if (matchingJournalEntries.length === 1 && updateExisting === true) {
-        console.log("Updating an existing scan");
+        console.log("lancer-automations | Updating an existing scan");
         const scanName = matchingJournalEntries[0].name;
         scanEntry = game.journal.getName(scanName);
         let scanPage = scanEntry.pages.getName(scanName);
         await scanPage.update({ _id: matchingJournalEntries[0]._id, text: { content: scanContent } });
     } else {
-        console.log("Creating a new scan");
+        console.log("lancer-automations | Creating a new scan");
         let scanCount = zeroPad(allJournals.filter(e => e.name.startsWith(nameTemplate)).length + startingNumber, numberLength);
         let scanName;
         if (customName && customName.trim().length > 0) {
@@ -459,7 +466,7 @@ async function createScanJournalEntry(target, actor, hase_table_html, stat_table
         } else {
             scanName = nameTemplate + scanCount + ` - ` + actor.name;
         }
-        let scanPage = new JournalEntryPage({ name: scanName, type: "text", text: { content: scanContent } });
+        let scanPage = /** @type {any} */ ({ name: scanName, type: "text", text: { content: scanContent } });
         scanEntry = await JournalEntry.create({ folder: journalFolder.id, name: scanName });
         await scanEntry.createEmbeddedDocuments("JournalEntryPage", [scanPage]);
     }
@@ -491,7 +498,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                 icon: '<i class="fas fa-check"></i>',
                 label: "Send to Chat",
                 callback: async (html) => {
-                    const info = html.find('[name="scan-info"]').val().trim();
+                    const info = String(html.find('[name="scan-info"]').val()).trim();
                     let content = `<h2>Scan results: ${targetNames}</h2>`;
                     content += `<h3>${scanTitle}</h3>`;
                     if (info) {
@@ -500,10 +507,14 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                         content += `<p><em>Information provided orally by GM</em></p>`;
                     }
                     ChatMessage.create({
-                        user: game.user._id,
+                        author: game.user.id,
                         content: content,
-                        whisper: game.user.isGM ? [] : [game.user._id],
-                        "flags.core.canPopout": true,
+                        whisper: game.user.isGM ? [] : [game.user.id],
+                        flags: {
+                            core: {
+                                canPopout: true
+                            }
+                        }
                     });
                 }
             },
@@ -544,7 +555,7 @@ function showSystemScanDialog(targets) {
                 label: "Execute Scan",
                 callback: async (html) => {
                     const createJournal = html.find('.lancer-toggle-card').data('create-journal') === true;
-                    const customName = html.find('[name="custom-journal-name"]').val().trim();
+                    const customName = String(html.find('[name="custom-journal-name"]').val()).trim();
 
                     if (createJournal && !game.user.isGM) {
                         targetArray.forEach(target => {

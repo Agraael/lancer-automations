@@ -134,7 +134,7 @@ export function getHexVertices(col, row) {
     const gridSize = canvas.grid.size;
 
     if (canvas.grid.getShape) {
-        const shape = canvas.grid.getShape();
+        const shape = /** @type {PIXI.Polygon} */ (/** @type {unknown} */ (canvas.grid.getShape()));
         if (shape && shape.points && shape.points.length > 0) {
             for (let i = 0; i < shape.points.length; i += 2) {
                 points.push({ x: shape.points[i] + center.x, y: shape.points[i + 1] + center.y });
@@ -174,9 +174,10 @@ export function drawHexAt(graphics, col, row) {
 }
 
 export function measureGridDistance(c1, c2) {
-    return canvas.grid.measurePath
-        ? canvas.grid.measurePath([c1, c2]).distance
-        : canvas.grid.measureDistance(c1, c2);
+    const d = canvas.grid.measurePath
+        ? canvas.grid.measurePath([c1, c2], {}).distance
+        : canvas.grid.measureDistance(c1, c2, {});
+    return Array.isArray(d) ? d.reduce((a, b) => a + b, 0) : d;
 }
 
 export function getOccupiedOffsets(token, overridePos = null) {
@@ -303,7 +304,7 @@ export function getOccupiedGridSpaces(excludeIds = []) {
  * Uses native getDirectPath and accounts for even-sized token alignment.
  * @param {Token} token - The moving token
  * @param {Object} change - The proposed coordinate change {x, y}
- * @returns {Array<Array<Object>>} Array of steps, each containing an array of {x, y} hex centers occupied.
+ * @returns {PathHexArray} Array of steps, each containing an array of {x, y} hex centers occupied.
  */
 export function getMovementPathHexes(token, change) {
     let rawPoints = [];
@@ -343,7 +344,7 @@ export function getMovementPathHexes(token, change) {
         rawPoints.push(getCenterFromTopLeft(change.x ?? token.document.x, change.y ?? token.document.y));
     }
 
-    let pathHexes = [];
+    let pathHexes = /** @type {PathHexArray} */ (/** @type {unknown} */ ([]));
     let seenHexes = new Set();
 
     const getOffsetFromPx = (px, py) => {
@@ -362,7 +363,7 @@ export function getMovementPathHexes(token, change) {
 
         const alignOffset = { x: 0, y: 0 };
         if (canvas.grid.isHexagonal && token.document.width % 2 === 0) {
-            if (canvas.grid.grid.columnar) {
+            if (/** @type {any} */ (canvas.grid.grid).columnar) {
                 alignOffset.x = canvas.grid.sizeX / 2;
             } else {
                 alignOffset.y = canvas.grid.sizeY / 2;
@@ -462,7 +463,7 @@ export function getMovementPathHexes(token, change) {
 
 /**
  * Draws a visual debug layout of a token's movement path using PIXI Graphics.
- * @param {Array<Array<Object>>} pathHexes - The extracted path data
+ * @param {PathHexArray} pathHexes - The extracted path data
  */
 export function drawDebugPath(pathHexes) {
     if (!canvas.lancerDebugPath) {

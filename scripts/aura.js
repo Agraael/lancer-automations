@@ -2,6 +2,8 @@
  * Wrapper for Grid-Aware Auras to support lambda function callbacks within Lancer Automations.
  * This utilizes libWrapper to intercept macro execution calls dynamically without modifying the original GAA codebase.
  */
+import { hasReactionAvailable } from "./misc-tools.js";
+
 export class LAAuras {
     /** Session cache of compiled aura macro callbacks, keyed on serialized source string. */
     static callbackCache = new Map();
@@ -65,12 +67,12 @@ export class LAAuras {
             LAAuras.init();
         }
 
-        let configToPass = deepClone(auraConfig);
+        let configToPass = foundry.utils.deepClone(auraConfig);
 
         const tokenDoc = owner.document ?? owner;
         if (tokenDoc?.actor) {
             const actor = tokenDoc.actor;
-            const hasReaction = actor.system?.action_tracker?.reaction ?? 0;
+            const hasReaction = hasReactionAvailable(actor);
             const tokenFactionsApi = game.modules.get("token-factions")?.api;
 
             let resolvedColor = "#ffffff";
@@ -151,7 +153,7 @@ export class LAAuras {
      * @returns {object|null} The aura configuration object, or null if not found.
      */
     static findAura(actorOrToken, auraName) {
-        const actor = actorOrToken?.actor || actorOrToken;
+        const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
         const auras = actor?.getFlag('grid-aware-auras', 'auras');
         if (!auras)
             return null;

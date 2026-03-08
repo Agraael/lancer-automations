@@ -144,9 +144,10 @@ export function isItemAvailable(item, reactionPath) {
     return true;
 }
 
-export function hasReactionAvailable(token) {
-    const reaction = token.actor?.system?.action_tracker?.reaction;
-    return reaction !== undefined && reaction > 0;
+export function hasReactionAvailable(tokenOrActor) {
+    const actor = tokenOrActor?.actor || tokenOrActor;
+    const reaction = actor?.system?.action_tracker?.reaction;
+    return reaction !== undefined && Number(reaction) > 0;
 }
 
 /**
@@ -169,7 +170,7 @@ export async function addItemTag(item, tagData) {
         currentTags.push(tagData); // Add new
     }
 
-    return item.update({ "system.tags": currentTags });
+    return item.update(/** @type {any} */ ({ system: { tags: currentTags } }));
 }
 
 /**
@@ -187,11 +188,20 @@ export async function removeItemTag(item, tagId) {
 
     // Only update if something was actually removed
     if (newTags.length !== currentTags.length) {
-        return item.update({ "system.tags": newTags });
+        return item.update(/** @type {any} */ ({ system: { tags: newTags } }));
     }
     return item;
 }
 
+/**
+ * Execute a Lancer stat roll (hull, agi, sys, eng, grit) via StatRollFlow.
+ * @param {Actor} actor - The rolling actor.
+ * @param {string} stat - Stat key: "hull", "agi", "sys", "eng", or "grit".
+ * @param {string} title - Chat card title (defaults to "<STAT> Check" or "<STAT> Save").
+ * @param {number|"token"|Token|TokenDocument} [target=10] - Difficulty value, "token" to let the user pick, or a Token/TokenDocument to auto-derive difficulty from.
+ * @param {{ targetStat?: string, [key: string]: any }} [extraData={}] - Extra state passed to the flow. `targetStat` overrides which stat is read from a mech target.
+ * @returns {Promise<{ completed: boolean, [key: string]: any }>}
+ */
 export async function executeStatRoll(actor, stat, title, target = 10, extraData = {}) {
     const StatRollFlow = game.lancer.flows.get("StatRollFlow");
     if (!StatRollFlow) {
@@ -270,7 +280,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     flow.state.data.chooseToken = chooseTokenInFlow;
 
     if (restExtraData && typeof restExtraData === 'object') {
-        globalThis.mergeObject(flow.state.data, restExtraData);
+        foundry.utils.mergeObject(flow.state.data, restExtraData);
     }
 
     const completed = await flow.begin();
@@ -329,10 +339,10 @@ export async function executeDamageRoll(attacker, targets, damageValue, damageTy
         bonus_damage: options.bonus_damage || []
     };
 
-    globalThis.mergeObject(flowData, options);
+    foundry.utils.mergeObject(flowData, options);
     const flow = new DamageRollFlow(actor.uuid, flowData);
     if (extraData && typeof extraData === 'object') {
-        globalThis.mergeObject(flow.state.data, extraData);
+        foundry.utils.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -345,7 +355,7 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new BasicAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        globalThis.mergeObject(flow.state.data, extraData);
+        foundry.utils.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -358,7 +368,7 @@ export async function executeTechAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new TechAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        globalThis.mergeObject(flow.state.data, extraData);
+        foundry.utils.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -497,6 +507,7 @@ export async function executeReactorExplosion(token) {
     ]);
 
     new Sequence()
+        // @ts-ignore
         .effect("modules/lancer-weapon-fx/sprites/jetlancer_explosion_white_bg.png")
         .fadeIn(100)
         .duration(6000)
@@ -532,7 +543,7 @@ export async function executeReactorExplosion(token) {
         .atLocation({ x: tokenCenterX, y: tokenCenterY })
         .scale(scaleFactor)
         .thenDo(async () => {
-            await canvas.scene.createEmbeddedDocuments("AmbientLight", [{
+            await canvas.scene.createEmbeddedDocuments("AmbientLight", /** @type {any[]} */ ([{
                 x: tokenCenterX,
                 y: tokenCenterY,
                 config: {
@@ -541,7 +552,7 @@ export async function executeReactorExplosion(token) {
                     bright: 5 * scaleFactor,
                     animation: { type: "pulse" },
                 },
-            }]);
+            }]));
         })
         .effect("modules/lancer-weapon-fx/sprites/scorch_mark_hires.png")
         .atLocation({ x: tokenCenterX, y: tokenCenterY })
@@ -579,7 +590,7 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
     // }
 
     if (extraData && typeof extraData === 'object') {
-        globalThis.mergeObject(flow.state.data, extraData);
+        foundry.utils.mergeObject(flow.state.data, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -702,7 +713,7 @@ export async function openItemBrowserDialog() {
                 const listContainer = html.find('#item-list');
 
                 const updateList = () => {
-                    const query = searchInput.val().toLowerCase().trim();
+                    const query = (String)(searchInput.val()).toLowerCase().trim();
                     const type = typeFilter.val();
                     const showAll = showAllCb.is(':checked');
 
@@ -752,7 +763,7 @@ export async function openItemBrowserDialog() {
                     ev.preventDefault();
                     const uuid = $(ev.currentTarget).data('uuid');
                     if (uuid) {
-                        const item = await fromUuid(uuid);
+                        const item = /** @type {Item} */ (await fromUuid(uuid));
                         if (item)
                             item.sheet.render(true);
                     }
@@ -779,6 +790,25 @@ export async function openItemBrowserDialog() {
     });
 }
 
+/**
+ * Update actor system data on a token, routing through the GM via socket if the current user is not the owner.
+ * @param {Token} token
+ * @param {object} data - Update data, e.g. { 'system.burn': 0 }
+ * @returns {Promise<void>}
+ */
+export async function updateTokenSystem(token, data) {
+    if (!token?.actor)
+        return;
+    if (token.actor.isOwner) {
+        await token.actor.update(data);
+    } else {
+        game.socket.emit('module.lancer-automations', {
+            action: 'updateActorSystem',
+            payload: { actorId: token.actor.id, data }
+        });
+    }
+}
+
 export const MiscAPI = {
     executeStatRoll,
     executeDamageRoll,
@@ -789,5 +819,6 @@ export const MiscAPI = {
     executeReactorExplosion,
     addItemTag,
     removeItemTag,
-    findItemByLid
+    findItemByLid,
+    updateTokenSystem
 };
