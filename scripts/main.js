@@ -275,7 +275,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         if (typeof reaction.evaluate === 'function') {
             const result = reaction.evaluate(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
-                console.warn(`lancer-automations | evaluate for "${reactionName}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
+                console.warn(`lancer-automations | evaluate for "${reactionName}" is async. Async evaluate functions run asynchronously and cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck. Consider making it synchronous.`);
                 result.then(val => { /* fire-and-forget async evaluate */ });
                 shouldTrigger = false;
             } else {
@@ -285,7 +285,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
             const result = evalFunc(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
-                console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancel().`);
+                console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck.`);
                 shouldTrigger = false;
             } else {
                 shouldTrigger = result;
@@ -439,7 +439,7 @@ async function checkReactions(triggerType, data) {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
                             const result = evalFunc(triggerType, enrichedData, token, item, activationName, api);
                             if (result instanceof Promise) {
-                                console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancel().`);
+                                console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck.`);
                                 shouldTrigger = false;
                             } else {
                                 shouldTrigger = result;
@@ -676,6 +676,12 @@ function passesBuiltInFilters(consumption, triggerType, data) {
     }
     if (consumption.checkBelow !== undefined && consumption.checkBelow !== null) {
         if ((data.total || 0) > consumption.checkBelow)
+            return false;
+    }
+    if (consumption.statusId) {
+        const triggerStatusId = data.statusId || data.effect?.statuses?.first() || data.effect?.name;
+        const allowedIds = consumption.statusId.split(',').map(s => s.trim()).filter(Boolean);
+        if (!allowedIds.includes(triggerStatusId))
             return false;
     }
     return true;
@@ -1149,7 +1155,18 @@ async function handleSocketEvent({ action, payload }) {
     } else if (action === 'choiceCardGMRequest') {
         if (!game.user.isGM)
             return;
-        showGMControlledChoiceCard(payload);
+        let gmTrace = null;
+        if (payload.traceData) {
+            const { tokenId, endPos, newEndPos } = payload.traceData;
+            const traceToken = canvas.tokens.get(tokenId);
+            if (traceToken)
+                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+        }
+        await showGMControlledChoiceCard(payload);
+        if (gmTrace?.parent)
+            gmTrace.parent.removeChild(gmTrace);
+        if (gmTrace)
+            gmTrace.destroy();
     } else if (action === 'choiceCardGMResponse') {
         if (payload.requestingUserId !== game.userId)
             return;
@@ -1649,17 +1666,84 @@ async function onCheckStep(state) {
 }
 
 async function onInitCheckStep(state) {
+    if (state.data?._ignoredCancel)
+        return true;
+
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const statName = state.data?.title || 'Unknown';
     state.data.targetVal = state.data.targetVal ? state.data.targetVal : 10;
 
+    let cancelCheckTriggered = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    const cancelCheck = (reasonText = "This check has been canceled.", title = "CHECK CANCELED", showCard = true, gmControl = true) => {
+        cancelCheckTriggered = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This check has been canceled.");
+
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    {
+                        text: "Cancel",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            const flowClass = game.lancer?.flows?.get?.(state.name);
+                            if (flowClass) {
+                                let newFlow;
+                                if (state.name === "StatRollFlow") {
+                                    newFlow = new flowClass(state.actor, state.data);
+                                } else {
+                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                                    return;
+                                }
+                                if (newFlow.state) {
+                                    newFlow.state.data._ignoredCancel = true;
+                                    await newFlow.begin();
+                                }
+                            }
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
     await handleTrigger('onInitCheck', {
         triggeringToken: token,
         statName,
         checkAgainstToken: state.data.targetToken,
-        targetVal: state.data.targetVal
+        targetVal: state.data.targetVal,
+        cancelCheck
     });
+
+    if (cancelCheckTriggered) {
+        if (cancelCardPromise)
+            await cancelCardPromise;
+        return false;
+    }
 
     if (token) {
         state.actor = token.actor;
@@ -1668,6 +1752,9 @@ async function onInitCheckStep(state) {
 }
 
 async function onInitAttackStep(state) {
+    if (state.data?._ignoredCancel)
+        return true;
+
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1686,14 +1773,80 @@ async function onInitAttackStep(state) {
         stateData: state.data
     };
 
+    let cancelAttackTriggered = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    const cancelAttack = (reasonText = "This attack has been canceled.", title = "ATTACK CANCELED", showCard = true, gmControl = true) => {
+        cancelAttackTriggered = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This attack has been canceled.");
+
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    {
+                        text: "Cancel",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            const flowClass = game.lancer?.flows?.get?.(state.name);
+                            if (flowClass) {
+                                let newFlow;
+                                if (state.name === "WeaponAttackFlow") {
+                                    newFlow = new flowClass(state.item, state.data);
+                                } else if (state.name === "BasicAttackFlow") {
+                                    newFlow = new flowClass(state.item || state.actor, state.data);
+                                } else {
+                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                                    return;
+                                }
+                                if (newFlow.state) {
+                                    newFlow.state.data._ignoredCancel = true;
+                                    await newFlow.begin();
+                                }
+                            }
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
     await handleTrigger('onInitAttack', {
         triggeringToken: token,
         weapon,
         targets,
         actionName: actionData.title,
         tags: actionData.tags,
-        actionData
+        actionData,
+        cancelAttack
     });
+
+    if (cancelAttackTriggered) {
+        if (cancelCardPromise)
+            await cancelCardPromise;
+        return false;
+    }
 
     if (token) {
         state.actor = token.actor;
@@ -1702,6 +1855,9 @@ async function onInitAttackStep(state) {
 }
 
 async function onInitTechAttackStep(state) {
+    if (state.data?._ignoredCancel)
+        return true;
+
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1720,6 +1876,63 @@ async function onInitTechAttackStep(state) {
         stateData: state.data
     };
 
+    let cancelTechAttackTriggered = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    const cancelTechAttack = (reasonText = "This tech attack has been canceled.", title = "TECH ATTACK CANCELED", showCard = true, gmControl = true) => {
+        cancelTechAttackTriggered = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This tech attack has been canceled.");
+
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    {
+                        text: "Cancel",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            const flowClass = game.lancer?.flows?.get?.(state.name);
+                            if (flowClass) {
+                                let newFlow;
+                                if (state.name === "TechAttackFlow") {
+                                    newFlow = new flowClass(state.item, state.data);
+                                } else {
+                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                                    return;
+                                }
+                                if (newFlow.state) {
+                                    newFlow.state.data._ignoredCancel = true;
+                                    await newFlow.begin();
+                                }
+                            }
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
     await handleTrigger('onInitTechAttack', {
         triggeringToken: token,
         techItem,
@@ -1727,8 +1940,15 @@ async function onInitTechAttackStep(state) {
         actionName: actionData.title,
         isInvade: actionData.isInvade,
         tags: actionData.tags,
-        actionData
+        actionData,
+        cancelTechAttack
     });
+
+    if (cancelTechAttackTriggered) {
+        if (cancelCardPromise)
+            await cancelCardPromise;
+        return false;
+    }
 
     if (token) {
         state.actor = token.actor;
@@ -1786,6 +2006,125 @@ async function onActivationStep(state) {
     if (token) {
         state.actor = token.actor;
     }
+    return true;
+}
+
+async function onInitActivationStep(state) {
+    if (state.data?._ignoredCancel)
+        return true;
+
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const item = state.item;
+
+    let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
+    const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
+
+    const tags = state.data?.tags || item?.system?.tags || [];
+    if (Array.isArray(tags)) {
+        const tagMap = {
+            "tg_quick_action": "Quick",
+            "tg_full_action": "Full",
+            "tg_reaction": "Reaction",
+            "tg_protocol": "Protocol",
+            "tg_free_action": "Free"
+        };
+        for (const tag of tags) {
+            if (tag.lid && tagMap[tag.lid]) {
+                actionType = tagMap[tag.lid];
+                break;
+            }
+        }
+    }
+
+    const actionData = {
+        type: "action",
+        title: state.data?.title || actionName,
+        action: state.data?.action || { name: actionName, activation: actionType },
+        detail: state.data?.detail || state.data?.effect || item?.system?.effect || "",
+        tags: tags,
+        stateData: state.data
+    };
+
+    let cancelActivation = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    // Synchronous — sets the cancel flag immediately so it works when called from non-async evaluate functions.
+    const cancelAction = (reasonText = "This activation has been canceled.", title = "ACTIVATION CANCELED", showCard = true, gmControl = true) => {
+        cancelActivation = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+
+        // Yield one microtask so concurrent cancelAction calls can collect reasons before rendering.
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This activation has been canceled.");
+
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    {
+                        text: "Cancel",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            const flowClass = game.lancer?.flows?.get?.(state.name);
+                            if (flowClass) {
+                                let newFlow;
+                                if (state.name === "SimpleActivationFlow") {
+                                    newFlow = new flowClass(state.actor.uuid, state.data);
+                                } else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name)) {
+                                    newFlow = new flowClass(state.item, state.data);
+                                } else {
+                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                                    return;
+                                }
+                                if (newFlow.state) {
+                                    newFlow.state.data._ignoredCancel = true;
+                                    await newFlow.begin();
+                                }
+                            }
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
+    // Called WITHOUT await — only synchronous evaluate functions work correctly with cancelAction.
+    handleTrigger('onInitActivation', {
+        triggeringToken: token,
+        actionType,
+        actionName,
+        item,
+        actionData,
+        cancelAction
+    });
+
+    if (cancelActivation) {
+        if (cancelCardPromise)
+            await cancelCardPromise;
+        return false;
+    }
+
+    if (token)
+        state.actor = token.actor;
     return true;
 }
 
@@ -2027,6 +2366,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onTechHitMiss', onTechHitMissStep);
     flowSteps.set('lancer-automations:onCheck', onCheckStep);
     flowSteps.set('lancer-automations:onActivation', onActivationStep);
+    flowSteps.set('lancer-automations:onInitActivation', onInitActivationStep);
     flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
     flowSteps.set('lancer-automations:onInitAttack', onInitAttackStep);
     flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
@@ -2052,9 +2392,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
 
     // Insert onInitAttack/TechAttack steps
-    flows.get('BasicAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepAttack', 'lancer-automations:onInitAttack');
-    flows.get('WeaponAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepWeaponAttack', 'lancer-automations:onInitAttack');
-    flows.get('TechAttackFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepTechAttack', 'lancer-automations:onInitTechAttack');
+    flows.get('BasicAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:onInitAttack');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:onInitAttack');
+    flows.get('TechAttackFlow')?.insertStepAfter('initTechAttackData', 'lancer-automations:onInitTechAttack');
 
     // Insert targeting step BEFORE HUD
     flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:statRollTargetSelect');
@@ -2091,6 +2431,14 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
     flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onActivation');
     flows.get('CoreActiveFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
+
+    // Insert onInitActivation before resource consumption (applySelfHeat) in flows that consume resources.
+    // For TalentFlow and SimpleActivationFlow there is no consumption step, so insert before the print step.
+    flows.get('ActivationFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
+    flows.get('CoreActiveFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
+    flows.get('SystemFlow')?.insertStepAfter('initSystemUseData', 'lancer-automations:onInitActivation');
+    flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onInitActivation');
+    flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onInitActivation');
 
 }
 
@@ -2408,20 +2756,29 @@ function registerBuiltinStartup(entry) {
 }
 
 async function syncBuiltinStartups() {
-    const scripts = ReactionManager.getStartupScripts();
-    let changed = false;
+    ReactionManager.builtinStartups = [];
+    let persistentScripts = ReactionManager.getStartupScripts();
+    let persistentChanged = false;
+
     for (const entry of builtinStartups) {
+        // Remove from persistent if it exists (legacy cleanup)
+        const persistentIdx = persistentScripts.findIndex(s => s.id === entry.id);
+        if (persistentIdx !== -1) {
+            persistentScripts.splice(persistentIdx, 1);
+            persistentChanged = true;
+        }
+
         const settingEnabled = entry.settingKey
             ? (game.settings.get(ReactionManager.ID, entry.settingKey) ?? true)
             : true;
+
         if (!settingEnabled)
             continue;
-        if (scripts.some(s => s.id === entry.id))
-            continue;
+
         try {
             const response = await fetch(`/modules/lancer-automations/${entry.filePath}`);
             const code = await response.text();
-            scripts.push({
+            ReactionManager.builtinStartups.push({
                 id: entry.id,
                 name: entry.name,
                 description: entry.description,
@@ -2429,23 +2786,26 @@ async function syncBuiltinStartups() {
                 code,
                 builtin: true
             });
-            changed = true;
             console.log(`lancer-automations | Registered built-in startup: ${entry.name}`);
         } catch (e) {
             console.error(`lancer-automations | Failed to load built-in startup "${entry.name}":`, e);
         }
     }
-    if (changed)
-        await ReactionManager.saveStartupScripts(scripts);
+
+    if (persistentChanged) {
+        await ReactionManager.saveStartupScripts(persistentScripts);
+    }
 }
 
 function runStartupScripts(api) {
-    const scripts = ReactionManager.getStartupScripts();
-    for (const script of scripts) {
+    const userScripts = ReactionManager.getStartupScripts();
+    const allScripts = [...ReactionManager.builtinStartups, ...userScripts];
+
+    for (const script of allScripts) {
         if (!script.enabled)
             continue;
         try {
-            const fn = stringToAsyncFunction(script.code, ['api']);
+            const fn = stringToAsyncFunction(script.code, ['api'], script.name);
             fn(api);
         } catch (e) {
             console.error(`lancer-automations | Startup script "${script.name}" failed:`, e);
@@ -2679,6 +3039,8 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
 });
 
 Hooks.on('createCombatant', async (combatant, options, userId) => {
+    if (game.user.id !== userId)
+        return;
     const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
     if (!token)
         return;
@@ -2686,6 +3048,8 @@ Hooks.on('createCombatant', async (combatant, options, userId) => {
 });
 
 Hooks.on('deleteCombatant', async (combatant, options, userId) => {
+    if (game.user.id !== userId)
+        return;
     const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
     if (!token)
         return;
@@ -2693,6 +3057,8 @@ Hooks.on('deleteCombatant', async (combatant, options, userId) => {
 });
 
 Hooks.on('deleteCombat', async (combat, options, userId) => {
+    if (game.user.id !== userId)
+        return;
     for (const combatant of combat.combatants) {
         const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
         if (!token)
@@ -2706,64 +3072,172 @@ Hooks.on('updateCombat', async (combat, change, options, userId) => {
     // Reserved for future use.
 });
 
-Hooks.on('createActiveEffect', async (effect, options, userId) => {
+Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
+    // skipPreStatusHooks: re-creation from immunity "Allow" path — bypass all pre-checks
+    if (options?.skipPreStatusHooks)
+        return true;
+
+    const actor = effect.parent;
+    if (!actor)
+        return true;
+
+    const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
+    const statusId = effect.statuses?.first() || effect.name;
+    if (!statusId)
+        return true;
+
+    // Immunity check — block before the effect is ever created
+    const effectData = effect.toObject();
+    const immunitySources = checkEffectImmunities(actor, statusId, effect);
+    if (immunitySources.length > 0) {
+        (async () => {
+            await Promise.resolve();
+            await startChoiceCard({
+                title: "ACTIVATE IMMUNITY?",
+                description: `<b>${actor.name}</b> affected by <b>${statusId}</b>.<hr>Immunity from: <i>${immunitySources.join(", ")}</i>. Activate?`,
+                icon: "mdi mdi-shield",
+                mode: "or",
+                choices: [
+                    {
+                        text: "Yes (Resist Effect)",
+                        icon: "fas fa-check",
+                        callback: async () => {
+                            ui.notifications.info(`${actor.name} resisted ${statusId}`);
+                        }
+                    },
+                    {
+                        text: "No (Allow Effect)",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { skipPreStatusHooks: true });
+                        }
+                    }
+                ]
+            });
+        })().catch(() => {});
+        return false;
+    }
+
+    let cancelChange = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    const cancelChangeFn = (reasonText = "This status change has been blocked.", title = "STATUS BLOCKED", showCard = true, gmControl = true) => {
+        cancelChange = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This status change has been blocked.");
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    { text: "Confirm",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore (Allow Effect)",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { skipPreStatusHooks: true });
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
+    handleTrigger('onPreStatusApplied', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
+
+    if (cancelChange) {
+        if (cancelCardPromise)
+            cancelCardPromise.catch(() => {});
+        return false;
+    }
+});
+
+Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
+    if (options?.skipPreStatusHooks)
+        return true;
+
     const actor = effect.parent;
     if (!actor)
         return;
 
-    // De-duplicate execution: only the active user who matches the actor's owner should run the interactive prompt
-    let isResponsible = false;
-    if (actor.hasPlayerOwner) {
-        const activeOwners = game.users.filter(u => u.active && !u.isGM && actor.testUserPermission(u, "OWNER"));
-        isResponsible = activeOwners.length > 0 ? activeOwners[0].id === game.user.id : game.user.isGM;
-    } else {
-        const activeGMs = game.users.filter(u => u.active && u.isGM);
-        if (activeGMs.length === 0) {
-            isResponsible = true; // Fallback if no GM
-        } else {
-            isResponsible = activeGMs[0].id === game.user.id;
-        }
+    const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
+    const statusId = effect.statuses?.first() || effect.name;
+    if (!statusId)
+        return;
+
+    let cancelChange = false;
+    let cancelCardPending = false;
+    let cancelCardPromise = null;
+    const cancelledReasons = [];
+
+    const cancelChangeFn = (reasonText = "This status removal has been blocked.", title = "REMOVAL BLOCKED", showCard = true, gmControl = true) => {
+        cancelChange = true;
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (cancelCardPending)
+            return;
+        cancelCardPending = true;
+        cancelCardPromise = (async () => {
+            await Promise.resolve();
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? "This status removal has been blocked.");
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                gmControl,
+                choices: [
+                    { text: "Confirm",
+                        icon: "fas fa-check",
+                        callback: async () => {}
+                    },
+                    {
+                        text: "Ignore (Delete Effect)",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            effect.delete({ skipPreStatusHooks: true });
+                        }
+                    }
+                ]
+            });
+        })();
+    };
+
+    handleTrigger('onPreStatusRemoved', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
+
+    if (cancelChange) {
+        if (cancelCardPromise)
+            cancelCardPromise.catch(() => {});
+        return false;
     }
+});
+
+Hooks.on('createActiveEffect', async (effect, _options, _userId) => {
+    const actor = effect.parent;
+    if (!actor)
+        return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
-
-    const immunitySources = checkEffectImmunities(actor, statusId, effect);
-    if (immunitySources.length > 0) {
-        if (isResponsible) {
-            const api = game.modules.get('lancer-automations')?.api;
-            if (api?.startChoiceCard) {
-                await api.startChoiceCard({
-                    title: "ACTIVATE IMMUNITY?",
-                    description: `<b>${actor.name}</b> affected by <b>${statusId}</b>.<hr>Immunity from: <i>${immunitySources.join(", ")}</i>. Activate?`,
-                    icon: "mdi mdi-shield",
-                    mode: "or",
-                    choices: [
-                        {
-                            text: "Yes (Resist Effect)",
-                            icon: "fas fa-check",
-                            callback: async () => {
-                                ui.notifications.info(`${actor.name} resisted ${statusId}`);
-                                await effect.delete();
-                            }
-                        },
-                        {
-                            text: "No (Allow Effect)",
-                            icon: "fas fa-times",
-                            callback: async () => {
-                                await handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
-                            }
-                        }
-                    ]
-                });
-            } else {
-                // Fallback to old behavior if API not ready
-                ui.notifications.info(`${actor.name} resisted ${statusId} (${immunitySources.join(", ")})`);
-                await effect.delete();
-            }
-        }
-        return;
-    }
 
     await handleTrigger('onStatusApplied', { triggeringToken: token, statusId, effect });
 });
@@ -3014,7 +3488,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         let cancelCardPending = false;
         const cancelledReasons = [];
 
-        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, gmControl = false) => {
+        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, gmControl = true) => {
             // Always cancel the movement immediately (idempotent).
             triggerData.cancel();
             cancelRulerDrag(token, moveInfo);
@@ -3046,6 +3520,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 title: "MOVEMENT CANCELED",
                 description,
                 gmControl,
+                traceData: gmControl ? { tokenId: token.id, endPos, newEndPos: null } : null,
                 choices: [
                     { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
                     { text: "Ignore",
@@ -3065,7 +3540,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             trace.destroy();
         };
 
-        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, gmControl = false) => {
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, gmControl = true) => {
             const executeChange = () => {
                 setTimeout(() => {
                     const updateData = { x: position.x, y: position.y };
@@ -3089,6 +3564,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     title: "MOVEMENT REROUTED",
                     description: reasonText,
                     gmControl,
+                    traceData: gmControl ? { tokenId: token.id, endPos, newEndPos: position } : null,
                     choices: [
                         { text: "Confirm",
                             icon: "fas fa-check",

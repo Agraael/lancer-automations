@@ -73,7 +73,7 @@ export class LAAuras {
             const hasReaction = actor.system?.action_tracker?.reaction ?? 0;
             const tokenFactionsApi = game.modules.get("token-factions")?.api;
 
-            let resolvedColor = "#000000";
+            let resolvedColor = "#ffffff";
             if (tokenFactionsApi && hasReaction) {
                 const color = await tokenFactionsApi.retrieveBorderFactionsColorFromToken(tokenDoc.name);
                 if (color)
@@ -91,18 +91,22 @@ export class LAAuras {
                 unified: true,
                 name: "lancer-automations-aura",
                 enabled: true,
+                animation: true,
+                animationType: "scroll",
+                animationSpeed: 0.1,
+                animationInvert: true,
                 fillAnimation: true,
                 fillAnimationSpeed: 0.15,
-                lineType: 1,
-                lineWidth: 3,
+                lineType: 2,
+                lineWidth: 2,
                 lineOpacity: 1,
-                lineDashSize: 15,
-                lineGapSize: 15,
+                lineDashSize: 5,
+                lineGapSize: 5,
                 fillType: 2,
                 fillOpacity: 0.15,
                 fillTextureOffset: { x: 0, y: 0 },
                 fillTextureScale: { x: 50, y: 50 },
-                lineColor: resolvedColor,
+                lineColor: "#ffffff",
                 fillColor: resolvedColor,
                 fillTexture: fillTexture,
                 ownerVisibility: {
@@ -137,9 +141,7 @@ export class LAAuras {
         const gaa = game.modules.get("grid-aware-auras");
         if (!gaa?.api?.deleteAuras)
             return [];
-        const deletedAuras = await gaa.api.deleteAuras(owner, filter, options);
-
-        return deletedAuras;
+        return await gaa.api.deleteAuras(owner, filter, options);
     }
 
     /**

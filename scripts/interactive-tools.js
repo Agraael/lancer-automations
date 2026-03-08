@@ -2025,7 +2025,8 @@ export function startChoiceCard(options = {}) {
         description = "",
         icon,
         headerClass = "",
-        gmControl = false
+        gmControl = false,
+        traceData = null
     } = options;
 
     if (gmControl && !game.user.isGM) {
@@ -2069,7 +2070,8 @@ export function startChoiceCard(options = {}) {
                     icon,
                     headerClass,
                     mode,
-                    choices: choices.map(c => ({ text: c.text, icon: c.icon }))
+                    choices: choices.map(c => ({ text: c.text, icon: c.icon })),
+                    traceData
                 }
             });
         }), _title);

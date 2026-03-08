@@ -25,10 +25,10 @@ export function stringToFunction(str, args = [], reaction = null) {
         fn = new Function(...args, trimmed);
     }
     if (fn.constructor.name === 'AsyncFunction') {
-        const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove'];
+        const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck'];
         const foundKeywords = blockingKeywords.filter(k => trimmed.includes(k));
 
-        const sensitiveTriggers = ['onPreMove', 'onInitAttack', 'onInitCheck'];
+        const sensitiveTriggers = ['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved'];
         const foundTriggers = reaction?.triggers?.filter(t => sensitiveTriggers.includes(t)) || [];
 
         const isForceSync = reaction?.forceSynchronous;
@@ -49,19 +49,24 @@ export function stringToFunction(str, args = [], reaction = null) {
     return fn;
 }
 
-export function stringToAsyncFunction(str, args = []) {
+export function stringToAsyncFunction(str, args = [], name = "lancer-automations-dynamic-script") {
     const trimmed = str.trim();
-    const cacheKey = `async|${trimmed}|${args.join(',')}`;
+    const cacheKey = `async|${trimmed}|${args.join(',')}|${name}`;
     if (scriptCache.has(cacheKey)) {
         return scriptCache.get(cacheKey);
     }
 
+    // Sanitize name for sourceURL (no spaces, alphanumeric/dashes)
+    const sanitizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const sourcePath = `modules/lancer-automations/dynamic/${sanitizedName}.js`;
+    const codeWithSourceURL = trimmed + `\n\n//# sourceURL=${sourcePath}`;
+
     let fn;
     if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
-        fn = eval(`(${trimmed})`);
+        fn = eval(`(${codeWithSourceURL})`);
     } else {
         const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
-        fn = new AsyncFunction(...args, trimmed);
+        fn = new AsyncFunction(...args, codeWithSourceURL);
     }
     scriptCache.set(cacheKey, fn);
     return fn;
@@ -87,6 +92,8 @@ export class ReactionManager {
     static get SETTING_STARTUP_SCRIPTS() {
         return "startupScripts";
     }
+
+    static builtinStartups = [];
 
     static initialize() {
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {
@@ -475,7 +482,7 @@ export class ReactionConfig extends FormApplication {
                     name: displayName,
                     subname: displaySubname,
                     reactionPath: reaction.reactionPath,
-                    triggers: reaction.triggers.join(", "),
+                    triggers: [...(reaction.triggers || []), ...(reaction.onInit ? ["onInit"] : [])].join(", "),
                     isCustom: true,
                     isGeneral: false,
                     reactionIndex: index,
@@ -539,7 +546,7 @@ export class ReactionConfig extends FormApplication {
                     name: displayName,
                     subname: displaySubname,
                     reactionPath: reaction.reactionPath,
-                    triggers: reaction.triggers.join(", "),
+                    triggers: [...(reaction.triggers || []), ...(reaction.onInit ? ["onInit"] : [])].join(", "),
                     isGeneral: false,
                     isDefault: true,
                     isOverridden: isOverridden,
@@ -586,7 +593,7 @@ export class ReactionConfig extends FormApplication {
             allReactions.push(startEnabled({
                 name: name,
                 lid: null,
-                triggers: reaction.triggers?.join(", ") || "",
+                triggers: [...(reaction.triggers || []), ...(reaction.onInit ? ["onInit"] : [])].join(", "),
                 isGeneral: true,
                 isCustom: true,
                 onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
@@ -606,7 +613,7 @@ export class ReactionConfig extends FormApplication {
                     return startEnabled({
                         name: name,
                         lid: null,
-                        triggers: subReaction.triggers?.join(", ") || "",
+                        triggers: [...(subReaction.triggers || []), ...(subReaction.onInit ? ["onInit"] : [])].join(", "),
                         isGeneral: true,
                         isDefault: true,
                         isOverridden: false,
@@ -643,7 +650,7 @@ export class ReactionConfig extends FormApplication {
                 defaultList.push(startEnabled({
                     name: name,
                     lid: null,
-                    triggers: reaction.triggers?.join(", ") || "",
+                    triggers: [...(reaction.triggers || []), ...(reaction.onInit ? ["onInit"] : [])].join(", "),
                     isGeneral: true,
                     isDefault: true,
                     isOverridden: isOverridden,
@@ -724,6 +731,12 @@ export class ReactionConfig extends FormApplication {
         }
         const allTriggers = [...allTriggerSet].sort();
 
+        const userScripts = ReactionManager.getStartupScripts();
+        const startupScripts = [
+            ...ReactionManager.builtinStartups.map(s => ({ ...s, builtin: true })),
+            ...userScripts
+        ];
+
         return {
             allReactions: allReactions,
             unfiledReactions: unfiledReactions,
@@ -731,7 +744,7 @@ export class ReactionConfig extends FormApplication {
             defaultReactions: defaultList,
             defaultFolders: defaultFolders,
             allTriggers: allTriggers,
-            startupScripts: ReactionManager.getStartupScripts()
+            startupScripts: startupScripts
         };
     }
 
@@ -1471,10 +1484,12 @@ export class ReactionEditor extends FormApplication {
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger }",
-            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(), changeTriggeredMove(pos, extraData), distanceToTrigger }",
+            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(reasonText, showCard, gmControl), changeTriggeredMove(pos, extraData), distanceToTrigger }",
             onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger }",
             onTurnStart: "{ triggeringToken, distanceToTrigger }",
             onTurnEnd: "{ triggeringToken, distanceToTrigger }",
+            onPreStatusApplied: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }",
+            onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onStructure: "{ triggeringToken, remainingStructure, rollResult, distanceToTrigger }",
@@ -1485,9 +1500,10 @@ export class ReactionEditor extends FormApplication {
             onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, distanceToTrigger }",
-            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, distanceToTrigger }",
-            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, distanceToTrigger }",
-            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
+            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, gmControl), distanceToTrigger }",
+            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, gmControl), distanceToTrigger }",
+            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, gmControl), distanceToTrigger }",
+            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, gmControl) }",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger, endActivation }",
             onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
@@ -1577,7 +1593,7 @@ export class ReactionEditor extends FormApplication {
 
         const sourceMatchTriggers = [
             'onAttack', 'onHit', 'onMiss', 'onDamage',
-            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation',
+            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
             'onInitAttack', 'onInitTechAttack', 'onKnockback', 'onDeploy'
         ];
 
@@ -2210,8 +2226,9 @@ export class ReactionEditor extends FormApplication {
             "onPreMove", "onMove", "onKnockback",
             "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
             "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
-            "onActivation", "onDeploy",
+            "onInitActivation", "onActivation", "onDeploy",
             "onInitCheck", "onCheck",
+            "onPreStatusApplied", "onPreStatusRemoved",
             "onStatusApplied", "onStatusRemoved",
             "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
             "onStructure", "onStress", "onDestroyed", "onUpdate"

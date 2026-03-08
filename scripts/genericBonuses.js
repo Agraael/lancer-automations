@@ -1647,9 +1647,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                         stack: bonusData.uses || 1
                     },
                     note: `Linked to Global Bonus: ${bonusData.name}`,
-                    duration: durationObj,
-                    useTokenAsOrigin: false,
-                    customOriginId: options.origin?.id || options.origin || token.id
+                    duration: { ...durationObj, overrideTurnOriginId: options.origin?.id || options.origin || token.id },
                 },
                 extraOptions
             );

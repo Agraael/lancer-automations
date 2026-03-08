@@ -21,6 +21,75 @@ export async function openItemBrowser(targetInput) {
     return result?.lid ?? null;
 }
 
+/**
+ * Open a status picker dialog and populate targetInput with the selected status ID.
+ * Shows all CONFIG.statusEffects plus custom statuses from temporary-custom-statuses if present.
+ * @param {jQuery} targetInput
+ */
+function openStatusPicker(targetInput) {
+    const statuses = [...(CONFIG.statusEffects || [])];
+
+    const customApi = game.modules.get('temporary-custom-statuses')?.api;
+    if (customApi && typeof customApi.getStatuses === 'function') {
+        const customs = customApi.getStatuses() || [];
+        for (const cs of customs) {
+            if (!statuses.some(s => s.id === cs.id))
+                statuses.push(cs);
+        }
+    }
+
+    const currentVal = targetInput ? targetInput.val() || '' : '';
+    const alreadySelected = new Set(currentVal.split(',').map(s => s.trim()).filter(Boolean));
+
+    const gridHtml = statuses.map(s => {
+        const icon = s.img || s.icon || '';
+        const id = s.id || s.name || '';
+        const label = s.name ? (typeof s.name === 'string' && s.name.startsWith('lancer') ? game.i18n.localize(s.name) : s.name) : id;
+        const isSelected = alreadySelected.has(id);
+        return `<div class="lancer-status-entry${isSelected ? ' selected' : ''}" data-id="${id}" title="${label}"
+            style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? '#991e2a' : 'transparent'};">
+            <div style="width:40px;height:40px;background:#1a1a1a;border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                <img src="${icon}" width="32" height="32" style="object-fit:contain;">
+            </div>
+            <span style="font-size:0.6em;text-align:center;word-break:break-all;margin-top:2px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</span>
+        </div>`;
+    }).join('');
+
+    const dialog = new Dialog({
+        title: 'Pick Status',
+        content: `
+            <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                <h1 class="lancer-dialog-title">PICK STATUS</h1>
+                <p class="lancer-dialog-subtitle">Click to toggle. Multiple can be selected.</p>
+            </div>
+            <div style="max-height:300px;overflow-y:auto;padding:4px;">
+                <div style="display:flex;flex-wrap:wrap;">${gridHtml}</div>
+            </div>
+        `,
+        buttons: {
+            confirm: {
+                label: '<i class="fas fa-check"></i> Confirm',
+                callback: (html) => {
+                    const selected = html.find('.lancer-status-entry.selected').map(function () {
+                        return $(this).data('id');
+                    }).get();
+                    if (targetInput)
+                        targetInput.val(selected.join(', '));
+                }
+            },
+            cancel: { label: '<i class="fas fa-times"></i> Cancel', callback: () => {} }
+        },
+        render: (html) => {
+            html.find('.lancer-status-entry').on('click', function () {
+                $(this).toggleClass('selected');
+                $(this).css('border-color', $(this).hasClass('selected') ? '#991e2a' : 'transparent');
+            });
+        },
+        default: "confirm"
+    }, { width: 420, classes: ["lancer-dialog-base", "lancer-no-title"] });
+    dialog.render(true);
+}
+
 const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="">None</option>
     <option value="onAttack">On Attack</option>
@@ -31,6 +100,7 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onTechHit">On Tech Hit</option>
     <option value="onMove">On Move</option>
     <option value="onPreMove">On Pre Move</option>
+    <option value="onInitActivation">On Init Activation</option>
     <option value="onActivation">On Activation</option>
     <option value="onDeploy">On Deploy</option>
     <option value="onCheck">On Check</option>
@@ -40,6 +110,10 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onTurnEnd">On Turn End</option>
     <option value="onEnterCombat">On Enter Combat</option>
     <option value="onExitCombat">On Exit Combat</option>
+    <option value="onPreStatusApplied">On Pre Status Applied</option>
+    <option value="onPreStatusRemoved">On Pre Status Removed</option>
+    <option value="onStatusApplied">On Status Applied</option>
+    <option value="onStatusRemoved">On Status Removed</option>
 `;
 
 const CONSUMPTION_FILTER_MAP = {
@@ -51,9 +125,14 @@ const CONSUMPTION_FILTER_MAP = {
     onTechHit: ['cfilter-itemLid', 'cfilter-itemId'],
     onMove: ['cfilter-boost'],
     onPreMove: ['cfilter-boost'],
+    onInitActivation: ['cfilter-actionName'],
     onActivation: ['cfilter-actionName'],
     onDeploy: ['cfilter-itemLid', 'cfilter-itemId'],
-    onCheck: ['cfilter-check']
+    onCheck: ['cfilter-check'],
+    onPreStatusApplied: ['cfilter-statusId'],
+    onPreStatusRemoved: ['cfilter-statusId'],
+    onStatusApplied: ['cfilter-statusId'],
+    onStatusRemoved: ['cfilter-statusId']
 };
 
 /**
@@ -100,6 +179,13 @@ function triggerFieldsHtml(prefix, tokensHtml) {
             <div class="form-group cfilter-check" style="display:none;">
                 <label>Check:</label>
                 <input type="text" id="${prefix}-filter-checkType" placeholder="hull" style="width:50%;">
+            </div>
+            <div class="form-group cfilter-statusId" style="display:none;">
+                <label data-tooltip="Only consume when one of these statuses is applied or removed (comma-separated).">Status:</label>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <input type="text" id="${prefix}-filter-statusId" placeholder="e.g. lockon, shredded" style="flex:1;">
+                    <button type="button" class="status-picker-btn" data-target="${prefix}-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
+                </div>
             </div>
         </div>
     `;
@@ -197,6 +283,12 @@ function setupTriggerUI(html, prefix) {
         }, { width: 500, classes: ["lancer-dialog-base", "lancer-no-title"] });
         pickerDialog.render(true);
     });
+
+    html.find(`#${prefix}-trigger-fields .status-picker-btn`).on('click', function (e) {
+        e.preventDefault();
+        const targetId = $(this).data('target');
+        openStatusPicker(html.find(`#${targetId}`));
+    });
 }
 
 /**
@@ -229,6 +321,9 @@ function getTriggerConfig(html, prefix) {
     const checkType = html.find(`#${prefix}-filter-checkType`).val()?.trim();
     if (checkType)
         consumption.checkType = checkType;
+    const statusId = html.find(`#${prefix}-filter-statusId`).val()?.trim();
+    if (statusId)
+        consumption.statusId = statusId;
     return consumption;
 }
 
@@ -409,6 +504,9 @@ export async function executeEffectManager(options = {}) {
         value: "onPreMove",
         label: "On Pre Move"
     }, {
+        value: "onInitActivation",
+        label: "On Init Activation"
+    }, {
         value: "onActivation",
         label: "On Activation"
     },
@@ -441,6 +539,18 @@ export async function executeEffectManager(options = {}) {
     {
         value: "onExitCombat",
         label: "On Exit Combat"
+    }, {
+        value: "onPreStatusApplied",
+        label: "On Pre Status Applied"
+    }, {
+        value: "onPreStatusRemoved",
+        label: "On Pre Status Removed"
+    }, {
+        value: "onStatusApplied",
+        label: "On Status Applied"
+    }, {
+        value: "onStatusRemoved",
+        label: "On Status Removed"
     }
     ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
@@ -709,6 +819,13 @@ export async function executeEffectManager(options = {}) {
                 <div class="form-group bonus-filter-actionName" style="display:none;">
                     <label data-tooltip="Only consume a charge when this specific action is activated.">Consume on action:</label>
                     <input type="text" id="bonus-filter-actionName" placeholder="e.g. Stabilize">
+                </div>
+                <div class="form-group bonus-filter-statusId" style="display:none;">
+                    <label data-tooltip="Only consume when one of these statuses is applied or removed (comma-separated).">Status:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-filter-statusId" placeholder="e.g. lockon, shredded" style="flex:1;">
+                        <button type="button" class="bonus-status-picker-btn" data-target="bonus-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
+                    </div>
                 </div>
                 <div class="form-group bonus-filter-boost" style="display:none;">
                     <label><input type="checkbox" id="bonus-filter-isBoost"> Boost only</label>
@@ -1055,9 +1172,7 @@ export async function executeEffectManager(options = {}) {
                         tokens: [token],
                         effectNames: effectName,
                         note: note,
-                        duration: duration,
-                        useTokenAsOrigin: false,
-                        customOriginId: originID
+                        duration: { ...duration, overrideTurnOriginId: originID },
                     }, extraOptions);
                     ui.notifications.info(`Applied ${effectName} to ${token.name}.`);
                     setTimeout(updateManageTabCount, 200);
@@ -1116,9 +1231,7 @@ export async function executeEffectManager(options = {}) {
                         tokens: [token],
                         effectNames: effectData,
                         note: note,
-                        duration: duration,
-                        useTokenAsOrigin: false,
-                        customOriginId: originID
+                        duration: { ...duration, overrideTurnOriginId: originID },
                     }, extraOptions);
                     ui.notifications.info(`Applied ${name} to ${token.name}.`);
                     setTimeout(updateManageTabCount, 200);
@@ -1213,7 +1326,7 @@ export async function executeEffectManager(options = {}) {
                     const item = $(`
                         <div class="te-effect-item">
                             <div class="te-effect-info">
-                                <img src="${e.img}" width="24" height="24" style="border:none;">
+                                <img src="${e.img}" width="24" height="24" style="border:none; background:#1a1a1a; border-radius:3px; padding:1px; object-fit:contain;">
                                 <span>${e.name}</span>
                                 <span style="font-size:0.8em; opacity:0.7">(${durText})</span>
                                 ${consumptionText}
@@ -1349,9 +1462,14 @@ export async function executeEffectManager(options = {}) {
                 onTechHit: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
                 onMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onPreMove: ['bonus-filter-boost', 'bonus-filter-distance'],
+                onInitActivation: ['bonus-filter-actionName'],
                 onActivation: ['bonus-filter-actionName'],
                 onDeploy: ['bonus-filter-itemLid', 'bonus-filter-itemId'],
-                onCheck: ['bonus-filter-check', 'bonus-filter-checkValues']
+                onCheck: ['bonus-filter-check', 'bonus-filter-checkValues'],
+                onPreStatusApplied: ['bonus-filter-statusId'],
+                onPreStatusRemoved: ['bonus-filter-statusId'],
+                onStatusApplied: ['bonus-filter-statusId'],
+                onStatusRemoved: ['bonus-filter-statusId']
             };
 
             html.find('#bonus-trigger').on('change', function () {
@@ -1483,6 +1601,13 @@ export async function executeEffectManager(options = {}) {
                 dialog.render(true);
             });
 
+            // Status picker button for bonus consumption filter
+            html.find('.bonus-status-picker-btn').on('click', function (e) {
+                e.preventDefault();
+                const targetId = $(this).data('target');
+                openStatusPicker(html.find(`#${targetId}`));
+            });
+
             // Add bonus handler
             const addBonusFromTab = async (type) => {
                 const targetID = html.find('#bonus-target').val();
@@ -1604,6 +1729,9 @@ export async function executeEffectManager(options = {}) {
                     const filterCheckBelow = html.find('#bonus-filter-checkBelow').val();
                     if (filterCheckBelow)
                         consumption.checkBelow = parseInt(filterCheckBelow);
+                    const filterStatusId = html.find('#bonus-filter-statusId').val()?.trim();
+                    if (filterStatusId)
+                        consumption.statusId = filterStatusId;
                     addOptions.consumption = consumption;
                 }
 

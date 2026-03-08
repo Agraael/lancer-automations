@@ -87,8 +87,7 @@ const suppressArcherReaction = {
                             "impaired"
                         ],
                         note: "Suppressed by Archer",
-                        duration: { label: 'end', turns: 1, rounds: 0 },
-                        useTokenAsOrigin: false,
+                        duration: { label: 'end', turns: 1, rounds: 0, overrideTurnOriginId: reactorToken.id },
                     }, {
                         suppressSourceId: reactorToken.id,
                         suppressSourceName: reactorToken.name
@@ -206,8 +205,7 @@ const sealantGunReaction = {
                     tokens: [target],
                     effectNames: ["slowed"],
                     note: "Sealant Gun (Allied)",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                    useTokenAsOrigin: true
+                    duration: { label: 'end', turns: 1, rounds: 0 }
                 });
             } else {
                 // Hostile/Neutral Path: Save, Apply Slowed on fail, Always Place Zone
@@ -218,7 +216,6 @@ const sealantGunReaction = {
                         effectNames: ["slowed"],
                         note: "Sealant Gun (Hostile)",
                         duration: { label: 'end', turns: 1, rounds: 0 },
-                        useTokenAsOrigin: true
                     });
                 }
                 // Burst 1 centered on target
@@ -532,7 +529,12 @@ async function teardownDefenseNet(reactorToken, item, api, forced = false) {
             await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reactorToken.id);
         }
 
-        await api.deleteAuras(reactorToken, { name: 'Defense Net' });
+        const deletedAuras = await api.deleteAuras(reactorToken, { name: 'Defense Net' });
+        if (deletedAuras.length && game.modules.get('sequencer')?.active) {
+            for (const aura of deletedAuras) {
+                Sequencer.EffectManager.endEffects({ origin: aura.id });
+            }
+        }
 
         if (forced)
             await api.endItemActivation(item, reactorToken);
@@ -620,6 +622,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
             triggerSelf: true,
             triggerOther: false,
             autoActivate: true,
+            outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -632,11 +635,24 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                     { tokens: [reactorToken], effectNames: ['immobilized'], duration: { label: 'unlimited' } },
                     { defenseNetSource: reactorToken.id }
                 );
-                await api.createAura(reactorToken, {
+                const aura = await api.createAura(reactorToken, {
                     name: 'Defense Net',
                     radius,
                     macros: [{ function: buildDefenseNetAuraCallback() }]
                 });
+
+                if (aura && game.modules.get('sequencer')?.active) {
+                    const tokenSize = reactorToken.document.width;
+                    const diameter = (radius + 0.33 + tokenSize) * 2 * (canvas.grid.size || 100);
+                    new Sequence()
+                        .effect()
+                        .file("jb2a.shield.03.loop.white")
+                        .attachTo(reactorToken)
+                        .size(diameter)
+                        .persist()
+                        .origin(aura.id)
+                        .play();
+                }
             }
         },
         {
@@ -644,6 +660,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
             triggerSelf: true,
             triggerOther: false,
             autoActivate: true,
+            outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -664,6 +681,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                 triggerSelf: true,
                 triggerOther: false,
                 autoActivate: true,
+                outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -681,6 +699,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                 triggerSelf: false,
                 triggerOther: true,
                 autoActivate: true,
+                outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -990,8 +1009,7 @@ api.registerDefaultItemReactions({
                             tokens: [reactorToken],
                             effectNames: ["cover_soft"],
                             note: "Fast Vehicle Boost",
-                            duration: { label: 'start', turns: 1, rounds: 0 },
-                            useTokenAsOrigin: true
+                            duration: { label: 'start', turns: 1, rounds: 0 }
                         });
                     }
                 }
@@ -1090,7 +1108,6 @@ api.registerDefaultItemReactions({
                             effectNames: ["lancer.statusIconsNames.impaired"],
                             note: "Remote Machine Gun",
                             duration: { label: 'end', turns: 1, rounds: 0 },
-                            useTokenAsOrigin: true,
                             checkEffectCallback: (token, effect) => {
                                 const lancerAutomations = game.modules.get('lancer-automations');
                                 return !!lancerAutomations?.api?.findFlaggedEffectOnToken(token, e =>
@@ -1213,9 +1230,7 @@ api.registerDefaultItemReactions({
                     tokens: [target],
                     effectNames: resistances,
                     note: `Dispersal Shield (${charges} charges)`,
-                    duration: { label: 'indefinite', turns: null, rounds: null },
-                    useTokenAsOrigin: false,
-                    customOriginId: reactorToken.id
+                    duration: { label: 'indefinite', turns: null, rounds: null, overrideTurnOriginId: reactorToken.id },
                 }, {
                     stack: charges,
                     consumption: {
@@ -1470,5 +1485,117 @@ api.registerDefaultItemReactions({
     "npcf_restock_drone_support": restockDroneSupportReaction,
     "npc-rebake_npcf_restock_drone_support": restockDroneSupportReaction,
     "npcf_veterancy_veteran": veterancyVeteranReaction,
-    "npc-rebake_npcf_veterancy_veteran": veterancyVeteranReaction
+    "npc-rebake_npcf_veterancy_veteran": veterancyVeteranReaction,
+    "npcf_marker_rifle_scout": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            // Reaction 1: on hit, apply LockOn (with marker source tracking) + Shredded (consumes when lockon removed)
+            {
+                triggers: ["onHit"],
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: true,
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const targets = triggerData.targets?.map(t => t.target).filter(Boolean) || [];
+                    for (const target of targets) {
+                        // LockOn with marker source identity so we can identify it later
+                        await api.applyEffectsToTokens(
+                            { tokens: [target], effectNames: ["lockon"] },
+                            { markerRifleSource: reactorToken.id }
+                        );
+                        // Shredded that auto-consumes when lockon is removed from that token
+                        await api.applyEffectsToTokens(
+                            { tokens: [target], effectNames: ["shredded"] },
+                            { consumption: { trigger: "onStatusRemoved", statusId: "lockon" } }
+                        );
+                    }
+                }
+            },
+            // Reaction 2: cancel "Hide" for any token bearing this marker rifle's lockon (passive, no reaction cost)
+            {
+                triggers: ["onInitActivation"],
+                triggerSelf: false,
+                triggerOther: true,
+                outOfCombat: false,
+                autoActivate: true,
+                forceSynchronous: true,
+                consumesReaction: false,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    if (triggerData.actionName !== 'Hide')
+                        return false;
+                    const token = triggerData.triggeringToken;
+                    if (!token?.actor)
+                        return false;
+                    const hasMarkerLockOn = token.actor.effects.some(e =>
+                        (e.statuses?.first() === 'lockon' || e.name?.toLowerCase().includes('lockon')) &&
+                        e.flags?.['lancer-automations']?.markerRifleSource === reactorToken.id
+                    );
+                    if (hasMarkerLockOn)
+                        triggerData.cancelAction("This unit is Marked — it cannot Hide while under Marker Rifle lock.");
+                    return hasMarkerLockOn;
+                },
+                activationCode: async function () { /* cancelAction already called synchronously in evaluate */ }
+            },
+            // Reaction 3: block stealth/invisible statuses being applied while this marker rifle's lockon is present
+            {
+                triggers: ["onPreStatusApplied"],
+                triggerSelf: false,
+                triggerOther: true,
+                outOfCombat: false,
+                autoActivate: true,
+                forceSynchronous: true,
+                consumesReaction: false,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken) {
+                    const stealthStatuses = ['invisible', 'hidden', 'stealth'];
+                    if (!stealthStatuses.includes(triggerData.statusId))
+                        return false;
+                    const token = triggerData.triggeringToken;
+                    if (!token?.actor)
+                        return false;
+                    const hasMarkerLockOn = token.actor.effects.some(e =>
+                        (e.statuses?.first() === 'lockon' || e.name?.toLowerCase().includes('lockon')) &&
+                        e.flags?.['lancer-automations']?.markerRifleSource === reactorToken.id
+                    );
+                    if (hasMarkerLockOn)
+                        triggerData.cancelChange("This unit is Marked — it cannot become invisible while under Marker Rifle lock.");
+                    return hasMarkerLockOn;
+                },
+                activationCode: async function () { /* cancelChange already called synchronously in evaluate */ }
+            }
+        ]
+    },
+    "npc-rebake_npcf_marker_rifle_scout": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onHit"],
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                triggerData.targets.forEach(target => {
+                    api.applyFlaggedEffectToTokens({
+                        tokens: [target],
+                        effectNames: ["lockon"],
+                    });
+                    api.applyFlaggedEffectToTokens({
+                        tokens: [target],
+                        effectNames: ["shredded"],
+                        duration: { label: 'end', turns: 1, rounds: 0 }
+                    });
+                });
+            }
+        }]
+    }
 });

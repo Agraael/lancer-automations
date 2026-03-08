@@ -31,7 +31,7 @@
     <div class="form-group general-only"
         style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onInitAttack, onInitTechAttack, onKnockback) will work in this mode."
+            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onInitAttack, onInitTechAttack, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
@@ -95,7 +95,7 @@
     <div class="form-group item-only"
         style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onActivation, onKnockback) will work in this mode."
+            title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
@@ -178,7 +178,7 @@
 
                     <!-- Force Synchronous (only when Auto Activate is checked) -->
                     <label class="checkbox force-sync-option"
-                        title="Run activation code synchronously. Required for cancel() in onPreMove and ensures bonuses like Accuracy are applied before rolls begin."
+                        title="Run activation code synchronously. Required for cancelAction/cancelAttack/cancelTechAttack/cancelCheck in their respective onInit triggers, and cancelTriggeredMove in onPreMove. Also ensures bonuses like Accuracy are applied before rolls begin."
                         {{#unless autoActivate}}style="display:none" {{/unless}}>
                         <input type="checkbox" name="forceSynchronous" {{#if forceSynchronous}}checked{{/if}}>
                         <span>Force Sync</span>
@@ -303,7 +303,8 @@
         <p class="notes">Name of the macro to execute.</p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
             <strong>Available arguments:</strong> <code>triggerType</code>, <code>triggerData</code>,
-            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>, <code>api</code>
+            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
+            <code>api</code>
         </p>
     </div>
 
@@ -318,7 +319,8 @@
         <p class="notes">JavaScript code to execute.</p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
             <strong>Available variables:</strong> <code>triggerType</code>, <code>triggerData</code>,
-            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>, <code>api</code>
+            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
+            <code>api</code>
         </p>
     </div>
 
@@ -334,7 +336,8 @@
             Useful for applying passive effects or setting up initial state.
         </p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>token</code>, <code>item</code> (null for general), <code>api</code>
+            <strong>Available variables:</strong> <code>token</code>, <code>item</code> (null for general),
+            <code>api</code>
         </p>
     </div>
 

@@ -544,8 +544,7 @@ export async function updateAllEngagements() {
             await api.applyEffectsToTokens({
                 tokens: [token],
                 effectNames: ["lancer.statusIconsNames.engaged"],
-                notify: false,
-                useTokenAsOrigin: false
+                notify: false
             });
         } else if (!needsStatus && hasStatus) {
             await api.removeEffectsByNameFromTokens({

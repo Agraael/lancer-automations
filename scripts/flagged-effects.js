@@ -99,16 +99,16 @@ async function dispatchNotifications() {
 }
 
 export function pushEffect(targetID, effect, duration, note, originID) {
-    if (game.users.filter(x => x.role === 4 && x.active).length < 1) {
+    const target = canvas.tokens.get(targetID);
+    const canActDirectly = game.user.isGM || target?.document?.isOwner;
+    if (!canActDirectly && game.users.filter(x => x.role === 4 && x.active).length < 1) {
         log('There is no active GM.');
         return ui.notifications.error('There must be an active GM for this to work.');
     }
-    if (game.user.isGM) {
-        // You are a GM, let's just set it.
+    if (canActDirectly) {
         log(`Local setFlaggedEffect ${effect}`);
         setEffect(targetID, effect, duration, note, originID);
     } else {
-        // You are a user, ask a GM to do it.
         log(`Pushing setFlaggedEffect ${effect}`);
         game.socket.emit('module.lancer-automations', { action: "setEffect", payload: { targetID, effect, duration, note, originID } });
     }
@@ -447,9 +447,8 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
  * @param {Array} options.tokens - Array of tokens to apply effect to
  * @param {Array<string>|string} options.effectNames - Effect name(s) to apply (single string or array)
  * @param {string} options.note - Note/description for the effect
- * @param {Object} options.duration - Duration object { label: 'end', turns: 1, rounds: 0 }
- * @param {boolean} [options.useTokenAsOrigin=true] - If true, uses targetID as originID in payload
- * @param {string} [options.customOriginId] - Optional custom origin ID (ignored if useTokenAsOrigin is true)
+ * @param {Object} options.duration - Duration object { label: 'end', turns: 1, rounds: 0, overrideTurnOriginId: null }
+ * @param {string} [options.duration.overrideTurnOriginId] - When set, ties duration tracking to this token ID instead of the target's turn
  * @param {Function} [options.checkEffectCallback] - Optional custom function to check if effect already exists
  * @param {Object} [options.notify] - Optional notification options
  * @returns {Array} Array of valid tokens that received the effect(s)
@@ -460,8 +459,6 @@ export async function applyEffectsToTokens(options = {notify: true}, extraOption
         effectNames,
         note,
         duration = {},
-        useTokenAsOrigin = true,
-        customOriginId = null,
         checkEffectCallback = null
     } = options;
 
@@ -550,7 +547,7 @@ export async function applyEffectsToTokens(options = {notify: true}, extraOption
                     !existingEffect.flags?.['lancer-automations']?.effect &&
                     !existingEffect.flags?.['temporary-custom-statuses']?.originalName &&
                     !existingEffect.flags?.['csm-lancer-qol']?.effect &&
-                    (duration?.label || customOriginId)) {
+                    (duration?.label || duration?.overrideTurnOriginId)) {
                     existingEffect = null;
                 }
 
@@ -586,7 +583,7 @@ export async function applyEffectsToTokens(options = {notify: true}, extraOption
         validTokens.push(token);
 
         const tokenID = token.id;
-        const originID = useTokenAsOrigin ? token.id : (customOriginId || token.id);
+        const originID = duration?.overrideTurnOriginId ?? token.id;
 
         // Calculate duration - if it's currently the origin's turn, adjust turns to avoid immediate expiration
         let adjustedDuration = { ...duration };
@@ -595,12 +592,13 @@ export async function applyEffectsToTokens(options = {notify: true}, extraOption
         }
 
         // Apply
+        const canApplyDirectly = game.user.isGM || token.document?.isOwner;
         for (const effect of effectsToApplyToToken) {
-            if (game.user.isGM) {
-                // GM applies directly
+            if (canApplyDirectly) {
+                // GM or owner applies directly
                 setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
             } else {
-                // Non-GM uses socket
+                // Non-owner uses socket
                 game.socket.emit('module.lancer-automations', {
                     action: "setEffect",
                     payload: { targetID: tokenID, effect: effect, duration: adjustedDuration, note, originID, extraOptions }
@@ -680,7 +678,7 @@ export async function removeEffectsByNameFromTokens(options = {notify: true}) {
                 icon = existing?.img || existing?.icon || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
-            if (game.user.isGM) {
+            if (game.user.isGM || token.document?.isOwner) {
                 removeEffectsByName(tokenID, effectNameVal, originId, extraFlags);
             } else {
                 game.socket.emit('module.lancer-automations', {
@@ -1178,8 +1176,8 @@ export function getAllEffects(target) {
 export function deleteEffect(token, effect) {
     const tokenID = token?.id ?? token;
     const effectID = effect?.id ?? effect;
-    if (game.user.isGM) {
-        const target = canvas.tokens.get(tokenID);
+    const target = canvas.tokens.get(tokenID);
+    if (game.user.isGM || target?.document?.isOwner) {
         if (target?.actor) {
             target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
         }

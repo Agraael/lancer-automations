@@ -94,7 +94,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
 
 #### Attack Triggers
 - **`onInitAttack`**: Fires when an attack is initiated (before Attack HUD).
-    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData }`
+    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, gmControl) }`
 - **`onAttack`**: Fires when an attack roll is made.
     - Data: `{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData }`
 - **`onHit`**: Fires when an attack hits.
@@ -119,7 +119,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
     ```
 
 #### Tech Triggers
-- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData }`
+- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, gmControl) }`
 - **`onTechAttack`**: Tech roll made. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData }`
 - **`onTechHit`**: `{ triggeringToken, techItem, targets: Array<{target, roll, crit}>, ... }`
 - **`onTechMiss`**: `{ triggeringToken, techItem, targets: Array<{target, roll}>, ... }`
@@ -187,6 +187,8 @@ Fires *before* movement is finalized. Allows interception.
 - **`onEnterCombat`** / **`onExitCombat`**: `{ triggeringToken }`. Fires when a token is added to or removed from the combat tracker.
 
 #### Status Effect Triggers
+- **`onPreStatusApplied`**: Before a status is applied. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
+- **`onPreStatusRemoved`**: Before a status is removed. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
 - **`onStatusApplied`** / **`onStatusRemoved`**: `{ triggeringToken, statusId, effect }`.
 
 #### Damage & Structure Triggers
@@ -199,8 +201,9 @@ Fires *before* movement is finalized. Allows interception.
 - **`onClearHeat`**: `{ triggeringToken, heatCleared, currentHeat }`.
 
 #### Stat & Activation Triggers
-- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal }`.
+- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, gmControl) }`.
 - **`onCheck`**: Result. `{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal }`.
+- **`onInitActivation`**: Before item/action activates (before resource use). `{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
 - **`onActivation`**: Item/Action fired. `{ triggeringToken, actionType, actionName, item, actionData, endActivation }`.
 - **`onUpdate`**: **WARNING**: Generic document update (High frequency).
 
@@ -228,7 +231,7 @@ Code to run when a token is created on the scene.
 {
     triggers: ["onMove"],        // Array of trigger names
     enabled: true,               // Master toggle
-    forceSynchronous: false,     // Wait for resolution (required for onPreMove intercepts)
+    forceSynchronous: false,     // Wait for resolution (required for onPreMove, onInitActivation, onInitAttack, onInitTechAttack, onInitCheck intercepts)
     triggerDescription: "",      // Header text for the reaction card
     effectDescription: "",       // Body text for the reaction card
     actionType: "Reaction",      // Reaction, Free Action, Quick, Full, Protocol, Other
@@ -336,9 +339,7 @@ Code to run when a token is created on the scene.
 | `tokens` | `Array<Token>`| *required* | Targets |
 | `effectNames`| `string\|Array`| *required* | "prone" or `{ name, icon, isCustom }` |
 | `note` | `string` | `undefined` | Flavor note |
-| `duration` | `Object` | `undefined` | `{ label, turns, rounds }` |
-| `useTokenAsOrigin`| `boolean`| `true`| Use target as duration origin |
-| `customOriginId`| `string`| `null`| Override origin ID |
+| `duration` | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` — when `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | `checkEffectCallback`| `fn`| `null`| Duplicate check predicate |
 | `notify` | `bool\|obj`| `true`| Unified notification config |
 

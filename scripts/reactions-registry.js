@@ -107,8 +107,7 @@ export function getDefaultGeneralReactionRegistry() {
                         tokens: [reactorToken],
                         effectNames: "brace",
                         note: "brace",
-                        duration: { label: 'end', turns: 1, rounds: 0 },
-                        useTokenAsOrigin: true
+                        duration: { label: 'end', turns: 1, rounds: 0 }
                     });
 
                     if (!validTokens || validTokens.length === 0)
@@ -166,8 +165,7 @@ export function getDefaultGeneralReactionRegistry() {
                             await api.applyEffectsToTokens({
                                 tokens: [reactorToken],
                                 effectNames: laggingStatus.id,
-                                duration: { label: 'start', turns: 1, rounds: 0 },
-                                useTokenAsOrigin: true
+                                duration: { label: 'start', turns: 1, rounds: 0 }
                             });
                         }
                     }
@@ -243,8 +241,7 @@ export function getDefaultGeneralReactionRegistry() {
                 await api.applyEffectsToTokens({
                     tokens: targets,
                     effectNames: ["lockon"],
-                    note: "Lock On",
-                    useTokenAsOrigin: true
+                    note: "Lock On"
                 });
 
                 const targetsWithLockOn = targets.filter(target =>
@@ -301,8 +298,7 @@ export function getDefaultGeneralReactionRegistry() {
                         tokens: targets,
                         effectNames: "lancer.statusIconsNames.bolster",
                         note: "Bolster",
-                        duration: { label: 'end', turns: 1, rounds: 0 },
-                        useTokenAsOrigin: true
+                        duration: { label: 'end', turns: 1, rounds: 0 }
                     });
 
                     if (!validTargets || validTargets.length === 0)
@@ -388,8 +384,7 @@ export function getDefaultGeneralReactionRegistry() {
                 await api.applyEffectsToTokens({
                     tokens: targetTokens,
                     effectNames: effects,
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                    useTokenAsOrigin: true
+                    duration: { label: 'end', turns: 1, rounds: 0 }
                 });
             }
         },
@@ -442,8 +437,7 @@ export function getDefaultGeneralReactionRegistry() {
                         tokens: targetTokens,
                         effectNames: ["prone"],
                         note: "Ram by " + reactorToken.name,
-                        duration: { label: 'end', turns: 1, rounds: 0 },
-                        customOriginId: reactorToken.id
+                        duration: { label: 'end', turns: 1, rounds: 0, overrideTurnOriginId: reactorToken.id },
                     });
                 }
             }]
@@ -632,8 +626,7 @@ export function getDefaultGeneralReactionRegistry() {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["Disengage"],
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                    useTokenAsOrigin: true
+                    duration: { label: 'end', turns: 1, rounds: 0 }
                 });
             }
         },
@@ -661,8 +654,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "lancer.statusIconsNames.reactor_meltdown",
-                        duration: { label: 'end', turns: selectedTurns, rounds: 0 },
-                        useTokenAsOrigin: true,
+                        duration: { label: 'end', turns: selectedTurns, rounds: 0 }
                     });
                     if (validTokens.length > 0)
                         ui.notifications.warn(`⚠️ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
@@ -752,8 +744,7 @@ export function getDefaultGeneralReactionRegistry() {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ['lancer.statusIconsNames.impaired'],
-                    note: 'Eject',
-                    useTokenAsOrigin: true
+                    note: 'Eject'
                 });
 
                 ui.notifications.info(`${pilotActor.name} has ejected from ${mechActor.name}!`);

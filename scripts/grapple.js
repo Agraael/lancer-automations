@@ -79,7 +79,6 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
             tokens: [grappledToken],
             effectNames: ['lancer.statusIconsNames.immobilized'],
             note: 'Grapple',
-            customOriginId: state.grapplerIds[0]
         }, { grappleSource: true });
         await api.removeEffectsByNameFromTokens({ tokens: grapplerTokens, effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
     } else if (newImmobilizedSide === "grapplers") {
@@ -87,7 +86,6 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
             tokens: grapplerTokens,
             effectNames: ['lancer.statusIconsNames.immobilized'],
             note: 'Grapple',
-            customOriginId: grappledToken.id
         }, { grappleSource: true });
         await api.removeEffectsByNameFromTokens({ tokens: [grappledToken], effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
     }
@@ -122,7 +120,6 @@ async function establishGrapples(api, grappler, grappledTokens) {
                 tokens: [grappledToken],
                 effectNames: ['grappled'],
                 note: `Grappled by ${grappler.name}`,
-                customOriginId: grappler.id
             }, { grappleSource: true });
         }
 
@@ -130,7 +127,6 @@ async function establishGrapples(api, grappler, grappledTokens) {
             tokens: [grappler],
             effectNames: ['grappling'],
             note: `Grappling ${grappledToken.name}`,
-            customOriginId: grappledToken.id
         }, { grappleSource: true });
 
         await updateImmobilized(api, grappledToken, true);

@@ -362,8 +362,8 @@ flowchart LR
 | `onMove` | After a token finishes moving |
 | `onPreMove` | Before movement executes, can cancel or redirect |
 | `onAttack` | When an attack is initiated |
-| `onInitAttack` | At the very start of an attack flow (before the HUD) |
-| `onInitTechAttack` | At the very start of a tech attack flow |
+| `onInitAttack` | At the very start of an attack flow (before the HUD), can cancel |
+| `onInitTechAttack` | At the very start of a tech attack flow, can cancel |
 | `onHit` | After a hit is confirmed |
 | `onMiss` | After a miss is confirmed |
 | `onTechAttack` | When a tech attack is initiated |
@@ -373,12 +373,15 @@ flowchart LR
 | `onStructure` | After a structure roll |
 | `onStress` | After an overheat roll |
 | `onCheck` | After a stat check resolves (HULL, AGI, SYS, ENG) |
-| `onInitCheck` | At the very start of a stat check flow |
+| `onInitCheck` | At the very start of a stat check flow, can cancel |
+| `onInitActivation` | Before an item or action is activated (before resource use) |
 | `onActivation` | When an item or action is activated |
 | `onTurnStart` | At the start of a token's turn |
 | `onTurnEnd` | At the end of a token's turn |
 | `onEnterCombat` | When a token joins combat |
 | `onExitCombat` | When a token leaves combat |
+| `onPreStatusApplied` | Before a status is applied, can cancel |
+| `onPreStatusRemoved` | Before a status is removed, can cancel |
 | `onStatusApplied` | When a status effect is applied to a token |
 | `onStatusRemoved` | When a status effect is removed from a token |
 | `onHeat` | When a token gains heat |
@@ -492,7 +495,7 @@ By default, activating an LID-based activation prints the item card to chat and 
 
 ### Force Synchronous
 
-For `onPreMove`, `onInitAttack`, and `onInitCheck` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, or `injectBonusToNextRoll` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
+For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `injectBonusToNextRoll` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
 
 ### Movement Cancel & Redirect (onPreMove)
 
@@ -504,6 +507,24 @@ For `onPreMove`, `onInitAttack`, and `onInitCheck` triggers: any code that calls
 For example, when a token tries to move away, check if it's within an enemy's engagement range and cancel or redirect the move.
 
 ![Movement cancel example](doc/img/movement-cancel.png)
+
+### Action & Status Cancellation (onInit / onPreStatus)
+
+Several other triggers allow you to cancel an operation before it completes. Any code that uses these functions **must not be async** (use **Force Synchronous**).
+
+- `triggerData.cancelAction(reasonText?, title?, showCard?, gmControl?)`: stop an item activation or general action in `onInitActivation`
+- `triggerData.cancelAttack(reasonText?, title?, showCard?, gmControl?)`: stop an attack before the HUD appears in `onInitAttack`
+- `triggerData.cancelTechAttack(reasonText?, title?, showCard?, gmControl?)`: stop a tech attack in `onInitTechAttack`
+- `triggerData.cancelCheck(reasonText?, title?, showCard?, gmControl?)`: stop a stat check in `onInitCheck`
+- `triggerData.cancelChange(reasonText?, title?, showCard?, gmControl?)`: stop a status effect from being applied or removed in `onPreStatusApplied` / `onPreStatusRemoved`
+
+**Parameters:**
+- `reasonText`: (String) The reason why the action was blocked, shown in chat.
+- `title`: (String) The title of the choice card shown to the user.
+- `showCard`: (Boolean) If true (default), a chat card is printed explaining the cancellation.
+- `gmControl`: (Boolean) When true (by default), the "Ignore / Allow" choice card is sent to the GM instead of the current player.
+
+![Choice card Gm control](doc/img/choice-gm-control.png)
 
 ### Built-in Activations
 
@@ -677,9 +698,7 @@ Grants all-damage resistance for the next `1d3` attacks to a friendly target in 
                 tokens: [target],
                 effectNames: resistances,
                 note: `Dispersal Shield (${charges} charges)`,
-                duration: { label: 'indefinite', turns: null, rounds: null },
-                useTokenAsOrigin: false,
-                customOriginId: reactorToken.id
+                duration: { label: 'indefinite', turns: null, rounds: null, overrideTurnOriginId: reactorToken.id },
             }, {
                 stack: charges,
                 consumption: {
