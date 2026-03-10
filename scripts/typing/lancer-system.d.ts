@@ -24,7 +24,23 @@ interface LancerActorSystem {
     sensor_range: number;
     size: number;
     speed: number;
-    statuses: Record<string, boolean>;
+    statuses: {
+        dangerzone: boolean;
+        downandout: boolean;
+        engaged: boolean;
+        exposed: boolean;
+        hidden: boolean;
+        immobilized: boolean;
+        impaired: boolean;
+        invisible: boolean;
+        jammed: boolean;
+        lockon: boolean;
+        prone: boolean;
+        shredded: boolean;
+        shutdown: boolean;
+        slowed: boolean;
+        stunned: boolean;
+    };
     sys: number;
     tech_attack: number;
     action_tracker: { protocol: boolean; move: number; full: boolean; quick: boolean; reaction: boolean | number };

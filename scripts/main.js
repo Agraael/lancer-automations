@@ -2451,10 +2451,11 @@ function wrapRollReliable(flowSteps) {
 
 function wrapApplySelfHeat(flowSteps) {
     const origApplySelfHeat = flowSteps.get('applySelfHeat');
-    if (!origApplySelfHeat) return;
+    if (!origApplySelfHeat)
+        return;
 
     flowSteps.set('applySelfHeat', async function wrappedApplySelfHeat(state, options) {
-        const actor = state.actor;
+        const actor = /** @type {Actor}*/(state.actor);
         // Only intercept when there's self_heat to process
         if (!actor || !state.data?.self_heat) {
             return origApplySelfHeat(state, options);
@@ -2488,9 +2489,9 @@ function wrapApplySelfHeat(flowSteps) {
 
             const automationSettings = game.settings.get(game.system.id, "automationOptions");
             if (automationSettings?.attack_self_heat && (actor.is_mech() || actor.is_npc())) {
-                await actor.update({
+                await actor.update(/** @type {any}*/({
                     "system.heat.value": actor.system.heat.value + (state.data.overkill_heat ?? 0) + halved
-                });
+                }));
             }
 
             // Zero out both so original step applies nothing further
