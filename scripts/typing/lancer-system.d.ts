@@ -86,8 +86,6 @@ interface LancerActorSystem {
 
 /**
  * Minimal Lancer item system type declarations.
- * Single interface covering all item types — properties are optional where not universal.
- * Extend as new item types / properties are encountered.
  */
 interface LancerItemSystem {
     // ─── Universal ───────────────────────────────────────────────────────────

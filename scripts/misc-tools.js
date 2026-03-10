@@ -1,6 +1,7 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
 import { chooseToken } from "./interactive-tools.js";
+import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
 
 const STAT_PATHS = {
     HULL: "system.hull",
@@ -809,6 +810,210 @@ export async function updateTokenSystem(token, data) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Weapon / Item utility functions (bonus-aware)
+// ---------------------------------------------------------------------------
+
+const REACH_RANGE_TYPES = new Set(["Range", "Threat", "Line", "Burst", "Cone"]);
+
+/**
+ * Returns the base { tags, range } for an item, handling mech_weapon profiles.
+ * Both arrays are shallow-cloned so originals are never mutated.
+ */
+function _getItemBaseData(item) {
+    let tags, range;
+    if (item.type === "mech_weapon") {
+        const profileIdx = item.system?.selected_profile_index ?? 0;
+        const profile = item.system?.profiles?.[profileIdx];
+        tags = profile?.all_tags ?? item.system?.tags ?? [];
+        range = profile?.range ?? item.system?.range ?? [];
+    } else {
+        tags = item.system?.tags ?? [];
+        range = item.system?.range ?? [];
+    }
+    return { tags: tags.map(t => ({ ...t })), range: range.map(r => ({ ...r })) };
+}
+
+/**
+ * Resolves input (Actor | Token | Item | mixed array) to { weapons, actor }.
+ */
+function _resolveWeaponsAndActor(input) {
+    const entries = Array.isArray(input) ? input.flat() : [input];
+    const weapons = [];
+    let actor = null;
+
+    for (const entry of entries) {
+        if (!entry) {
+            continue;
+        }
+        if (entry.documentName === "Token" || entry.actor) {
+            // Token
+            const a = entry.actor;
+            if (a) {
+                actor = actor ?? a;
+                weapons.push(..._getActorWeapons(a));
+            }
+        } else if (entry.documentName === "Actor" || entry.items) {
+            // Actor
+            actor = actor ?? entry;
+            weapons.push(..._getActorWeapons(entry));
+        } else if (entry.system) {
+            // Item
+            actor = actor ?? entry.parent ?? null;
+            if (entry.type === "mech_weapon" || (entry.type === "npc_feature" && entry.system?.type === "Weapon")) {
+                weapons.push(entry);
+            }
+        }
+    }
+    return { weapons, actor };
+}
+
+function _getActorWeapons(actor) {
+    return (actor?.items ?? []).filter(i =>
+        i.type === "mech_weapon" ||
+        i.type === "pilot_weapon" ||
+        (i.type === "npc_feature" && i.system?.type === "Weapon")
+    );
+}
+
+/**
+ * Applies tag and range bonuses from actor onto the given tags/range arrays (mutates in-place).
+ */
+async function _applyItemBonuses(item, actor, tags, range) {
+    if (!actor) {
+        return;
+    }
+    const bonuses = flattenBonuses([
+        ...(actor.getFlag("lancer-automations", "global_bonuses") || []),
+        ...(actor.getFlag("lancer-automations", "constant_bonuses") || [])
+    ]);
+    const flowTags = new Set(["all", "attack"]);
+    const state = { actor, item, data: { tags, range } };
+    for (const bonus of bonuses) {
+        if (!await isBonusApplicable(bonus, flowTags, state)) {
+            continue;
+        }
+        if (bonus.type === "tag") {
+            applyTagBonus(state, bonus);
+        }
+        if (bonus.type === "range") {
+            applyRangeBonus(state, bonus);
+        }
+    }
+}
+
+/**
+ * Returns the effective tag list for a single item, with actor bonuses applied.
+ * @param {Item} item
+ * @param {Actor} [actor] - Defaults to item.parent
+ * @returns {Promise<Array>}
+ */
+export async function getItemTags_WithBonus(item, actor) {
+    if (!item) {
+        return [];
+    }
+    const a = actor ?? item.parent ?? null;
+    const { tags, range } = _getItemBaseData(item);
+    await _applyItemBonuses(item, a, tags, range);
+    return tags;
+}
+
+/**
+ * Returns the maximum range value per range type across all weapons of the input.
+ * @param {Actor|Token|Item|Array} input
+ * @returns {Promise<Object>} e.g. { Range: 25, Burst: 3 }
+ */
+export async function getMaxWeaponRanges_WithBonus(input) {
+    const { weapons, actor } = _resolveWeaponsAndActor(input);
+    const maxPerType = {};
+    for (const weapon of weapons) {
+        const { tags, range } = _getItemBaseData(weapon);
+        await _applyItemBonuses(weapon, actor, tags, range);
+        for (const r of range) {
+            const val = parseInt(r.val) || 0;
+            if (maxPerType[r.type] === undefined || val > maxPerType[r.type]) {
+                maxPerType[r.type] = val;
+            }
+        }
+    }
+    return maxPerType;
+}
+
+/**
+ * Returns the maximum threat range for an actor, accounting for active bonuses.
+ * @param {Actor} actor
+ * @returns {Promise<number>}
+ */
+export async function getActorMaxThreat(actor) {
+    if (!actor)
+        return 0;
+    const ranges = await getMaxWeaponRanges_WithBonus(actor);
+    return ranges.Threat || 1;
+}
+
+/**
+ * Returns the single maximum reach across all weapons of the input.
+ * Counts Range, Threat, Line, Burst, Cone (not Blast). Also checks tg_thrown tag.
+ * @param {Actor|Token|Item|Array} input
+ * @returns {Promise<number>}
+ */
+export async function getMaxWeaponReach_WithBonus(input) {
+    const { weapons, actor } = _resolveWeaponsAndActor(input);
+    let max = 0;
+    for (const weapon of weapons) {
+        const { tags, range } = _getItemBaseData(weapon);
+        await _applyItemBonuses(weapon, actor, tags, range);
+        for (const r of range) {
+            if (REACH_RANGE_TYPES.has(r.type)) {
+                const val = parseInt(r.val) || 0;
+                if (val > max) {
+                    max = val;
+                }
+            }
+        }
+        // Check throw tag
+        const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+        if (thrownTag) {
+            const throwVal = parseInt(thrownTag.val || thrownTag.num_val) || 0;
+            if (throwVal > max) {
+                max = throwVal;
+            }
+        }
+    }
+    return max;
+}
+
+/**
+ * Returns the weapon subtype string (e.g. "Superheavy Rifle", "Melee").
+ * Synchronous — no bonus application.
+ * @param {Item} item
+ * @returns {string}
+ */
+export function getWeaponType(item) {
+    if (!item) {
+        return "";
+    }
+    if (item.type === "mech_weapon") {
+        const profileIdx = item.system?.selected_profile_index ?? 0;
+        return item.system?.profiles?.[profileIdx]?.weapon_type ?? item.system?.weapon_type ?? "";
+    }
+    return item.system?.weapon_type ?? "";
+}
+
+/**
+ * Returns the Lancer item type string (e.g. "Weapon", "System", "mech_weapon").
+ * Prefers item.system.type (Lancer type) over item.type (Foundry type).
+ * Synchronous — no bonus application.
+ * @param {Item} item
+ * @returns {string}
+ */
+export function getItemType(item) {
+    if (!item) {
+        return "";
+    }
+    return item.system?.type || item.type || "";
+}
+
 export const MiscAPI = {
     executeStatRoll,
     executeDamageRoll,
@@ -820,5 +1025,11 @@ export const MiscAPI = {
     addItemTag,
     removeItemTag,
     findItemByLid,
-    updateTokenSystem
+    updateTokenSystem,
+    getItemTags_WithBonus,
+    getActorMaxThreat,
+    getMaxWeaponRanges_WithBonus,
+    getMaxWeaponReach_WithBonus,
+    getWeaponType,
+    getItemType
 };

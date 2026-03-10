@@ -6,7 +6,7 @@ import {
     getOccupiedOffsets, getOccupiedCenters, getMinGridDistance,
     measureGridDistance
 } from "./grid-helpers.js";
-import { hasReactionAvailable } from "./misc-tools.js";
+import { hasReactionAvailable, getActorMaxThreat } from "./misc-tools.js";
 
 export { getMinGridDistance };
 
@@ -46,7 +46,7 @@ export function isHostile(reactor, mover) {
     return (d.is1Good && d.is2Bad) || (d.is1Bad && d.is2Good);
 }
 
-export function checkOverwatchCondition(reactor, mover, startPos) {
+export async function checkOverwatchCondition(reactor, mover, startPos) {
     if (reactor.id === mover.id)
         return false;
 
@@ -68,7 +68,7 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
         }
     }
 
-    const maxThreat = getActorMaxThreat(reactor.actor);
+    const maxThreat = await getActorMaxThreat(reactor.actor);
     const distanceStart = getMinGridDistance(mover, reactor, startPos);
 
     return distanceStart <= maxThreat;
@@ -144,7 +144,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
             const hasGaaSupport = manager && manager.getTokenAuras(reactor).some(a => isThreatAura(a));
 
             if (!hasGaaSupport) {
-                const maxThreat = getActorMaxThreat(reactor.actor);
+                const maxThreat = await getActorMaxThreat(reactor.actor);
                 const distanceStart = getMinGridDistance(movedToken, reactor, startPos);
 
                 if (distanceStart <= maxThreat) {
@@ -249,46 +249,6 @@ export function displayOverwatch(reactors, target) {
     }
 }
 
-export function getActorMaxThreat(actor) {
-    if (!actor)
-        return 0;
-    const actorType = actor.type;
-    if (!["mech", "npc", "pilot"].includes(actorType))
-        return 0;
-
-    let maxThreat = 1;
-
-    const items = actor.items || [];
-    for (const item of items) {
-        if ((actorType === "mech" && item.type === "mech_weapon") ||
-            (actorType === "npc" && item.type === "npc_feature") ||
-            (actorType === "pilot" && item.type === "pilot_weapon")) {
-
-            let ranges = [];
-
-            if (item.system?.profiles) {
-                for (const profile of item.system.profiles) {
-                    if (profile.range)
-                        ranges.push(...profile.range);
-                }
-            }
-            if (item.system?.range)
-                ranges.push(...item.system.range);
-            if (item.system?.active_profile?.range)
-                ranges.push(...item.system.active_profile.range);
-
-            for (const range of ranges) {
-                if (range.type === "Threat") {
-                    const val = parseInt(range.val);
-                    if (!isNaN(val) && val > maxThreat) {
-                        maxThreat = val;
-                    }
-                }
-            }
-        }
-    }
-    return maxThreat;
-}
 
 export async function drawThreatDebug(token) {
     if (!token)
@@ -296,7 +256,7 @@ export async function drawThreatDebug(token) {
 
     canvas.controls.debug.clear();
 
-    const maxThreat = getActorMaxThreat(token.actor);
+    const maxThreat = await getActorMaxThreat(token.actor);
 
     ui.notifications.info(`Debug: Token Size ${token.document.width}x${token.document.height}, Max Threat: ${maxThreat}`);
 

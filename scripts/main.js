@@ -17,8 +17,7 @@ import {
     initCollapseHook,
 } from "./flagged-effects.js";
 import {
-    getMovementPathHexes, drawDebugPath,
-    isHexGrid, getOccupiedOffsets, drawHexAt
+    getMovementPathHexes, drawDebugPath
 } from "./grid-helpers.js";
 import {
     genericBonusStepDamage,
@@ -28,6 +27,8 @@ import {
     checkDamageResistances,
     applyDamageImmunities,
     hasCritImmunity,
+    hasHitImmunity,
+    hasMissImmunity,
     executeGenericBonusMenu,
 
     genericAccuracyStepAttack,
@@ -43,7 +44,10 @@ import {
     chooseToken, knockBackToken, applyKnockbackMoves,
     startChoiceCard, deployWeaponToken,
     revertMovement, clearMovementHistory,
-    showGMControlledChoiceCard, resolveGMChoiceCard
+    showUserIdControlledChoiceCard, resolveGMChoiceCard,
+    showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard,
+    drawMovementTrace,
+    getActiveGMId, getTokenOwnerUserId
 } from "./interactive-tools.js";
 import {
     MiscAPI,
@@ -59,6 +63,9 @@ let reactionDebounceTimer = null;
 let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
 let cachedFlatGeneralReactions = null;
+/** @type {Map<string, Array>} triggerType → filtered non-action reactions; cleared with cachedFlatGeneralReactions */
+const cachedNonActionReactionsByTrigger = new Map();
+const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd']);
 let deployableConnectionsGraphic = null;
 
 // Cache reaction items per actor; invalidated on actor/item changes
@@ -66,6 +73,7 @@ const _reactionItemsCache = new Map();
 
 Hooks.on('lancer-automations.clearCaches', () => {
     cachedFlatGeneralReactions = null;
+    cachedNonActionReactionsByTrigger.clear();
     _reactionItemsCache.clear();
 });
 
@@ -306,6 +314,8 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
 async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const reactionsPromises = [];
+    // Change 4: hoist api lookup out of the inner loop
+    const api = game.modules.get('lancer-automations').api;
 
     // Flatten general reactions: entries with a "reactions" array are expanded into individual sub-reactions
     if (!cachedFlatGeneralReactions) {
@@ -323,23 +333,30 @@ async function checkReactions(triggerType, data) {
     }
     const flatGeneralReactions = cachedFlatGeneralReactions;
 
-    const _matchActionReaction = ([name, r]) =>
-        name === data.actionName && r.onlyOnSourceMatch && r.triggers?.includes(triggerType);
-    const actionBasedReaction = data.actionName ?
-        flatGeneralReactions.find(_matchActionReaction)?.[1] ?
-            { name: data.actionName, reaction: flatGeneralReactions.find(_matchActionReaction)[1] } : null
-        : null;
-
-    const nonActionBasedReactions = [];
-    for (const [reactionName, reaction] of flatGeneralReactions) {
-        if (reaction.onlyOnSourceMatch)
-            continue;
-        if (!reaction.triggers?.includes(triggerType))
-            continue;
-        if (reaction.enabled === false)
-            continue;
-        nonActionBasedReactions.push([reactionName, reaction]);
+    // Change 3: compute actionBasedReaction with a single .find()
+    let actionBasedReaction = null;
+    if (data.actionName) {
+        const found = flatGeneralReactions.find(([name, r]) =>
+            name === data.actionName && r.onlyOnSourceMatch && r.triggers?.includes(triggerType));
+        if (found)
+            actionBasedReaction = { name: found[0], reaction: found[1] };
     }
+
+    // Change 2: cache nonActionBasedReactions per triggerType
+    if (!cachedNonActionReactionsByTrigger.has(triggerType)) {
+        const filtered = [];
+        for (const [reactionName, reaction] of flatGeneralReactions) {
+            if (reaction.onlyOnSourceMatch)
+                continue;
+            if (!reaction.triggers?.includes(triggerType))
+                continue;
+            if (reaction.enabled === false)
+                continue;
+            filtered.push([reactionName, reaction]);
+        }
+        cachedNonActionReactionsByTrigger.set(triggerType, filtered);
+    }
+    const nonActionBasedReactions = cachedNonActionReactionsByTrigger.get(triggerType);
 
     const hasValidActionBasedReaction = actionBasedReaction &&
         actionBasedReaction.reaction.enabled !== false;
@@ -347,6 +364,11 @@ async function checkReactions(triggerType, data) {
     for (const token of allTokens) {
         const isSelf = data.triggeringToken?.id === token.id;
         const isInCombat = token.inCombat;
+
+        // Change 5: compute distance and enrichedData once per token, not per item/reaction
+        const sourceToken = data.triggeringToken;
+        const distanceToTrigger = sourceToken ? getTokenDistance(token, sourceToken) : null;
+        const enrichedData = { ...data, distanceToTrigger };
 
         const items = getReactionItems(token);
         for (const item of items) {
@@ -371,8 +393,8 @@ async function checkReactions(triggerType, data) {
                         continue;
                 }
 
-                const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
-                if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
+                // Change 1: use module-level Set instead of inline array
+                if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType)) {
                     if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered — out of combat.`);
                     continue;
@@ -397,14 +419,6 @@ async function checkReactions(triggerType, data) {
                     continue;
 
                 try {
-                    const sourceToken = data.triggeringToken;
-                    let distanceToTrigger = null;
-                    if (sourceToken && token) {
-                        distanceToTrigger = getTokenDistance(token, sourceToken);
-                    }
-
-                    const enrichedData = { ...data, distanceToTrigger };
-
                     let activationName = item.name;
                     const reactionPath = reaction.reactionPath || "";
 
@@ -424,7 +438,6 @@ async function checkReactions(triggerType, data) {
                         }
                     }
 
-                    const api = game.modules.get('lancer-automations').api;
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
@@ -1155,7 +1168,7 @@ async function handleSocketEvent({ action, payload }) {
             default: "yes"
         }, { classes: ["lancer-dialog-base"], width: 450 }).render(true);
     } else if (action === 'choiceCardGMRequest') {
-        if (!game.user.isGM)
+        if (payload.targetUserId !== game.user.id)
             return;
         let gmTrace = null;
         if (payload.traceData) {
@@ -1164,15 +1177,34 @@ async function handleSocketEvent({ action, payload }) {
             if (traceToken)
                 gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
         }
-        await showGMControlledChoiceCard(payload);
+        await showUserIdControlledChoiceCard(payload);
         if (gmTrace?.parent)
             gmTrace.parent.removeChild(gmTrace);
         if (gmTrace)
             gmTrace.destroy();
-    } else if (action === 'choiceCardGMResponse') {
-        if (payload.requestingUserId !== game.userId)
+    } else if (action === 'choiceCardBroadcastRequest') {
+        if (!payload.allTargetUserIds?.includes(game.user.id))
             return;
-        resolveGMChoiceCard(payload.cardId, payload.choiceIdx);
+        let gmTrace = null;
+        if (payload.traceData) {
+            const { tokenId, endPos, newEndPos } = payload.traceData;
+            const traceToken = canvas.tokens.get(tokenId);
+            if (traceToken)
+                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+        }
+        await showMultiUserControlledChoiceCard(payload);
+        if (gmTrace?.parent)
+            gmTrace.parent.removeChild(gmTrace);
+        if (gmTrace)
+            gmTrace.destroy();
+    } else if (action === 'choiceCardBroadcastCancel') {
+        if (!payload.otherTargetUserIds?.includes(game.user.id))
+            return;
+        cancelBroadcastChoiceCard(payload.cardId, payload.responderName, payload.isCancellation);
+    } else if (action === 'choiceCardGMResponse') {
+        if (payload.requestingUserId !== game.user.id)
+            return;
+        resolveGMChoiceCard(payload.cardId, payload.choiceIdx, payload.responderName, payload.responderUserId);
     } else if (action === 'updateActorSystem') {
         if (!game.user.isGM)
             return;
@@ -1427,6 +1459,31 @@ async function onHitMissStep(state) {
             ui.notifications.info(`${targetToken.name} is immune to Critical Hits!`);
         }
 
+        const missImmunity = await hasMissImmunity(targetToken.actor, state.actor);
+        const hitImmunity = await hasHitImmunity(targetToken.actor, state.actor);
+        if (missImmunity && hitImmunity)
+            ui.notifications.info(`${targetToken.name} is immune to miss and hit - these effects cancel each other`);
+        else {
+            if (missImmunity && (hitResult?.miss || state.data?.attack_results?.[i]?.miss)) {
+                if (hitResult)
+                    hitResult.hit = true;
+                if (state.data?.attack_results?.[i])
+                    state.data.attack_results[i].hit = true;
+                ui.notifications.info(`${targetToken.name} is immune to miss - attack hits!`);
+            }
+
+            if (hitImmunity && (hitResult?.hit || state.data?.attack_results?.[i]?.hit)) {
+                if (hitResult) {
+                    hitResult.hit = false;
+                    hitResult.crit = false;
+                }
+                if (state.data?.attack_results?.[i]) {
+                    state.data.attack_results[i].hit = false;
+                    state.data.attack_results[i].crit = false;
+                }
+                ui.notifications.info(`${targetToken.name} is immune to Hits — attack misses!`);
+            }
+        }
         if (hitResult?.hit) {
             hitTargets.push({
                 target: targetToken,
@@ -1681,7 +1738,7 @@ async function onInitCheckStep(state) {
     let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
-    const cancelCheck = (reasonText = "This check has been canceled.", title = "CHECK CANCELED", showCard = true, gmControl = true) => {
+    const cancelCheck = (reasonText = "This check has been canceled.", title = "CHECK CANCELED", showCard = true, userIdControl = null) => {
         cancelCheckTriggered = true;
         if (!showCard)
             return;
@@ -1701,7 +1758,7 @@ async function onInitCheckStep(state) {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     {
                         text: "Cancel",
@@ -1780,7 +1837,7 @@ async function onInitAttackStep(state) {
     let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
-    const cancelAttack = (reasonText = "This attack has been canceled.", title = "ATTACK CANCELED", showCard = true, gmControl = true) => {
+    const cancelAttack = (reasonText = "This attack has been canceled.", title = "ATTACK CANCELED", showCard = true, userIdControl = null) => {
         cancelAttackTriggered = true;
         if (!showCard)
             return;
@@ -1800,7 +1857,7 @@ async function onInitAttackStep(state) {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     {
                         text: "Cancel",
@@ -1883,7 +1940,7 @@ async function onInitTechAttackStep(state) {
     let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
-    const cancelTechAttack = (reasonText = "This tech attack has been canceled.", title = "TECH ATTACK CANCELED", showCard = true, gmControl = true) => {
+    const cancelTechAttack = (reasonText = "This tech attack has been canceled.", title = "TECH ATTACK CANCELED", showCard = true, userIdControl = null) => {
         cancelTechAttackTriggered = true;
         if (!showCard)
             return;
@@ -1903,7 +1960,7 @@ async function onInitTechAttackStep(state) {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     {
                         text: "Cancel",
@@ -2054,7 +2111,7 @@ async function onInitActivationStep(state) {
     const cancelledReasons = [];
 
     // Synchronous — sets the cancel flag immediately so it works when called from non-async evaluate functions.
-    const cancelAction = (reasonText = "This activation has been canceled.", title = "ACTIVATION CANCELED", showCard = true, gmControl = true) => {
+    const cancelAction = (reasonText = "This activation has been canceled.", title = "ACTIVATION CANCELED", showCard = true, userIdControl = null) => {
         cancelActivation = true;
         if (!showCard)
             return;
@@ -2075,7 +2132,7 @@ async function onInitActivationStep(state) {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     {
                         text: "Cancel",
@@ -2725,6 +2782,13 @@ Hooks.on('lancer.statusesReady', () => {
     });
 
     CONFIG.statusEffects.push({
+        id: "blinded",
+        name: "Blinded",
+        img: "modules/lancer-automations/icons/blinded.svg",
+        description: "Light of sight reduced to 1"
+    });
+
+    CONFIG.statusEffects.push({
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
@@ -2854,7 +2918,9 @@ Hooks.on('ready', async () => {
         processEffectConsumption,
         handleTrigger,
         registerUserHelper,
-        getUserHelper
+        getUserHelper,
+        getActiveGMId,
+        getTokenOwnerUserId
     });
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -3127,7 +3193,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
     let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
-    const cancelChangeFn = (reasonText = "This status change has been blocked.", title = "STATUS BLOCKED", showCard = true, gmControl = true) => {
+    const cancelChangeFn = (reasonText = "This status change has been blocked.", title = "STATUS BLOCKED", showCard = true, userIdControl = null) => {
         cancelChange = true;
         if (!showCard)
             return;
@@ -3145,7 +3211,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     { text: "Confirm",
                         icon: "fas fa-check",
@@ -3190,7 +3256,7 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
     let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
     const cancelledReasons = [];
 
-    const cancelChangeFn = (reasonText = "This status removal has been blocked.", title = "REMOVAL BLOCKED", showCard = true, gmControl = true) => {
+    const cancelChangeFn = (reasonText = "This status removal has been blocked.", title = "REMOVAL BLOCKED", showCard = true, userIdControl = null) => {
         cancelChange = true;
         if (!showCard)
             return;
@@ -3208,7 +3274,7 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
                 mode: "or",
                 title,
                 description,
-                gmControl,
+                userIdControl: userIdControl ?? getActiveGMId(),
                 choices: [
                     { text: "Confirm",
                         icon: "fas fa-check",
@@ -3381,57 +3447,7 @@ Hooks.on('renderSettings', (app, html) => {
     });
 });
 
-function drawMovementTrace(token, originalEndPos, newEndPos = null) {
-    const trace = new PIXI.Graphics();
-    const centerStart = token.center;
-    const gridSize = canvas.grid.size;
 
-    const drawFootprint = (targetX, targetY, lineColor, fillColor) => {
-        trace.lineStyle(3, lineColor, 0.8);
-        trace.beginFill(fillColor, 0.3);
-        if (isHexGrid()) {
-            const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
-            for (const o of offsets) {
-                drawHexAt(trace, o.col, o.row);
-            }
-        } else {
-            trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
-        }
-        trace.endFill();
-    };
-
-    // Start Position
-    drawFootprint(token.document.x, token.document.y, 0xffff00, 0xffff00);
-
-    // Original End Position
-    const originalColor = newEndPos ? 0xff0000 : 0xff6400;
-    const centerOriginal = { x: originalEndPos.x + token.w/2, y: originalEndPos.y + token.h/2 };
-    drawFootprint(originalEndPos.x, originalEndPos.y, originalColor, originalColor);
-
-    // Line to Original End
-    trace.lineStyle(4, 0xffffff, 0.5); // white fading line
-    trace.moveTo(centerStart.x, centerStart.y);
-    trace.lineTo(centerOriginal.x, centerOriginal.y);
-
-    if (newEndPos) {
-        // New End Position
-        const centerNew = { x: newEndPos.x + token.w/2, y: newEndPos.y + token.h/2 };
-        drawFootprint(newEndPos.x, newEndPos.y, 0xff6400, 0xff6400);
-
-        // Line to New End
-        trace.lineStyle(4, 0xffffff, 1);
-        trace.moveTo(centerStart.x, centerStart.y);
-        trace.lineTo(centerNew.x, centerNew.y);
-    }
-
-    if (canvas.tokens && canvas.tokens.parent) {
-        canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
-    } else {
-        canvas.stage.addChild(trace);
-    }
-
-    return trace;
-}
 
 Hooks.on('preUpdateToken', (document, change, options, userId) => {
     if (options.IgnorePreMove)
@@ -3486,7 +3502,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         let cancelCardPending = false;
         const cancelledReasons = [];
 
-        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, gmControl = true) => {
+        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, userIdControl = null) => {
             // Always cancel the movement immediately (idempotent).
             triggerData.cancel();
             cancelRulerDrag(token, moveInfo);
@@ -3517,8 +3533,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 mode: "or",
                 title: "MOVEMENT CANCELED",
                 description,
-                gmControl,
-                traceData: gmControl ? { tokenId: token.id, endPos, newEndPos: null } : null,
+                userIdControl: userIdControl ?? getActiveGMId(),
+                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: null } : null,
                 choices: [
                     { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
                     { text: "Ignore",
@@ -3538,7 +3554,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             trace.destroy();
         };
 
-        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, gmControl = true) => {
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, userIdControl = null) => {
             const executeChange = () => {
                 setTimeout(() => {
                     const updateData = { x: position.x, y: position.y };
@@ -3561,8 +3577,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     mode: "or",
                     title: "MOVEMENT REROUTED",
                     description: reasonText,
-                    gmControl,
-                    traceData: gmControl ? { tokenId: token.id, endPos, newEndPos: position } : null,
+                    userIdControl: userIdControl ?? getActiveGMId(),
+                    traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
                     choices: [
                         { text: "Confirm",
                             icon: "fas fa-check",

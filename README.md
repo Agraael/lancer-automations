@@ -59,7 +59,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
 | [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)) | Required for boost detection, movement history accuracy, and difficult terrain penalty calculation |
-| [Token Factions](https://github.com/Agraael/token-factions) | My fork that adds a multi-team disposition matrix so you can have more than two sides |
+| [Token Factions](https://github.com/Agraael/foundryvtt-token-factions) | My fork that adds a multi-team disposition matrix so you can have more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 
 ---
@@ -358,6 +358,13 @@ flowchart LR
     L --> I
 ```
 
+
+> **Client execution note:** `activationCode` does **not** always run on the GM's client.
+> - **Auto activations** run on the client of the triggering token's owner — the player whose action fired the trigger (or the GM if that token has no online owner).
+> - **Manual activations (popup)** run on whichever client clicks the Activate button. The popup is routed via socket to the reactor's token owner and/or GM depending on the `reactionNotificationMode` setting (`'owner'`, `'gm'`, or `'both'`).
+>
+> Because of this, `activationCode` may execute on a non-GM client. If your code needs GM-only permissions (creating tokens, modifying actors you don't own, etc.), you must delegate those operations via socket or use API helpers that already handle delegation internally.
+
 ### Trigger Reference
 
 <details>
@@ -518,17 +525,17 @@ For example, when a token tries to move away, check if it's within an enemy's en
 
 Several other triggers allow you to cancel an operation before it completes. Any code that uses these functions **must not be async** (use **Force Synchronous**).
 
-- `triggerData.cancelAction(reasonText?, title?, showCard?, gmControl?)`: stop an item activation or general action in `onInitActivation`
-- `triggerData.cancelAttack(reasonText?, title?, showCard?, gmControl?)`: stop an attack before the HUD appears in `onInitAttack`
-- `triggerData.cancelTechAttack(reasonText?, title?, showCard?, gmControl?)`: stop a tech attack in `onInitTechAttack`
-- `triggerData.cancelCheck(reasonText?, title?, showCard?, gmControl?)`: stop a stat check in `onInitCheck`
-- `triggerData.cancelChange(reasonText?, title?, showCard?, gmControl?)`: stop a status effect from being applied or removed in `onPreStatusApplied` / `onPreStatusRemoved`
+- `triggerData.cancelAction(reasonText?, title?, showCard?, userIdControl?)`: stop an item activation or general action in `onInitActivation`
+- `triggerData.cancelAttack(reasonText?, title?, showCard?, userIdControl?)`: stop an attack before the HUD appears in `onInitAttack`
+- `triggerData.cancelTechAttack(reasonText?, title?, showCard?, userIdControl?)`: stop a tech attack in `onInitTechAttack`
+- `triggerData.cancelCheck(reasonText?, title?, showCard?, userIdControl?)`: stop a stat check in `onInitCheck`
+- `triggerData.cancelChange(reasonText?, title?, showCard?, userIdControl?)`: stop a status effect from being applied or removed in `onPreStatusApplied` / `onPreStatusRemoved`
 
 **Parameters:**
 - `reasonText`: (String) The reason why the action was blocked, shown in chat.
 - `title`: (String) The title of the choice card shown to the user.
 - `showCard`: (Boolean) If true (default), a chat card is printed explaining the cancellation.
-- `gmControl`: (Boolean) When true (by default), the "Ignore / Allow" choice card is sent to the GM instead of the current player.
+- `userIdControl`: (Boolean) When true (by default), the "Ignore / Allow" choice card is sent to the GM instead of the current player.
 
 ![Choice card Gm control](doc/img/choice-gm-control.png)
 

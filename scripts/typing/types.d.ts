@@ -56,7 +56,8 @@ interface TriggerDataOnPreMove extends TriggerDataBase {
     isDrag: boolean;
     moveInfo: MoveInfo;
     cancel: () => void;
-    cancelTriggeredMove: (reason?: string, showCard?: boolean, gmControl?: boolean) => Promise<void>;
+    cancelTriggeredMove: (reason?: string, showCard?: boolean, userIdControl?: string | string[] | null) => Promise<void>;
+    changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, showCard?: boolean, userIdControl?: string | string[] | null) => Promise<void>;
 }
 
 interface TriggerDataOnDamage extends TriggerDataBase {
@@ -85,7 +86,7 @@ interface TriggerDataOnActivation extends TriggerDataBase {
 }
 
 interface TriggerDataOnInitActivation extends TriggerDataOnActivation {
-    cancelAction: (reason?: string) => void;
+    cancelAction: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null) => void;
 }
 
 interface TriggerDataOnInitAttack extends TriggerDataBase {
@@ -95,7 +96,7 @@ interface TriggerDataOnInitAttack extends TriggerDataBase {
     actionName: string;
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
-    cancelAttack: (reason?: string) => void;
+    cancelAttack: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null) => void;
     distanceToTrigger: number | null;
 }
 
@@ -107,7 +108,7 @@ interface TriggerDataOnInitTechAttack extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     isInvade: boolean;
-    cancelTechAttack: (reason?: string) => void;
+    cancelTechAttack: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null) => void;
     distanceToTrigger: number | null;
 }
 
@@ -116,7 +117,7 @@ interface TriggerDataOnInitCheck extends TriggerDataBase {
     statName: string;
     checkAgainstToken: Token | null;
     targetVal: number | null;
-    cancelCheck: (reason?: string) => void;
+    cancelCheck: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null) => void;
     distanceToTrigger: number | null;
 }
 
@@ -240,11 +241,13 @@ interface LancerAutomationsAPI {
         description?: string;
         icon?: string;
         headerClass?: string;
-        gmControl?: boolean;
+        userIdControl?: string | string[] | null;
         traceData?: any;
     }): Promise<true | null>;
     revertMovement(token: Token): Promise<void>;
     clearMovementHistory(token: Token): void;
+    getActiveGMId(): string | null;
+    getTokenOwnerUserId(token: Token): string[];
 
     // MiscAPI
     getItemLID(item: any): string | null;
@@ -259,7 +262,9 @@ interface LancerAutomationsAPI {
     getConstantBonuses(actor: any): any[];
     getImmunityBonuses(actor: any, type: string): any[];
     applyDamageImmunities(actor: any, damages: any[]): any[];
-    hasCritImmunity(actor: any): boolean;
+    hasCritImmunity(actor: any, attackerActor?: any): Promise<boolean>;
+    hasHitImmunity(actor: any, attackerActor?: any): Promise<boolean>;
+    hasMissImmunity(actor: any, attackerActor?: any): Promise<boolean>;
     addGlobalBonus(actor: any, bonus: object, options?: object): Promise<void>;
     addConstantBonus(actor: any, bonus: object, options?: object): Promise<void>;
     removeConstantBonus(actor: any, bonusId: string): Promise<void>;

@@ -70,7 +70,7 @@ async function delegateSetActorFlag(actor, ns, key, value) {
 /**
  * Mutates state.data.tags based on a tag bonus payload.
  */
-function applyTagBonus(state, bonus) {
+export function applyTagBonus(state, bonus) {
     if (!state.data)
         state.data = {};
     if (!state.data.tags)
@@ -115,6 +115,41 @@ function applyTagBonus(state, bonus) {
 }
 
 /**
+ * Mutates state.data.range based on a range bonus payload.
+ * Preserves _Range prototype instances by mutating in-place.
+ */
+export function applyRangeBonus(state, bonus) {
+    if (!state.data)
+        state.data = {};
+    if (!state.data.range)
+        state.data.range = [];
+
+    const rangeType = bonus.rangeType;
+    const isOverride = bonus.rangeMode === 'override';
+    const val = parseInt(bonus.val) || 0;
+
+    const existingIdx = state.data.range.findIndex(r => r.type === rangeType);
+    if (existingIdx !== -1) {
+        // Mutate in-place to preserve _Range prototype methods (icon getter, etc.)
+        const entry = state.data.range[existingIdx];
+        if (isOverride) {
+            entry.val = val;
+        } else {
+            entry.val = (parseInt(entry.val) || 0) + val;
+        }
+    } else {
+        // Try to reuse the constructor from an existing range to preserve prototype methods
+        const RangeClass = state.data.range[0]?.constructor;
+        if (RangeClass && RangeClass !== Object) {
+            state.data.range.push(new RangeClass({ type: rangeType, val }));
+        } else {
+            // Fallback: plain object with computed icon
+            state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
+        }
+    }
+}
+
+/**
  * Creates a generic bonus step for a specific flow type
  * @param {string} flowType - The flow type identifier (e.g., "attack", "tech_attack", "hull", "damage")
  * @returns {Function} The flow step function
@@ -123,332 +158,87 @@ function createGenericBonusStep(flowType) {
     return async function genericAccuracyStepImpl(state) {
         try {
             const actor = state.actor;
-            if (!actor)
+            if (!actor) {
                 return true;
-
-            const legacyAcc = (actor.getFlag("lancer-automations", "generic_accuracy") || 0) +
-                              (actor.getFlag("world", "generic_accuracy") || 0);
-
-            const legacyDiff = (actor.getFlag("lancer-automations", "generic_difficulty") || 0) +
-                               (actor.getFlag("world", "generic_difficulty") || 0);
-
-            let netBonus = legacyAcc - legacyDiff;
-
-            const bonuses = flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses") || []);
-
-            const activeBonuses = [];       // pure global acc/diff bonuses (no applyTo)
-            const damageBonuses = [];
-            const allTargetedBonuses = [];  // ALL acc/diff bonuses with applyTo (managed dynamically)
-            const targetedDamageBonuses = [];
-
-            // Shared set tracking user-disabled bonus+token pairs ("${bonus.id}:${tokenId}")
-            const disabledByUser = new Set();
-
-            if (Array.isArray(bonuses)) {
-                const tags = getFlowTags(flowType, state);
-
-                for (const bonus of bonuses) {
-                    // applyToTargetter bonuses are applied to attackers via the targetter scan below, not here
-                    if (bonus.applyToTargetter)
-                        continue;
-
-                    if (!await isBonusApplicable(bonus, tags, state))
-                        continue;
-
-                    if (bonus.type === 'stat')
-                        continue;
-
-                    if (bonus.type === 'tag') {
-                        applyTagBonus(state, bonus);
-                        activeBonuses.push(bonus);
-                        continue;
-                    }
-
-                    const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
-
-                    if (bonus.type === 'damage') {
-                        if (flowType === 'damage') {
-                            if (hasTarget) {
-                                // Always push to targetedDamageBonuses; injectInfo decides
-                                // at render time whether to treat it as global (1 card) or per-card.
-                                const matched = Array.from(game.user?.targets || [])
-                                    .some(t => bonus.applyTo.includes(t.id));
-                                if (matched)
-                                    targetedDamageBonuses.push(bonus);
-                            } else {
-                                damageBonuses.push(bonus);
-                            }
-                        }
-                        continue;
-                    }
-
-                    if (hasTarget) {
-                        if (!bonus.id)
-                            bonus.id = foundry.utils.randomID();
-                        allTargetedBonuses.push(bonus);
-                    } else {
-                        let val = parseInt(bonus.val) || 0;
-                        if (bonus.type === 'difficulty')
-                            val = -val;
-                        netBonus += val;
-                        activeBonuses.push(bonus);
-                    }
-                }
             }
 
-            // Process ephemeral bonuses
-            let ephemeralBonuses = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
-            let ephemeralChanged = false;
-            const remainingEphemeral = [];
-            const consumedEphemeralNames = [];
+            const tags = getFlowTags(flowType, state);
+            const r = {
+                netBonus: (actor.getFlag("lancer-automations", "generic_accuracy") || 0) -
+                           (actor.getFlag("lancer-automations", "generic_difficulty") || 0) +
+                           (actor.getFlag("world", "generic_accuracy") || 0) -
+                           (actor.getFlag("world", "generic_difficulty") || 0),
+                activeBonuses: [],
+                damageBonuses: [],
+                allTargetedBonuses: [],
+                targetedDamageBonuses: [],
+                disabledByUser: new Set()
+            };
 
-            if (ephemeralBonuses.length > 0) {
-                const tags = getFlowTags(flowType, state);
+            await processBonusBatch(flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses")), flowType, tags, state, r);
+            await processBonusBatch(actor.getFlag("lancer-automations", "constant_bonuses"), flowType, tags, state, r);
+            await processEphemeralBonuses(actor, flowType, tags, state, r);
 
-                for (const bonus of ephemeralBonuses) {
-                    if (await isBonusApplicable(bonus, tags, state)) {
-                        const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+            const attackerId = actor.token?.id ?? canvas.tokens.placeables.find(t => t.actor?.id === actor.id)?.id;
+            await collectTargeterBonuses(attackerId, flowType, tags, state, r);
 
-                        if (bonus.type === 'tag') {
-                            applyTagBonus(state, bonus);
-                            activeBonuses.push({ ...bonus });
-                            if (bonus.name)
-                                consumedEphemeralNames.push(bonus.name);
-                            ephemeralChanged = true;
-                            continue;
-                        }
-
-                        if (bonus.type === 'damage') {
-                            if (flowType === 'damage') {
-                                if (hasTarget) {
-                                    const matched = Array.from(game.user?.targets || [])
-                                        .some(t => bonus.applyTo.includes(t.id));
-                                    if (matched) {
-                                        targetedDamageBonuses.push({ ...bonus });
-                                        if (bonus.name)
-                                            consumedEphemeralNames.push(bonus.name);
-                                        ephemeralChanged = true;
-                                    } else {
-                                        remainingEphemeral.push(bonus);
-                                    }
-                                } else {
-                                    damageBonuses.push({ ...bonus });
-                                    if (bonus.name)
-                                        consumedEphemeralNames.push(bonus.name);
-                                    ephemeralChanged = true;
-                                }
-                            } else {
-                                remainingEphemeral.push(bonus);
-                            }
-                            continue;
-                        }
-
-                        if (hasTarget) {
-                            const b = { ...bonus };
-                            if (!b.id)
-                                b.id = foundry.utils.randomID();
-                            allTargetedBonuses.push(b);
-                            if (bonus.name)
-                                consumedEphemeralNames.push(bonus.name);
-                            ephemeralChanged = true;
-                        } else {
-                            let val = parseInt(bonus.val) || 0;
-                            if (bonus.type === 'difficulty')
-                                val = -val;
-                            netBonus += val;
-                            activeBonuses.push({ ...bonus });
-                            if (bonus.name)
-                                consumedEphemeralNames.push(bonus.name);
-                            ephemeralChanged = true;
-                        }
-                    } else {
-                        remainingEphemeral.push(bonus);
-                    }
-                }
-            }
-
-            if (ephemeralChanged) {
-                await delegateSetActorFlag(actor, "lancer-automations", "ephemeral_bonuses", remainingEphemeral);
-            }
-
-            // Process constant bonuses (never consumed)
-            const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
-            if (constantBonuses.length > 0) {
-                const tags = getFlowTags(flowType, state);
-
-                for (const bonus of constantBonuses) {
-                    if (!await isBonusApplicable(bonus, tags, state))
-                        continue;
-
-                    if (bonus.type === 'stat')
-                        continue;
-
-                    if (bonus.type === 'tag') {
-                        applyTagBonus(state, bonus);
-                        activeBonuses.push(bonus);
-                        continue;
-                    }
-
-                    const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
-
-                    if (bonus.type === 'damage') {
-                        if (flowType === 'damage') {
-                            if (hasTarget) {
-                                const matched = Array.from(game.user?.targets || [])
-                                    .some(t => bonus.applyTo.includes(t.id));
-                                if (matched)
-                                    targetedDamageBonuses.push(bonus);
-                            } else {
-                                damageBonuses.push(bonus);
-                            }
-                        }
-                        continue;
-                    }
-
-                    if (hasTarget) {
-                        const b = { ...bonus };
-                        if (!b.id)
-                            b.id = foundry.utils.randomID();
-                        allTargetedBonuses.push(b);
-                    } else {
-                        let val = parseInt(bonus.val) || 0;
-                        if (bonus.type === 'difficulty')
-                            val = -val;
-                        netBonus += val;
-                        activeBonuses.push(bonus);
-                    }
-                }
-            }
-
-            // Safer approach: scan all actors in active scene for applyToTargetter bonuses.
-            // The original applyTo field acts as an attacker filter (empty = any attacker);
-            // the owner's token id becomes the effective applyTo after transformation so
-            // existing targeted routing applies. Ephemeral bonuses consume only when the
-            // owning actor is actually among the current targets.
-            const attackerTokenId = actor.token?.id
-                ?? canvas.tokens.placeables.find(t => t.actor?.id === actor.id)?.id;
-            const targeterTags = getFlowTags(flowType, state);
-            const targeterEphemeralUpdates = new Map();
-
-            for (const tokenDoc of game.scenes.active?.tokens ?? []) {
-                const sourceActor = tokenDoc.actor;
-                const sourceTokenId = tokenDoc.id;
-                if (!tokenDoc || !sourceActor || sourceTokenId === attackerTokenId)
-                    continue;
-
-                const isSourceTargeted = Array.from(game.user?.targets || []).some(t => t.id === sourceTokenId);
-
-                const routeTargeterBonus = (bonus) => {
-                    const injected = { ...bonus, applyTo: [sourceTokenId] };
-                    if (!injected.id)
-                        injected.id = foundry.utils.randomID();
-                    if (bonus.type === 'damage') {
-                        if (flowType === 'damage' && isSourceTargeted)
-                            targetedDamageBonuses.push(injected);
-                        return;
-                    }
-                    if (bonus.type === 'tag') {
-                        applyTagBonus(state, bonus);
-                        activeBonuses.push(injected);
-                        return;
-                    }
-                    allTargetedBonuses.push(injected);
-                };
-
-                const passesTargeterFilter = async (bonus) => {
-                    if (!bonus.applyToTargetter)
-                        return false;
-                    if (bonus.applyTo?.length && !bonus.applyTo.includes(attackerTokenId))
-                        return false;
-                    if (!await isBonusApplicable(bonus, targeterTags, state))
-                        return false;
-                    return bonus.type !== 'stat';
-                };
-
-                for (const bonus of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses") || [])) {
-                    if (await passesTargeterFilter(bonus))
-                        routeTargeterBonus(bonus);
-                }
-
-                const sourceEphemeral = duplicate(sourceActor.getFlag("lancer-automations", "ephemeral_bonuses") || []);
-                const remainingEphemeral = [];
-                let ephemeralConsumed = false;
-                for (const bonus of sourceEphemeral) {
-                    if (await passesTargeterFilter(bonus) && isSourceTargeted) {
-                        routeTargeterBonus(bonus);
-                        ephemeralConsumed = true;
-                    } else {
-                        remainingEphemeral.push(bonus);
-                    }
-                }
-                if (ephemeralConsumed)
-                    targeterEphemeralUpdates.set(sourceActor, remainingEphemeral);
-
-                for (const bonus of (sourceActor.getFlag("lancer-automations", "constant_bonuses") || [])) {
-                    if (await passesTargeterFilter(bonus))
-                        routeTargeterBonus(bonus);
-                }
-            }
-
-            for (const [sourceActor, remaining] of targeterEphemeralUpdates)
-                await delegateSetActorFlag(sourceActor, "lancer-automations", "ephemeral_bonuses", remaining);
-
-            const hasAny = netBonus !== 0 || activeBonuses.length > 0 || damageBonuses.length > 0 ||
-                           allTargetedBonuses.length > 0 || targetedDamageBonuses.length > 0;
-            if (!hasAny)
+            const hasAny = r.netBonus !== 0 || r.activeBonuses.length > 0 || r.damageBonuses.length > 0 ||
+                           r.allTargetedBonuses.length > 0 || r.targetedDamageBonuses.length > 0;
+            if (!hasAny) {
                 return true;
+            }
 
-            if (!state.data)
+            if (!state.data) {
                 state.data = {};
-            if (!state.data.acc_diff)
+            }
+            if (!state.data.acc_diff) {
                 state.data.acc_diff = {};
-            if (!state.data.acc_diff.base)
+            }
+            if (!state.data.acc_diff.base) {
                 state.data.acc_diff.base = {};
-
-            if (typeof state.data.acc_diff.base.accuracy !== 'number')
-                state.data.acc_diff.base.accuracy = 0;
-            if (typeof state.data.acc_diff.base.difficulty !== 'number')
-                state.data.acc_diff.base.difficulty = 0;
-
-            if (netBonus > 0) {
-                state.data.acc_diff.base.accuracy += netBonus;
-            } else if (netBonus < 0) {
-                state.data.acc_diff.base.difficulty += Math.abs(netBonus);
             }
 
-            // Tracks how each targeted bonus is currently applied:
-            //   'base'   → applied to acc_diff.base (1 target or no cards)
-            //   'target' → applied to specific t.accuracy/t.difficulty (2+ targets)
-            //   null     → no matching target currently
-            const appliedMode = new Map();
+            const base = state.data.acc_diff.base;
+            if (typeof base.accuracy !== 'number')
+                base.accuracy = 0;
+            if (typeof base.difficulty !== 'number')
+                base.difficulty = 0;
 
+            if (r.netBonus > 0) {
+                base.accuracy += r.netBonus;
+            } else if (r.netBonus < 0) {
+                base.difficulty += Math.abs(r.netBonus);
+            }
+
+            const appliedMode = new Map();
             const applyTargetedBonuses = (accDiff) => {
                 const count = accDiff.targets?.length || 0;
-                const base = accDiff.base;
-                for (const bonus of allTargetedBonuses) {
+                const bBase = accDiff.base;
+                for (const bonus of r.allTargetedBonuses) {
                     const val = parseInt(bonus.val) || 0;
-                    if (!val)
+                    if (!val) {
                         continue;
-
-                    // Undo previous application
-                    const prev = appliedMode.get(bonus.id);
-                    if (prev === 'base') {
-                        if (bonus.type === 'difficulty')
-                            base.difficulty -= val;
-                        else
-                            base.accuracy -= val;
-                    } else if (prev === 'target') {
-                        for (const t of accDiff.targets) {
-                            if (bonus.applyTo.includes(t.target?.id)) {
-                                if (bonus.type === 'difficulty')
-                                    t.difficulty -= val;
-                                else
-                                    t.accuracy -= val;
-                            }
-                        }
                     }
 
-                    // Find matching targets in the new list
+                    const prev = appliedMode.get(bonus.id);
+                    if (prev === 'base') {
+                        if (bonus.type === 'difficulty') {
+                            bBase.difficulty -= val;
+                        } else {
+                            bBase.accuracy -= val;
+                        }
+                    } else if (prev === 'target') {
+                        accDiff.targets.forEach(t => {
+                            if (bonus.applyTo.includes(t.target?.id)) {
+                                if (bonus.type === 'difficulty') {
+                                    t.difficulty -= val;
+                                } else {
+                                    t.accuracy -= val;
+                                }
+                            }
+                        });
+                    }
+
                     const matching = accDiff.targets?.filter(t => bonus.applyTo.includes(t.target?.id)) ?? [];
                     if (!matching.length) {
                         appliedMode.set(bonus.id, null);
@@ -456,137 +246,287 @@ function createGenericBonusStep(flowType) {
                     }
 
                     if (count <= 1) {
-                        // Single / no target card: apply globally to base
-                        if (bonus.type === 'difficulty')
-                            base.difficulty += val;
-                        else
-                            base.accuracy += val;
+                        if (bonus.type === 'difficulty') {
+                            bBase.difficulty += val;
+                        } else {
+                            bBase.accuracy += val;
+                        }
                         appliedMode.set(bonus.id, 'base');
                     } else {
-                        // Multiple targets: apply per-target
-                        for (const t of matching) {
-                            if (!disabledByUser.has(`${bonus.id}:${t.target?.id}`)) {
-                                if (bonus.type === 'difficulty')
+                        matching.forEach(t => {
+                            if (!r.disabledByUser.has(`${bonus.id}:${t.target?.id}`)) {
+                                if (bonus.type === 'difficulty') {
                                     t.difficulty += val;
-                                else
+                                } else {
                                     t.accuracy += val;
+                                }
                             }
-                        }
+                        });
                         appliedMode.set(bonus.id, 'target');
                     }
                 }
             };
 
-            // Returns current effective lists for injection (re-evaluated each call)
-            const getEffectiveActive = () => {
-                const result = [...activeBonuses];
-                for (const b of allTargetedBonuses) {
-                    if (appliedMode.get(b.id) === 'base')
-                        result.push(b);
-                }
-                return result;
-            };
-            const getEffectiveTargeted = () => allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'target');
+            const getEffActive = () => [...r.activeBonuses, ...r.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'base')];
+            const getEffTargeted = () => r.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'target');
 
-            // Apply targeted bonuses for initial render
-            if (allTargetedBonuses.length > 0)
+            if (r.allTargetedBonuses.length > 0) {
                 applyTargetedBonuses(state.data.acc_diff);
+            }
 
-            // Will be set to injectIntoCard() after showBonusNotification is called below.
-            // Captured by the replaceTargets closure so it's always current at call time.
             let reinjectCallback = null;
-
-            // Monkey-patch replaceTargets: re-applies on every target change before Svelte re-renders
             if (typeof state.data.acc_diff.replaceTargets === 'function') {
                 const origReplace = state.data.acc_diff.replaceTargets.bind(state.data.acc_diff);
                 state.data.acc_diff.replaceTargets = function(ts) {
                     origReplace(ts);
-                    if (allTargetedBonuses.length > 0)
+                    if (r.allTargetedBonuses.length > 0) {
                         applyTargetedBonuses(this);
-                    // Force-rebuild the global column DOM after Svelte finishes re-rendering
-                    if (reinjectCallback)
+                    }
+                    if (reinjectCallback) {
                         setTimeout(reinjectCallback, 50);
+                    }
                     return this;
                 };
             }
 
-            if (activeBonuses.length > 0 || allTargetedBonuses.length > 0) {
-                reinjectCallback = showBonusNotification(getEffectiveActive, state, getEffectiveTargeted, disabledByUser);
+            if (r.activeBonuses.length > 0 || r.allTargetedBonuses.length > 0) {
+                reinjectCallback = showBonusNotification(getEffActive, state, getEffTargeted, r.disabledByUser);
             }
 
-            if (flowType === 'damage') {
-                if (damageBonuses.length > 0 || targetedDamageBonuses.length > 0) {
-                    showDamageBonusNotification(damageBonuses, state, targetedDamageBonuses);
-                }
+            if (flowType === 'damage' && (r.damageBonuses.length > 0 || r.targetedDamageBonuses.length > 0)) {
+                showDamageBonusNotification(r.damageBonuses, state, r.targetedDamageBonuses);
             }
 
         } catch (e) {
             console.error("lancer-automations | Error in genericAccuracyStep:", e);
         }
 
-        return true; // Continue flow
+        return true;
     };
+}
+
+/**
+ * Internal helper to process a list of bonuses and sort them into results buckets.
+ */
+async function processBonusBatch(bonuses, flowType, tags, state, results) {
+    if (!Array.isArray(bonuses))
+        return;
+    const targets = Array.from(game.user?.targets || []);
+
+    for (const bonus of bonuses) {
+        if (bonus.applyToTargetter || !(await isBonusApplicable(bonus, tags, state)) || bonus.type === 'stat') {
+            continue;
+        }
+
+        if (bonus.type === 'tag') {
+            applyTagBonus(state, bonus);
+            results.activeBonuses.push(bonus);
+        } else if (bonus.type === 'range') {
+            applyRangeBonus(state, bonus);
+            results.activeBonuses.push(bonus);
+        } else if (bonus.type === 'damage' && flowType === 'damage') {
+            const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+            if (hasTarget) {
+                if (targets.some(t => bonus.applyTo.includes(t.id))) {
+                    results.targetedDamageBonuses.push(bonus);
+                }
+            } else {
+                results.damageBonuses.push(bonus);
+            }
+        } else if (bonus.type !== 'damage') {
+            const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+            if (hasTarget) {
+                const b = { ...bonus, id: bonus.id || foundry.utils.randomID() };
+                results.allTargetedBonuses.push(b);
+            } else {
+                let val = parseInt(bonus.val) || 0;
+                if (bonus.type === 'difficulty') {
+                    val = -val;
+                }
+                results.netBonus += val;
+                results.activeBonuses.push(bonus);
+            }
+        }
+    }
+}
+
+/**
+ * Specifically handles ephemeral bonuses and their consumption.
+ */
+async function processEphemeralBonuses(actor, flowType, tags, state, results) {
+    const bonuses = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+    if (!bonuses.length) {
+        return;
+    }
+    const remaining = [];
+    let changed = false;
+
+    for (const b of bonuses) {
+        if (await isBonusApplicable(b, tags, state)) {
+            const res = { netBonus: 0, activeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [] };
+            await processBonusBatch([b], flowType, tags, state, res);
+
+            // If it was actually applicable and used in the current context, consume it
+            const consumed = (res.activeBonuses.length > 0) || (res.damageBonuses.length > 0) ||
+                             (res.allTargetedBonuses.length > 0) || (res.targetedDamageBonuses.length > 0) ||
+                             (res.netBonus !== 0);
+
+            if (consumed) {
+                results.netBonus += res.netBonus;
+                results.activeBonuses.push(...res.activeBonuses);
+                results.damageBonuses.push(...res.damageBonuses);
+                results.allTargetedBonuses.push(...res.allTargetedBonuses);
+                results.targetedDamageBonuses.push(...res.targetedDamageBonuses);
+                changed = true;
+            } else {
+                remaining.push(b);
+            }
+        } else {
+            remaining.push(b);
+        }
+    }
+    if (changed) {
+        await delegateSetActorFlag(actor, "lancer-automations", "ephemeral_bonuses", remaining);
+    }
+}
+
+/**
+ * Scans for bonuses from other tokens on the active scene (applyToTargetter).
+ */
+async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, results) {
+    const targets = Array.from(game.user?.targets || []);
+    const updates = new Map();
+    for (const token of (game.scenes.active?.tokens ?? [])) {
+        if (!token.actor || token.id === attackerTokenId) {
+            continue;
+        }
+        const sourceActor = token.actor;
+        const isTargeted = targets.some(t => t.id === token.id);
+        const filter = async (b) => {
+            return b.applyToTargetter && (!b.applyTo?.length || b.applyTo.includes(attackerTokenId)) &&
+                                   await isBonusApplicable(b, tags, state) && b.type !== 'stat';
+        };
+        const route = (b) => {
+            const injected = { ...b, applyTo: [token.id], id: b.id || foundry.utils.randomID() };
+            if (b.type === 'damage') {
+                if (flowType === 'damage' && isTargeted) {
+                    results.targetedDamageBonuses.push(injected);
+                }
+            } else if (b.type === 'tag') {
+                applyTagBonus(state, b);
+                results.activeBonuses.push(injected);
+            } else if (b.type === 'range') {
+                applyRangeBonus(state, b);
+                results.activeBonuses.push(injected);
+            } else {
+                results.allTargetedBonuses.push(injected);
+            }
+        };
+
+        for (const b of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses"))) {
+            if (await filter(b)) {
+                route(b);
+            }
+        }
+        for (const b of (sourceActor.getFlag("lancer-automations", "constant_bonuses") || [])) {
+            if (await filter(b)) {
+                route(b);
+            }
+        }
+        const ephemerals = sourceActor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+        const rem = [];
+        let consumed = false;
+        for (const b of ephemerals) {
+            if (await filter(b) && isTargeted) {
+                route(b);
+                consumed = true;
+            } else {
+                rem.push(b);
+            }
+        }
+        if (consumed) {
+            updates.set(sourceActor, rem);
+        }
+    }
+    for (const [a, r] of updates) {
+        await delegateSetActorFlag(a, "lancer-automations", "ephemeral_bonuses", r);
+    }
+}
+
+/**
+ * Determines the appropriate icon for a bonus based on its type and value.
+ * @param {object} bonus - The bonus data
+ * @returns {string} The path to the SVG icon
+ */
+export function getBonusIcon(bonus) {
+    const ACC = "systems/lancer/assets/icons/white/accuracy.svg";
+    const DIFF = "systems/lancer/assets/icons/white/difficulty.svg";
+    const RANGE = "systems/lancer/assets/icons/white/range.svg";
+    const MELEE = "systems/lancer/assets/icons/white/melee.svg";
+    const GENERIC = "systems/lancer/assets/icons/white/generic_item.svg";
+    const IMMUNITY = "modules/lancer-automations/icons/immunity.svg";
+
+    if (bonus.type === 'difficulty')
+        return DIFF;
+    if (bonus.type === 'range')
+        return RANGE;
+    if (bonus.type === 'damage')
+        return MELEE;
+    if (bonus.type === 'stat')
+        return GENERIC;
+    if (bonus.type === 'immunity')
+        return IMMUNITY;
+
+    if (bonus.type === 'multi' && Array.isArray(bonus.bonuses)) {
+        const counts = {};
+        let maxCount = 0, maxType = null;
+        for (const sub of bonus.bonuses) {
+            counts[sub.type] = (counts[sub.type] || 0) + 1;
+            if (counts[sub.type] > maxCount) {
+                maxCount = counts[sub.type];
+                maxType = sub.type;
+            }
+        }
+        return getBonusIcon({ type: maxType });
+    }
+
+    const val = parseInt(bonus.val) || 0;
+    return val >= 0 ? ACC : DIFF;
 }
 
 function getFlowTags(flowType, state) {
     const tags = new Set(["all"]);
+    const itemType = state.item?.system?.type?.toLowerCase();
 
-    if (flowType === "attack" || flowType === "basic_attack" || flowType === "weapon_attack") {
+    if (["attack", "basic_attack", "weapon_attack"].includes(flowType)) {
         tags.add("attack");
-        if (state.item) {
-            const type = state.item.system?.type || "";
-            if (type)
-                tags.add(type.toLowerCase());
+        if (itemType) {
+            tags.add(itemType);
         }
-    }
-
-    if (flowType === "tech_attack") {
+    } else if (flowType === "tech_attack") {
         tags.add("attack");
         tags.add("tech_attack");
-    }
-
-    if (flowType === "stat_roll") {
+    } else if (flowType === "stat_roll") {
         tags.add("check");
-        if (state.data && state.data.path) {
-            const path = state.data.path.toLowerCase();
-            if (path.includes("hull"))
-                tags.add("hull");
-            if (path.includes("agility") || path.includes("agi"))
-                tags.add("agility");
-            if (path.includes("systems") || path.includes("sys"))
-                tags.add("systems");
-            if (path.includes("engineering") || path.includes("eng"))
-                tags.add("engineering");
-            if (path.includes("grit"))
-                tags.add("grit");
-        }
-
-        if (state.actor && state.actor.is_npc && state.data && state.data.path && state.data.path.includes("tier")) {
+        const path = state.data?.path?.toLowerCase() || "";
+        ["hull", "agility", "systems", "engineering", "grit"].forEach(t => {
+            if (path.includes(t) || path.includes(t.slice(0, 3))) {
+                tags.add(t);
+            }
+        });
+        if (state.actor?.is_npc && path.includes("tier")) {
             tags.add("tier");
         }
-    }
-
-    if (flowType === "structure") {
-        tags.add("structure");
-    }
-
-    if (flowType === "overheat") {
-        tags.add("overheat");
-    }
-
-    if (flowType === "damage") {
-        tags.add("damage");
-        if (state.item) {
-            const type = state.item.system?.type || "";
-            if (type)
-                tags.add(type.toLowerCase());
+    } else if (["structure", "overheat", "damage"].includes(flowType)) {
+        tags.add(flowType);
+        if (flowType === "damage" && itemType) {
+            tags.add(itemType);
         }
     }
-
     return tags;
 }
 
-async function isBonusApplicable(bonus, flowTags, state) {
+export async function isBonusApplicable(bonus, flowTags, state) {
     if (bonus.rollTypes && Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0) {
         const hasMatch = bonus.rollTypes.some(t => flowTags.has(t.toLowerCase()));
         if (!hasMatch)
@@ -1003,8 +943,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     // Try immediately (form may already be open)
     tryInjectTargeted();
 
-    // Watch for target cards added or changed during the dialog lifetime.
-    // Disconnects when form#accdiff is removed (dialog closed), not on a fixed timer.
+    // Observer for dynamic target changes
     const $form = $('form#accdiff');
     const observeTarget = $form.length > 0 ? $form[0] : document.body;
     const observer = new MutationObserver(() => {
@@ -1064,11 +1003,7 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = []) {
                 const damages = bonusState.damage || [];
                 for (const d of damages) {
                     $addBtn.click();
-
-                    await new Promise(r => setTimeout(r, 50));
-
-                    await new Promise(r => setTimeout(r, 50));
-
+                    await new Promise(r => setTimeout(r, 100));
                     const $valInputs = $bonusSection.find('input[type="text"][placeholder="0"], input[type="number"]');
                     const $lastValInput = $valInputs.last();
 
@@ -1543,42 +1478,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 }
             }
 
-            const isPositive = (parseInt(bonusData.val) || 0) >= 0;
-            let icon = "systems/lancer/assets/icons/white/accuracy.svg";
-
-            if (bonusData.type === 'difficulty') {
-                icon = "systems/lancer/assets/icons/white/difficulty.svg";
-            } else if (bonusData.type === 'damage') {
-                icon = "systems/lancer/assets/icons/white/melee.svg";
-            } else if (bonusData.type === 'stat') {
-                icon = "systems/lancer/assets/icons/white/generic_item.svg";
-            } else if (bonusData.type === 'immunity') {
-                icon = "modules/lancer-automations/icons/immunity.svg";
-            } else if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses)) {
-                const counts = {};
-                let maxCount = 0;
-                let maxType = null;
-                for (const sub of bonusData.bonuses) {
-                    counts[sub.type] = (counts[sub.type] || 0) + 1;
-                    if (counts[sub.type] > maxCount) {
-                        maxCount = counts[sub.type];
-                        maxType = sub.type;
-                    }
-                }
-                if (maxType === 'accuracy') {
-                    icon = "systems/lancer/assets/icons/white/accuracy.svg";
-                } else if (maxType === 'difficulty') {
-                    icon = "systems/lancer/assets/icons/white/difficulty.svg";
-                } else if (maxType === 'damage') {
-                    icon = "systems/lancer/assets/icons/white/melee.svg";
-                } else if (maxType === 'immunity') {
-                    icon = "modules/lancer-automations/icons/immunity.svg";
-                } else {
-                    icon = "systems/lancer/assets/icons/white/generic_item.svg";
-                }
-            } else if (!isPositive) {
-                icon = "systems/lancer/assets/icons/white/difficulty.svg";
-            }
+            const icon = getBonusIcon(bonusData);
 
             const extraOptions = { linkedBonusId: bonusData.id };
 
@@ -1908,7 +1808,7 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null) {
                     return true;
                 }
 
-                const flagName = effect.getFlag('lancer-automations', 'effect') || effect.getFlag('csm-lancer-qol', 'effect');
+                const flagName = effect.getFlag('lancer-automations', 'effect') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null);
                 if (flagName) {
                     const flagLower = flagName.toLowerCase();
                     if (flagLower === immuneLower || flagLower.includes(immuneTail)) {
@@ -1988,6 +1888,39 @@ export async function hasCritImmunity(actor, attackerActor = null) {
     return false;
 }
 
+export async function hasHitImmunity(actor, attackerActor = null) {
+    if (!actor)
+        return false;
+    const candidates = getImmunityBonuses(actor, "hit");
+    if (candidates.length === 0)
+        return false;
+    if (!attackerActor)
+        return true;
+    const attackerState = { actor: attackerActor };
+    for (const b of candidates) {
+        if (await isBonusApplicable(b, new Set(), attackerState))
+            return true;
+    }
+    return false;
+}
+
+export async function hasMissImmunity(actor, attackerActor = null) {
+    if (!actor)
+        return false;
+    const candidates = getImmunityBonuses(actor, "miss");
+    if (candidates.length === 0)
+        return false;
+    if (!attackerActor)
+        return true;
+    const attackerState = { actor: attackerActor };
+    for (const b of candidates) {
+        if (await isBonusApplicable(b, new Set(), attackerState))
+            return true;
+    }
+    return false;
+}
+
+
 export const BonusesAPI = {
     addGlobalBonus,
     removeGlobalBonus,
@@ -2000,5 +1933,7 @@ export const BonusesAPI = {
     getImmunityBonuses,
     checkEffectImmunities,
     applyDamageImmunities,
-    hasCritImmunity
+    hasCritImmunity,
+    hasHitImmunity,
+    hasMissImmunity
 };

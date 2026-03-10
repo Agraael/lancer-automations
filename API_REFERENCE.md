@@ -44,6 +44,13 @@
   - [Faction & Disposition](#faction--disposition)
   - [Grid & Cell Data](#grid--cell-data)
   - [Debug Visualizations](#debug-visualizations)
+- [Weapon & Item Details](#weapon--item-details)
+  - [`getItemTags_WithBonus`](#getitemtags_withbonusitem-actor)
+  - [`getActorMaxThreat`](#getactormaxthreatactor)
+  - [`getMaxWeaponRanges_WithBonus`](#getmaxweaponranges_withbonusinput)
+  - [`getMaxWeaponReach_WithBonus`](#getmaxweaponreach_withbonusinput)
+  - [`getWeaponType`](#getweapontypeitem)
+  - [`getItemType`](#getitemtypeitem)
 - [Interactive Player Tools](#interactive-player-tools)
   - [`chooseToken`](#choosetokencastertoken-options)
   - [`placeZone`](#placezonecastertoken-options)
@@ -51,6 +58,7 @@
   - [`knockBackToken`](#knockbacktokentokens-distance-options)
   - [`revertMovement`](#revertmovementtoken-destination)
   - [`startChoiceCard`](#startchoicecardoptions)
+  - [`openChoiceMenu`](#openchoicemenu)
 - [Deployment & Thrown Weapons](#deployment--thrown-weapons)
   - [`addItemFlags`](#additemflagsitem-flags)
   - [`getItemFlags`](#getitemflagsitem-flagname)
@@ -94,7 +102,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
 
 #### Attack Triggers
 - **`onInitAttack`**: Fires when an attack is initiated (before Attack HUD).
-    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, gmControl) }`
+    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, userIdControl) }`
 - **`onAttack`**: Fires when an attack roll is made.
     - Data: `{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData }`
 - **`onHit`**: Fires when an attack hits.
@@ -119,7 +127,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
     ```
 
 #### Tech Triggers
-- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, gmControl) }`
+- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, userIdControl) }`
 - **`onTechAttack`**: Tech roll made. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData }`
 - **`onTechHit`**: `{ triggeringToken, techItem, targets: Array<{target, roll, crit}>, ... }`
 - **`onTechMiss`**: `{ triggeringToken, techItem, targets: Array<{target, roll}>, ... }`
@@ -187,8 +195,8 @@ Fires *before* movement is finalized. Allows interception.
 - **`onEnterCombat`** / **`onExitCombat`**: `{ triggeringToken }`. Fires when a token is added to or removed from the combat tracker.
 
 #### Status Effect Triggers
-- **`onPreStatusApplied`**: Before a status is applied. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
-- **`onPreStatusRemoved`**: Before a status is removed. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
+- **`onPreStatusApplied`**: Before a status is applied. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
+- **`onPreStatusRemoved`**: Before a status is removed. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
 - **`onStatusApplied`** / **`onStatusRemoved`**: `{ triggeringToken, statusId, effect }`.
 
 #### Damage & Structure Triggers
@@ -201,9 +209,9 @@ Fires *before* movement is finalized. Allows interception.
 - **`onClearHeat`**: `{ triggeringToken, heatCleared, currentHeat }`.
 
 #### Stat & Activation Triggers
-- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, gmControl) }`.
+- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, userIdControl) }`.
 - **`onCheck`**: Result. `{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal }`.
-- **`onInitActivation`**: Before item/action activates (before resource use). `{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, gmControl) }`. Non-async evaluate only.
+- **`onInitActivation`**: Before item/action activates (before resource use). `{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
 - **`onActivation`**: Item/Action fired. `{ triggeringToken, actionType, actionName, item, actionData, endActivation }`.
 - **`onUpdate`**: **WARNING**: Generic document update (High frequency).
 
@@ -427,7 +435,7 @@ Removes **all** active effects from the provided tokens.
 | `id` | `string` | Optional custom ID |
 | `name` | `string` | Display name |
 | `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"multi"` |
-| `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"` |
+| `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
 | `effects` | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | `damageTypes` | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 | `tagName` | `string` | Only for `type: "tag"`. Name of the custom tag being added (e.g. `"Inaccurate"`) |
@@ -457,13 +465,19 @@ Removes **all** active effects from the provided tokens.
 #### `removeConstantBonus(actor, bonusId)`
 #### `injectBonusToNextRoll(actor, bonus)`
 #### `getImmunityBonuses(actor, subtype)`
-- **Returns**: `Array<object>` — returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`) for the actor.
+- **Returns**: `Array<object>` — returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`) for the actor.
 
 #### `applyDamageImmunities(actor, damages)`
 - **Returns**: `Array<object>` — takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out.
 
 #### `hasCritImmunity(actor)`
 - **Returns**: `boolean` — returns true if the actor has any "crit" subtype immunity bonuses.
+
+#### `hasHitImmunity(actor)`
+- **Returns**: `boolean` — returns true if the actor has any "Hit" subtype immunity bonuses.
+
+#### `hasMissImmunity(actor)`
+- **Returns**: `boolean` — returns true if the actor has any "Miss" subtype immunity bonuses.
 
 ---
 
@@ -479,7 +493,6 @@ Removes **all** active effects from the provided tokens.
 - **`isFriendly(t1, t2)`**: Checks disposition.
 
 #### Grid & Cell Data
-- **`getActorMaxThreat(actor)`**: Highest Threat range across all weapons.
 - **`getTokenCells(token)`**: Array of `[x,y]` coordinates occupied.
 - **`getMaxGroundHeightUnderToken(token, terrainAPI)`**: Highest height value under any cell.
 
@@ -487,6 +500,83 @@ Removes **all** active effects from the provided tokens.
 - **`drawThreatDebug(token)`**: Draw threat cells (Hex only).
 - **`drawDistanceDebug()`**: Select 2 tokens to display distance.
 - **`drawRangeHighlight(token, range, color, alpha)`**: Returns PIXI Graphics.
+
+---
+
+## Weapon & Item Details
+
+These functions provide processed information about weapons and items, often accounting for active actor bonuses (e.g., Accuracy, Threat bonuses).
+
+#### `getItemTags_WithBonus(item, actor)`
+
+Returns the effective tag list for a single item, with actor bonuses applied.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `item` | `Item` | *required* | The item to inspect |
+| `actor` | `Actor` | `item.parent` | The actor whose bonuses should be applied |
+
+**Returns:** `Promise<Array<Object>>` (Array of Lancer tags)
+
+---
+
+#### `getActorMaxThreat(actor)`
+
+Returns the highest Threat range across all weapons held by the actor, accounting for active bonuses.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to inspect |
+
+**Returns:** `Promise<number>`
+
+---
+
+#### `getMaxWeaponRanges_WithBonus(input)`
+
+Returns the maximum range value per range type across all weapons provided in the input.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | `Actor\|Token\|Item\|Array` | The source(s) to scan for weapons |
+
+**Returns:** `Promise<Object>` — e.g., `{ Range: 25, Burst: 3 }`
+
+---
+
+#### `getMaxWeaponReach_WithBonus(input)`
+
+Returns the single highest reach value across all scanned weapons. Scans `Range`, `Threat`, `Line`, `Burst`, and `Cone` (ignores `Blast`). Also accounts for the `tg_thrown` tag.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | `Actor\|Token\|Item\|Array` | The source(s) to scan for weapons |
+
+**Returns:** `Promise<number>`
+
+---
+
+#### `getWeaponType(item)`
+
+Returns the weapon subtype string (e.g. `"Superheavy Rifle"`, `"Melee"`). **Note:** This is synchronous and does not apply bonuses.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The weapon item |
+
+**Returns:** `string`
+
+---
+
+#### `getItemType(item)`
+
+Returns the Lancer item type string (e.g. `"Weapon"`, `"System"`, `"mech_weapon"`).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The item to inspect |
+
+**Returns:** `string`
 
 ---
 
@@ -675,7 +765,7 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 | `description`| `string` | `""` | Subtitle text |
 | `icon` | `string` | `null` | FontAwesome class (e.g. `"fas fa-shield-alt"`) |
 | `headerClass`| `string` | `""` | Optional CSS class for the header |
-| `gmControl` | `boolean`| `false` | If true, the card is shown to the GM instead |
+| `userIdControl` | `boolean`| `false` | If true, the card is shown to the GM instead |
 
 **Choice Object Structure:**
 ```javascript
@@ -690,6 +780,18 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 ```
 
 **Returns:** `Promise<true|null>` (true on completion, null if cancelled)
+
+---
+
+#### `openChoiceMenu()`
+
+Opens a configuration dialog to send a **Choice Card** to one or more active users. 
+- **Returns:** `Promise<void>`
+
+**Macro Example:**
+```javascript
+game.modules.get('lancer-automations').api.openChoiceMenu();
+```
 
 ---
 

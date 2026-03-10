@@ -100,6 +100,65 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
 }
 
 
+/**
+ * Draw a visual trace of a token's movement on the canvas.
+ * @param {Token} token
+ * @param {Object} originalEndPos
+ * @param {Object|null} newEndPos
+ * @returns {PIXI.Graphics}
+ */
+export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
+    const trace = new PIXI.Graphics();
+    const centerStart = token.center;
+    const gridSize = canvas.grid.size;
+
+    const drawFootprint = (targetX, targetY, lineColor, fillColor) => {
+        trace.lineStyle(3, lineColor, 0.8);
+        trace.beginFill(fillColor, 0.3);
+        if (isHexGrid()) {
+            const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
+            for (const o of offsets) {
+                drawHexAt(trace, o.col, o.row);
+            }
+        } else {
+            trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+        }
+        trace.endFill();
+    };
+
+    // Start Position
+    drawFootprint(token.document.x, token.document.y, 0xffff00, 0xffff00);
+
+    // Original End Position
+    const originalColor = newEndPos ? 0xff0000 : 0xff6400;
+    const centerOriginal = { x: originalEndPos.x + token.w/2, y: originalEndPos.y + token.h/2 };
+    drawFootprint(originalEndPos.x, originalEndPos.y, originalColor, originalColor);
+
+    // Line to Original End
+    trace.lineStyle(4, 0xffffff, 0.5); // white fading line
+    trace.moveTo(centerStart.x, centerStart.y);
+    trace.lineTo(centerOriginal.x, centerOriginal.y);
+
+    if (newEndPos) {
+        // New End Position
+        const centerNew = { x: newEndPos.x + token.w/2, y: newEndPos.y + token.h/2 };
+        drawFootprint(newEndPos.x, newEndPos.y, 0xff6400, 0xff6400);
+
+        // Line to New End
+        trace.lineStyle(4, 0xffffff, 1);
+        trace.moveTo(centerStart.x, centerStart.y);
+        trace.lineTo(centerNew.x, centerNew.y);
+    }
+
+    if (canvas.tokens && canvas.tokens.parent) {
+        canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
+    } else {
+        canvas.stage.addChild(trace);
+    }
+
+    return trace;
+}
+
 export function getGridDistance(pos1, pos2) {
     if (isHexGrid()) {
         const offset1 = pixelToOffset(pos1.x, pos1.y);
@@ -131,6 +190,10 @@ let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
 
 // --- GM-controlled choice cards ---
 const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
+
+// --- Broadcast choice cards (multi-user, first-to-respond wins) ---
+// Stores a cancel() fn on each TARGET client so the card can be forcefully dismissed.
+const _pendingBroadcastCards = new Map(); // cardId → cancel()
 
 function _updatePendingBadge() {
     const pendingTitles = _cardQueueTitles.slice(1);
@@ -2031,6 +2094,25 @@ export function placeToken(options = {}) {
 }
 
 
+/** Returns the userId of the first active GM, or null if none online. */
+export function getActiveGMId() {
+    return game.users.find(u => u.isGM && u.active)?.id ?? null;
+}
+
+/**
+ * Returns all active OWNER-level non-GM userIds for a token.
+ * Uses testUserPermission so default ownership is handled automatically.
+ * Pass the result directly to startChoiceCard({ userIdControl: ids }) — if the array
+ * is empty, startChoiceCard will fall back to the GM automatically.
+ * @param {Token} token
+ * @returns {string[]}
+ */
+export function getTokenOwnerUserId(token) {
+    return game.users
+        .filter(u => u.active && !u.isGM && token.document.testUserPermission(u, "OWNER"))
+        .map(u => u.id);
+}
+
 /**
  * Interactive choice card — presents a list of choices with callbacks.
  * @param {Object} options - Configuration options
@@ -2040,8 +2122,9 @@ export function placeToken(options = {}) {
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
- * @param {boolean} [options.gmControl=false] - Whether the card is controlled by the GM
+ * @param {string|string[]|null} [options.userIdControl=null] - userId or array of userIds who control this card. Array = broadcast, first to respond wins. null = show locally. Offline users are dropped with a warning.
  * @param {Object} [options.traceData=null] - Optional trace data for the card
+ * @param {boolean} [options.forceSocket=false] - If true, treats the current user as a remote target (shows delegated card instead of local)
  * @returns {Promise<true|null>} true on completion, null if cancelled
  */
 export function startChoiceCard(options = {}) {
@@ -2053,144 +2136,276 @@ export function startChoiceCard(options = {}) {
         description = "",
         icon,
         headerClass = "",
-        gmControl = false,
-        traceData = null
+        userIdControl = null,
+        traceData = null,
+        forceSocket = false
     } = /** @type {any} */ (options);
 
-    if (gmControl && !game.user.isGM) {
-        return _queueCard(() => new Promise((resolve) => {
-            if (choices.length === 0) {
-                resolve(true);
-                return;
-            }
+    // Normalize userIdControl to an array.
+    const rawTargets = Array.isArray(userIdControl)
+        ? userIdControl
+        : (userIdControl ? [userIdControl] : []);
 
-            const cardId = foundry.utils.randomID();
+    // If the current user is one of the targets — show the card locally, no waiting, no socket.
+    if (rawTargets.includes(game.user.id) && !forceSocket)
+        rawTargets.length = 0; // clear targets so we fall through to the local card
 
-            const cardEl = _createInfoCard("choiceCard", {
-                title,
-                icon,
-                headerClass,
-                description: (description ? description + '<br>' : '') + '<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> Waiting for GM...</em>',
-                mode,
-                disabled: true,
-                onConfirm: () => {},
-                onCancel: () => {}
-            });
+    // Filter remaining targets to active users only (self already removed above if needed).
+    const activeTargets = rawTargets.filter(id => id && game.users.get(id)?.active);
+    const offlineTargets = rawTargets.filter(id => id && !game.users.get(id)?.active);
 
-            _updateInfoCard(cardEl, "choiceCard", {
-                choices,
-                chosenSet: new Set(),
-                disabled: true,
-                onChoose: () => {}
-            });
-
-            _updatePendingBadge();
-
-            _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode });
-
-            game.socket.emit('module.lancer-automations', {
-                action: 'choiceCardGMRequest',
-                payload: {
-                    cardId,
-                    requestingUserId: game.user.id,
-                    title,
-                    description,
-                    icon,
-                    headerClass,
-                    mode,
-                    choices: choices.map(c => ({ text: c.text, icon: c.icon })),
-                    traceData
-                }
-            });
-        }), _title);
+    if (offlineTargets.length > 0) {
+        const offlineNames = offlineTargets.map(id => game.users.get(id)?.name ?? id).join(', ');
+        if (activeTargets.length === 0) {
+            const gmId = getActiveGMId();
+            if (gmId)
+                activeTargets.push(gmId);
+            const fallbackName = activeTargets.length > 0 ? (game.users.get(activeTargets[0])?.name ?? activeTargets[0]) : 'local user';
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — ${fallbackName} will handle the choice instead.`);
+        } else {
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — removed from choice recipients.`);
+        }
     }
 
-    return _queueCard(() => new Promise(async (resolve) => {
+    // If targets were specified but all gone, fall back to GM.
+    if (rawTargets.length > 0 && activeTargets.length === 0) {
+        const gmId = getActiveGMId();
+        if (gmId)
+            activeTargets.push(gmId);
+    }
+
+    const _makeWaitingCard = (waitMsg, onCancel = () => {}) => {
+        const cardEl = _createInfoCard("choiceCard", {
+            title,
+            icon,
+            headerClass,
+            description: (description ? description + '<br>' : '') + `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> ${waitMsg}</em>`,
+            mode,
+            disabled: true,
+            onConfirm: () => {},
+            onCancel
+        });
+        _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet: new Set(), disabled: true, onChoose: () => {} });
+        _updatePendingBadge();
+        return cardEl;
+    };
+
+    if (activeTargets.length > 0) {
+        const cardId = foundry.utils.randomID();
+        const payload = {
+            cardId,
+            requestingUserId: game.user.id,
+            title,
+            description,
+            icon,
+            headerClass,
+            mode,
+            choices: choices.map(c => ({ text: c.text, icon: c.icon })),
+            traceData
+        };
+
+        if (activeTargets.length === 1) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardGMRequest',
+                payload: { ...payload, targetUserId: activeTargets[0] }
+            });
+        } else {
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardBroadcastRequest',
+                payload: { ...payload, allTargetUserIds: activeTargets }
+            });
+        }
+
+        const isSelfTarget = activeTargets.includes(game.user.id);
+        const controllerNames = activeTargets.map(id => game.users.get(id)?.name ?? id).join(', ');
+
+        return _queueCard(() => new Promise(async (resolve) => {
+            if (isSelfTarget) {
+                // SENDER IS A TARGET: Show interactive card to ourselves instead of waiting.
+                let dismissed = false;
+                const chosenSet = new Set();
+                const _cancelOthers = (isCancellation = false) => {
+                    const others = activeTargets.filter(id => id !== game.user.id);
+                    if (others.length > 0) {
+                        game.socket.emit('module.lancer-automations', {
+                            action: 'choiceCardBroadcastCancel',
+                            payload: { cardId, otherTargetUserIds: others, responderName: game.user.name, isCancellation }
+                        });
+                    }
+                };
+
+                let gmTrace = null;
+                if (traceData) {
+                    const { tokenId, endPos, newEndPos } = traceData;
+                    const traceToken = canvas.tokens.get(tokenId);
+                    if (traceToken)
+                        gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+                }
+
+                const doCleanup = () => {
+                    document.removeEventListener('keydown', keyHandler);
+                    _removeInfoCard(cardEl);
+                    if (gmTrace?.parent)
+                        gmTrace.parent.removeChild(gmTrace);
+                    if (gmTrace)
+                        gmTrace.destroy();
+                };
+
+                const onCancel = async () => {
+                    if (dismissed)
+                        return;
+                    const confirm = await Dialog.confirm({
+                        title: "Cancel Choice?",
+                        content: `<p>Are you sure you want to cancel the <b>${title}</b> choice card for all recipients?</p>`,
+                        yes: () => true,
+                        no: () => false,
+                        defaultYes: false
+                    });
+                    if (!confirm)
+                        return;
+                    _cancelOthers(true);
+                    dismissed = true;
+                    doCleanup();
+                    await resolveGMChoiceCard(cardId, null, game.user.name, game.user.id);
+                };
+
+                const cardEl = _createInfoCard("choiceCard", {
+                    title: `[Self] ${title}`,
+                    icon,
+                    headerClass,
+                    description,
+                    mode,
+                    onConfirm: () => {},
+                    onCancel
+                });
+
+                const keyHandler = (e) => {
+                    if (e.key === "Escape")
+                        onCancel();
+                };
+                document.addEventListener('keydown', keyHandler);
+
+                const handleChoose = async (idx) => {
+                    if (dismissed)
+                        return;
+
+                    if (chosenSet.size === 0)
+                        _cancelOthers();
+
+                    if (mode === "or") {
+                        dismissed = true;
+                        doCleanup();
+                        await resolveGMChoiceCard(cardId, idx, game.user.name, game.user.id);
+                    } else {
+                        chosenSet.add(idx);
+                        await resolveGMChoiceCard(cardId, idx, game.user.name, game.user.id);
+
+                        if (chosenSet.size === choices.length) {
+                            dismissed = true;
+                            doCleanup();
+                        } else {
+                            // Update UI without closing
+                            _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+                        }
+                    }
+                };
+
+                _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+                _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode, chosenSet, activeTargets: new Set(activeTargets) });
+                _updatePendingBadge();
+
+            } else {
+                // REQUIESTER ONLY: Show waiting card.
+                const onCancel = async () => {
+                    const confirm = await Dialog.confirm({
+                        title: "Cancel Choice?",
+                        content: `<p>Are you sure you want to cancel the <b>${title}</b> choice card for all recipients?</p>`,
+                        yes: () => true,
+                        no: () => false,
+                        defaultYes: false
+                    });
+                    if (confirm) {
+                        game.socket.emit('module.lancer-automations', {
+                            action: 'choiceCardBroadcastCancel',
+                            payload: { cardId, otherTargetUserIds: activeTargets, responderName: game.user.name, isCancellation: true }
+                        });
+                        await resolveGMChoiceCard(cardId, null, game.user.name, game.user.id);
+                    }
+                };
+                const cardEl = _makeWaitingCard(`Waiting for first response from: ${controllerNames}`, onCancel);
+                _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode, chosenSet: new Set(), activeTargets: new Set(activeTargets) });
+            }
+        }), title);
+    }
+
+    return _queueCard(() => new Promise((resolve) => {
         if (choices.length === 0) {
             resolve(true);
             return;
         }
 
         const chosenSet = new Set();
+        let dismissed = false;
 
-        // Show the card once and wait for a single pick or cancel.
-        // Stays within the outer _queueCard slot — does NOT go through _queueCard itself.
-        const _pickOne = () => new Promise((innerResolve) => {
-            let dismissed = false;
+        const doCleanup = () => {
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
 
-            const doCleanup = () => {
-                document.removeEventListener('keydown', keyHandler);
-                _removeInfoCard(cardEl);
-            };
+        const onCancel = () => {
+            if (dismissed)
+                return;
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        };
 
-            const cardEl = _createInfoCard("choiceCard", {
-                title,
-                icon,
-                headerClass,
-                description,
-                mode,
-                onConfirm: () => {},
-                onCancel: () => {
-                    dismissed = true;
-                    doCleanup();
-                    innerResolve(null);
-                }
-            });
-
-            const keyHandler = (event) => {
-                if (event.key === "Escape") {
-                    dismissed = true;
-                    doCleanup();
-                    innerResolve(null);
-                }
-            };
-
-            document.addEventListener('keydown', keyHandler);
-
-            _updateInfoCard(cardEl, "choiceCard", {
-                choices,
-                chosenSet,
-                onChoose: (idx) => {
-                    if (dismissed)
-                        return;
-                    dismissed = true;
-                    doCleanup(); // close card before callback
-                    innerResolve(idx);
-                }
-            });
-
-            // Re-apply pending badge since this card was created outside _queueCard
-            _updatePendingBadge();
+        const cardEl = _createInfoCard("choiceCard", {
+            title,
+            icon,
+            headerClass,
+            description,
+            mode,
+            onConfirm: () => {},
+            onCancel
         });
 
-        if (mode === "or") {
-            // OR: single pick → release queue → run callback
-            const idx = await _pickOne();
-            if (idx === null) {
-                resolve(null);
-                return;
-            }
-            const choice = choices[idx];
-            resolve(true); // release queue slot so callback's cards appear immediately
-            if (choice.callback)
-                await choice.callback(choice.data);
+        const keyHandler = (event) => {
+            if (event.key === "Escape")
+                onCancel();
+        };
+        document.addEventListener('keydown', keyHandler);
 
-        } else {
-            // AND: loop entirely within this queue slot until all choices are picked.
-            // The OR card (or any other queued card) waits until the loop ends.
-            while (chosenSet.size < choices.length) {
-                const idx = await _pickOne();
-                if (idx === null) {
-                    resolve(null);
-                    return;
-                }
+        const handleChoose = async (idx) => {
+            if (dismissed)
+                return;
+
+            if (mode === "or") {
+                dismissed = true;
+                doCleanup();
+                const choice = choices[idx];
+                resolve(true); // Release queue slot
+                if (choice.callback)
+                    await choice.callback({ ...choice.data, responderName: game.user.name });
+            } else {
                 chosenSet.add(idx);
                 const choice = choices[idx];
                 if (choice.callback)
-                    await choice.callback(choice.data);
+                    await choice.callback({ ...choice.data, responderName: game.user.name });
+
+                if (chosenSet.size === choices.length) {
+                    dismissed = true;
+                    doCleanup();
+                    resolve(true);
+                } else {
+                    // Update UI without closing
+                    _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+                }
             }
-            resolve(true);
-        }
+        };
+
+        _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+        _updatePendingBadge();
     }), _title);
 }
 
@@ -2198,105 +2413,290 @@ export function startChoiceCard(options = {}) {
  * Called on the GM's client (via socket) to show a controlled choice card on behalf of a player.
  * When the GM picks or cancels, the result is sent back to the requesting user.
  */
-export async function showGMControlledChoiceCard({ cardId, requestingUserId, title, description, icon, headerClass, mode, choices }) {
-    await _queueCard(() => new Promise(async (resolve) => {
+export async function showUserIdControlledChoiceCard({ cardId, requestingUserId, title, description, icon, headerClass, mode, choices }) {
+    const requesterName = game.users.get(requestingUserId)?.name ?? '?';
+    await _queueCard(() => new Promise((resolve) => {
         const chosenSet = new Set();
+        let dismissed = false;
 
-        const _pickOne = () => new Promise((innerResolve) => {
-            let dismissed = false;
+        const doCleanup = () => {
+            _pendingBroadcastCards.delete(cardId);
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
 
-            const doCleanup = () => {
-                document.removeEventListener('keydown', keyHandler);
-                _removeInfoCard(cardEl);
-            };
-
-            const cardEl = _createInfoCard("choiceCard", {
-                title: `[GM] ${title}`,
-                icon,
-                headerClass,
-                description: (description ? description + '<br>' : '') + '<em style="color:#aaa;">Controlling choice for player</em>',
-                mode,
-                onConfirm: () => {},
-                onCancel: () => {
-                    dismissed = true;
-                    doCleanup();
-                    innerResolve(null);
-                }
-            });
-
-            const keyHandler = (event) => {
-                if (event.key === "Escape") {
-                    dismissed = true;
-                    doCleanup();
-                    innerResolve(null);
-                }
-            };
-
-            document.addEventListener('keydown', keyHandler);
-
-            _updateInfoCard(cardEl, "choiceCard", {
-                choices,
-                chosenSet,
-                onChoose: (idx) => {
-                    if (dismissed)
-                        return;
-                    dismissed = true;
-                    doCleanup();
-                    innerResolve(idx);
-                }
-            });
-
-            _updatePendingBadge();
-        });
-
-        if (mode === "or") {
-            const idx = await _pickOne();
+        const onCancel = () => {
+            if (dismissed)
+                return;
             game.socket.emit('module.lancer-automations', {
                 action: 'choiceCardGMResponse',
-                payload: { cardId, requestingUserId, choiceIdx: idx }
+                payload: { cardId, requestingUserId, choiceIdx: null, responderName: game.user.name, responderUserId: game.user.id }
             });
-            resolve(true);
-        } else {
-            while (chosenSet.size < choices.length) {
-                const idx = await _pickOne();
-                if (idx === null) {
-                    game.socket.emit('module.lancer-automations', {
-                        action: 'choiceCardGMResponse',
-                        payload: { cardId, requestingUserId, choiceIdx: null }
-                    });
-                    resolve(null);
-                    return;
-                }
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        };
+
+        const cardEl = _createInfoCard("choiceCard", {
+            title: `[${requesterName}→You] ${title}`,
+            icon,
+            headerClass,
+            description: (description ? description + '<br>' : '') + `<em style="color:#aaa;">Controlling choice for ${requesterName}</em>`,
+            mode,
+            onConfirm: () => {},
+            onCancel
+        });
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape")
+                onCancel();
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        // Register cancel hook so the requester's dismissal can close this card silently.
+        _pendingBroadcastCards.set(cardId, () => {
+            if (dismissed)
+                return;
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        });
+
+        const handleChoose = (idx) => {
+            if (dismissed)
+                return;
+
+            if (mode === "or") {
+                dismissed = true;
+                game.socket.emit('module.lancer-automations', {
+                    action: 'choiceCardGMResponse',
+                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
+                });
+                doCleanup();
+                resolve(true);
+            } else {
                 chosenSet.add(idx);
                 game.socket.emit('module.lancer-automations', {
                     action: 'choiceCardGMResponse',
-                    payload: { cardId, requestingUserId, choiceIdx: idx }
+                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
                 });
+
+                if (chosenSet.size === choices.length) {
+                    dismissed = true;
+                    doCleanup();
+                    resolve(true);
+                } else {
+                    // Update UI without closing
+                    _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+                }
             }
-            resolve(true);
-        }
-    }), `[GM] ${title}`);
+        };
+
+        _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+        _updatePendingBadge();
+    }), `[${requesterName}→You] ${title}`);
 }
 
 /**
  * Called on the player's client (via socket) to resolve a pending GM-controlled choice.
  */
-export async function resolveGMChoiceCard(cardId, choiceIdx) {
+export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, responderUserId = null) {
     const pending = _pendingGMChoices.get(cardId);
     if (!pending)
         return;
-    _pendingGMChoices.delete(cardId);
-    _removeInfoCard(pending.cardEl);
 
     if (choiceIdx === null || choiceIdx === undefined) {
-        pending.resolve(null);
+        // If the responder is the requester (local call) - always cancel.
+        // Otherwise check if there are other targets.
+        const isRequester = (responderUserId === game.user.id) || (responderName === game.user.name);
+
+        if (isRequester) {
+            _pendingGMChoices.delete(cardId);
+            if (pending.cardEl)
+                _removeInfoCard(pending.cardEl);
+            pending.resolve(null);
+            return;
+        }
+
+        // It's a target cancelling.
+        if (pending.activeTargets) {
+            const targetId = responderUserId || game.users.find(u => u.name === responderName)?.id;
+            if (targetId)
+                pending.activeTargets.delete(targetId);
+
+            if (pending.activeTargets.size === 0) {
+                // All targets either responded or cancelled.
+                _pendingGMChoices.delete(cardId);
+                if (pending.cardEl)
+                    _removeInfoCard(pending.cardEl);
+                pending.resolve(null);
+            } else {
+                // Still waiting for others.
+                ui.notifications.info(`${responderName} declined the choice.`);
+                // Update waiting card text?
+                // For now just letting them wait.
+            }
+        } else {
+            // No target list (legacy or single target).
+            _pendingGMChoices.delete(cardId);
+            if (pending.cardEl)
+                _removeInfoCard(pending.cardEl);
+            pending.resolve(null);
+        }
         return;
     }
 
     const choice = pending.choices[choiceIdx];
-    pending.resolve(true);
-    if (choice?.callback)
-        await choice.callback(choice.data);
+
+    if (pending.mode === "or") {
+        _pendingGMChoices.delete(cardId);
+        if (pending.cardEl)
+            _removeInfoCard(pending.cardEl);
+        pending.resolve(true);
+    } else {
+        // AND mode: track choices if we have a chosenSet
+        if (pending.chosenSet) {
+            pending.chosenSet.add(choiceIdx);
+            if (pending.chosenSet.size === pending.choices.length) {
+                _pendingGMChoices.delete(cardId);
+                if (pending.cardEl)
+                    _removeInfoCard(pending.cardEl);
+                pending.resolve(true);
+            }
+        } else {
+            // Fallback for legacy calls without chosenSet
+            _pendingGMChoices.delete(cardId);
+            if (pending.cardEl)
+                _removeInfoCard(pending.cardEl);
+            pending.resolve(true);
+        }
+    }
+
+    if (choice?.callback) {
+        await choice.callback({ ...choice.data, responderName });
+    }
+}
+
+/**
+ * Called on a non-winning target client to forcefully dismiss their broadcast choice card
+ * when another target responded first or the requester cancelled.
+ */
+export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation = false) {
+    const cancel = _pendingBroadcastCards.get(cardId);
+    if (cancel) {
+        if (isCancellation)
+            ui.notifications.info(`${responderName || 'The requester'} cancelled the choice card.`);
+        else if (responderName)
+            ui.notifications.info(`${responderName} took the choice card.`);
+        cancel();
+    }
+}
+
+/**
+ * Called on each target client when a multi-user broadcast choice card is requested.
+ * First user to respond wins: their choice is sent to the requester and all other
+ * targets' cards are cancelled.
+ * @param {{ cardId: string, requestingUserId: string, allTargetUserIds: string[], title: string, description: string, icon: string, headerClass: string, mode: string, choices: Array }} payload
+ */
+export async function showMultiUserControlledChoiceCard({ cardId, requestingUserId, allTargetUserIds, title, description, icon, headerClass, mode, choices }) {
+    const requesterName = game.users.get(requestingUserId)?.name ?? '?';
+
+    const _cancelOthers = () => {
+        const otherTargets = allTargetUserIds.filter(id => id !== game.user.id);
+        if (otherTargets.length > 0) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardBroadcastCancel',
+                payload: { cardId, otherTargetUserIds: otherTargets, responderName: game.user.name, isCancellation: false }
+            });
+        }
+    };
+
+    await _queueCard(() => new Promise((resolve) => {
+        const chosenSet = new Set();
+        let dismissed = false;
+        let firstPick = true;
+
+        const doCleanup = () => {
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+            _pendingBroadcastCards.delete(cardId);
+        };
+
+        const onCancel = () => {
+            if (dismissed)
+                return;
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardGMResponse',
+                payload: { cardId, requestingUserId, choiceIdx: null, responderName: game.user.name, responderUserId: game.user.id }
+            });
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        };
+
+        const cardEl = _createInfoCard("choiceCard", {
+            title: `[${requesterName}→You] ${title}`,
+            icon,
+            headerClass,
+            description: (description ? description + '<br>' : '') + `<em style="color:#aaa;">Controlling choice for ${requesterName}</em>`,
+            mode,
+            onConfirm: () => {},
+            onCancel
+        });
+
+        const keyHandler = (event) => {
+            if (event.key === "Escape")
+                onCancel();
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        // Register cancel hook so another user's response can dismiss this card silently.
+        _pendingBroadcastCards.set(cardId, () => {
+            if (dismissed)
+                return;
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        });
+
+        const handleChoose = (idx) => {
+            if (dismissed)
+                return;
+
+            if (firstPick) {
+                _cancelOthers();
+                firstPick = false;
+            }
+
+            if (mode === "or") {
+                dismissed = true;
+                game.socket.emit('module.lancer-automations', {
+                    action: 'choiceCardGMResponse',
+                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
+                });
+                doCleanup();
+                resolve(true);
+            } else {
+                chosenSet.add(idx);
+                game.socket.emit('module.lancer-automations', {
+                    action: 'choiceCardGMResponse',
+                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
+                });
+
+                if (chosenSet.size === choices.length) {
+                    dismissed = true;
+                    doCleanup();
+                    resolve(true);
+                } else {
+                    // Update UI without closing
+                    _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+                }
+            }
+        };
+
+        _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
+        _updatePendingBadge();
+    }), `[${requesterName}→You] ${title}`);
 }
 
 /**
@@ -2574,7 +2974,11 @@ export async function placeDeployable(options = /** @type {any} */({})) {
 
     // Determine defaults for disposition and team from owner
     const disposition = dispositionOpt ?? ownerActor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-    const team = teamOpt ?? ownerActor.getFlag('token-factions', 'team') ?? null;
+    let team = teamOpt;
+    if (team === null || team === undefined) {
+        team = game.modules.get('token-factions')?.active ? ownerActor.getFlag('token-factions', 'team') : null;
+    }
+    team = team ?? null;
 
     // Determine origin
     const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
@@ -3366,7 +3770,7 @@ export async function openDeployableMenu(actor) {
                 // Inherit disposition and team for the new actor
                 actorData.prototypeToken = actorData.prototypeToken || {};
                 actorData.prototypeToken.disposition = actor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-                const actorTeam = actor.getFlag('token-factions', 'team');
+                const actorTeam = game.modules.get('token-factions')?.active ? actor.getFlag('token-factions', 'team') : null;
                 if (actorTeam !== null) {
                     actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
                     actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
@@ -3831,6 +4235,208 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
     return chosenWeapon;
 }
 
+/**
+ * Opens a dialog menu to configure and send a custom choice card to one or more active users.
+ * On response, a chat message from the requester is posted showing the selection.
+ * @returns {Promise<void>}
+ */
+export async function openChoiceMenu() {
+    const activeUsers = game.users.filter(u => u.active);
+    if (activeUsers.length === 0) {
+        ui.notifications.warn("No active users found.");
+        return;
+    }
+
+    // Initial State
+    let choicesInfo = [
+        { text: "Confirm" },
+        { text: "Decline" }
+    ];
+    let selectedUserIds = []; // No pre-selection per user request
+    let title = "CHOICE"; // Default title per user request
+    let description = "Please select an option:";
+    let mode = "or";
+
+    function refresh(html) {
+        // Render users grid - Compact 3-column grid
+        const usersHtml = activeUsers.map(u => {
+            const isSelected = selectedUserIds.includes(u.id);
+            return `
+            <div class="la-choice-user-card ${isSelected ? 'selected' : ''}"
+                 data-user-id="${u.id}"
+                 style="padding: 4px 6px; min-height: 28px; display: flex; align-items: center; border: 1px solid #7a7971; border-radius: 4px; background: rgba(0,0,0,0.1); cursor: pointer; margin: 0; gap: 4px; overflow: hidden;">
+                <img src="${u.avatar || 'icons/svg/user.svg'}" style="width: 18px; height: 18px; border: none; flex-shrink: 0;" />
+                <div style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${u.name}</div>
+                ${u.isGM ? '<i class="fas fa-crown" style="font-size: 0.6em; color: #ff6400; flex-shrink: 0;"></i>' : ''}
+            </div>
+        `;
+        }).join('');
+        html.find('.la-choice-users-grid').html(usersHtml);
+
+        // Render mode choices
+        const modeHtml = `
+            <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                <label style="font-size: 0.85em; flex: 1;">Mode</label>
+                <select class="la-choice-mode" style="height: 24px; font-size: 0.85em; flex: 2; color: #fff; background: #222; border: 1px solid #7a7971; border-radius: 4px; padding: 0 4px;">
+                    <option value="or" ${mode === "or" ? 'selected' : ''} style="background: #222; color: #fff;">Pick One (OR)</option>
+                    <option value="and" ${mode === "and" ? 'selected' : ''} style="background: #222; color: #fff;">Pick All (AND)</option>
+                </select>
+            </div>
+        `;
+        html.find('.la-choice-mode-container').html(modeHtml);
+
+        // Render choices list - No icons, just text with automatic numbers
+        const choicesHtml = choicesInfo.map((c, idx) => `
+            <div class="form-group la-choice-row" data-idx="${idx}" style="display: flex; gap: 5px; margin-bottom: 2px; align-items: center;">
+                <span style="font-size: 0.9em; font-weight: bold; width: 15px; text-align: right;">${idx + 1}.</span>
+                <input type="text" class="la-choice-text" value="${c.text || ''}" placeholder="Option Text" style="flex: 1; height: 24px; font-size: 0.9em;" />
+                <button type="button" class="la-choice-remove" style="flex: 0 0 24px; height: 24px; padding: 0; background: none; border: none; color: #c33; cursor: pointer;"><i class="fas fa-times"></i></button>
+            </div>
+        `).join('');
+        html.find('.la-choices-container').html(choicesHtml);
+
+        // Event Listeners
+        html.find('.la-choice-user-card').off('click').on('click', function () {
+            const id = $(this).data('user-id');
+            if (selectedUserIds.includes(id)) {
+                selectedUserIds = selectedUserIds.filter(uid => uid !== id);
+            } else {
+                selectedUserIds.push(id);
+            }
+            refresh(html);
+        });
+
+        html.find('.la-choice-remove').off('click').on('click', function () {
+            const idx = parseInt($(this).closest('.la-choice-row').data('idx'));
+            if (!isNaN(idx)) {
+                choicesInfo.splice(idx, 1);
+                refresh(html);
+            }
+        });
+
+        html.find('.la-choice-text').off('input').on('input', function () {
+            const idx = parseInt($(this).closest('.la-choice-row').data('idx'));
+            if (!isNaN(idx)) {
+                choicesInfo[idx].text = $(this).val();
+            }
+        });
+
+        html.find('.la-choice-mode').off('change').on('change', function () {
+            mode = $(this).val();
+        });
+
+        // Auto-resize the dialog window to fit content
+        if (typeof this?.setPosition === "function") {
+            this.setPosition({ height: "auto" });
+        }
+    }
+
+    const htmlContent = `
+        <style>
+            .la-choice-config { display: flex; flex-direction: column; gap: 8px; }
+            .la-choice-users-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; border: 1px solid #7a7971; padding: 6px; border-radius: 4px; background: rgba(0,0,0,0.15); }
+            .la-choice-user-card { transition: all 0.1s ease; opacity: 0.8; }
+            .la-choice-user-card:hover { opacity: 1; background: rgba(255,255,255,0.05) !important; }
+            .la-choice-user-card.selected { border-color: #ff6400 !important; background: rgba(255, 100, 0, 0.25) !important; box-shadow: 0 0 4px #ff6400 inset; font-weight: bold; opacity: 1; }
+            .la-choices-container { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+            .la-choice-add { background: #333; color: #eee; border: 1px solid #666; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em; align-self: flex-start; margin-top: 4px; }
+            .la-choice-add:hover { background: #444; border-color: #ff6400; color: #fff; }
+            .la-choice-mode:focus { border-color: #ff6400; outline: none; }
+        </style>
+        <div class="lancer-dialog-base la-choice-config">
+            <div class="lancer-dialog-header">
+                <div class="lancer-dialog-title">CHOICE MENU</div>
+                <div class="lancer-dialog-subtitle">Configure a card to send to players.</div>
+            </div>
+
+            <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.85em;">Title</label>
+                <input type="text" class="la-choice-title" value="${title}" style="height: 24px;" />
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.85em;">Description</label>
+                <input type="text" class="la-choice-description" value="${description}" style="height: 24px;" />
+            </div>
+
+            <div class="la-choice-mode-container"></div>
+
+            <label style="font-weight: bold; font-size: 0.85em; margin-top: 4px;">Recipients (${activeUsers.length} Active)</label>
+            <div class="la-choice-users-grid"></div>
+
+            <label style="font-weight: bold; font-size: 0.85em; margin-top: 8px;">Options</label>
+            <div class="la-choices-container"></div>
+            <button type="button" class="la-choice-add"><i class="fas fa-plus"></i> Add Option</button>
+        </div>
+    `;
+
+    const dialogObj = new Dialog({
+        title: "Choice Configuration",
+        content: htmlContent,
+        buttons: {
+            send: {
+                icon: '<i class="fas fa-paper-plane"></i>',
+                label: "Send",
+                callback: async (html) => {
+                    const finalTitle = String(html.find('.la-choice-title').val() || "Choice");
+                    const finalDesc = String(html.find('.la-choice-description').val() || "");
+
+                    if (selectedUserIds.length === 0) {
+                        ui.notifications.warn("No recipients selected.");
+                        return;
+                    }
+                    if (choicesInfo.length === 0) {
+                        ui.notifications.warn("No options provided.");
+                        return;
+                    }
+
+                    // Map choices to startChoiceCard format
+                    const mappedChoices = choicesInfo.map((c, idx) => ({
+                        text: `${idx + 1}. ${c.text}`,
+                        data: { text: c.text, number: idx + 1 },
+                        callback: async (data) => {
+                            const name = data.responderName || "A user";
+                            await ChatMessage.create({
+                                content: `
+                                    <div class="lancer-dialog-header">
+                                        <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle}</div>
+                                        <div class="lancer-dialog-subtitle"><b>${name}</b> selected:</div>
+                                        <div style="font-weight: bold; font-size: 1.25em; padding: 12px; background: rgba(0,0,0,0.05); border-left: 3px solid #ff6400; margin-top: 5px; display: flex; align-items: center; gap: 8px;">
+                                            <span style="color: #ff6400; opacity: 0.7;">${data.number}.</span> ${data.text}
+                                        </div>
+                                    </div>
+                                `,
+                                speaker: ChatMessage.getSpeaker({ alias: game.user.name })
+                            });
+                        }
+                    }));
+
+                    // Use the built-in startChoiceCard with the full selection array
+                    startChoiceCard(/** @type {any} */ ({
+                        choices: mappedChoices,
+                        title: finalTitle,
+                        description: finalDesc,
+                        userIdControl: selectedUserIds,
+                        mode: mode,
+                        forceSocket: true
+                    }));
+
+                    ui.notifications.info(`Sent card to ${selectedUserIds.length} users.`);
+                }
+            },
+            cancel: { label: "Cancel" }
+        },
+        default: "send",
+        render: (html) => {
+            refresh.call(dialogObj, html);
+            html.find('.la-choice-add').on('click', () => {
+                choicesInfo.push({ text: "Option " + (choicesInfo.length + 1) });
+                refresh.call(dialogObj, html);
+            });
+        }
+    }, { width: 400, height: "auto" });
+    dialogObj.render(true);
+}
+
 export const InteractiveAPI = {
     chooseToken,
     placeZone,
@@ -3854,6 +4460,11 @@ export const InteractiveAPI = {
     drawRangeHighlight,
     revertMovement,
     clearMovementHistory,
+    showUserIdControlledChoiceCard,
+    resolveGMChoiceCard,
+    showMultiUserControlledChoiceCard,
+    cancelBroadcastChoiceCard,
+    drawMovementTrace,
     pickItem,
     reloadOneWeapon,
     getWeapons,
@@ -3861,5 +4472,6 @@ export const InteractiveAPI = {
     setItemAsActivated,
     getActivatedItems,
     endItemActivation,
-    openEndActivationMenu
+    openEndActivationMenu,
+    openChoiceMenu
 };

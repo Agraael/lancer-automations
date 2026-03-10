@@ -152,7 +152,7 @@ const movingTargetArcherReaction = {
                 return false;
             const isSuppressed = !!api?.findEffectOnToken(mover, e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id);
             if (isSuppressed)
-                triggerData.cancelTriggeredMove?.(`Moving Target: ${mover.name}'s movement could be cancelled by ${reactorToken.name}.`, true, true);
+                triggerData.cancelTriggeredMove?.(`Moving Target: ${mover.name}'s movement could be cancelled by ${reactorToken.name}.`, true, api.getTokenOwnerUserId(reactorToken));
             return isSuppressed;
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {

@@ -170,7 +170,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         if (customStatusApi) {
             // Check for existing effect to stack
             const existingEffect = target.actor.effects.find(e =>
-                e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name
+                (game.modules.get("temporary-custom-statuses")?.active && e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
             );
 
             if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
@@ -182,8 +182,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 if (entries.length === 0) {
                     const existingDur = existingEffect.getFlag('lancer-automations', 'duration');
                     const existingOrigin = existingEffect.getFlag('lancer-automations', 'originID');
-                    const existingApplied = existingEffect.getFlag('lancer-automations', 'appliedStack');
-                    const existingStack = existingEffect.flags?.statuscounter?.value || 1;
+                    const existingApplied = (game.modules.get("lancer-automations")?.active && existingEffect.getFlag('lancer-automations', 'appliedStack'));
+                    const existingStack = (game.modules.get("statuscounter")?.active && existingEffect.getFlag("statuscounter", "value")) || 1;
                     if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null) {
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied || existingStack });
                     }
@@ -245,7 +245,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             if (activeEffects && !Array.isArray(activeEffects)) {
                 // modifyStack was called — update our flags on the existing effect
                 const existingEffect = target.actor.effects.find(e =>
-                    e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name
+                    (game.modules.get("temporary-custom-statuses")?.active && e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
                 );
                 if (existingEffect) {
                     const updateData = { "flags.lancer-automations": lancerFlags };
@@ -320,7 +320,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
             // Update existing stack
-            const currentStack = existingEffect.getFlag('statuscounter', 'value') || 1;
+            const currentStack = (game.modules.get('statuscounter')?.active ? existingEffect.getFlag('statuscounter', 'value') : (existingEffect.flags?.statuscounter?.value)) || 1;
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
 
@@ -412,7 +412,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
     const effectsToDelete = target.actor.effects.filter(/** @param {any} e */ e => {
         // When a source is specified, skip effects from any other source.
         if (originID) {
-            const flagOrigin = e.getFlag('lancer-automations', 'originID') || e.getFlag('csm-lancer-qol', 'originID');
+            const flagOrigin = e.getFlag('lancer-automations', 'originID') || (game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'originID') : null);
             if (flagOrigin !== originID)
                 return false;
         }
@@ -685,7 +685,7 @@ export async function removeEffectsByNameFromTokens(options = {}) {
 
             if (notify) {
                 const existing = findEffectOnToken(token, effectNameVal);
-                icon = existing?.img || existing?.icon || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
+                icon = existing?.img || (existing && game.modules.get('temporary-custom-statuses')?.active ? existing.getFlag('temporary-custom-statuses', 'icon') : "") || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
             if (game.user.isGM || (/** @type {Token} */ (token)).document?.isOwner) {

@@ -852,6 +852,7 @@ export async function executeEffectManager(options = {}) {
                     <option value="roll">Roll (Acc/Diff)</option>
                     <option value="damage">Damage</option>
                     <option value="tag">Tag</option>
+                    <option value="range">Range</option>
                     <option value="immunity">Immunity</option>
                 </select>
             </div>
@@ -936,6 +937,28 @@ export async function executeEffectManager(options = {}) {
                     <input type="checkbox" id="bonus-removeTag" style="width: auto;">
                 </div>
             </div>
+            <div id="bonus-type-range" style="display:none;">
+                <div class="form-group">
+                    <label>Range Type:</label>
+                    <select id="bonus-rangeType">
+                        <option value="Range">Range</option>
+                        <option value="Threat">Threat</option>
+                        <option value="Blast">Blast</option>
+                        <option value="Burst">Burst</option>
+                        <option value="Cone">Cone</option>
+                        <option value="Line">Line</option>
+                    </select>
+                </div>
+                <div class="form-group" style="justify-content:center;">
+                    <label>Mode:</label>
+                    <select id="bonus-rangeMode" style="flex:0.6;">
+                        <option value="add">Add Value</option>
+                        <option value="override">Override Value</option>
+                    </select>
+                    <label style="margin-left: 10px;">Value:</label>
+                    <input type="number" id="bonus-rangeVal" value="1" style="width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                </div>
+            </div>
             <div id="bonus-type-immunity" style="display:none;">
                 <div class="form-group">
                     <label>Immunity Subtype:</label>
@@ -944,6 +967,8 @@ export async function executeEffectManager(options = {}) {
                         <option value="damage">Damage</option>
                         <option value="resistance">Resistance</option>
                         <option value="crit">Critical Hit</option>
+                        <option value="hit">Hit</option>
+                        <option value="miss">Miss</option>
                     </select>
                 </div>
                 <div id="bonus-immunity-effects-row">
@@ -1250,11 +1275,19 @@ export async function executeEffectManager(options = {}) {
                     return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
                 if (subB.type === 'tag')
                     return subB.removeTag ? `Remove Tag: ${subB.tagName}` : `${subB.tagMode === 'override' ? 'Set' : 'Add'} ${subB.tagName} ${subB.val}`;
+                if (subB.type === 'range')
+                    return `${subB.rangeMode === 'override' ? 'Set' : 'Add'} ${subB.rangeType} ${subB.val}`;
                 if (subB.type === 'immunity') {
                     if (subB.subtype === 'effect' && subB.effects)
                         return `Immunity: ${subB.effects.join(', ')}`;
                     if ((subB.subtype === 'damage' || subB.subtype === 'resistance') && subB.damageTypes)
                         return `${subB.subtype}: ${subB.damageTypes.join(', ')}`;
+                    if (subB.subtype === 'crit')
+                        return 'Immunity: Critical Hit';
+                    if (subB.subtype === 'hit')
+                        return 'Immunity: Hit';
+                    if (subB.subtype === 'miss')
+                        return 'Immunity: Miss';
                     return subB.subtype;
                 }
                 return subB.type || 'Unknown';
@@ -1673,6 +1706,10 @@ export async function executeEffectManager(options = {}) {
                     bonusData.tagMode = html.find('#bonus-tagMode').val();
                     bonusData.val = html.find('#bonus-tagVal').val() || "0";
                     bonusData.removeTag = html.find('#bonus-removeTag').is(':checked');
+                } else if (type === 'range') {
+                    bonusData.rangeType = html.find('#bonus-rangeType').val();
+                    bonusData.rangeMode = html.find('#bonus-rangeMode').val();
+                    bonusData.val = html.find('#bonus-rangeVal').val() || "0";
                 } else if (type === 'immunity') {
                     bonusData.subtype = html.find('#bonus-immunity-subtype').val();
                     if (bonusData.subtype === 'effect') {
@@ -1743,10 +1780,10 @@ export async function executeEffectManager(options = {}) {
             // Bonus type selector - show/hide relevant inputs
             html.find('#bonus-type').on('change', function () {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-immunity').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity').hide();
                 html.find(`#bonus-type-${type}`).show();
 
-                const showItems = type === 'roll' || type === 'damage' || type === 'tag';
+                const showItems = type === 'roll' || type === 'damage' || type === 'tag' || type === 'range';
                 html.find('#bonus-items-row').toggle(showItems);
                 if (showItems) {
                     html.find('#row-bonus-rollTypes-roll').toggle(type === 'roll');
