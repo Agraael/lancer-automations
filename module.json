@@ -35,17 +35,70 @@
         "requires": [
             {
                 "id": "lancer-style-library",
-                "type": "module"
+                "type": "module",
+                "url": "https://github.com/Agraael/lancer-style-library",
+                "manifest": "https://github.com/Agraael/lancer-style-library/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/lancer-style-library/releases/latest/download/module.zip"
             },
             {
                 "id": "temporary-custom-statuses",
+                "type": "module",
+                "url": "https://github.com/Agraael/temporary-custom-statuses",
+                "manifest": "https://github.com/Agraael/temporary-custom-statuses/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/temporary-custom-statuses/releases/latest/download/module.zip"
+            },
+            {
+                "id": "lib-wrapper",
+                "type": "module"
+            },
+            {
+                "id": "socketlib",
+                "type": "module"
+            },
+            {
+                "id": "tokenmagic",
+                "type": "module"
+            },
+            {
+                "id": "sequencer",
                 "type": "module"
             }
         ],
-        "optional": [
+        "recommends": [
             {
                 "id": "_CodeMirror",
                 "type": "module"
+            },
+            {
+                "id": "templatemacro",
+                "type": "module",
+                "url": "https://github.com/Agraael/templatemacro",
+                "manifest": "https://github.com/Agraael/templatemacro/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/templatemacro/releases/latest/download/module.zip"
+            },
+            {
+                "id": "elevationruler",
+                "type": "module",
+                "url": "https://github.com/Agraael/Lancer-elevationRuler-Fork",
+                "manifest": "https://github.com/Agraael/Lancer-elevationRuler-Fork/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/Lancer-elevationRuler-Fork/releases/latest/download/module.zip",
+                "reason": "This will link to my forked version"
+            },
+            {
+                "id": "token-factions",
+                "type": "module",
+                "url": "https://github.com/Agraael/foundryvtt-token-factions",
+                "manifest": "https://github.com/Agraael/foundryvtt-token-factions/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/foundryvtt-token-factions/releases/latest/download/module.zip",
+                "reason": "This will link to my forked version"
+            },
+            {
+                "id": "grid-aware-auras",
+                "type": "module",
+                "url": "https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras",
+                "manifest": "https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras/releases/latest/download/module.json",
+                "download": "https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras/releases/latest/download/module.zip",
+                "reason": "This will link to my forked version"
             }
         ]
     },

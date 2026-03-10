@@ -50,6 +50,10 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | FoundryVTT v12 | The version I'm currently working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
+| [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required for API hooks |
+| [Socketlib](https://foundryvtt.com/packages/socketlib) | Required for API hooks |
+| [Tokenmagic](https://foundryvtt.com/packages/tokenmagic) | Required for API hooks |
+| [Sequencer](https://foundryvtt.com/packages/sequencer) | Required for API hooks |
 
 ### Optional
 
