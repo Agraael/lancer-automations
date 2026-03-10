@@ -1,6 +1,6 @@
 {
     "name": "L.A - Choice Menu",
     "type": "script",
-    "img": "modules/lancer-automations/icons/choice.svg",
+    "img": "modules/lancer-automations/icons/vote.svg",
     "command_source": "OpenChoiceMenu.js"
 }

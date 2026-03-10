@@ -47,7 +47,9 @@ import {
     showUserIdControlledChoiceCard, resolveGMChoiceCard,
     showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard,
     drawMovementTrace,
-    getActiveGMId, getTokenOwnerUserId
+    getActiveGMId, getTokenOwnerUserId,
+    showVoteCardOnVoter, receiveVoteSubmission,
+    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter
 } from "./interactive-tools.js";
 import {
     MiscAPI,
@@ -58,6 +60,7 @@ import { registerModuleFlows } from "./flows.js";
 import { DowntimeAPI } from "./downtime.js";
 import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
 import { LAAuras, AurasAPI } from "./aura.js";
+import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
@@ -1211,6 +1214,37 @@ async function handleSocketEvent({ action, payload }) {
         const actor = game.actors.get(payload.actorId);
         if (actor)
             await actor.update(payload.data);
+    } else if (action === 'voteCardRequest') {
+        if (!payload.allVoterUserIds?.includes(game.user.id))
+            return;
+        showVoteCardOnVoter(payload);
+    } else if (action === 'voteCardSubmit') {
+        if (payload.requestingUserId !== game.user.id)
+            return;
+        receiveVoteSubmission(payload);
+    } else if (action === 'voteCardUpdate') {
+        if (!payload.allVoterUserIds?.includes(game.user.id))
+            return;
+        updateVoteCardOnVoter(payload);
+    } else if (action === 'voteCardConfirm') {
+        if (!payload.allVoterUserIds?.includes(game.user.id))
+            return;
+        confirmVoteCardOnVoter(payload);
+    } else if (action === 'voteCardCancel') {
+        if (!payload.allVoterUserIds?.includes(game.user.id))
+            return;
+        cancelVoteCardOnVoter(payload);
+    } else if (action === 'syncPlaceholderVideos') {
+        setTimeout(() => {
+            for (let tokenId of payload.placeholderIds) {
+                const token = canvas.tokens.get(tokenId);
+                const video = token?.mesh?.texture?.baseTexture?.resource?.["source"];
+                if (video instanceof HTMLVideoElement) {
+                    video.currentTime = 0;
+                    video.play().catch(() => {});
+                }
+            }
+        }, 200);
     }
 }
 
@@ -2920,10 +2954,12 @@ Hooks.on('ready', async () => {
         registerUserHelper,
         getUserHelper,
         getActiveGMId,
-        getTokenOwnerUserId
+        getTokenOwnerUserId,
+        delayedTokenAppearance
     });
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
+    initDelayedAppearanceHook();
     await syncBuiltinStartups();
     runStartupScripts(game.modules.get('lancer-automations').api);
     Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);

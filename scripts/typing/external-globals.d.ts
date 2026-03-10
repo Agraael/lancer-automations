@@ -4,6 +4,12 @@
 
 // ─── Sequencer Module ─────────────────────────────────────────────────────────
 
+interface Window {
+    Sequencer: typeof Sequencer;
+    Sequence: typeof Sequence;
+}
+
+
 interface SequencerSection {
     file(path: string): this;
     attachTo(target: object): this;
@@ -70,6 +76,13 @@ interface FlagConfig {
     };
     Item: {
         "lancer-automations": {
+            [key: string]: any;
+        };
+        [key: string]: any;
+    };
+    Combat: {
+        "lancer-automations": {
+            delayedAppearances?: any[];
             [key: string]: any;
         };
         [key: string]: any;

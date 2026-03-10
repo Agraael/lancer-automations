@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Reinforcement",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/rally-the-troops.svg",
+    "command_source": "Reinforcement.js"
+}

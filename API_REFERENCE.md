@@ -434,14 +434,16 @@ Removes **all** active effects from the provided tokens.
 |----------|------|-------------|
 | `id` | `string` | Optional custom ID |
 | `name` | `string` | Display name |
-| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"multi"` |
+| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"` |
 | `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
 | `effects` | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | `damageTypes` | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 | `tagName` | `string` | Only for `type: "tag"`. Name of the custom tag being added (e.g. `"Inaccurate"`) |
-| `val` | `number\|string`| Value for stat, accuracy, difficulty, or tag bonuses |
+| `val` | `number\|string`| Value for stat, accuracy, difficulty, tag, or range bonuses |
 | `tagMode` | `string` | `"add"`, `"override"`. For `type: "tag"`. Determines if the tag adds to a value or overrides it. |
 | `removeTag` | `boolean` | For `type: "tag"`. If true, negates the tag instead of adding it. |
+| `rangeType` | `string` | Only for `type: "range"`. The range category to modify: `"Range"`, `"Threat"`, `"Line"`, `"Blast"`, `"Burst"`, `"Cone"` |
+| `rangeMode` | `string` | Only for `type: "range"`. `"add"` (default) or `"override"` |
 | `bonuses` | `Array` | Only for `type: "multi"`. Array of sub-bonus objects to be grouped under this single bonus entry. |
 | `uses` | `number` | Stack count |
 | `stat` | `string` | Property path (e.g. `system.hp.max`) |
@@ -756,16 +758,17 @@ Finds an item on an actor by its Lancer ID (lid).
 
 #### `startChoiceCard(options)`
 
-Presents a choice card to the user (or GM) with custom buttons and callbacks. 
+Presents a choice card to the user (or GM) with custom buttons and callbacks.
+
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `mode` | `string` | `"or"` | `"or"` (pick one, close) or `"and"` (must pick all) |
+| `mode` | `string` | `"or"` | `"or"` (pick one, close), `"and"` (must confirm all), `"vote"` (multi-user vote, creator sees live tally), `"vote-hidden"` (tally hidden until creator confirms) |
 | `choices` | `Array` | `[]` | List of choice objects (see below) |
 | `title` | `string` | `"CHOICE"` | Card header title |
 | `description`| `string` | `""` | Subtitle text |
 | `icon` | `string` | `null` | FontAwesome class (e.g. `"fas fa-shield-alt"`) |
 | `headerClass`| `string` | `""` | Optional CSS class for the header |
-| `userIdControl` | `boolean`| `false` | If true, the card is shown to the GM instead |
+| `userIdControl` | `string\|string[]\|null` | `null` | Single userId, array of userIds (vote/broadcast targets), or null (show locally). For vote modes this is the list of voters. |
 
 **Choice Object Structure:**
 ```javascript
@@ -773,11 +776,17 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
     text: "Button Label",
     icon: "fas fa-check",       // Optional icon
     data: { id: 1 },            // Arbitrary data passed to callback
-    callback: async (data) => { // Logic to run when selected
+    callback: async (data) => { // Logic to run when selected (or when creator confirms in vote mode)
         console.log(data.id);
     }
 }
 ```
+
+**Vote mode notes:**
+- `"vote"`: voters see a live running tally as votes arrive. The creator sees all votes in real time and manually confirms the winner.
+- `"vote-hidden"`: voters cannot see each other's choices until the creator confirms. Creator always sees the full tally.
+- `userIdControl` must be a non-empty array of user IDs when using vote modes.
+- When the creator confirms, the winning choice's `callback` is called.
 
 **Returns:** `Promise<true|null>` (true on completion, null if cancelled)
 
@@ -785,11 +794,36 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 
 #### `openChoiceMenu()`
 
-Opens a configuration dialog to send a **Choice Card** to one or more active users. 
+Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote to one or more active users.
+
 - **Returns:** `Promise<void>`
+
+**Modes available in the dialog:**
+
+| Mode | Behavior |
+|------|----------|
+| **Vote** | Each selected recipient gets a vote card. The GM sees a live tally as responses arrive, then manually picks the winner. Result is posted to chat. |
+| **Hidden Vote** | Same as Vote, but voters cannot see each other's selections until the GM confirms. Useful to avoid bandwagon effects. |
+| **Pick One (OR)** | First player to click wins. Other cards are dismissed automatically. |
+| **Pick All (AND)** | Every recipient must confirm their own card before the flow resolves. |
+
+**Dialog options:**
+- **Title / Description**: text shown on the card sent to players
+- **Recipients**: click to toggle which active users receive the card
+- **Options**: free-text list of choices (auto-numbered)
+
+When the vote concludes or a pick-one is selected, a styled chat message is posted with the result.
 
 **Macro Example:**
 ```javascript
+game.modules.get('lancer-automations').api.openChoiceMenu();
+```
+
+**Use case — player vote:**
+Run `openChoiceMenu()` from a macro, set the mode to **Vote**, select the players, add the options, and click Send. Each player sees a vote card. The GM watches the tally fill in live and clicks Confirm to lock the result. A chat message announces the winner.
+
+```javascript
+// Shortcut macro (add to hotbar)
 game.modules.get('lancer-automations').api.openChoiceMenu();
 ```
 

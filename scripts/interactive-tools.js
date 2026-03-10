@@ -8,6 +8,16 @@ import {
     snapTokenCenter, getOccupiedGridSpaces
 } from "./grid-helpers.js";
 
+/**
+ * Convert a PixiJS pointer event's global screen position to canvas world coordinates.
+ * Uses the full inverse world transform so it works correctly with isometric-perspective,
+ * which adds skew components that the manual (tx/scale) decomposition ignores.
+ * @param {PIXI.FederatedPointerEvent} event
+ * @returns {{x: number, y: number}}
+ */
+function pointerToWorld(event) {
+    return canvas.stage.worldTransform.applyInverse(event.global);
+}
 
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
     const highlight = new PIXI.Graphics();
@@ -181,7 +191,8 @@ const _cardDefaults = {
     placeToken:  { title: "PLACE TOKEN",     icon: "fas fa-user-plus" },
     placeZone:   { title: "PLACE ZONE",      icon: "fas fa-bullseye" },
     choiceCard:  { title: "CHOICE",          icon: "fas fa-list" },
-    deploymentCard: { title: "DEPLOY",      icon: "cci cci-deployable" }
+    deploymentCard: { title: "DEPLOY",      icon: "cci cci-deployable" },
+    voteCard:    { title: "VOTE",            icon: "fas fa-poll" }
 };
 
 // --- Card queue: serialise all interactive cards so they never overwrite each other ---
@@ -194,6 +205,12 @@ const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, m
 // --- Broadcast choice cards (multi-user, first-to-respond wins) ---
 // Stores a cancel() fn on each TARGET client so the card can be forcefully dismissed.
 const _pendingBroadcastCards = new Map(); // cardId → cancel()
+
+// --- Vote cards (creator side) ---
+const _pendingVoteCards = new Map(); // cardId → { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
+
+// --- Vote cards (voter side) ---
+const _pendingVoterCards = new Map(); // cardId → { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
 
 function _updatePendingBadge() {
     const pendingTitles = _cardQueueTitles.slice(1);
@@ -236,6 +253,7 @@ function _createInfoCard(type, opts) {
         icon = defaults.icon,
         headerClass = "",
         description = "",
+        origin = "",
         range = null,
         count = 1,
         zoneType = "",
@@ -248,7 +266,7 @@ function _createInfoCard(type, opts) {
     $('.la-info-card').remove();
 
     let infoRowHtml = '';
-    if (type !== "choiceCard" && type !== "deploymentCard") {
+    if (type !== "choiceCard" && type !== "deploymentCard" && type !== "voteCard") {
         let infoItems = [];
         if (range !== null) {
             infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${range}</span>`);
@@ -311,6 +329,11 @@ function _createInfoCard(type, opts) {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Deployables</h3>
             <div class="la-deployment-list" data-role="deployment-list"></div>`;
+    } else if (type === "voteCard") {
+        dynamicHtml = `
+            ${opts.disabled ? '' : `<h3 class="la-section-header lancer-border-primary">Cast Your Vote</h3>`}
+            <div class="la-choice-list" data-role="choice-list"></div>
+            <div class="la-vote-status" data-role="vote-status" style="font-size:0.8em; color:#aaa; margin-top:4px;"></div>`;
     } else {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Placed Zones</h3>
@@ -319,14 +342,18 @@ function _createInfoCard(type, opts) {
             </div>`;
     }
 
-    const showConfirm = type !== "choiceCard";
+    const showConfirm = type !== "choiceCard" && type !== "voteCard";
+    const showConfirmVote = type === "voteCard" && opts.isCreator;
 
     const html = `
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
         <div class="lancer lancer-hud window-content">
             <div class="lancer-header ${headerClass} medium">
                 <i class="${icon} i--m" style="color:#000;"></i>
-                <span>${title}</span>
+                <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+                    <span>${title}</span>
+                    ${origin ? `<span style="font-size:0.7em; font-weight:normal; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${origin}</span>` : ''}
+                </div>
             </div>
             <div class="la-info-card-body">
                 ${infoRowHtml}
@@ -334,6 +361,7 @@ function _createInfoCard(type, opts) {
                 ${dynamicHtml}
                 <div class="dialog-buttons flexrow">
                     ${showConfirm ? `<button class="lancer-button lancer-secondary dialog-button submit default" data-action="confirm" type="button"><i class="fas fa-check"></i> Confirm</button>` : ''}
+                    ${showConfirmVote ? `<button class="lancer-button lancer-secondary dialog-button submit default" data-action="confirm-vote" type="button"><i class="fas fa-check-double"></i> Confirm Vote</button>` : ''}
                     <button class="dialog-button cancel" data-action="cancel" type="button"><i class="fas fa-times"></i> Cancel</button>
                 </div>
             </div>
@@ -345,6 +373,7 @@ function _createInfoCard(type, opts) {
     const cardEl = $('.la-info-card').last();
 
     cardEl.find('[data-action="confirm"]').on('click', () => onConfirm());
+    cardEl.find('[data-action="confirm-vote"]').on('click', () => opts.onConfirmVote?.());
     cardEl.find('[data-action="cancel"]').on('click', () => onCancel());
 
     // Slide up from bottom + fade in
@@ -568,6 +597,63 @@ function _updateInfoCard(cardEl, type, data) {
                     data.onDeploy(idx);
             });
         }
+    } else if (type === "voteCard") {
+        const listEl = cardEl.find('[data-role="choice-list"]');
+        const statusEl = cardEl.find('[data-role="vote-status"]');
+        listEl.empty();
+
+        const { choices = [], voteCounts = [], myVote = null, hidden = false, isCreator = false, responded = [], allVoters = [] } = data;
+
+        choices.forEach((choice, idx) => {
+            const isMyVote = myVote === idx;
+            const iconHtml = choice.icon
+                ? `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`
+                : '';
+            const checkHtml = isMyVote
+                ? '<span class="la-choice-status" style="color:#ff6400;"><i class="fas fa-check"></i></span>'
+                : '';
+
+            // Highlight selected vote — orange left border + subtle tint; no strikethrough
+            const selectedStyle = isMyVote
+                ? 'border-left:3px solid #ff6400; background:rgba(255,100,0,0.08); padding-left:6px;'
+                : 'border-left:3px solid transparent; padding-left:6px;';
+
+            // Show count: creator always sees full count, non-hidden voters see full count,
+            // hidden voters see only their own vote indicator
+            let countBadge = '';
+            const count = voteCounts[idx] ?? 0;
+            if (isCreator || !hidden) {
+                countBadge = `<span style="font-size:0.78em; font-weight:600; color:#cc5200; background:rgba(255,100,0,0.12); border:1px solid rgba(255,100,0,0.3); border-radius:3px; padding:1px 6px; margin-left:auto; white-space:nowrap;">${count}</span>`;
+            } else if (isMyVote) {
+                // Hidden, non-creator: only show own vote indicator
+                countBadge = `<i class="fas fa-circle" style="font-size:0.55em; color:#ff6400; margin-left:auto; opacity:0.8;"></i>`;
+            }
+
+            listEl.append(`
+                <div class="la-choice-item" data-choice-index="${idx}" style="display:flex; align-items:center; cursor:pointer; ${selectedStyle}">
+                    ${iconHtml}
+                    <span class="la-choice-text" style="flex:1;">${choice.text}</span>
+                    ${countBadge}
+                    ${checkHtml}
+                </div>`);
+        });
+
+        if (!data.disabled) {
+            listEl.find('.la-choice-item').on('click', function () {
+                const idx = $(this).data('choice-index');
+                if (data.onChoose)
+                    data.onChoose(idx);
+            });
+        }
+
+        // Status line
+        const votedCount = responded.length;
+        const totalCount = allVoters.length;
+        statusEl.html(
+            totalCount > 0
+                ? `<i class="fas fa-users"></i> ${votedCount} / ${totalCount} voted`
+                : ''
+        );
     }
 }
 
@@ -848,16 +934,12 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const moveHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
             drawCursorHighlight(tx, ty);
         };
 
         const clickHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
 
             // Find clicked token
             const clickedToken = allTokens.find(token => {
@@ -1525,9 +1607,7 @@ export function knockBackToken(tokens, distance, options = {}) {
 
         // Handlers
         const moveHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
 
             const activeToken = tokenList[activeIndex];
             if (!activeToken)
@@ -1585,9 +1665,7 @@ export function knockBackToken(tokens, distance, options = {}) {
         };
 
         const clickHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
 
             const activeToken = tokenList[activeIndex];
             if (!activeToken)
@@ -2028,9 +2106,7 @@ export function placeToken(options = {}) {
         };
 
         const moveHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
 
             const cursorOffset = snapCursor(tx, ty);
             const inRange = checkInRange(cursorOffset.col, cursorOffset.row);
@@ -2044,9 +2120,7 @@ export function placeToken(options = {}) {
         };
 
         const clickHandler = (event) => {
-            const t = canvas.stage.worldTransform;
-            const tx = ((event.data.global.x - t.tx) / canvas.stage.scale.x);
-            const ty = ((event.data.global.y - t.ty) / canvas.stage.scale.y);
+            const { x: tx, y: ty } = pointerToWorld(event);
 
             const cursorOffset = snapCursor(tx, ty);
 
@@ -2128,6 +2202,10 @@ export function getTokenOwnerUserId(token) {
  * @returns {Promise<true|null>} true on completion, null if cancelled
  */
 export function startChoiceCard(options = {}) {
+    // Delegate vote mode to the dedicated vote card function
+    if (/** @type {any} */ (options).mode === "vote" || /** @type {any} */ (options).mode === "vote-hidden")
+        return startVoteCard({ ...options, hidden: /** @type {any} */ (options).mode === "vote-hidden" });
+
     const _title = options.title || 'CHOICE';
     const {
         mode = "or",
@@ -2270,7 +2348,8 @@ export function startChoiceCard(options = {}) {
                 };
 
                 const cardEl = _createInfoCard("choiceCard", {
-                    title: `[Self] ${title}`,
+                    title,
+                    origin: "Self",
                     icon,
                     headerClass,
                     description,
@@ -2438,10 +2517,11 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
         };
 
         const cardEl = _createInfoCard("choiceCard", {
-            title: `[${requesterName}→You] ${title}`,
+            title,
+            origin: `${requesterName} → You`,
             icon,
             headerClass,
-            description: (description ? description + '<br>' : '') + `<em style="color:#aaa;">Controlling choice for ${requesterName}</em>`,
+            description,
             mode,
             onConfirm: () => {},
             onCancel
@@ -2592,6 +2672,376 @@ export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation 
     }
 }
 
+// ─── Vote Card ────────────────────────────────────────────────────────────────
+
+/**
+ * Start a vote card. All listed voters receive a card and cast their choice.
+ * Only the creator (caller) sees the tally and can confirm to close the vote.
+ * @param {Object} options
+ * @param {Array<{text:string,icon?:string,callback?:Function,data?:Object}>} [options.choices=[]]
+ * @param {string} [options.title]
+ * @param {string} [options.description=""]
+ * @param {string} [options.icon]
+ * @param {string} [options.headerClass=""]
+ * @param {string|string[]|null} [options.userIdControl=null] - voter userIds
+ * @param {boolean} [options.hidden=false] - if true voters cannot see each other's vote counts
+ * @returns {Promise<true|null>}
+ */
+export function startVoteCard(options = {}) {
+    const _title = /** @type {any} */ (options).title || 'VOTE';
+    const {
+        choices = [],
+        title,
+        description = "",
+        icon,
+        headerClass = "",
+        userIdControl = null,
+        hidden = false
+    } = /** @type {any} */ (options);
+
+    const cardId = foundry.utils.randomID();
+    const rawVoters = Array.isArray(userIdControl)
+        ? userIdControl
+        : (userIdControl ? [userIdControl] : []);
+    const activeVoters = rawVoters.filter(id => id && game.users.get(id)?.active);
+
+    // Emit to all voters (socket reaches everyone including self, filtered on receiver side)
+    if (activeVoters.length > 0) {
+        game.socket.emit('module.lancer-automations', {
+            action: 'voteCardRequest',
+            payload: {
+                cardId,
+                requestingUserId: game.user.id,
+                allVoterUserIds: activeVoters,
+                title,
+                description,
+                icon,
+                headerClass,
+                choices: choices.map(c => ({ text: c.text, icon: c.icon })),
+                hidden
+            }
+        });
+    }
+
+    return _queueCard(() => new Promise((resolve) => {
+        /** @type {Map<string, number>} */
+        const votes = new Map();
+        let dismissed = false;
+
+        const doCleanup = () => {
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
+
+        const refreshCreatorCard = () => {
+            const counts = choices.map((_, i) => [...votes.values()].filter(v => v === i).length);
+            const myVote = votes.has(game.user.id) ? votes.get(game.user.id) : null;
+            _updateInfoCard(cardEl, "voteCard", {
+                choices,
+                voteCounts: counts,
+                hidden: false, // creator always sees everything
+                isCreator: true,
+                myVote: myVote ?? null,
+                responded: [...votes.keys()],
+                allVoters: activeVoters,
+                onChoose: handleCreatorVote
+            });
+            // Broadcast tally update to voters
+            game.socket.emit('module.lancer-automations', {
+                action: 'voteCardUpdate',
+                payload: {
+                    cardId,
+                    allVoterUserIds: activeVoters,
+                    voteCounts: hidden ? null : counts,
+                    responded: [...votes.keys()]
+                }
+            });
+        };
+
+        const handleCreatorVote = (idx) => {
+            if (dismissed)
+                return;
+            // Creator votes or changes their vote
+            votes.set(game.user.id, idx);
+            refreshCreatorCard();
+        };
+
+        const onConfirmVote = async () => {
+            if (dismissed)
+                return;
+            if (votes.size === 0) {
+                ui.notifications.warn("No votes cast yet.");
+                return;
+            }
+            const counts = choices.map((_, i) => [...votes.values()].filter(v => v === i).length);
+            const maxCount = Math.max(...counts);
+            const winners = counts.reduce((acc, c, i) => {
+                if (c === maxCount)
+                    acc.push(i); return acc;
+            }, /** @type {number[]} */ ([]));
+
+            let winnerIdx;
+            if (winners.length === 1) {
+                winnerIdx = winners[0];
+            } else {
+                // Tie: build a dialog with one button per tied option
+                const tieButtons = /** @type {Record<string,any>} */ ({});
+                for (const i of winners) {
+                    tieButtons[`choice_${i}`] = { label: choices[i].text, callback: () => i };
+                }
+                tieButtons.cancel = { label: "Cancel", callback: () => null };
+                const tiedNames = winners.map(i => `<b>${choices[i].text}</b>`).join(', ');
+                const picked = await Dialog.wait({
+                    title: "Vote Tie",
+                    content: `<p>There is a tie between: ${tiedNames}.</p><p>Pick the winner or cancel.</p>`,
+                    buttons: tieButtons,
+                    default: "cancel"
+                });
+                if (picked === null || picked === undefined)
+                    return;
+                winnerIdx = picked;
+            }
+
+            dismissed = true;
+            doCleanup();
+            _pendingVoteCards.delete(cardId);
+
+            // Notify voters
+            if (activeVoters.length > 0) {
+                game.socket.emit('module.lancer-automations', {
+                    action: 'voteCardConfirm',
+                    payload: {
+                        cardId,
+                        allVoterUserIds: activeVoters,
+                        winnerIdx,
+                        winnerText: choices[winnerIdx]?.text ?? ''
+                    }
+                });
+            }
+
+            const winner = choices[winnerIdx];
+            resolve(true);
+            if (winner?.callback)
+                await winner.callback({ ...winner.data, responderName: game.user.name });
+        };
+
+        const onCancel = async () => {
+            if (dismissed)
+                return;
+            const confirm = await Dialog.confirm({
+                title: "Cancel Vote?",
+                content: `<p>Are you sure you want to cancel the <b>${title}</b> vote?</p>`,
+                yes: () => true,
+                no: () => false,
+                defaultYes: false
+            });
+            if (!confirm)
+                return;
+            dismissed = true;
+            doCleanup();
+            _pendingVoteCards.delete(cardId);
+            if (activeVoters.length > 0) {
+                game.socket.emit('module.lancer-automations', {
+                    action: 'voteCardCancel',
+                    payload: { cardId, allVoterUserIds: activeVoters }
+                });
+            }
+            resolve(null);
+        };
+
+        const cardEl = _createInfoCard("voteCard", {
+            title,
+            origin: "Vote",
+            icon,
+            headerClass,
+            description,
+            isCreator: true,
+            onConfirmVote,
+            onCancel
+        });
+
+        const keyHandler = (e) => {
+            if (e.key === "Escape")
+                onCancel();
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        _pendingVoteCards.set(cardId, { resolve, cardEl, choices, votes, allVoters: activeVoters, hidden, refreshCreatorCard });
+        refreshCreatorCard();
+    }), _title);
+}
+
+/**
+ * Called on voter clients when a voteCardRequest socket event arrives.
+ * @param {{ cardId:string, requestingUserId:string, allVoterUserIds:string[], title:string, description:string, icon:string, headerClass:string, choices:Array, hidden:boolean }} payload
+ */
+export async function showVoteCardOnVoter({ cardId, requestingUserId, allVoterUserIds, title, description, icon, headerClass, choices, hidden }) {
+    const creatorName = game.users.get(requestingUserId)?.name ?? '?';
+
+    await _queueCard(() => new Promise((resolve) => {
+        let myVote = null;
+        let dismissed = false;
+        let voteCounts = choices.map(() => 0);
+        let responded = [];
+
+        const doCleanup = () => {
+            _pendingVoterCards.delete(cardId);
+            document.removeEventListener('keydown', keyHandler);
+            _removeInfoCard(cardEl);
+        };
+
+        const onCancel = () => {
+            if (dismissed)
+                return;
+            // Notify creator that this voter cancelled
+            game.socket.emit('module.lancer-automations', {
+                action: 'voteCardSubmit',
+                payload: {
+                    cardId,
+                    requestingUserId,
+                    voterUserId: game.user.id,
+                    voterName: game.user.name,
+                    choiceIdx: null // null = cancel/withdraw
+                }
+            });
+            dismissed = true;
+            doCleanup();
+            resolve(null);
+        };
+
+        const cardEl = _createInfoCard("voteCard", {
+            title,
+            origin: `Vote by ${creatorName}`,
+            icon,
+            headerClass,
+            description,
+            isCreator: false,
+            onConfirmVote: null,
+            onCancel
+        });
+
+        const keyHandler = (e) => {
+            if (e.key === "Escape")
+                onCancel();
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        const refreshVoterCard = () => {
+            _updateInfoCard(cardEl, "voteCard", {
+                choices,
+                voteCounts,
+                hidden,
+                isCreator: false,
+                myVote,
+                responded,
+                allVoters: allVoterUserIds,
+                onChoose: handleVote
+            });
+        };
+
+        const handleVote = (idx) => {
+            if (dismissed)
+                return;
+            myVote = idx;
+            game.socket.emit('module.lancer-automations', {
+                action: 'voteCardSubmit',
+                payload: {
+                    cardId,
+                    requestingUserId,
+                    voterUserId: game.user.id,
+                    voterName: game.user.name,
+                    choiceIdx: idx
+                }
+            });
+            refreshVoterCard();
+        };
+
+        _pendingVoterCards.set(cardId, {
+            cardEl,
+            choices,
+            get myVote() {
+                return myVote;
+            },
+            set myVote(v) {
+                myVote = v;
+            },
+            get dismissed() {
+                return dismissed;
+            },
+            set dismissed(v) {
+                dismissed = v;
+            },
+            cleanup: doCleanup,
+            updateCounts: (newCounts, newResponded) => {
+                if (!hidden)
+                    voteCounts = newCounts;
+                responded = newResponded;
+                refreshVoterCard();
+            },
+            resolve
+        });
+
+        refreshVoterCard();
+    }), `[${creatorName}] ${title}`);
+}
+
+/**
+ * Called on the creator's client when a voter submits or withdraws their vote.
+ * @param {{ cardId:string, voterUserId:string, voterName:string, choiceIdx:number|null }} payload
+ */
+export function receiveVoteSubmission({ cardId, voterUserId, voterName, choiceIdx }) {
+    const pending = _pendingVoteCards.get(cardId);
+    if (!pending)
+        return;
+
+    if (choiceIdx === null) {
+        // Voter withdrew — remove their vote
+        pending.votes.delete(voterUserId);
+    } else {
+        pending.votes.set(voterUserId, choiceIdx);
+    }
+    pending.refreshCreatorCard();
+}
+
+/**
+ * Called on voter clients to update vote tallies (non-hidden mode).
+ * @param {{ cardId:string, voteCounts:number[]|null, responded:string[] }} payload
+ */
+export function updateVoteCardOnVoter({ cardId, voteCounts, responded }) {
+    const pending = _pendingVoterCards.get(cardId);
+    if (!pending)
+        return;
+    pending.updateCounts(voteCounts ?? pending.choices.map(() => 0), responded ?? []);
+}
+
+/**
+ * Called on voter clients when the creator confirms the vote result.
+ * @param {{ cardId:string, winnerIdx:number, winnerText:string }} payload
+ */
+export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText }) {
+    const pending = _pendingVoterCards.get(cardId);
+    if (!pending || pending.dismissed)
+        return;
+    pending.dismissed = true;
+    pending.cleanup();
+    ui.notifications.info(`Vote concluded — winner: ${winnerText}`);
+    pending.resolve(true);
+}
+
+/**
+ * Called on voter clients when the creator cancels the vote.
+ * @param {{ cardId:string }} payload
+ */
+export function cancelVoteCardOnVoter({ cardId }) {
+    const pending = _pendingVoterCards.get(cardId);
+    if (!pending || pending.dismissed)
+        return;
+    pending.dismissed = true;
+    pending.cleanup();
+    ui.notifications.info("The vote was cancelled.");
+    pending.resolve(null);
+}
+
 /**
  * Called on each target client when a multi-user broadcast choice card is requested.
  * First user to respond wins: their choice is sent to the requester and all other
@@ -2635,10 +3085,11 @@ export async function showMultiUserControlledChoiceCard({ cardId, requestingUser
         };
 
         const cardEl = _createInfoCard("choiceCard", {
-            title: `[${requesterName}→You] ${title}`,
+            title,
+            origin: `${requesterName} → You`,
             icon,
             headerClass,
-            description: (description ? description + '<br>' : '') + `<em style="color:#aaa;">Controlling choice for ${requesterName}</em>`,
+            description,
             mode,
             onConfirm: () => {},
             onCancel
@@ -4255,7 +4706,8 @@ export async function openChoiceMenu() {
     let selectedUserIds = []; // No pre-selection per user request
     let title = "CHOICE"; // Default title per user request
     let description = "Please select an option:";
-    let mode = "or";
+    let mode = "vote";
+    let hidden = false;
 
     function refresh(html) {
         // Render users grid - Compact 3-column grid
@@ -4278,6 +4730,8 @@ export async function openChoiceMenu() {
             <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                 <label style="font-size: 0.85em; flex: 1;">Mode</label>
                 <select class="la-choice-mode" style="height: 24px; font-size: 0.85em; flex: 2; color: #fff; background: #222; border: 1px solid #7a7971; border-radius: 4px; padding: 0 4px;">
+                    <option value="vote" ${mode === "vote" ? 'selected' : ''} style="background: #222; color: #fff;">Vote</option>
+                    <option value="vote-hidden" ${mode === "vote-hidden" ? 'selected' : ''} style="background: #222; color: #fff;">Hidden Vote</option>
                     <option value="or" ${mode === "or" ? 'selected' : ''} style="background: #222; color: #fff;">Pick One (OR)</option>
                     <option value="and" ${mode === "and" ? 'selected' : ''} style="background: #222; color: #fff;">Pick All (AND)</option>
                 </select>
@@ -4323,6 +4777,7 @@ export async function openChoiceMenu() {
 
         html.find('.la-choice-mode').off('change').on('change', function () {
             mode = $(this).val();
+            hidden = mode === "vote-hidden";
         });
 
         // Auto-resize the dialog window to fit content
@@ -4389,36 +4844,66 @@ export async function openChoiceMenu() {
                         return;
                     }
 
-                    // Map choices to startChoiceCard format
-                    const mappedChoices = choicesInfo.map((c, idx) => ({
-                        text: `${idx + 1}. ${c.text}`,
-                        data: { text: c.text, number: idx + 1 },
-                        callback: async (data) => {
-                            const name = data.responderName || "A user";
-                            await ChatMessage.create({
-                                content: `
-                                    <div class="lancer-dialog-header">
-                                        <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle}</div>
-                                        <div class="lancer-dialog-subtitle"><b>${name}</b> selected:</div>
-                                        <div style="font-weight: bold; font-size: 1.25em; padding: 12px; background: rgba(0,0,0,0.05); border-left: 3px solid #ff6400; margin-top: 5px; display: flex; align-items: center; gap: 8px;">
-                                            <span style="color: #ff6400; opacity: 0.7;">${data.number}.</span> ${data.text}
+                    if (mode === "vote" || mode === "vote-hidden") {
+                        // Vote mode — one winner callback posted as chat when creator confirms
+                        const voteChoices = choicesInfo.map((c, idx) => ({
+                            text: `${idx + 1}. ${c.text}`,
+                            data: { text: c.text, number: idx + 1 },
+                            callback: async (data) => {
+                                await ChatMessage.create({
+                                    content: `
+                                        <div>
+                                            <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle} — Vote Result</div>
+                                            <div class="lancer-dialog-subtitle">The vote has concluded. Winner:</div>
+                                            <div style="font-weight: bold; font-size: 1.25em; padding: 12px; background: rgba(0,0,0,0.05); border-left: 3px solid #ff6400; margin-top: 5px; display: flex; align-items: center; gap: 8px;">
+                                                <span style="color: #ff6400; opacity: 0.7;">${data.number}.</span> ${data.text}
+                                            </div>
                                         </div>
-                                    </div>
-                                `,
-                                speaker: ChatMessage.getSpeaker({ alias: game.user.name })
-                            });
-                        }
-                    }));
+                                    `,
+                                    speaker: ChatMessage.getSpeaker({ alias: game.user.name })
+                                });
+                            }
+                        }));
 
-                    // Use the built-in startChoiceCard with the full selection array
-                    startChoiceCard(/** @type {any} */ ({
-                        choices: mappedChoices,
-                        title: finalTitle,
-                        description: finalDesc,
-                        userIdControl: selectedUserIds,
-                        mode: mode,
-                        forceSocket: true
-                    }));
+                        startVoteCard({
+                            choices: voteChoices,
+                            title: finalTitle,
+                            description: finalDesc,
+                            userIdControl: selectedUserIds,
+                            hidden
+                        });
+                    } else {
+                        // Map choices to startChoiceCard format
+                        const mappedChoices = choicesInfo.map((c, idx) => ({
+                            text: `${idx + 1}. ${c.text}`,
+                            data: { text: c.text, number: idx + 1 },
+                            callback: async (data) => {
+                                const name = data.responderName || "A user";
+                                await ChatMessage.create({
+                                    content: `
+                                        <div>
+                                            <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle}</div>
+                                            <div class="lancer-dialog-subtitle"><b>${name}</b> selected:</div>
+                                            <div style="font-weight: bold; font-size: 1.25em; padding: 12px; background: rgba(0,0,0,0.05); border-left: 3px solid #ff6400; margin-top: 5px; display: flex; align-items: center; gap: 8px;">
+                                                <span style="color: #ff6400; opacity: 0.7;">${data.number}.</span> ${data.text}
+                                            </div>
+                                        </div>
+                                    `,
+                                    speaker: ChatMessage.getSpeaker({ alias: game.user.name })
+                                });
+                            }
+                        }));
+
+                        // Use the built-in startChoiceCard with the full selection array
+                        startChoiceCard(/** @type {any} */ ({
+                            choices: mappedChoices,
+                            title: finalTitle,
+                            description: finalDesc,
+                            userIdControl: selectedUserIds,
+                            mode: mode,
+                            forceSocket: true
+                        }));
+                    }
 
                     ui.notifications.info(`Sent card to ${selectedUserIds.length} users.`);
                 }
@@ -4473,5 +4958,11 @@ export const InteractiveAPI = {
     getActivatedItems,
     endItemActivation,
     openEndActivationMenu,
-    openChoiceMenu
+    openChoiceMenu,
+    startVoteCard,
+    showVoteCardOnVoter,
+    receiveVoteSubmission,
+    updateVoteCardOnVoter,
+    confirmVoteCardOnVoter,
+    cancelVoteCardOnVoter
 };

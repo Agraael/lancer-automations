@@ -73,7 +73,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 - **TemplateMacro Integration**: Lancer-specific zone tools: effect zones, dangerous zones, difficult terrain
 - **Item Flags & Injection**: attach deployables to any item, add custom flags read by the automation system
 - **Built-in Activations**: Overwatch, Brace, Flight, Fall, ready to use out of the box
-- **Built-in Macros**: Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, and more
+- **Built-in Macros**: Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, Reinforcement, and more
 
 ---
 
@@ -140,6 +140,7 @@ General bonuses behave like standard status effects: they're visible on the toke
 - **Damage**: adds bonus damage (by type, e.g. +2 Energy) applied on the next damage roll
 - **Stat**: modifies an actor stat directly (HP, Heat Cap, Speed, Evasion, E-Defense, Save, etc.)
 - **Tag**: injects or modifies tags on weapons (e.g. adding Armor Penetration, changing range)
+- **Range**: increases or overrides a weapon's range value for a specific range category (Range, Threat, Line, Blast, Burst, Cone).
 - **Immunity**: grants immunity to a damage type or effect category
 
 <br clear="right"/>
@@ -264,6 +265,7 @@ Several functions handle deploying tokens or weapons onto the scene:
 - `api.pickupWeaponToken(ownerToken)`: retrieves a thrown weapon token
 - `api.beginThrowWeaponFlow(weapon)`: starts a weapon attack flow pre-configured for throwing
 - `api.openThrowMenu(actor)`: dialog listing all throwable weapons for an actor
+- `api.delayedTokenAppearance()`: handles delayed token appearance in combat, using placeholders and automatic reveal on a target round
 
 ### Movement History & Revert
 
@@ -531,13 +533,28 @@ Several other triggers allow you to cancel an operation before it completes. Any
 - `triggerData.cancelCheck(reasonText?, title?, showCard?, userIdControl?)`: stop a stat check in `onInitCheck`
 - `triggerData.cancelChange(reasonText?, title?, showCard?, userIdControl?)`: stop a status effect from being applied or removed in `onPreStatusApplied` / `onPreStatusRemoved`
 
-**Parameters:**
-- `reasonText`: (String) The reason why the action was blocked, shown in chat.
-- `title`: (String) The title of the choice card shown to the user.
-- `showCard`: (Boolean) If true (default), a chat card is printed explaining the cancellation.
-- `userIdControl`: (Boolean) When true (by default), the "Ignore / Allow" choice card is sent to the GM instead of the current player.
+![Choice card GM control](doc/img/choice-gm-control.png)
 
-![Choice card Gm control](doc/img/choice-gm-control.png)
+## Choice Cards
+
+`api.startChoiceCard(options)` shows an interactive HUD card that pauses execution and waits for a user to pick. Cards queue automatically so multiple calls never overlap.
+
+The `userIdControl` parameter routes the card to a specific user or a list of users. When an array is given, the **first to respond wins** and the card is dismissed for everyone else.
+
+Three modes are available:
+- **OR** — pick exactly one option, card closes immediately.
+- **AND** — every option must be clicked before the card closes; each callback fires as soon as its button is clicked.
+- **Vote / Hidden Vote** — the card is broadcast to all recipients simultaneously. The creator monitors a live tally and clicks **Confirm** to finalize. Ties are broken by the creator. In hidden mode, voters cannot see each other's choices until the vote is confirmed.
+
+![Vote card](doc/img/vote-card.png)
+
+### openChoiceMenu
+
+A built-in GM macro tool that opens a configuration dialog to build and send a choice card without writing any code. Set the title, description, mode, recipients, and options, then click **Send**.
+
+![Choice Menu](doc/img/choice-menu.png)
+
+
 
 ### Built-in Activations
 
@@ -620,7 +637,7 @@ When configured in module settings, a token's vision radius is reduced during dr
 
 ## Built-in Macros
 
-The module ships with a compendium of macros for common Lancer actions:
+The module ships with a compendium of macros for common Lancer actions (All macro starts with "L.A -"):
 
 <details>
 <summary>Expand macro list</summary>
@@ -640,10 +657,12 @@ The module ships with a compendium of macros for common Lancer actions:
 | **Pickup Weapon** | Retrieve a thrown weapon from the scene |
 | **Boot Up / Shut Down** | Handle mech boot and shutdown flows |
 | **Scan** | Perform a System Scan on an NPC |
+| **Reinforcement** | Delayed token appearance for combat. Hides selected tokens and places placeholders that countdown to appearance. Will use tokens named "Size X" (e.g., "Size 1", "Size 2") as placeholders if they exist in the actor directory. |
 | **Aid / Bolster / Search / Handle / Interact / Squeeze / Hide / Dismount** | Standard pilot and mech actions |
 | **Reactor Explosion / Meltdown** | NPC and scenario tools |
 | **Downtime** | Downtime activity card |
 | **Frag Signal** | Scenario-specific macro |
+| **openChoiceMenu** | Open a menu to trigger choice event, like votes |
 
 </details>
 
