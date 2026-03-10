@@ -602,7 +602,7 @@ function _updateInfoCard(cardEl, type, data) {
         const statusEl = cardEl.find('[data-role="vote-status"]');
         listEl.empty();
 
-        const { choices = [], voteCounts = [], myVote = null, hidden = false, isCreator = false, responded = [], allVoters = [] } = data;
+        const { choices = [], voteCounts = [], myVote = null, hidden = false, isCreator = false, disabled = false, responded = [], allVoters = [] } = data;
 
         choices.forEach((choice, idx) => {
             const isMyVote = myVote === idx;
@@ -630,7 +630,7 @@ function _updateInfoCard(cardEl, type, data) {
             }
 
             listEl.append(`
-                <div class="la-choice-item" data-choice-index="${idx}" style="display:flex; align-items:center; cursor:pointer; ${selectedStyle}">
+                <div class="la-choice-item" data-choice-index="${idx}" style="display:flex; align-items:center; cursor:${disabled ? 'default' : 'pointer'}; ${selectedStyle}">
                     ${iconHtml}
                     <span class="la-choice-text" style="flex:1;">${choice.text}</span>
                     ${countBadge}
@@ -2723,6 +2723,8 @@ export function startVoteCard(options = {}) {
         });
     }
 
+    const creatorIsVoter = activeVoters.includes(game.user.id);
+
     return _queueCard(() => new Promise((resolve) => {
         /** @type {Map<string, number>} */
         const votes = new Map();
@@ -2741,10 +2743,11 @@ export function startVoteCard(options = {}) {
                 voteCounts: counts,
                 hidden: false, // creator always sees everything
                 isCreator: true,
+                disabled: !creatorIsVoter,
                 myVote: myVote ?? null,
                 responded: [...votes.keys()],
                 allVoters: activeVoters,
-                onChoose: handleCreatorVote
+                onChoose: creatorIsVoter ? handleCreatorVote : null
             });
             // Broadcast tally update to voters
             game.socket.emit('module.lancer-automations', {
@@ -2849,12 +2852,17 @@ export function startVoteCard(options = {}) {
             resolve(null);
         };
 
+        const _desc = creatorIsVoter
+            ? description
+            : (description ? description + '<br>' : '') + `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> Waiting for votes from ${activeVoters.map(id => game.users.get(id)?.name ?? id).join(', ')}</em>`;
+
         const cardEl = _createInfoCard("voteCard", {
             title,
             origin: "Vote",
             icon,
             headerClass,
-            description,
+            description: _desc,
+            disabled: !creatorIsVoter,
             isCreator: true,
             onConfirmVote,
             onCancel

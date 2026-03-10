@@ -2449,6 +2449,65 @@ function wrapRollReliable(flowSteps) {
     });
 }
 
+function wrapApplySelfHeat(flowSteps) {
+    const origApplySelfHeat = flowSteps.get('applySelfHeat');
+    if (!origApplySelfHeat) return;
+
+    flowSteps.set('applySelfHeat', async function wrappedApplySelfHeat(state, options) {
+        const actor = state.actor;
+        // Only intercept when there's self_heat to process
+        if (!actor || !state.data?.self_heat) {
+            return origApplySelfHeat(state, options);
+        }
+
+        // --- Heat Immunity check (lancer-automations bonus system) ---
+        const heatImmune = getImmunityBonuses(actor, "damage")
+            .some(b => b.damageTypes?.some(t => ['heat', 'all'].includes(t.toLowerCase())));
+
+        if (heatImmune) {
+            // Zero out self_heat so original step skips the roll and applies 0
+            const savedSelfHeat = state.data.self_heat;
+            state.data.self_heat = undefined;
+            const result = await origApplySelfHeat(state, options);
+            state.data.self_heat = savedSelfHeat; // restore for chat card
+            return result;
+        }
+
+        // --- Heat Resistance check (native OR lancer-automations bonus) ---
+        const isShredded = actor.system.statuses?.shredded;
+        const hasResistance = !isShredded && (
+            actor.system.resistances?.heat ||
+            checkDamageResistances(actor, "heat").length > 0
+        );
+
+        if (hasResistance) {
+            // Roll the self_heat ourselves, halve (floor), apply the halved value
+            const roll = await new Roll(state.data.self_heat).evaluate();
+            const halved = Math.floor(roll.total / 2);
+            state.data.self_heat_result = { roll, tt: await roll.getTooltip() };
+
+            const automationSettings = game.settings.get(game.system.id, "automationOptions");
+            if (automationSettings?.attack_self_heat && (actor.is_mech() || actor.is_npc())) {
+                await actor.update({
+                    "system.heat.value": actor.system.heat.value + (state.data.overkill_heat ?? 0) + halved
+                });
+            }
+
+            // Zero out both so original step applies nothing further
+            const savedSelfHeat = state.data.self_heat;
+            const savedOverkillHeat = state.data.overkill_heat;
+            state.data.self_heat = undefined;
+            state.data.overkill_heat = 0;
+            const result = await origApplySelfHeat(state, options);
+            state.data.self_heat = savedSelfHeat;      // restore for chat card
+            state.data.overkill_heat = savedOverkillHeat;
+            return result;
+        }
+
+        return origApplySelfHeat(state, options);
+    });
+}
+
 function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
@@ -2512,6 +2571,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
 
     // Wrap rollReliable so knockback-only flows (no damage dice) don't abort
     wrapRollReliable(flowSteps);
+
+    // Wrap applySelfHeat to honour heat immunity and resistance
+    wrapApplySelfHeat(flowSteps);
 
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
