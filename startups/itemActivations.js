@@ -1386,13 +1386,12 @@ api.registerDefaultItemReactions({
 
                 if (effect && roller) {
                     if (triggerType === "onInitCheck") {
-                        if (triggerData.flowState) {
-                            triggerData.flowState.injectBonus({
-                                name: "Squad Leader",
-                                val: 1,
-                                type: "difficulty"
-                            });
-                        }
+                        triggerData.flowState.injectBonus({
+                            name: "Squad Leader",
+                            val: 1,
+                            type: "difficulty"
+                        });
+
                     } else if (triggerType === "onCheck") {
                         await api.consumeEffectCharge(effect);
                     }

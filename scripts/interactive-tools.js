@@ -5411,6 +5411,269 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
     });
 }
 
+/**
+ * Prompts the user to choose an invade option for a tech attack.
+ * Always includes the built-in Fragment Signal. Collects item-based invades
+ * from mech loadout systems (and frame core) or NPC/other actor items.
+ * @param {Actor|Token} actorOrToken
+ * @returns {Promise<Object|null>} Selected invade entry or null if cancelled.
+ */
+export async function chooseInvade(actorOrToken) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return null;
+
+    const isNPC = actor.type === 'npc';
+
+    // --- Collect invades ---
+    const invades = [];
+
+    // Built-in Fragment Signal
+    const fragDetail = isNPC
+        ? "Target becomes IMPAIRED until the end of their next turn."
+        : "Target becomes IMPAIRED and SLOWED until the end of their next turn.";
+    invades.push({
+        name: "Fragment Signal",
+        detail: fragDetail,
+        item: null,
+        action: null,
+        tags: [],
+        isFragmentSignal: true,
+        sourceItemName: "Built-in",
+        img: "systems/lancer/assets/icons/tech_quick.svg"
+    });
+
+    if (actor.type === 'mech') {
+        // Mech loadout systems
+        for (const s of (actor.system?.loadout?.systems ?? [])) {
+            const item = s?.value;
+            if (!item)
+                continue;
+            for (const action of (item.system?.actions ?? [])) {
+                if (action.activation === "Invade") {
+                    invades.push({
+                        name: action.name,
+                        detail: action.detail || '',
+                        item,
+                        action,
+                        tags: item.system?.tags ?? [],
+                        isFragmentSignal: false,
+                        sourceItemName: item.name,
+                        img: item.img || "systems/lancer/assets/icons/mech_system.svg"
+                    });
+                }
+            }
+        }
+        // Frame core system passive actions
+        const frame = actor.system?.loadout?.frame?.value;
+        if (frame) {
+            for (const action of (frame.system?.core_system?.passive_actions ?? [])) {
+                if (action.activation === "Invade") {
+                    invades.push({
+                        name: action.name,
+                        detail: action.detail || '',
+                        item: frame,
+                        action,
+                        tags: [],
+                        isFragmentSignal: false,
+                        sourceItemName: `${frame.name} (Core)`,
+                        img: frame.img || "systems/lancer/assets/icons/frame.svg"
+                    });
+                }
+            }
+        }
+    } else {
+        // NPC and others: check all items
+        for (const item of actor.items) {
+            for (const action of (item.system?.actions ?? [])) {
+                if (action.activation === "Invade") {
+                    invades.push({
+                        name: action.name,
+                        detail: action.detail || '',
+                        item,
+                        action,
+                        tags: item.system?.tags ?? [],
+                        isFragmentSignal: false,
+                        sourceItemName: item.name,
+                        img: item.img || "systems/lancer/assets/icons/generic_item.svg"
+                    });
+                }
+            }
+        }
+    }
+
+    return new Promise((resolve) => {
+        const content = `
+            <div class="lancer-dialog-header">
+                <div class="lancer-dialog-title">CHOOSE INVADE</div>
+                <div class="lancer-dialog-subtitle">Select an invade option.</div>
+            </div>
+            <div class="lancer-dialog-body" style="padding: 10px;">
+                <div style="font-size: 0.72em; color: #777; font-style: italic; margin-bottom: 6px;"><i class="fas fa-mouse-pointer"></i> Right-click a row for details</div>
+                <div class="la-invade-list" style="max-height: 500px; overflow-y: auto; padding-right: 5px;">
+                    ${invades.map((inv, idx) => `
+                        <div class="la-invade-item" data-idx="${idx}"
+                             style="display: flex; align-items: flex-start; padding: 10px; border: 1px solid #444;
+                                    margin-bottom: 6px; cursor: pointer; border-radius: 4px;
+                                    background: rgba(255,255,255,0.03); transition: all 0.2s;">
+                            <img src="${inv.img}" style="width: 40px; height: 40px; object-fit: contain; margin-right: 12px; border: 1px solid #222; flex-shrink: 0;">
+                            <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                                <div style="margin-bottom: 4px;">
+                                    <span style="font-weight: bold;">${inv.name}</span>
+                                    <span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${inv.sourceItemName}</span>
+                                </div>
+                                <span style="font-size: 0.75em; opacity: 0.5; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">INVADE</span>
+                            </div>
+                            <i class="fas fa-check la-invade-check" style="color: #ff6400; margin-left: 8px; margin-top: 14px; visibility: hidden;"></i>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        let selectedIdx = -1;
+
+        const dialog = new Dialog({
+            title: "Choose Invade",
+            content,
+            buttons: {
+                confirm: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: "Confirm",
+                    callback: () => {
+                        if (selectedIdx >= 0)
+                            resolve(invades[selectedIdx]);
+                        else
+                            resolve(null);
+                    }
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Cancel",
+                    callback: () => resolve(null)
+                }
+            },
+            default: "confirm",
+            render: (html) => {
+                const listItems = html.find('.la-invade-item');
+                const confirmBtn = html.parent().find('button.confirm');
+                confirmBtn.prop('disabled', true);
+
+                const _sectionLabel = (text, bg) =>
+                    `<span style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
+
+                const _showInvadeDetailPopup = (inv) => {
+                    $('.la-invade-detail-popup').remove();
+
+                    const effectHtml = inv.detail
+                        ? `<div style="margin-bottom:6px;">${_sectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${inv.detail}</div></div>`
+                        : '';
+                    const tagsHtml = inv.tags?.length
+                        ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${inv.tags.map(t => {
+                            const tn = String(t.name ?? t.lid ?? t.id ?? '').replace(/\{VAL\}/gi, t.val ?? '');
+                            return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tn}</span>`;
+                        }).join('')}</div>`
+                        : '';
+
+                    const popup = $(`
+                        <div class="la-invade-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #4a1010;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
+                            <div style="background:linear-gradient(90deg,#2d0a0a,#1a0808);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5a1515;border-radius:4px 4px 0 0;">
+                                <div>
+                                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${inv.name}</div>
+                                    <div style="font-size:0.72em;color:#aaa;">${inv.sourceItemName}</div>
+                                </div>
+                                <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
+                            </div>
+                            <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${effectHtml}${tagsHtml}</div>
+                        </div>`);
+
+                    $('body').append(popup);
+
+                    const dlg = html.closest('.app');
+                    const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
+                    const dlgW = dlg.outerWidth() ?? 480;
+                    const pw = popup.outerWidth(), ph = popup.outerHeight();
+                    const wx = window.innerWidth, wy = window.innerHeight;
+                    let px = dlgOffset.left + dlgW + 8;
+                    if (px + pw > wx - 10)
+                        px = dlgOffset.left - pw - 8;
+                    let py = dlgOffset.top;
+                    if (py + ph > wy - 10)
+                        py = wy - ph - 10;
+                    popup.css({ left: Math.max(10, px), top: Math.max(10, py) });
+
+                    popup.find('.la-detail-close').on('click', () => popup.remove());
+                    $(document).one('click', () => popup.remove());
+                };
+
+                listItems.on('contextmenu', function(e) {
+                    e.preventDefault();
+                    const idx = Number.parseInt($(this).data('idx'));
+                    _showInvadeDetailPopup(invades[idx]);
+                });
+
+                listItems.on('click', function() {
+                    const idx = Number.parseInt($(this).data('idx'));
+                    listItems.css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
+                        .find('.la-invade-check').css('visibility', 'hidden');
+                    selectedIdx = idx;
+                    $(this).css({ 'border-color': '#ff6400', 'background': 'rgba(255,100,0,0.05)' })
+                        .find('.la-invade-check').css('visibility', 'visible');
+                    confirmBtn.prop('disabled', false);
+                });
+            }
+        }, {
+            classes: ['lancer-dialog-base', 'lancer-no-title'],
+            width: 480,
+            top: 450,
+            left: 150
+        });
+        dialog.render(true);
+    });
+}
+
+/**
+ * Prompts the user to choose an invade then fires TechAttackFlow.
+ * @param {Actor|Token} actorOrToken
+ * @returns {Promise<void>}
+ */
+export async function executeInvade(actorOrToken) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return;
+
+    const selected = await chooseInvade(actor);
+    if (!selected)
+        return;
+
+    const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
+    if (!TechAttackFlow) {
+        ui.notifications.error("TechAttackFlow not found in game.lancer.flows.");
+        return;
+    }
+
+    if (selected.isFragmentSignal) {
+        const flow = new TechAttackFlow(actor.uuid, {
+            title: "Fragment Signal",
+            invade: true,
+            effect: selected.detail,
+            attack_type: "Tech"
+        });
+        await flow.begin();
+    } else {
+        const uuid = selected.item?.uuid ?? actor.uuid;
+        const flow = new TechAttackFlow(uuid, {
+            title: selected.name,
+            invade: true,
+            attack_type: "Tech",
+            action: selected.action,
+            effect: selected.detail,
+            tags: selected.tags
+        });
+        await flow.begin();
+    }
+}
+
 export const InteractiveAPI = {
     chooseToken,
     placeZone,
@@ -5454,5 +5717,6 @@ export const InteractiveAPI = {
     updateVoteCardOnVoter,
     confirmVoteCardOnVoter,
     cancelVoteCardOnVoter,
-    choseMount
+    choseMount,
+    chooseInvade
 };

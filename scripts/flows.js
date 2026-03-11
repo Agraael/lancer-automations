@@ -125,4 +125,23 @@ export function injectExtraDataUtility(state) {
     return state;
 }
 
-
+/**
+ * Flow step injected before showAttackHUD in TechAttackFlow.
+ * When the attack is an invade but has no lancerItem (e.g. Fragment Signal),
+ * sets a minimal fake lancerItem on acc_diff so isTech() returns true and
+ * the HUD renders with purple tech styling instead of grey weapon styling.
+ */
+export async function forceTechHUDStep(state, _options) {
+    const data = state?.data;
+    if (data?.invade && data.acc_diff && !data.acc_diff.lancerItem) {
+        data.acc_diff.lancerItem = {
+            is_mech_weapon: () => false,
+            is_pilot_weapon: () => false,
+            is_npc_feature: () => false,
+            currentProfile: () => ({ range: [], damage: [] }),
+            rangesFor: () => [],
+            system: {}
+        };
+    }
+    return true;
+}

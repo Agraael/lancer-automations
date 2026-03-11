@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Invade",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/tech_quick.svg",
+    "command_source": "Invade.js"
+}

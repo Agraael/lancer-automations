@@ -56,7 +56,8 @@ import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable } from "./mi
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
     bindChatMessageStateInterceptor,
-    ActiveFlowState
+    ActiveFlowState,
+    forceTechHUDStep
 } from "./flows.js";
 import { DowntimeAPI } from "./downtime.js";
 import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
@@ -2597,8 +2598,11 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Register new targeting step
     flowSteps.set('lancer-automations:statRollTargetSelect', statRollTargetSelectStep);
 
+    flowSteps.set('lancer-automations:forceTechHUD', forceTechHUDStep);
+
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
+    flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:forceTechHUD');
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
 
     // Insert onInitAttack/TechAttack steps

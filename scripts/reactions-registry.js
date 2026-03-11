@@ -284,7 +284,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: reactorToken.actor.system.sensor_range,
-                        filter: (t) => !api.findEffectOnToken(t, "lancer.statusIconsNames.bolster")
+                        filter: (t) => !api.findEffectOnToken(t, "bolster")
                     });
                     if (!chosen || chosen.length === 0)
                         return;
@@ -292,7 +292,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                     const validTargets = await api.applyEffectsToTokens({
                         tokens: targets,
-                        effectNames: "lancer.statusIconsNames.bolster",
+                        effectNames: "bolster",
                         note: "Bolster",
                         duration: { label: 'end', turns: 1, rounds: 0 }
                     });
@@ -375,8 +375,8 @@ export function getDefaultGeneralReactionRegistry() {
 
                 const actor = reactorToken.actor;
                 const effects = actor.type === 'npc'
-                    ? ["lancer.statusIconsNames.impaired"]
-                    : ["lancer.statusIconsNames.slow", "lancer.statusIconsNames.impaired"];
+                    ? ["impaired"]
+                    : ["slow", "impaired"];
 
                 await api.applyEffectsToTokens({
                     tokens: targetTokens,
@@ -740,7 +740,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
-                    effectNames: ['lancer.statusIconsNames.impaired'],
+                    effectNames: ['impaired'],
                     note: 'Eject'
                 });
 

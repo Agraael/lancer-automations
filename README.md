@@ -654,6 +654,9 @@ The module ships with a compendium of macros for common Lancer actions (All macr
 
 | Macro | What it does |
 |-------|-------------|
+| **Skirmish** | Open a menu to select a weapon and execute a Skirmish action |
+| **Barrage** | Open a menu to select weapons and execute a Barrage action |
+| **Invade** | Open a menu to select an option and execute an Invade action |
 | **Overwatch** | Declare Overwatch |
 | **Brace** | Declare Brace |
 | **Knockback** | Interactive knockback tool |
@@ -662,6 +665,8 @@ The module ships with a compendium of macros for common Lancer actions (All macr
 | **Disengage** | Execute a Disengage |
 | **Eject** | Execute an Eject |
 | **Lock On** | Apply Lock On to a target |
+| **Reload One Weapon** | Reload a single weapon |
+| **End Activation** | Open a menu to end an active item effect |
 | **Throw Weapon** | Open the throw weapon menu for the selected token |
 | **Deploy Item** | Open the deployable menu for the selected token |
 | **Pickup Weapon** | Retrieve a thrown weapon from the scene |
@@ -672,6 +677,7 @@ The module ships with a compendium of macros for common Lancer actions (All macr
 | **Reactor Explosion / Meltdown** | NPC and scenario tools |
 | **Downtime** | Downtime activity card |
 | **Frag Signal** | Scenario-specific macro |
+| **Suicide** | Instantly destroy a token (GM tool) |
 | **openChoiceMenu** | Open a menu to trigger choice event, like votes |
 
 </details>

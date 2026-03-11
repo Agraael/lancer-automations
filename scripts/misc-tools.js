@@ -1,6 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, choseMount, InteractiveAPI } from "./interactive-tools.js";
+import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive-tools.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
 
 const STAT_PATHS = {
@@ -396,12 +396,16 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     return { completed, flow };
 }
 
-export async function executeTechAttack(actor, options = {}, extraData = {}) {
-    const TechAttackFlow = game.lancer.flows.get("TechAttackFlow");
+export async function executeTechAttack(target, options = {}, extraData = {}) {
+    const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
     if (!TechAttackFlow) {
         return { completed: false };
     }
-    const flow = new TechAttackFlow(actor.uuid, options);
+    if (!target) {
+        ui.notifications.error("lancer-automations | executeTechAttack: target (actor or item) is required.");
+        return { completed: false };
+    }
+    const flow = new TechAttackFlow(target, options);
     if (extraData && typeof extraData === 'object') {
         flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
@@ -1217,6 +1221,37 @@ export function getItemType(item) {
     return item.system?.type || item.type || "";
 }
 
+export async function executeInvade(actorOrToken) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor) {
+        ui.notifications.error("lancer-automations | executeInvade requires a token or actor.");
+        return;
+    }
+
+    const selected = await chooseInvade(actor);
+    if (!selected)
+        return;
+
+    if (selected.isFragmentSignal) {
+        await executeTechAttack(actor, {
+            title: "Fragment Signal",
+            invade: true,
+            effect: selected.detail,
+            grit: actor.system.tech_attack,
+            attack_type: "Tech"
+        });
+    } else {
+        await executeTechAttack(selected.item, {
+            title: selected.name,
+            invade: true,
+            attack_type: "Tech",
+            action: selected.action,
+            effect: selected.detail,
+            tags: selected.tags
+        });
+    }
+}
+
 export const MiscAPI = {
     executeStatRoll,
     executeDamageRoll,
@@ -1237,6 +1272,7 @@ export const MiscAPI = {
     getItemType,
     executeSkirmish,
     executeBarrage,
+    executeInvade,
     beginWeaponThrowFlow,
     beginWeaponAttackFlow
 };
