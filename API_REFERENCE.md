@@ -38,7 +38,7 @@
   - [`addConstantBonus`](#addconstantbonusactor-bonusdata)
   - [`getConstantBonuses`](#getconstantbonusesactor)
   - [`removeConstantBonus`](#removeconstantbonusactor-bonusid)
-  - [`injectBonusToNextRoll`](#injectbonustonextrollactor-bonus)
+  - [Flow State Data Injection](#flow-state-data-injection)
 - [Spatial & Distance Tools](#spatial--distance-tools)
   - [Distance Calculations](#distance-calculations)
   - [Faction & Disposition](#faction--disposition)
@@ -465,7 +465,20 @@ Removes **all** active effects from the provided tokens.
 #### `addConstantBonus(actor, bonusData)`
 #### `getConstantBonuses(actor)`
 #### `removeConstantBonus(actor, bonusId)`
-#### `injectBonusToNextRoll(actor, bonus)`
+
+### Flow State Data Injection
+
+When within an active flow (like an attack, a check, etc.), the `triggerData` parameter contains a `flowState` object. You can use this state object to inject ephemeral bonuses or share arbitrary variables across triggers for the lifespan of that specific flow.
+
+#### `triggerData.flowState.injectBonus(bonus)`
+Adds an ephemeral bonus to the current flow (e.g., an accuracy bonus). The bonus applies to rolls during this flow and is discarded when the flow completes.
+
+#### `triggerData.flowState.injectFlowExtraData(extraData)`
+Merges the properties of `extraData` into `state.la_extraData`. Useful for passing variables between different trigger phases (e.g., from `onHit` to `onDamage`).
+
+#### `triggerData.flowState.getFlowExtraData()`
+Returns the `la_extraData` object attached to the current flow state.
+
 #### `getImmunityBonuses(actor, subtype)`
 - **Returns**: `Array<object>` — returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`) for the actor.
 

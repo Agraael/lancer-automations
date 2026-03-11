@@ -92,13 +92,13 @@ export function applyTagBonus(state, bonus) {
         // Tag exists. Modify it.
         const tag = { ...state.data.tags[existingIdx] }; // Clone so we don't mutate the base definition
         const isOverride = bonus.tagMode === 'override';
-        const val = parseInt(bonus.val) || 0;
+        const val = Number.parseInt(bonus.val) || 0;
 
         if (isOverride) {
             tag.val = String(val);
         } else {
             // Add
-            const currentVal = parseInt(tag.val) || parseInt(tag.num_val) || 0;
+            const currentVal = Number.parseInt(tag.val) || Number.parseInt(tag.num_val) || 0;
             tag.val = String(currentVal + val);
         }
         state.data.tags[existingIdx] = tag;
@@ -107,7 +107,7 @@ export function applyTagBonus(state, bonus) {
         state.data.tags.push({
             id: tagId,
             lid: tagId,
-            val: String(parseInt(bonus.val) || 0),
+            val: String(Number.parseInt(bonus.val) || 0),
             name: tagName,
             description: `Granted by bonus: ${bonus.name}`
         });
@@ -126,7 +126,7 @@ export function applyRangeBonus(state, bonus) {
 
     const rangeType = bonus.rangeType;
     const isOverride = bonus.rangeMode === 'override';
-    const val = parseInt(bonus.val) || 0;
+    const val = Number.parseInt(bonus.val) || 0;
 
     const existingIdx = state.data.range.findIndex(r => r.type === rangeType);
     if (existingIdx !== -1) {
@@ -135,7 +135,7 @@ export function applyRangeBonus(state, bonus) {
         if (isOverride) {
             entry.val = val;
         } else {
-            entry.val = (parseInt(entry.val) || 0) + val;
+            entry.val = (Number.parseInt(entry.val) || 0) + val;
         }
     } else {
         // Try to reuse the constructor from an existing range to preserve prototype methods
@@ -215,7 +215,7 @@ function createGenericBonusStep(flowType) {
                 const count = accDiff.targets?.length || 0;
                 const bBase = accDiff.base;
                 for (const bonus of r.allTargetedBonuses) {
-                    const val = parseInt(bonus.val) || 0;
+                    const val = Number.parseInt(bonus.val) || 0;
                     if (!val) {
                         continue;
                     }
@@ -339,7 +339,7 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
                 const b = { ...bonus, id: bonus.id || foundry.utils.randomID() };
                 results.allTargetedBonuses.push(b);
             } else {
-                let val = parseInt(bonus.val) || 0;
+                let val = Number.parseInt(bonus.val) || 0;
                 if (bonus.type === 'difficulty') {
                     val = -val;
                 }
@@ -354,7 +354,7 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
  * Specifically handles ephemeral bonuses and their consumption.
  */
 async function processEphemeralBonuses(actor, flowType, tags, state, results) {
-    const bonuses = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+    const bonuses = state?.la_extraData?.flow_bonus || [];
     if (!bonuses.length) {
         return;
     }
@@ -385,8 +385,8 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results) {
             remaining.push(b);
         }
     }
-    if (changed) {
-        await delegateSetActorFlag(actor, "lancer-automations", "ephemeral_bonuses", remaining);
+    if (changed && state?.la_extraData) {
+        state.la_extraData.flow_bonus = remaining;
     }
 }
 
@@ -395,7 +395,6 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results) {
  */
 async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, results) {
     const targets = Array.from(game.user?.targets || []);
-    const updates = new Map();
     for (const token of (game.scenes.active?.tokens ?? [])) {
         if (!token.actor || token.id === attackerTokenId) {
             continue;
@@ -433,6 +432,10 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
                 route(b);
             }
         }
+        /*
+        // Lancer-Automations: This is the old ephemeral bonus system utilizing actor flags.
+        // It has been deprecated in favor of storing ephemeral bonuses entirely inside the active flow's state.la_extraData.flow_bonus,
+        // to avoid concurrency issues when an actor is in multiple flows simultaneously. We keep this commented out for future reference.
         const ephemerals = sourceActor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
         const rem = [];
         let consumed = false;
@@ -447,9 +450,7 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
         if (consumed) {
             updates.set(sourceActor, rem);
         }
-    }
-    for (const [a, r] of updates) {
-        await delegateSetActorFlag(a, "lancer-automations", "ephemeral_bonuses", r);
+        */
     }
 }
 
@@ -490,7 +491,7 @@ export function getBonusIcon(bonus) {
         return getBonusIcon({ type: maxType });
     }
 
-    const val = parseInt(bonus.val) || 0;
+    const val = Number.parseInt(bonus.val) || 0;
     return val >= 0 ? ACC : DIFF;
 }
 
@@ -609,7 +610,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     };
 
     const updateFlowAccuracy = (bonus, wasEnabled) => {
-        let val = parseInt(bonus.val) || 0;
+        let val = Number.parseInt(bonus.val) || 0;
         if (bonus.type === 'difficulty')
             val = -val;
 
@@ -646,7 +647,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     const renderBonusRow = (bonus, index) => {
         const usesText = bonus.uses !== undefined ? ` (${bonus.uses} left)` : '';
         const isDifficulty = bonus.type === 'difficulty';
-        const rawVal = parseInt(bonus.val) || 0;
+        const rawVal = Number.parseInt(bonus.val) || 0;
         const effectiveVal = isDifficulty ? -Math.abs(rawVal) : rawVal;
         const valText = (effectiveVal > 0 ? '+' : '') + effectiveVal;
         const isEnabled = bonus.enabled;
@@ -661,7 +662,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
     const bindEvents = ($container) => {
         $container.find('.csm-bonus-checkbox').on('change', function() {
-            const index = parseInt($(this).data('index'));
+            const index = Number.parseInt($(this).data('index'));
             const bonusId = $(this).closest('label').data('bonus-id');
             const isChecked = $(this).is(':checked');
             const currentStates = getCurrentBonusStates();
@@ -692,7 +693,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
             const bonusStates = getCurrentBonusStates();
             bonusStates.forEach((bonus, index) => {
-                const val = parseInt(bonus.val) || 0;
+                const val = Number.parseInt(bonus.val) || 0;
                 if (val === 0)
                     return;
 
@@ -820,7 +821,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
         let injectedAny = false;
 
         for (const bonus of targetedBonuses) {
-            const val = parseInt(bonus.val) || 0;
+            const val = Number.parseInt(bonus.val) || 0;
             if (val === 0)
                 continue;
 
@@ -1086,7 +1087,7 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = []) {
         $myContainer.toggle(bonusStates.length > 0);
 
         $myContainer.find('.csm-bonus-checkbox').on('change', function() {
-            const index = parseInt($(this).data('index'));
+            const index = Number.parseInt($(this).data('index'));
             const isChecked = $(this).is(':checked');
             bonusStates[index].enabled = isChecked;
 
@@ -1325,7 +1326,7 @@ export function injectKnockbackCheckbox(state) {
     const tags = state.data?.tags || item?.system?.tags || [];
     const kbTag = tags.find(t => t.id === "knockback" || t.lid === "tg_knockback");
     const hasTag = !!kbTag;
-    let tagVal = hasTag ? (parseInt(kbTag.val) || parseInt(kbTag.num_val) || 1) : 1;
+    let tagVal = hasTag ? (Number.parseInt(kbTag.val) || Number.parseInt(kbTag.num_val) || 1) : 1;
 
     // Shared state that the knockbackDamageStep will read
     state.data._csmKnockback = { enabled: hasTag, value: tagVal };
@@ -1379,7 +1380,7 @@ export function injectKnockbackCheckbox(state) {
 
         // Bind value input
         $row.find('.csm-knockback-value').on('input change', function () {
-            state.data._csmKnockback.value = parseInt(String($(this).val())) || 1;
+            state.data._csmKnockback.value = Number.parseInt(String($(this).val())) || 1;
         });
 
         return true;
@@ -1413,6 +1414,111 @@ export function injectKnockbackCheckbox(state) {
     }
 
     // Safety disconnect after 10 minutes
+    setTimeout(() => observer.disconnect(), 600000);
+}
+
+/**
+ * Inject a "No Bonus Dmg" checkbox into the damage HUD options grid.
+ * Pre-fills from item flag lancer-automations.noBonusDmg; default false.
+ * When checked, crosses out .bonus-damage and .csm-bonus-container visually.
+ * Actual suppression is handled by noBonusDmgClearStep in main.js.
+ */
+export function injectNoBonusDmgCheckbox(state) {
+    if (!state.data)
+        state.data = {};
+
+    state.la_extraData = state.la_extraData || {};
+
+    if (!state.la_extraData._csmNoBonusDmg?.enabled) {
+        const hasFlag = !!(state.item?.getFlag('lancer-automations', 'noBonusDmg'));
+        state.la_extraData._csmNoBonusDmg = { enabled: hasFlag };
+    }
+
+    const applyStrikethrough = ($form) => {
+        const active = state.la_extraData._csmNoBonusDmg.enabled;
+        $form.find('.bonus-damage').css({
+            'text-decoration': active ? 'line-through' : '',
+            'opacity':         active ? '0.5'          : '',
+            'pointer-events':  active ? 'none'         : ''
+        });
+        $form.find('.csm-bonus-container').css({
+            'text-decoration': active ? 'line-through' : '',
+            'opacity':         active ? '0.5'          : '',
+            'pointer-events':  active ? 'none'         : ''
+        });
+    };
+
+    const doInject = () => {
+        const $form = $('#damage-hud');
+        if ($form.length === 0)
+            return false;
+
+        const $configGrid = $form.find('.damage-hud-options-grid');
+        if ($configGrid.length === 0)
+            return false;
+
+        if ($configGrid.find('.csm-no-bonus-dmg-row').length > 0) {
+            applyStrikethrough($form);
+            return true;
+        }
+
+        const currentAreas = $configGrid.css('grid-template-areas') || '';
+        if (currentAreas.includes('empty')) {
+            $configGrid.css('grid-template-areas', currentAreas.replace('empty', 'nobonusdmg'));
+        } else {
+            $configGrid.css('grid-template-areas', currentAreas + ' "nobonusdmg nobonusdmg"');
+        }
+
+        const checked = state.la_extraData._csmNoBonusDmg.enabled;
+
+        const $row = $(`
+            <div class="csm-no-bonus-dmg-row" style="grid-area: nobonusdmg; display: flex; align-items: center; margin-top: 4px;">
+                <label class="container svelte-wt0sk2" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
+                    <input type="checkbox" class="csm-no-bonus-dmg-checkbox svelte-wt0sk2" ${checked ? 'checked' : ''}>
+                    <i class="mdi mdi-cancel i--s svelte-wt0sk2"></i>
+                    <span style="text-wrap: nowrap;">No Bonus Dmg</span>
+                </label>
+            </div>
+        `);
+
+        $configGrid.append($row);
+        applyStrikethrough($form);
+
+        $row.find('.csm-no-bonus-dmg-checkbox').on('change', function () {
+            state.la_extraData._csmNoBonusDmg.enabled = $(this).is(':checked');
+            applyStrikethrough($form);
+        });
+
+        return true;
+    };
+
+    doInject();
+
+    let reinjectPending = false;
+    const observer = new MutationObserver(() => {
+        const $form = $('#damage-hud');
+        if ($form.length === 0) {
+            observer.disconnect();
+            return;
+        }
+        if ($form.find('.csm-no-bonus-dmg-row').length === 0 && !reinjectPending) {
+            reinjectPending = true;
+            setTimeout(() => {
+                doInject();
+                reinjectPending = false;
+            }, 50);
+        } else if (state.la_extraData._csmNoBonusDmg.enabled) {
+            applyStrikethrough($form);
+        }
+    });
+
+    const $hudzone = $('#hudzone');
+    if ($hudzone.length > 0) {
+        observer.observe($hudzone[0], { childList: true, subtree: true });
+    } else {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
     setTimeout(() => observer.disconnect(), 600000);
 }
 
@@ -1510,14 +1616,14 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                     // (AE changes don't work here because Foundry re-applies them after damage/healing)
                     extraOptions.statDirect = {
                         key: bonusData.stat,
-                        value: parseInt(bonusData.val) || 0,
+                        value: Number.parseInt(bonusData.val) || 0,
                         preBonusValue: foundry.utils.getProperty(token.actor, bonusData.stat) || 0
                     };
                 } else {
                     // Use ActiveEffect changes for max/flat stats (Foundry auto-applies/reverses)
                     extraOptions.changes = [{
                         key: bonusData.stat,
-                        value: String(parseInt(bonusData.val) || 0),
+                        value: String(Number.parseInt(bonusData.val) || 0),
                         mode: CONST.ACTIVE_EFFECT_MODES.ADD
                     }];
                 }
@@ -1690,25 +1796,23 @@ Hooks.on("deleteActiveEffect", (effect) => {
 
 
 /**
- * Inject a bonus to the next roll for an actor.
- * @param {Actor} actor - The actor to inject the bonus for
+ * Inject a bonus to the active flow state.
+ * @param {Object} state - The flow state object
  * @param {Object} bonus - The bonus to inject
  */
-export async function injectBonusToNextRoll(actor, bonus) {
-    if (!actor)
+export async function injectBonusToFlowState(state, bonus) {
+    if (!state)
         return;
 
-    if (!actor.testUserPermission(game.user, "OWNER")) {
-        const msg = `lancer-automations | injectBonusToNextRoll called for ${actor.name} by non-owner. This may cause timing issues if the reaction isn't Force Synchronous.`;
-        console.warn(msg);
-        ui.notifications.warn(msg);
-    }
-
-    const bonuses = duplicate(actor.getFlag("lancer-automations", "ephemeral_bonuses") || []);
     if (!bonus.id)
         bonus.id = foundry.utils.randomID();
-    bonuses.push(bonus);
-    await delegateSetActorFlag(actor, "lancer-automations", "ephemeral_bonuses", bonuses);
+
+    if (!state.la_extraData)
+        state.la_extraData = {};
+    if (!state.la_extraData.flow_bonus)
+        state.la_extraData.flow_bonus = [];
+
+    state.la_extraData.flow_bonus.push(bonus);
 }
 
 export async function addConstantBonus(actor, bonusData) {
@@ -1760,7 +1864,7 @@ export function executeGenericBonusMenu(actor = null) {
     executeEffectManager({ initialTab: 'bonus', actor });
 }
 
-export function getImmunityBonuses(actor, subtype) {
+export function getImmunityBonuses(actor, subtype, state = null) {
     if (!actor) {
         return [];
     }
@@ -1768,16 +1872,17 @@ export function getImmunityBonuses(actor, subtype) {
     const constants = actor.getFlag("lancer-automations", "constant_bonuses") || [];
     const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
     const ephemerals = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+    const flowBonuses = state?.la_extraData?.flow_bonus || [];
 
-    return flattenBonuses([...constants, ...globals, ...ephemerals]).filter(b => b.type === "immunity" && b.subtype === subtype);
+    return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses]).filter(b => b.type === "immunity" && b.subtype === subtype);
 }
 
-export function checkEffectImmunities(actor, effectIdOrName, effect = null) {
+export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null) {
     if (!actor || !effectIdOrName) {
         return [];
     }
 
-    const effectImmunities = getImmunityBonuses(actor, "effect");
+    const effectImmunities = getImmunityBonuses(actor, "effect", state);
     const matchedSources = [];
 
     const incomingLower = effectIdOrName.toLowerCase();
@@ -1840,12 +1945,12 @@ export function checkDamageResistances(actor, damageType) {
         .map(b => b.source || b.name || "Unknown Resistance");
 }
 
-export function applyDamageImmunities(actor, damages) {
+export function applyDamageImmunities(actor, damages, state = null) {
     if (!actor || !damages) {
         return damages;
     }
 
-    const damageImmunities = getImmunityBonuses(actor, "damage");
+    const damageImmunities = getImmunityBonuses(actor, "damage", state);
     if (damageImmunities.length === 0) {
         return damages;
     }
@@ -1872,15 +1977,15 @@ export function applyDamageImmunities(actor, damages) {
     });
 }
 
-export async function hasCritImmunity(actor, attackerActor = null) {
+export async function hasCritImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;
-    const candidates = getImmunityBonuses(actor, "crit");
+    const candidates = getImmunityBonuses(actor, "crit", state);
     if (candidates.length === 0)
         return false;
     if (!attackerActor)
         return true;
-    const attackerState = { actor: attackerActor };
+    const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
     for (const b of candidates) {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
@@ -1888,15 +1993,15 @@ export async function hasCritImmunity(actor, attackerActor = null) {
     return false;
 }
 
-export async function hasHitImmunity(actor, attackerActor = null) {
+export async function hasHitImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;
-    const candidates = getImmunityBonuses(actor, "hit");
+    const candidates = getImmunityBonuses(actor, "hit", state);
     if (candidates.length === 0)
         return false;
     if (!attackerActor)
         return true;
-    const attackerState = { actor: attackerActor };
+    const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
     for (const b of candidates) {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
@@ -1904,15 +2009,15 @@ export async function hasHitImmunity(actor, attackerActor = null) {
     return false;
 }
 
-export async function hasMissImmunity(actor, attackerActor = null) {
+export async function hasMissImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;
-    const candidates = getImmunityBonuses(actor, "miss");
+    const candidates = getImmunityBonuses(actor, "miss", state);
     if (candidates.length === 0)
         return false;
     if (!attackerActor)
         return true;
-    const attackerState = { actor: attackerActor };
+    const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
     for (const b of candidates) {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
@@ -1929,7 +2034,6 @@ export const BonusesAPI = {
     removeConstantBonus,
     getConstantBonuses,
     executeGenericBonusMenu,
-    injectBonusToNextRoll,
     getImmunityBonuses,
     checkEffectImmunities,
     applyDamageImmunities,

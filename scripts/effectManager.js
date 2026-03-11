@@ -44,7 +44,10 @@ function openStatusPicker(targetInput) {
     const gridHtml = statuses.map(s => {
         const icon = s.img || s.icon || '';
         const id = s.id || s.name || '';
-        const label = s.name ? (typeof s.name === 'string' && s.name.startsWith('lancer') ? game.i18n.localize(s.name) : s.name) : id;
+        let label = s.name || id;
+        if (typeof s.name === 'string' && s.name.startsWith('lancer')) {
+            label = game.i18n.localize(s.name);
+        }
         const isSelected = alreadySelected.has(id);
         return `<div class="lancer-status-entry${isSelected ? ' selected' : ''}" data-id="${id}" title="${label}"
             style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? '#991e2a' : 'transparent'};">
@@ -229,7 +232,7 @@ function setupTriggerUI(html, prefix) {
         if (!targetToken)
             targetToken = canvas.tokens.controlled[0];
 
-        if (!targetToken || !targetToken.actor) {
+        if (!targetToken?.actor) {
             ui.notifications.warn("Please select a target token first.");
             return;
         }
@@ -1158,11 +1161,11 @@ export async function executeEffectManager(options = {}) {
                 if (tab === 'standard') {
                     const targetID = String(html.find('#std-target').val());
                     const effectName = html.find('#std-effect').val();
-                    const stack = parseInt(String(html.find('#std-stack').val())) || 1;
+                    const stack = Number.parseInt(String(html.find('#std-stack').val())) || 1;
                     const durationLabel = String(html.find('#std-duration').val());
                     const originID = String(html.find('#std-origin').val());
                     const note = String(html.find('#std-note').val());
-                    const turnsInput = parseInt(String(html.find('#std-turns').val())) || 1;
+                    const turnsInput = Number.parseInt(String(html.find('#std-turns').val())) || 1;
 
                     let duration = {
                         label: 'indefinite',
@@ -1206,11 +1209,11 @@ export async function executeEffectManager(options = {}) {
                     const targetID = String(html.find('#cust-target').val());
                     const name = html.find('#cust-name').val();
                     const icon = html.find('#cust-icon').val();
-                    const stack = parseInt(String(html.find('#cust-stack').val())) || 1;
+                    const stack = Number.parseInt(String(html.find('#cust-stack').val())) || 1;
                     const durationLabel = String(html.find('#cust-duration').val());
                     const originID = String(html.find('#cust-origin').val());
                     const note = String(html.find('#cust-note').val());
-                    const turnsInput = parseInt(String(html.find('#cust-turns').val())) || 1;
+                    const turnsInput = Number.parseInt(String(html.find('#cust-turns').val())) || 1;
 
                     if (!name)
                         return ui.notifications.error("Name is required!");
@@ -1270,11 +1273,15 @@ export async function executeEffectManager(options = {}) {
                 if (subB.type === 'difficulty')
                     return `Difficulty +${subB.val}`;
                 if (subB.type === 'stat')
-                    return `${subB.stat?.split('.').pop() || subB.stat} ${parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
+                    return `${subB.stat?.split('.').pop() || subB.stat} ${Number.parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
                 if (subB.type === 'damage')
                     return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
-                if (subB.type === 'tag')
-                    return subB.removeTag ? `Remove Tag: ${subB.tagName}` : `${subB.tagMode === 'override' ? 'Set' : 'Add'} ${subB.tagName} ${subB.val}`;
+                if (subB.type === 'tag') {
+                    if (subB.removeTag)
+                        return `Remove Tag: ${subB.tagName}`;
+                    const action = subB.tagMode === 'override' ? 'Set' : 'Add';
+                    return `${action} ${subB.tagName} ${subB.val}`;
+                }
                 if (subB.type === 'range')
                     return `${subB.rangeMode === 'override' ? 'Set' : 'Add'} ${subB.rangeType} ${subB.val}`;
                 if (subB.type === 'immunity') {
@@ -1302,7 +1309,7 @@ export async function executeEffectManager(options = {}) {
             const updateManageTabCount = () => {
                 const targetID = String(html.find('#manage-target').val());
                 const target = canvas.tokens.get(targetID);
-                if (!target || !target.actor) {
+                if (!target?.actor) {
                     html.find('#manage-tab-count').text('');
                     return;
                 }
@@ -1322,7 +1329,7 @@ export async function executeEffectManager(options = {}) {
                 const list = html.find('#manage-list');
                 list.empty();
 
-                if (!target || !target.actor)
+                if (!target?.actor)
                     return;
 
                 const effects = target.actor.effects.filter(e =>
@@ -1417,7 +1424,7 @@ export async function executeEffectManager(options = {}) {
                         if (b.uses !== undefined) {
                             const linkedEffect = actor.effects.find(e => e.getFlag("lancer-automations", "linkedBonusId") === b.id);
                             const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
-                            usesInfo = remaining !== null ? ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>` : ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>`;
+                            usesInfo = remaining === null ? ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>` : ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>`;
                         }
 
                         const item = $(`
@@ -1453,7 +1460,7 @@ export async function executeEffectManager(options = {}) {
                 const target = canvas.tokens.get(targetID);
                 const summary = html.find('#bonus-summary');
 
-                if (!target || !target.actor) {
+                if (!target?.actor) {
                     summary.text('No active bonuses.');
                     return;
                 }
@@ -1532,7 +1539,7 @@ export async function executeEffectManager(options = {}) {
             html.find('.token-picker-btn').on('click', async function (e) {
                 e.preventDefault();
                 const targetId = $(this).data('target');
-                const count = parseInt($(this).data('count')) || 1;
+                const count = Number.parseInt($(this).data('count')) || 1;
                 const api = game.modules.get('lancer-automations').api;
 
                 // Use currently selected token as caster for the selection tool context if possible
@@ -1575,7 +1582,7 @@ export async function executeEffectManager(options = {}) {
                     targetToken = canvas.tokens.controlled[0];
                 }
 
-                if (!targetToken || !targetToken.actor) {
+                if (!targetToken?.actor) {
                     ui.notifications.warn("Please select a target token on the map, or fill in the 'Apply to tokens' field first, to pick an item from them.");
                     return;
                 }
@@ -1645,16 +1652,16 @@ export async function executeEffectManager(options = {}) {
             const addBonusFromTab = async (type) => {
                 const targetID = String(html.find('#bonus-target').val());
                 const target = canvas.tokens.get(targetID);
-                if (!target || !target.actor)
+                if (!target?.actor)
                     return ui.notifications.error("Target token not found!");
                 const actor = target.actor;
 
                 const name = String(html.find('#bonus-name').val() || "Test Bonus");
                 const usesStr = String(html.find('#bonus-uses').val());
-                const uses = usesStr ? parseInt(usesStr) : undefined;
+                const uses = usesStr ? Number.parseInt(usesStr) : undefined;
                 const duration = html.find('#bonus-duration').val();
                 const durOrigin = html.find('#bonus-durOrigin').val();
-                const durTurns = parseInt(String(html.find('#bonus-durTurns').val())) || 1;
+                const durTurns = Number.parseInt(String(html.find('#bonus-durTurns').val())) || 1;
                 const itemLidsStr = String(html.find('#bonus-itemLids').val());
                 const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
@@ -1756,16 +1763,16 @@ export async function executeEffectManager(options = {}) {
                         consumption.isBoost = true;
                     const filterMinDistance = String(html.find('#bonus-filter-minDistance').val());
                     if (filterMinDistance)
-                        consumption.minDistance = parseInt(filterMinDistance);
+                        consumption.minDistance = Number.parseInt(filterMinDistance);
                     const filterCheckType = String(html.find('#bonus-filter-checkType').val())?.trim();
                     if (filterCheckType)
                         consumption.checkType = filterCheckType;
                     const filterCheckAbove = String(html.find('#bonus-filter-checkAbove').val());
                     if (filterCheckAbove)
-                        consumption.checkAbove = parseInt(filterCheckAbove);
+                        consumption.checkAbove = Number.parseInt(filterCheckAbove);
                     const filterCheckBelow = String(html.find('#bonus-filter-checkBelow').val());
                     if (filterCheckBelow)
-                        consumption.checkBelow = parseInt(filterCheckBelow);
+                        consumption.checkBelow = Number.parseInt(filterCheckBelow);
                     const filterStatusId = String(html.find('#bonus-filter-statusId').val())?.trim();
                     if (filterStatusId)
                         consumption.statusId = filterStatusId;
@@ -1848,7 +1855,7 @@ export async function executeEffectManager(options = {}) {
             html.find('#bonus-clear-all').click(async () => {
                 const targetID = String(html.find('#bonus-target').val());
                 const target = canvas.tokens.get(targetID);
-                if (!target || !target.actor)
+                if (!target?.actor)
                     return;
                 await target.actor.unsetFlag("lancer-automations", "global_bonuses");
                 setTimeout(updateBonusList, 200);
@@ -1873,7 +1880,7 @@ export async function executeEffectManager(options = {}) {
         height: 'auto',
         left: 100,
         top: 60,
-        classes: ['lancer-effect-manager', 'lancer-no-title']
+        classes: ['lancer-effect-manager', 'lancer-dialog-base', 'lancer-no-title']
     }));
 
     dialog.render(true);

@@ -101,7 +101,7 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
 
 
     // Add to stage below tokens
-    if (canvas.tokens && canvas.tokens.parent) {
+    if (canvas.tokens?.parent) {
         canvas.tokens.parent.addChildAt(highlight, canvas.tokens.parent.getChildIndex(canvas.tokens));
     } else {
         canvas.stage.addChild(highlight);
@@ -160,7 +160,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
         trace.lineTo(centerNew.x, centerNew.y);
     }
 
-    if (canvas.tokens && canvas.tokens.parent) {
+    if (canvas.tokens?.parent) {
         canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
     } else {
         canvas.stage.addChild(trace);
@@ -199,6 +199,23 @@ const _cardDefaults = {
 let _cardQueue = Promise.resolve();
 let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
 
+// --- Card visual stack: sub-cards push on top, parent cards re-appear when child pops ---
+let _cardCallbackDepth = 0;  // >0 → inside a card callback, new cards push on stack
+let _cardVisualStack = [];   // jQuery elements — topmost is visible
+
+/**
+ * Wrap a card callback so that any _queueCard call inside it pushes
+ * on top of the visual stack instead of waiting behind the queue.
+ */
+async function _runCardCallback(fn) {
+    _cardCallbackDepth++;
+    try {
+        return await fn();
+    } finally {
+        _cardCallbackDepth--;
+    }
+}
+
 // --- GM-controlled choice cards ---
 const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
 
@@ -231,6 +248,14 @@ function _updatePendingBadge() {
 }
 
 function _queueCard(fn, title = '') {
+    // --- In-scope: push on visual stack, bypass queue ---
+    if (_cardCallbackDepth > 0) {
+        if (_cardVisualStack.length > 0)
+            _cardVisualStack[_cardVisualStack.length - 1].hide();
+        return fn();
+    }
+
+    // --- Out-of-scope: normal queue behaviour ---
     _cardQueueTitles.push(title);
     _updatePendingBadge(); // badge on currently visible card, if any
     const next = _cardQueue.then(() => {
@@ -262,8 +287,11 @@ function _createInfoCard(type, opts) {
         onCancel = () => {}
     } = opts;
 
-    // Remove any existing info card
-    $('.la-info-card').remove();
+    // Remove orphaned info cards (not on the visual stack)
+    $('.la-info-card').each(function () {
+        if (!_cardVisualStack.some(el => el[0] === this))
+            $(this).remove();
+    });
 
     let infoRowHtml = '';
     if (type !== "choiceCard" && type !== "deploymentCard" && type !== "voteCard") {
@@ -388,6 +416,8 @@ function _createInfoCard(type, opts) {
     // CSS transition handles the transform animation
     setTimeout(() => cardEl.css('transform', 'translateY(0)'), 10);
 
+    // Track on visual stack
+    _cardVisualStack.push(cardEl);
     return cardEl;
 }
 
@@ -660,6 +690,16 @@ function _updateInfoCard(cardEl, type, data) {
 function _removeInfoCard(cardEl) {
     if (!cardEl || cardEl.length === 0)
         return;
+
+    // Pop from visual stack
+    const stackIdx = _cardVisualStack.findIndex(el => el[0] === cardEl[0]);
+    if (stackIdx >= 0)
+        _cardVisualStack.splice(stackIdx, 1);
+
+    // Reveal parent card immediately (appears behind the fade-out for a cross-fade)
+    if (_cardVisualStack.length > 0)
+        _cardVisualStack[_cardVisualStack.length - 1].show();
+
     // Slide down + fade out
     cardEl.css('transform', 'translateY(30px)');
     cardEl.animate(
@@ -1568,7 +1608,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             trace.lineTo(centerEnd.x, centerEnd.y);
 
             // Add to stage below tokens
-            if (canvas.tokens && canvas.tokens.parent) {
+            if (canvas.tokens?.parent) {
                 canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
             } else {
                 canvas.stage.addChild(trace);
@@ -1715,9 +1755,7 @@ export function knockBackToken(tokens, distance, options = {}) {
                     }
                     updateCard();
                     updateVisuals();
-                } else {
-
-                }
+                } else { /* empty */ }
             }
         };
 
@@ -1828,7 +1866,7 @@ export function placeToken(options = {}) {
 
         const getActiveEntry = () => actorEntries[activeActorIndex];
 
-        const originToken = (origin && origin.document) ? origin : null;
+        const originToken = (origin?.document) ? origin : null;
         const originOffset = (!originToken && origin)
             ? pixelToOffset(origin.x, origin.y)
             : null;
@@ -1873,7 +1911,7 @@ export function placeToken(options = {}) {
 
                 hl.endFill();
 
-                if (canvas.tokens && canvas.tokens.parent) {
+                if (canvas.tokens?.parent) {
                     canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
                 } else {
                     canvas.stage.addChild(hl);
@@ -2054,7 +2092,7 @@ export function placeToken(options = {}) {
                 if (doc) {
                     spawnedTokens.push(doc);
 
-                    if (window.Sequencer) {
+                    if (globalThis.Sequencer) {
                         const tokenObj = canvas.tokens.get(id);
                         if (tokenObj) {
                             new Sequence()
@@ -2097,7 +2135,7 @@ export function placeToken(options = {}) {
             drawOffsets(graphics, getProtoOffsets(centerCol, centerRow));
             graphics.endFill();
 
-            if (canvas.tokens && canvas.tokens.parent) {
+            if (canvas.tokens?.parent) {
                 canvas.tokens.parent.addChildAt(graphics, canvas.tokens.parent.getChildIndex(canvas.tokens));
             } else {
                 canvas.stage.addChild(graphics);
@@ -2465,12 +2503,12 @@ export function startChoiceCard(options = {}) {
                 const choice = choices[idx];
                 resolve(true); // Release queue slot
                 if (choice.callback)
-                    await choice.callback({ ...choice.data, responderName: game.user.name });
+                    await _runCardCallback(() => choice.callback({ ...choice.data, responderName: game.user.name }));
             } else {
                 chosenSet.add(idx);
                 const choice = choices[idx];
                 if (choice.callback)
-                    await choice.callback({ ...choice.data, responderName: game.user.name });
+                    await _runCardCallback(() => choice.callback({ ...choice.data, responderName: game.user.name }));
 
                 if (chosenSet.size === choices.length) {
                     dismissed = true;
@@ -2653,7 +2691,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
     }
 
     if (choice?.callback) {
-        await choice.callback({ ...choice.data, responderName });
+        await _runCardCallback(() => choice.callback({ ...choice.data, responderName }));
     }
 }
 
@@ -2825,7 +2863,7 @@ export function startVoteCard(options = {}) {
             const winner = choices[winnerIdx];
             resolve(true);
             if (winner?.callback)
-                await winner.callback({ ...winner.data, responderName: game.user.name });
+                await _runCardCallback(() => winner.callback({ ...winner.data, responderName: game.user.name }));
         };
 
         const onCancel = async () => {
@@ -3368,7 +3406,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 
         if (entry) {
             deployable = await pack.getDocument(entry._id);
-            if (deployable && deployable.type === 'deployable') {
+            if (deployable?.type === 'deployable') {
                 return { deployable, source: 'compendium' };
             }
         }
@@ -3791,7 +3829,7 @@ export function getItemDeployables(item, actor = null) {
         return [];
 
     // NPC tier-based selection: pick the tier-appropriate deployable
-    if (actor && actor.type === 'npc') {
+    if (actor?.type === 'npc') {
         const tier = actor.system?.tier ?? 1;
         const tierIndex = Math.max(0, Math.min(2, tier - 1));
 
@@ -4209,7 +4247,7 @@ export async function openDeployableMenu(actor) {
                 const itemId = $(this).data('item-id');
                 const item = items.find(i => i.id === itemId);
 
-                if (!item || !item.deployableData || !game.user.isGM) {
+                if (!item?.deployableData || !game.user.isGM) {
                     return;
                 }
 
@@ -4253,7 +4291,8 @@ export async function openDeployableMenu(actor) {
         }
     }, {
         width: 680,
-        height: "auto"
+        height: "auto",
+        classes: ['lancer-dialog-base', 'lancer-dialog-base', 'lancer-no-title']
     });
 
     dialog.render(true);
@@ -4438,7 +4477,7 @@ export async function openThrowMenu(actor) {
         <div class="lancer-dialog-base">
             <div class="lancer-dialog-header" style="margin-bottom: 10px;">
                 <div class="lancer-dialog-title" style="font-weight: bold; font-size: 1.2em;">THROW WEAPON</div>
-                <div class="lancer-dialog-subtitle" style="font-style: italic; font-size: 0.9em; color: #666;">Select a throwable weapon to attack with.</div>
+                <div class="lancer-dialog-subtitle" style="font-style: italic; font-size: 0.9em; color: #ffffffff;">Select a throwable weapon to attack with.</div>
             </div>
             <div class="lancer-items-grid" style="display: grid;">
                 ${items.map(item => `
@@ -4467,8 +4506,8 @@ export async function openThrowMenu(actor) {
                         return;
                     const weapon = /** @type {any} */ (item.weaponData);
                     const api = game.modules.get('lancer-automations')?.api;
-                    if (api?.beginThrowWeaponFlow) {
-                        await api.beginThrowWeaponFlow(weapon);
+                    if (api?.beginWeaponThrowFlow) {
+                        await api.beginWeaponThrowFlow(weapon);
                     } else if (weapon.beginWeaponAttackFlow) {
                         await weapon.beginWeaponAttackFlow(true);
                         if (api?.deployWeaponToken) {
@@ -4491,7 +4530,7 @@ export async function openThrowMenu(actor) {
                 html.closest('.dialog').find('.dialog-button.throw').click();
             });
         }
-    }, { width: 400 }).render(true);
+    }, { width: 400, classes: ['lancer-dialog-base', 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
 }
 
 /**
@@ -4635,12 +4674,12 @@ export function pickItem(items, options = {}) {
  */
 export function getWeapons(entity) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (entity))?.actor || entity);
-    if (!actor || !actor.items)
+    if (!actor?.items)
         return [];
 
     return actor.items.filter(i =>
         i.type === 'mech_weapon' ||
-        (i.system?.type && i.system.type.toLowerCase() === 'weapon')
+        (i.system?.type?.toLowerCase() === 'weapon')
     );
 }
 
@@ -4652,7 +4691,7 @@ export function getWeapons(entity) {
  */
 export function findItemByLid(actorOrToken, lid) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-    if (!actor || !actor.items)
+    if (!actor?.items)
         return null;
     return actor.items.find(i => i.system?.lid === lid) || null;
 }
@@ -4769,16 +4808,16 @@ export async function openChoiceMenu() {
         });
 
         html.find('.la-choice-remove').off('click').on('click', function () {
-            const idx = parseInt($(this).closest('.la-choice-row').data('idx'));
-            if (!isNaN(idx)) {
+            const idx = Number.parseInt($(this).closest('.la-choice-row').data('idx'));
+            if (!Number.isNaN(idx)) {
                 choicesInfo.splice(idx, 1);
                 refresh(html);
             }
         });
 
         html.find('.la-choice-text').off('input').on('input', function () {
-            const idx = parseInt($(this).closest('.la-choice-row').data('idx'));
-            if (!isNaN(idx)) {
+            const idx = Number.parseInt($(this).closest('.la-choice-row').data('idx'));
+            if (!Number.isNaN(idx)) {
                 choicesInfo[idx].text = $(this).val();
             }
         });
@@ -4926,8 +4965,450 @@ export async function openChoiceMenu() {
                 refresh.call(dialogObj, html);
             });
         }
-    }, { width: 400, height: "auto" });
+    }, { width: 400, height: "auto", classes: ['lancer-dialog-base', 'lancer-no-title'] });
     dialogObj.render(true);
+}
+
+/**
+ * Prompts the user to choose one or more weapon mounts (Mechs) or weapons (NPCs/Pilots).
+ * @param {Actor|Token} actorOrToken
+ * @param {number} numberToChoose - Maximum number of items to choose
+ * @param {Function} [filterPredicate] - Optional predicate to filter weapons
+ * @param {string[]} [allowedMountTypes] - Optional list of allowed mount types (Mech only)
+ * @param {string} [title] - Optional custom title
+ * @param {Function} [selectionValidator] - Optional (selectedItems) => { valid, message }
+ * @returns {Promise<any[]|null>} Resolves to an array of selected mounts/items, or null if cancelled.
+ */
+export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return null;
+
+    const isMech = actor.type === 'mech' && actor.system.loadout?.weapon_mounts;
+    let allItems = [];
+
+    if (isMech) {
+        allItems = actor.system.loadout.weapon_mounts.map(mount => {
+            if (allowedMountTypes && !allowedMountTypes.includes(mount.type))
+                return { item: mount, hidden: true };
+
+            // Collect weapon data and their states
+            const weaponData = mount.slots.map(s => {
+                const w = s.weapon?.value;
+                if (!w) {
+                    return null;
+                }
+                const sys = w.system;
+                const profiles = sys?.profiles || [];
+                const activeProfileIndex = sys?.selected_profile_index ?? 0;
+                let profileName = "";
+                if (profiles.length > 1 && profiles[activeProfileIndex]) {
+                    profileName = profiles[activeProfileIndex].name;
+                }
+                const allTags = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
+                const hasLoadingTag = allTags.some(t => t.lid === 'tg_loading' || t.id === 'tg_loading');
+
+                return {
+                    id: w.id,
+                    name: w.name,
+                    img: w.img,
+                    mod: s.mod?.value?.name || null,
+                    modItem: s.mod?.value || null,
+                    destroyed: !!sys.destroyed,
+                    disabled: !!sys.disabled,
+                    unloaded: sys.loaded === false && hasLoadingTag,
+                    fitsFilter: !filterPredicate || filterPredicate(w),
+                    type: sys?.active_profile?.type || sys?.type || "",
+                    size: sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || ""),
+                    profileName: profileName,
+                    value: w
+                };
+            }).filter(Boolean);
+
+            const hasWeapon = weaponData.length > 0;
+            // A mount is destroyed only if ALL weapons are destroyed
+            const allDestroyed = hasWeapon && weaponData.every(w => w.destroyed);
+            // A mount is only selectable if ALL weapons pass the filter and at least one is not destroyed
+            const allFitFilter = weaponData.every(w => w.fitsFilter);
+
+            return {
+                item: mount,
+                weaponData,
+                isMount: true,
+                allDestroyed,
+                selectable: allFitFilter && !allDestroyed && hasWeapon,
+                hidden: false
+            };
+        }).filter(m => !m.hidden);
+    } else {
+        allItems = actor.items.filter(item => {
+            const isWeapon = ['mech_weapon', 'npc_feature', 'pilot_weapon'].includes(item.type);
+            if (!isWeapon)
+                return false;
+            if (item.type === 'npc_feature' && item.system.type !== 'Weapon')
+                return false;
+            return true;
+        }).map(item => {
+            const sys = item.system;
+            const destroyed = !!sys.destroyed;
+            const fitsFilter = !filterPredicate || filterPredicate(item);
+
+            const profiles = sys?.profiles || [];
+            const activeProfileIndex = sys?.selected_profile_index ?? 0;
+            let profileName = "";
+            if (item.type === 'npc_feature') {
+                const tierOverride = sys?.tier_override ?? 0;
+                const actorTier = actor.system?.tier ?? 1;
+                profileName = `T${tierOverride > 0 ? tierOverride : actorTier}`;
+            } else if (profiles.length > 1 && profiles[activeProfileIndex]) {
+                profileName = profiles[activeProfileIndex].name;
+            }
+            const allTagsNonMech = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
+            const hasLoadingTagNonMech = allTagsNonMech.some(t => t.lid === 'tg_loading' || t.id === 'tg_loading');
+
+            return {
+                item,
+                weaponData: [{
+                    id: item.id,
+                    name: item.name,
+                    img: item.img,
+                    destroyed,
+                    disabled: !!sys.disabled,
+                    unloaded: sys.loaded === false && hasLoadingTagNonMech,
+                    fitsFilter,
+                    type: sys?.weapon_type || sys?.active_profile?.type || "",
+                    size: sys?.weapon_type ? "" : (sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || "")),
+                    profileName: profileName,
+                    modItem: null,
+                    value: item
+                }],
+                isMount: false,
+                allDestroyed: destroyed,
+                selectable: !destroyed && fitsFilter,
+                hidden: false
+            };
+        });
+    }
+
+    if (allItems.length === 0) {
+        ui.notifications.warn(`No ${isMech ? 'mounts' : 'weapons'} found.`);
+        return [];
+    }
+
+    return new Promise((resolve) => {
+        const choices = allItems.map((choice, idx) => {
+            const weaponData = choice.weaponData;
+            const isMount = choice.isMount;
+
+            // Group identical weapons for display
+            const counts = {};
+            const uniqueWeapons = [];
+            for (const w of weaponData) {
+                const key = `${w.name}|${w.mod || ""}|${w.destroyed}|${w.disabled}|${w.unloaded}`;
+                if (!counts[key]) {
+                    counts[key] = 0;
+                    uniqueWeapons.push({ ...w, key });
+                }
+                counts[key]++;
+            }
+
+            const labelHtml = uniqueWeapons.map(w => {
+                let style = "display: block; margin-bottom: 2px;";
+                let nameStyle = "font-weight: bold;";
+                let statusTags = "";
+
+                if (w.destroyed) {
+                    statusTags += `<span style="font-size: 0.7em; background: #b71c1c; color: #fff; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">✕ DESTROYED</span>`;
+                } else {
+                    if (w.disabled) {
+                        nameStyle += " color: #ff9800;"; // Orange
+                        statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
+                    }
+                    if (w.unloaded) {
+                        statusTags += `<span style="font-size: 0.7em; background: #ffeb3b; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">UNLOADED</span>`;
+                    }
+                }
+
+                const sizeTypeArr = [w.size, w.type].filter(Boolean);
+                let typeText = "";
+                if (sizeTypeArr.length > 0) {
+                    typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeArr.join(' ')}</span>`;
+                }
+
+                if (w.profileName) {
+                    typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${w.profileName})</span>`;
+                }
+
+                const countStr = counts[w.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[w.key]}</span>` : "";
+                const modHtml = w.mod ? `<div style="font-size: 0.8em; opacity: 0.9; background: rgba(255,100,0,0.15); border: 1px solid rgba(255,100,0,0.3); border-radius: 4px; padding: 1px 6px; display: inline-block; margin-top: 2px; color: #ff6400;">MOD: ${w.mod}</div>` : "";
+
+                return `
+                    <div style="${style}">
+                        <span style="${nameStyle}">${w.name}${typeText}${countStr}${statusTags}</span>
+                        ${modHtml}
+                    </div>
+                `;
+            }).join('');
+
+            const sublabel = isMount ? `${choice.item.type} MOUNT` : (choice.item.type === 'npc_feature' ? choice.item.system.type : choice.item.type.replace('mech_', '').replace('pilot_', ''));
+            const img = weaponData[0]?.img || "icons/svg/item-bag.svg";
+
+            // Build detail data for right-click popup
+            const weaponDetails = weaponData.map(wd => {
+                const wItem = wd.value;
+                if (!wItem?.system)
+                    return null;
+                const sys = wItem.system;
+                let allProfiles = [];
+                if (wItem.type === 'npc_feature') {
+                    // NPC weapon: show only the effective tier
+                    const tierOverride = sys.tier_override ?? 0;
+                    const actorTier = actor.system?.tier ?? 1;
+                    const effectiveTier = tierOverride > 0 ? tierOverride : actorTier;
+                    const tierIndex = Math.max(0, Math.min(2, effectiveTier - 1));
+                    const tierDmg = (sys.damage ?? [])[tierIndex] ?? [];
+                    const _tierRegex = /\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g;
+                    const _resolveTier = s => String(s ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
+                    const resolvedTags = (sys.tags ?? []).map(t => {
+                        const raw = t.name ?? t.lid ?? t.id ?? '';
+                        const resolvedVal = _resolveTier(t.val);
+                        const resolved = _resolveTier(raw).replace(/\{VAL\}/gi, resolvedVal);
+                        return { ...t, _resolvedName: resolved };
+                    });
+                    allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
+                } else {
+                    allProfiles = sys.profiles ?? [];
+                }
+                if (allProfiles.length === 0)
+                    return null;
+                return { name: wItem.name, img: wItem.img, size: wd.size, type: wd.type, mod: wd.mod || null, modItem: wd.modItem || null, profiles: allProfiles };
+            }).filter(Boolean);
+
+            return {
+                item: choice.item,
+                labelHtml,
+                sublabel,
+                img,
+                id: idx,
+                selectable: choice.selectable,
+                allDestroyed: choice.allDestroyed,
+                weaponDetails
+            };
+        });
+
+        const content = `
+            <div class="lancer-dialog-header">
+                <div class="lancer-dialog-title">${title || `CHOOSE ${isMech ? 'MOUNT' : 'WEAPON'}`}</div>
+                <div class="lancer-dialog-subtitle">Select up to ${numberToChoose} ${isMech ? 'mount(s)' : 'weapon(s)'}.</div>
+            </div>
+            <div class="lancer-dialog-body" style="padding: 10px;">
+                <div class="la-selection-validation-msg" style="color: #d97000; font-style: italic; font-size: 0.9em; margin-bottom: 4px; min-height: 18px;"></div>
+                <div style="font-size: 0.72em; color: #777; font-style: italic; margin-bottom: 6px;"><i class="fas fa-mouse-pointer"></i> Right-click a row for weapon details</div>
+                <div class="la-choice-list" style="max-height: 500px; overflow-y: auto; padding-right: 5px;">
+                    ${choices.map(c => `
+                        <div class="la-choice-item ${c.selectable ? '' : 'unselectable'}" data-idx="${c.id}" data-has-details="${c.weaponDetails.length > 0}"
+                             style="display: flex; align-items: flex-start; padding: 10px; border: 1px solid ${c.selectable ? '#444' : (c.allDestroyed ? '#b71c1c' : '#222')};
+                                    margin-bottom: 6px; cursor: ${c.selectable ? 'pointer' : 'not-allowed'}; border-radius: 4px;
+                                    background: ${c.selectable ? 'rgba(255,255,255,0.03)' : (c.allDestroyed ? 'rgba(183,28,28,0.08)' : 'rgba(0,0,0,0.2)')};
+                                    opacity: ${c.selectable ? '1' : '0.75'}; transition: all 0.2s;">
+                            <img src="${c.img}" style="width: 40px; height: 40px; object-fit: contain; margin-right: 12px; border: 1px solid #222; flex-shrink: 0;">
+                            <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                                <div style="margin-bottom: 4px;">${c.labelHtml}</div>
+                                <span style="font-size: 0.75em; opacity: 0.5; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">${c.sublabel}</span>
+                            </div>
+                            <i class="fas fa-check selection-check" style="color: #ff6400; margin-left: 8px; margin-top: 14px; visibility: hidden;"></i>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        let selectedIndices = new Set();
+        const dialog = new Dialog({
+            title: title || `Choose ${isMech ? 'Mount' : 'Weapon'}`,
+            content: content,
+            buttons: {
+                confirm: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: "Confirm",
+                    callback: () => {
+                        const result = Array.from(selectedIndices).map(idx => choices[idx].item);
+                        resolve(result);
+                    }
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Cancel",
+                    callback: () => resolve(null)
+                }
+            },
+            default: "confirm",
+            render: (html) => {
+                const listItems = html.find('.la-choice-item');
+                const confirmBtn = html.parent().find('button.confirm');
+                const validationMsg = html.find('.la-selection-validation-msg');
+
+                const updateValidation = () => {
+                    if (selectionValidator) {
+                        const selectedItems = Array.from(selectedIndices).map(i => choices[i].item);
+                        const result = selectionValidator(selectedItems);
+                        confirmBtn.prop('disabled', !result.valid);
+                        validationMsg.text(result.message || '');
+                        
+                        if (result.level === 'success') {
+                            validationMsg.css('color', '#4caf50');
+                        } else if (result.level === 'error') {
+                            validationMsg.css('color', '#f44336');
+                        } else {
+                            validationMsg.css('color', '#d97000');
+                        }
+                    } else {
+                        confirmBtn.prop('disabled', selectedIndices.size === 0);
+                        validationMsg.text('');
+                    }
+                };
+
+                // Initial validation state
+                updateValidation();
+
+                // Right-click: show weapon detail popup
+                const _showWeaponDetailPopup = (choice) => {
+                    $('.la-weapon-detail-popup').remove();
+                    if (!choice.weaponDetails?.length)
+                        return;
+
+                    const _sectionLabel = (text, bg) =>
+                        `<span style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
+
+                    const _renderProfile = (p, showName) => {
+                        const nameHdr = showName && p.name
+                            ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${p.name}</div>`
+                            : '';
+                        const damageHtml = p.damage?.length
+                            ? `<div style="margin-bottom:6px;">${_sectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
+                            : '';
+                        const rangeHtml = p.range?.length
+                            ? `<div style="margin-bottom:6px;">${_sectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ')}</div></div>`
+                            : '';
+                        const tagsHtml = p.tags?.length
+                            ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${p.tags.map(t => {
+                                const rawName = t._resolvedName ?? t.name ?? t.lid ?? t.id ?? '';
+                                const tagText = String(rawName).replace(/\{VAL\}/gi, t.val ?? '');
+                                return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tagText}</span>`;
+                            }).join('')}</div>`
+                            : '';
+                        const onHitHtml = p.on_hit
+                            ? `<div style="margin-bottom:4px;">${_sectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.on_hit}</div></div>`
+                            : '';
+                        const effectHtml = p.effect
+                            ? `<div style="margin-bottom:4px;">${_sectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.effect}</div></div>`
+                            : '';
+                        return `${nameHdr}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
+                    };
+
+                    const detailHtml = choice.weaponDetails.map(wd => {
+                        const wName = choice.weaponDetails.length > 1
+                            ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>`
+                            : '';
+                        let modHtml = '';
+                        if (wd.mod) {
+                            const ms = wd.modItem?.system;
+                            const modEffect = ms?.effect || ms?.description || '';
+                            const modTagsArr = ms?.tags ?? [];
+                            const modTagsHtml = modTagsArr.length
+                                ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${modTagsArr.map(t => {
+                                    const tn = String(t.name ?? t.lid ?? t.id ?? '').replace(/\{VAL\}/gi, t.val ?? '');
+                                    return `<span style="background:rgba(255,255,255,0.08);border:1px solid #555;border-radius:3px;padding:0 5px;font-size:0.72em;color:#ccc;">${tn}</span>`;
+                                }).join('')}</div>`
+                                : '';
+                            const modBody = modEffect
+                                ? `<div style="font-size:0.8em;color:#bbb;margin-top:3px;line-height:1.3;">${modEffect}</div>${modTagsHtml}`
+                                : modTagsHtml;
+                            modHtml = `<div style="margin-bottom:8px;padding:5px 7px;background:rgba(255,100,0,0.07);border:1px solid rgba(255,100,0,0.35);border-radius:3px;">
+                                <div style="font-size:0.72em;font-weight:bold;color:#ff6400;letter-spacing:0.4px;margin-bottom:2px;">MOD · ${wd.mod}</div>
+                                ${modBody}
+                            </div>`;
+                        }
+                        const showProfileNames = wd.profiles.length > 1;
+                        const profilesHtml = wd.profiles
+                            .map(p => _renderProfile(p, showProfileNames))
+                            .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
+                        return `${wName}${modHtml}${profilesHtml}`;
+                    }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
+
+                    const popup = $(`
+                        <div class="la-weapon-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #4a1010;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
+                            <div style="background:linear-gradient(90deg,#2d0a0a,#1a0808);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5a1515;border-radius:4px 4px 0 0;">
+                                <div>
+                                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '')}</div>
+                                    <div style="font-size:0.72em;color:#aaa;">${choice.weaponDetails.length > 1 ? choice.weaponDetails.map(w => w.name).join(' / ') : [choice.weaponDetails[0]?.size, choice.weaponDetails[0]?.type].filter(Boolean).join(' · ')}</div>
+                                </div>
+                                <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
+                            </div>
+                            <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${detailHtml}</div>
+                        </div>`);
+
+                    $('body').append(popup);
+
+                    // Position next to the dialog window
+                    const dlg = html.closest('.app');
+                    const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
+                    const dlgW = dlg.outerWidth() ?? 480;
+                    const pw = popup.outerWidth(), ph = popup.outerHeight();
+                    const wx = window.innerWidth, wy = window.innerHeight;
+                    let px = dlgOffset.left + dlgW + 8;
+                    if (px + pw > wx - 10)
+                        px = dlgOffset.left - pw - 8;
+                    let py = dlgOffset.top;
+                    if (py + ph > wy - 10)
+                        py = wy - ph - 10;
+                    popup.css({ left: Math.max(10, px), top: Math.max(10, py) });
+
+                    popup.find('.la-detail-close').on('click', () => popup.remove());
+                    $(document).one('click', () => popup.remove());
+                };
+
+                listItems.on('contextmenu', function(e) {
+                    e.preventDefault();
+                    const idx = Number.parseInt($(this).data('idx'));
+                    _showWeaponDetailPopup(choices[idx]);
+                });
+
+                listItems.filter(':not(.unselectable)').click(function() {
+                    const idx = Number.parseInt($(this).data('idx'));
+                    if (selectedIndices.has(idx)) {
+                        selectedIndices.delete(idx);
+                        $(this).css({
+                            'border-color': '#444',
+                            'background': 'rgba(255,255,255,0.03)'
+                        }).find('.selection-check').css('visibility', 'hidden');
+                    } else {
+                        if (numberToChoose === 1) {
+                            selectedIndices.clear();
+                            listItems.css({
+                                'border-color': '#444',
+                                'background': 'rgba(255,255,255,0.03)'
+                            }).find('.selection-check').css('visibility', 'hidden');
+                        }
+                        if (selectedIndices.size < numberToChoose) {
+                            selectedIndices.add(idx);
+                            $(this).css({
+                                'border-color': '#ff6400',
+                                'background': 'rgba(255,100,0,0.05)'
+                            }).find('.selection-check').css('visibility', 'visible');
+                        }
+                    }
+                    updateValidation();
+                });
+            }
+        }, {
+            classes: ['lancer-dialog-base', 'lancer-no-title'],
+            width: 480,
+            top: 450,
+            left: 150
+        });
+        dialog.render(true);
+    });
 }
 
 export const InteractiveAPI = {
@@ -4972,5 +5453,6 @@ export const InteractiveAPI = {
     receiveVoteSubmission,
     updateVoteCardOnVoter,
     confirmVoteCardOnVoter,
-    cancelVoteCardOnVoter
+    cancelVoteCardOnVoter,
+    choseMount
 };

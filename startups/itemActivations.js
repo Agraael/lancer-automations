@@ -321,7 +321,7 @@ const restockDroneSupportReaction = {
                 return;
 
             const deployedTokens = triggerData.deployedTokens;
-            if (!deployedTokens || !deployedTokens.length)
+            if (!deployedTokens?.length)
                 return;
 
             const deployedToken = deployedTokens[0];
@@ -1386,11 +1386,13 @@ api.registerDefaultItemReactions({
 
                 if (effect && roller) {
                     if (triggerType === "onInitCheck") {
-                        await api.injectBonusToNextRoll(roller.actor, {
-                            name: "Squad Leader",
-                            val: 1,
-                            type: "difficulty"
-                        });
+                        if (triggerData.flowState) {
+                            triggerData.flowState.injectBonus({
+                                name: "Squad Leader",
+                                val: 1,
+                                type: "difficulty"
+                            });
+                        }
                     } else if (triggerType === "onCheck") {
                         await api.consumeEffectCharge(effect);
                     }

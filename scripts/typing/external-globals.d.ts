@@ -10,6 +10,7 @@ interface Window {
 }
 
 
+
 interface SequencerSection {
     file(path: string): this;
     attachTo(target: object): this;

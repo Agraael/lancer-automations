@@ -170,11 +170,10 @@ Damage bonuses appear in the damage roll output.
 </tr>
 </table>
 
-### Ephemeral Bonuses
+### Flow Bonuses
 
-Ephemeral bonuses are short-lived by design. They are injected just before a roll (accuracy, difficulty, or damage) and consumed regardless of whether the roll is completed or cancelled. This means you can systematically add an ephemeral bonus before every roll without worrying about accumulation.
-
-Use case: an ability that grants +1 accuracy on the next attack. Set it as ephemeral, inject it with `api.injectBonusToNextRoll(...)`, and it will be gone after the roll resolves no matter what.
+Flow bonuses are short-lived by design. They can be injected into the current flow state using `triggerData.flowState.injectBonus(...)`. 
+They will stay in the flow up to the very end, event roll damage. With help of the flow injection system,  for exemple things like  bonus damage even  if set in the AttackRoll  will live in the damageChat Card. cf Flow Data Injection.
 
 ### Constant Bonuses
 
@@ -204,6 +203,13 @@ When an immunity bonus is active on a token, any incoming damage of that type tr
 ### Tag Injection
 
 Tag bonuses let you inject or modify tags on a weapon mid-flow. Useful for abilities that temporarily grant a property, for example adding the `Armor Penetration` tag before an attack. You can also remove existing tags.
+
+### Flow Data Injection
+
+Flow data injection is a system that allows you to inject data into the current flow state. This data will be available to all subsequent steps in the flow. It is a way to pass data between steps in a flow without having to store it in a variable. Two function are available to inject data into the flow state:
+
+- `triggerData.flowState.injectBonus(...)`: injects a bonus into the flow state
+- `triggerData.flowState.injectData(...)`: injects any data into the flow state
 
 <br clear="right"/>
 
@@ -514,7 +520,7 @@ By default, activating an LID-based activation prints the item card to chat and 
 
 ### Force Synchronous
 
-For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `injectBonusToNextRoll` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
+For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `triggerData.flowState.injectBonus` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
 
 ### Movement Cancel & Redirect (onPreMove)
 

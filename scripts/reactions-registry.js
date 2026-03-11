@@ -340,11 +340,12 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (triggerType === 'onInitCheck') {
-                        await api.injectBonusToNextRoll(reactorToken.actor, {
+                        triggerData.flowState.injectBonus({
                             name: "Bolster",
                             type: "accuracy",
                             val: 2
                         });
+
                     } else if (triggerType === 'onCheck') {
                         await api.removeEffectsByNameFromTokens({
                             tokens: [reactorToken],
@@ -539,7 +540,7 @@ export function getDefaultGeneralReactionRegistry() {
 
                 if (triggerType === "onPreMove") {
                     const moveInfo = triggerData.moveInfo;
-                    if (!moveInfo || !moveInfo.pathHexes || moveInfo.pathHexes.length === 0)
+                    if (!moveInfo?.pathHexes || moveInfo.pathHexes.length === 0)
                         return false;
                     if (moveInfo.isTeleport || moveInfo.isModified)
                         return false;
@@ -639,14 +640,14 @@ export function getDefaultGeneralReactionRegistry() {
                 autoActivate: true,
                 outOfCombat: true,
                 evaluate: function (triggerType, triggerData) {
-                    if (!triggerData.actionData?.stateData?.selectedTurns) {
+                    if (!triggerData.actionData?.flowState?.selectedTurns) {
                         ui.notifications.warn('Reactor Meltdown: no turn count provided.');
                         return false;
                     }
                     return true;
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const selectedTurns = triggerData.actionData.stateData.selectedTurns;
+                    const selectedTurns = triggerData.actionData.flowState.selectedTurns;
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "lancer.statusIconsNames.reactor_meltdown",

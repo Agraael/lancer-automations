@@ -72,7 +72,7 @@ export class ReactionImport extends FormApplication {
                 }
             },
             default: "import"
-        }, { width: 400 }).render(true);
+        }, { width: 400, classes: ['lancer-dialog-base'] }).render(true);
         return this;
     }
 }

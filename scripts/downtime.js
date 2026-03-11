@@ -1,3 +1,38 @@
+let unionDate = () => {
+    const date = new Date();
+    let day = date.getDate();
+    let month = date.getMonth() + 1;
+    let year = date.getFullYear() + 2992;
+
+    return `${year}${month}${day}`;
+};
+
+function makeid(length) {
+    let result = '';
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const charactersLength = characters.length;
+    let counter = 0;
+    while (counter < length) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        counter += 1;
+    }
+    return result;
+}
+
+function createRange(start, end) {
+    if (start > end) {
+        console.error("Start value should be less than or equal to the end value.");
+        return [];
+    }
+
+    const array = [];
+    for (let i = start; i <= end; i++) {
+        array.push(i);
+    }
+    return array;
+}
+
+
 export async function executeDowntime() {
     let terms;
     let rollTermName;
@@ -51,14 +86,14 @@ export async function executeDowntime() {
 
     function termSet(termMode) {
         terms = termMode;
-        rollTermName = termOptions.roll[termMode],
-        activityTermName = termOptions.activity[termMode],
-        outcomeTermName = termOptions.outcome[termMode],
-        locationTermName = termOptions.location[termMode],
-        missionTermName = termOptions.mission[termMode],
-        skillTermName = termOptions.skill[termMode],
-        objectiveTermName = termOptions.objective[termMode],
-        pilotNoteTermName = termOptions.pilotNote[termMode],
+        rollTermName = termOptions.roll[termMode];
+        activityTermName = termOptions.activity[termMode];
+        outcomeTermName = termOptions.outcome[termMode];
+        locationTermName = termOptions.location[termMode];
+        missionTermName = termOptions.mission[termMode];
+        skillTermName = termOptions.skill[termMode];
+        objectiveTermName = termOptions.objective[termMode];
+        pilotNoteTermName = termOptions.pilotNote[termMode];
         gmNoteTermName = termOptions.gmNote[termMode];
 
         console.log(`Terms set to ${termMode} (valid options are 'diegetic or 'rulebook')`);
@@ -66,41 +101,10 @@ export async function executeDowntime() {
 
     termSet('diegetic');
 
-    let unionDate = () => {
-        const date = new Date();
-        let day = date.getDate();
-        let month = date.getMonth() + 1;
-        let year = date.getFullYear() + 2992;
 
-        return `${year}${month}${day}`;
-    };
-
-    function makeid(length) {
-        let result = '';
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        const charactersLength = characters.length;
-        let counter = 0;
-        while (counter < length) {
-            result += characters.charAt(Math.floor(Math.random() * charactersLength));
-            counter += 1;
-        }
-        return result;
-    }
 
     let sessionId = makeid(20);
 
-    function createRange(start, end) {
-        if (start > end) {
-            console.error("Start value should be less than or equal to the end value.");
-            return [];
-        }
-
-        const array = [];
-        for (let i = start; i <= end; i++) {
-            array.push(i);
-        }
-        return array;
-    }
 
     let Activities = [
         {
@@ -332,6 +336,7 @@ export async function executeDowntime() {
         buttons: {
             submit: {
                 label: "Proceed",
+                // @ts-ignore
                 callback: (html) => {
                     pilotData.name = /** @type {HTMLInputElement} */ (html.find("#pilotpicker")[0]).value;
 
@@ -446,13 +451,13 @@ export async function executeDowntime() {
                         });
 
                         document.getElementById('plusAcc').addEventListener('click', () => {
-                          let currentValue = parseInt(document.getElementById('modifierAcc').value, 10);
+                          let currentValue = Number.parseInt(document.getElementById('modifierAcc').value, 10);
                           if (isNaN(currentValue)) currentValue = 0;
                           document.getElementById('modifierAcc').value = currentValue + 1;
                         });
 
                         document.getElementById('plusDiff').addEventListener('click', () => {
-                          let currentValue = parseInt(document.getElementById('modifierAcc').value, 10);
+                          let currentValue = Number.parseInt(document.getElementById('modifierAcc').value, 10);
                           if (isNaN(currentValue)) currentValue = 0;
                           document.getElementById('modifierAcc').value = currentValue - 1;
                         });
@@ -510,12 +515,12 @@ export async function executeDowntime() {
                                     let outcomeDesc;
                                     let rollString;
 
-                                    let selectedAct = Activities.filter(act => act.Name === activity);
-
-                                    if (outcomeDesc = selectedAct[0].Rollable === true) {
+                                    let selectedAct = Activities.find(act => act.Name === activity);
+                                    outcomeDesc = selectedAct.Rollable === true;
+                                    if (outcomeDesc) {
                                         if (manualRollEnabled && manualRollValue) {
                                             overrideRoll = true;
-                                            rollResult = parseInt(manualRollValue);
+                                            rollResult = Number.parseInt(manualRollValue);
                                             console.log(`Manual roll mode: Using physical dice result of ${rollResult}`);
 
                                             roll = await new Roll(rollResult.toString()).evaluate();
@@ -548,19 +553,19 @@ export async function executeDowntime() {
                                         }
                                     }
 
-                                    let actOutcome = Activities.filter(obj => obj.Name === activity)[0].Results;
+                                    let actOutcome = Activities.find(obj => obj.Name === activity).Results;
 
-                                    if (!roll) {
+                                    if (roll) {
+                                        let outcome = actOutcome.find(obj => obj.RollRange.includes(rollResult));
+                                        outcomeDesc = outcome;
+                                        chatMessage.flavor = `<p>${activity} : ${outcome.ShortDesc}</p>`;
+                                        roll.toMessage(chatMessage);
+                                    } else {
                                         console.log('non-rollable activity');
                                         outcomeDesc = actOutcome;
                                         chatMessage.flavor = `${activity} : Success`;
                                         chatMessage.content = `${pilotData.name} downtime activity completed`;
                                         ChatMessage.create(chatMessage);
-                                    } else {
-                                        let outcome = actOutcome.filter(obj => obj.RollRange.includes(rollResult));
-                                        outcomeDesc = outcome[0];
-                                        chatMessage.flavor = `<p>${activity} : ${outcome[0].ShortDesc}</p>`;
-                                        roll.toMessage(chatMessage);
                                     }
 
                                     let dialogContent = `
@@ -569,18 +574,18 @@ export async function executeDowntime() {
                                         <h2 class="lancer-border-primary">${pilotData.name}: Downtime Report</h2>
                                         ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                         <br />
-                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign ? campaign : 'UNLISTED'}</b></h3>
+                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
                                         <div>
                                             <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
-                                                <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location ? location : '<i>unknown</i>'}</p>
+                                                <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location || '<i>unknown</i>'}</p>
 
                                                 <p style="margin-bottom:1rem"><b>${activityTermName}</b>: ${activity}</p>
 
-                                                <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective ? objective : '<i>null</i>'}</p>
+                                                <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective || '<i>null</i>'}</p>
 
                                                 <p style="margin-bottom:1rem"><b>${skillTermName}</b>: ${selectedTrigger}</p>
                                                 ${overrideRoll ? '<p class = "horus--subtle" style="color: red"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
-                                                <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult ? rollResult : 'NaN'}</span></p>
+                                                <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult || 'NaN'}</span></p>
                                             </div>
                                             <p><b>${pilotNoteTermName}</b>: <i>${outcomeDesc["LongDesc"]}</i></p>
                                             <div style="font-style: italic; margin-left: 1rem; border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
@@ -609,7 +614,8 @@ export async function executeDowntime() {
                                         content: dialogContent,
                                         buttons: {
                                             submitClose: {
-                                                label: "Submit and Close"
+                                                label: "Submit and Close",
+                                                callback: () => {}
                                             },
 
                                             logToJournal: {
@@ -619,7 +625,6 @@ export async function executeDowntime() {
                                                         ui.notifications.error(
                                                             `${game.user.name} attempted to write Downtime Activity to Downtime Journal. Please correct and try again.`
                                                         );
-                                                        return;
                                                     } else {
                                                         const journalFolderName = "Downtime Journal";
 
@@ -636,7 +641,7 @@ export async function executeDowntime() {
                                                                 });
                                                             } catch (error) {
                                                                 ui.notifications.error(
-                                                                    `${journalFolderName} does not exist and must be created manually by a user with permissions to do so.`
+                                                                    `${journalFolderName} does not exist and must be created manually by a user with permissions to do so. ${error}`
                                                                 );
                                                                 return;
                                                             }
@@ -655,7 +660,7 @@ export async function executeDowntime() {
                                                                 await JournalEntry.create(downtimeJournal);
                                                             } catch (error) {
                                                                 ui.notifications.error(
-                                                                    `Error creating Journal`
+                                                                    `Error creating Journal: ${error}`
                                                                 );
                                                                 return;
                                                             }
@@ -669,18 +674,18 @@ export async function executeDowntime() {
                                                         <h2 class="lancer-border-primary">${pilotData.name}: Downtime Report</h2>
                                                         ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                                         <br />
-                                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign ? campaign : 'UNLISTED'}</b></h3>
+                                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
                                                         <div>
                                                             <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
-                                                                <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location ? location : '<i>unknown</i>'}</p>
+                                                                <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location || '<i>unknown</i>'}</p>
 
                                                                 <p style="margin-bottom:1rem"><b>${activityTermName}</b>: ${activity}</p>
 
-                                                                <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective ? objective : '<i>null</i>'}</p>
+                                                                <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective || '<i>null</i>'}</p>
 
                                                                 <p style="margin-bottom:1rem"><b>${skillTermName}</b>: ${selectedTrigger}</p>
                                                                 ${overrideRoll ? '<p class = "horus--subtle" style="color: red"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
-                                                                <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult ? rollResult : 'Indeterminate'}</span></p>
+                                                                <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult || 'Indeterminate'}</span></p>
                                                             </div>
                                                             <p><b>${pilotNoteTermName}</b>: <i>${outcomeDesc["LongDesc"]}</i></p>
                                                             <div style="font-style: italic; margin-left: 1rem; border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
@@ -695,7 +700,7 @@ export async function executeDowntime() {
                                                             <div style="margin-bottom:1rem">
                                                                 <h3 class="lancer-border-primary">NET ASSET REPORT</h3>
                                                                 <p><b>${outcomeTermName}</b>:</p>
-                                                                <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">${pilotEvaluate ? pilotEvaluate : '<i>No Pilot Evaluation</i>'}</div>
+                                                                <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">${pilotEvaluate || '<i>No Pilot Evaluation</i>'}</div>
                                                             </div>
                                                             <div style="margin-bottom: 1rem;">
                                                                 <h3 style="border:none;">Requisitions Evaluation</h3>
@@ -710,10 +715,10 @@ export async function executeDowntime() {
                                                     `;
 
                                                         let parentdata = {
-                                                            parent: game.journal.filter(a => a.name === downtimeJournal.name)[0]
+                                                            parent: game.journal.find(a => a.name === downtimeJournal.name)
                                                         };
 
-                                                        let selectedJournal = game.journal.filter(a => a.name === downtimeJournal.name)[0];
+                                                        let selectedJournal = game.journal.find(a => a.name === downtimeJournal.name);
 
                                                         let journalEntryNumber = selectedJournal.pages.size + 1;
 
@@ -736,16 +741,16 @@ export async function executeDowntime() {
                                                 }
                                             }
                                         }
-                                    }, { width: 600, height: "auto" }).render(true);
+                                    }, { width: 600, height: "auto", classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
                                 }
                             }
                         }
-                    }, { width: 800, height: "auto", resizable: true }).render(true);
+                    }, { width: 800, height: "auto", resizable: true, classes: ['lancer-dialog-base'] }).render(true);
                 }
             }
         },
         default: "submit"
-    }, { width: 500, height: "auto" }).render(true);
+    }, { width: 500, height: "auto", classes: ['lancer-dialog-base'] }).render(true);
 }
 
 export const DowntimeAPI = {

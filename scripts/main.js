@@ -7,7 +7,18 @@ import { ReactionReset } from "./reaction-reset.js";
 import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { ReactionsAPI } from "./reactions-registry.js";
-import { cancelRulerDrag } from './interactive-tools.js';
+import { cancelRulerDrag ,
+    InteractiveAPI,
+    chooseToken, knockBackToken, applyKnockbackMoves,
+    startChoiceCard, deployWeaponToken,
+    revertMovement, clearMovementHistory,
+    showUserIdControlledChoiceCard, resolveGMChoiceCard,
+    showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard,
+    drawMovementTrace,
+    getActiveGMId, getTokenOwnerUserId,
+    showVoteCardOnVoter, receiveVoteSubmission,
+    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter
+} from './interactive-tools.js';
 import {
     EffectsAPI,
     setEffect,
@@ -22,6 +33,7 @@ import {
 import {
     genericBonusStepDamage,
     injectKnockbackCheckbox,
+    injectNoBonusDmgCheckbox,
     getImmunityBonuses,
     checkEffectImmunities,
     checkDamageResistances,
@@ -39,28 +51,18 @@ import {
 } from "./genericBonuses.js";
 import { EffectManagerAPI } from "./effectManager.js";
 import { TerrainAPI } from "./terrain-utils.js";
-import {
-    InteractiveAPI,
-    chooseToken, knockBackToken, applyKnockbackMoves,
-    startChoiceCard, deployWeaponToken,
-    revertMovement, clearMovementHistory,
-    showUserIdControlledChoiceCard, resolveGMChoiceCard,
-    showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard,
-    drawMovementTrace,
-    getActiveGMId, getTokenOwnerUserId,
-    showVoteCardOnVoter, receiveVoteSubmission,
-    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter
-} from "./interactive-tools.js";
-import {
-    MiscAPI,
-    getItemLID, isItemAvailable, hasReactionAvailable,
-} from "./misc-tools.js";
+
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
-import { registerModuleFlows } from "./flows.js";
+import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
+    bindChatMessageStateInterceptor,
+    ActiveFlowState
+} from "./flows.js";
 import { DowntimeAPI } from "./downtime.js";
 import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
 import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
+import { CardStackTests } from "../tests/card-stack.js";
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
@@ -144,8 +146,8 @@ function getReactionItems(token) {
     if (cached)
         return cached.items;
 
-    const itemTypes = ["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"];
-    let items = actor.items.filter(item => itemTypes.includes(item.type));
+    const itemTypes = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"]);
+    let items = actor.items.filter(item => itemTypes.has(item.type));
     let pilotId = null;
 
     if (actor.type === "mech") {
@@ -171,7 +173,7 @@ function getReactionItems(token) {
 
         if (pilot) {
             pilotId = pilot.id;
-            const pilotItems = pilot.items.filter(item => itemTypes.includes(item.type));
+            const pilotItems = pilot.items.filter(item => itemTypes.has(item.type));
             items = items.concat(pilotItems);
         }
     }
@@ -436,7 +438,7 @@ async function checkReactions(triggerType, data) {
                                 break;
                             }
                         }
-                        if (actionData && actionData.name) {
+                        if (actionData?.name) {
                             activationName = actionData.name;
                         }
                     }
@@ -1169,7 +1171,7 @@ async function handleSocketEvent({ action, payload }) {
                 }
             },
             default: "yes"
-        }, { classes: ["lancer-dialog-base"], width: 450 }).render(true);
+        }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 450 }).render(true);
     } else if (action === 'choiceCardGMRequest') {
         if (payload.targetUserId !== game.user.id)
             return;
@@ -1423,6 +1425,7 @@ async function handleTokenMove(document, change, options, userId) {
 }
 
 async function onAttackStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1439,7 +1442,7 @@ async function onAttackStep(state) {
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     await handleTrigger('onAttack', {
@@ -1449,12 +1452,14 @@ async function onAttackStep(state) {
         attackType: actionData.attack_type,
         actionName: actionData.title,
         tags: actionData.tags,
-        actionData
+        actionData,
+        flowState: state
     });
     return true;
 }
 
 async function onHitMissStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1471,7 +1476,7 @@ async function onHitMissStep(state) {
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     const hitTargets = [];
@@ -1485,7 +1490,7 @@ async function onHitMissStep(state) {
         if (!targetToken)
             continue;
 
-        if (await hasCritImmunity(targetToken.actor, state.actor) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
+        if (await hasCritImmunity(targetToken.actor, state.actor, state) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
             if (hitResult)
                 hitResult.crit = false;
             if (state.data?.attack_results?.[i])
@@ -1493,8 +1498,8 @@ async function onHitMissStep(state) {
             ui.notifications.info(`${targetToken.name} is immune to Critical Hits!`);
         }
 
-        const missImmunity = await hasMissImmunity(targetToken.actor, state.actor);
-        const hitImmunity = await hasHitImmunity(targetToken.actor, state.actor);
+        const missImmunity = await hasMissImmunity(targetToken.actor, state.actor, state);
+        const hitImmunity = await hasHitImmunity(targetToken.actor, state.actor, state);
         if (missImmunity && hitImmunity)
             ui.notifications.info(`${targetToken.name} is immune to miss and hit - these effects cancel each other`);
         else {
@@ -1540,7 +1545,8 @@ async function onHitMissStep(state) {
             attackType: actionData.attack_type,
             actionName: actionData.title,
             tags: actionData.tags,
-            actionData
+            actionData,
+            flowState: state
         });
     }
     if (missTargets.length > 0) {
@@ -1551,7 +1557,8 @@ async function onHitMissStep(state) {
             attackType: actionData.attack_type,
             actionName: actionData.title,
             tags: actionData.tags,
-            actionData
+            actionData,
+            flowState: state
         });
     }
 
@@ -1559,6 +1566,7 @@ async function onHitMissStep(state) {
 }
 
 async function onDamageStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1579,7 +1587,7 @@ async function onDamageStep(state) {
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     for (const targetInfo of targets) {
@@ -1588,7 +1596,7 @@ async function onDamageStep(state) {
         const isHit = targetInfo.hit || false;
 
         if (targetInfo.damage && targetToken.actor) {
-            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage);
+            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state);
         }
 
         const targetDamages = targetInfo.damage?.map(d => d.amount ?? d.val) || [];
@@ -1606,7 +1614,8 @@ async function onDamageStep(state) {
                 attackType: actionData.attack_type,
                 actionName: actionData.title,
                 tags: actionData.tags,
-                actionData
+                actionData,
+                flowState: state
             });
         }
     }
@@ -1615,6 +1624,7 @@ async function onDamageStep(state) {
 }
 
 async function onStructureStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStructure = actor?.system?.structure?.value ?? 0;
@@ -1625,6 +1635,7 @@ async function onStructureStep(state) {
 }
 
 async function onStressStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStress = actor?.system?.stress?.value ?? 0;
@@ -1635,6 +1646,7 @@ async function onStressStep(state) {
 }
 
 async function onTechAttackStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1651,7 +1663,7 @@ async function onTechAttackStep(state) {
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
         tags: state.data?.tags || techItem?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     await handleTrigger('onTechAttack', {
@@ -1661,12 +1673,14 @@ async function onTechAttackStep(state) {
         actionName: actionData.title,
         isInvade: actionData.isInvade,
         tags: actionData.tags,
-        actionData
+        actionData,
+        flowState: state
     });
     return true;
 }
 
 async function onTechHitMissStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -1683,7 +1697,7 @@ async function onTechHitMissStep(state) {
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
         tags: state.data?.tags || techItem?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     const hitTargets = [];
@@ -1719,7 +1733,8 @@ async function onTechHitMissStep(state) {
             actionName: actionData.title,
             isInvade: actionData.isInvade,
             tags: actionData.tags,
-            actionData
+            actionData,
+            flowState: state
         });
     }
     if (missTargets.length > 0) {
@@ -1730,7 +1745,8 @@ async function onTechHitMissStep(state) {
             actionName: actionData.title,
             isInvade: actionData.isInvade,
             tags: actionData.tags,
-            actionData
+            actionData,
+            flowState: state
         });
     }
 
@@ -1738,13 +1754,17 @@ async function onTechHitMissStep(state) {
 }
 
 async function onCheckStep(state) {
+    state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const statName = state.data?.title || 'Unknown';
     const roll = state.data?.result?.roll;
     const total = roll?.total;
-    state.data.targetVal = state.data.targetVal? state.data.targetVal : 10;
-    const success = total >= state.data.targetVal;
+    const targetVal = state.la_extraData?.targetVal ?? 10;
+    const success = total >= targetVal;
+
+    const targetTokenId = state.la_extraData?.targetTokenId;
+    const checkAgainstToken = targetTokenId ? canvas.tokens.get(targetTokenId) : null;
 
     await handleTrigger('onCheck', {
         triggeringToken: token,
@@ -1752,20 +1772,22 @@ async function onCheckStep(state) {
         roll,
         total,
         success,
-        checkAgainstToken: state.data.targetToken,
-        targetVal: state.data.targetVal
+        checkAgainstToken: checkAgainstToken,
+        targetVal: targetVal,
+        flowState: state
     });
     return true;
 }
 
 async function onInitCheckStep(state) {
+    state = injectExtraDataUtility(state);
     if (state.data?._ignoredCancel)
         return true;
 
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const statName = state.data?.title || 'Unknown';
-    state.data.targetVal = state.data.targetVal ? state.data.targetVal : 10;
+    const targetVal = state.la_extraData?.targetVal ?? 10;
 
     let cancelCheckTriggered = false;
     let cancelCardPending = false;
@@ -1827,9 +1849,10 @@ async function onInitCheckStep(state) {
     await handleTrigger('onInitCheck', {
         triggeringToken: token,
         statName,
-        checkAgainstToken: state.data.targetToken,
-        targetVal: state.data.targetVal,
-        cancelCheck
+        checkAgainstToken: state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null,
+        targetVal: targetVal,
+        cancelCheck,
+        flowState: state
     });
 
     if (cancelCheckTriggered) {
@@ -1863,7 +1886,7 @@ async function onInitAttackStep(state) {
         detail: state.data?.effect || weapon?.system?.effect || "",
         attack_type: state.data?.attack_type || "Ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     let cancelAttackTriggered = false;
@@ -1932,7 +1955,8 @@ async function onInitAttackStep(state) {
         actionName: actionData.title,
         tags: actionData.tags,
         actionData,
-        cancelAttack
+        cancelAttack,
+        flowState: state
     });
 
     if (cancelAttackTriggered) {
@@ -1966,7 +1990,7 @@ async function onInitTechAttackStep(state) {
         detail: state.data?.effect || techItem?.system?.effect || "",
         isInvade: state.data?.invade || false,
         tags: state.data?.tags || techItem?.system?.tags || [],
-        stateData: state.data
+        flowState: state
     };
 
     let cancelTechAttackTriggered = false;
@@ -2034,7 +2058,8 @@ async function onInitTechAttackStep(state) {
         isInvade: actionData.isInvade,
         tags: actionData.tags,
         actionData,
-        cancelTechAttack
+        cancelTechAttack,
+        flowState: state
     });
 
     if (cancelTechAttackTriggered) {
@@ -2084,7 +2109,7 @@ async function onActivationStep(state) {
         },
         detail: state.data?.detail || item?.system?.effect || "",
         tags: tags,
-        stateData: state.data
+        flowState: state
     };
 
     await handleTrigger('onActivation', {
@@ -2093,7 +2118,8 @@ async function onActivationStep(state) {
         actionName: actionName,
         item,
         actionData,
-        endActivation: state.data?.endActivation || false
+        endActivation: state.la_extraData?.endActivation || false,
+        flowState: state
     });
 
     if (token) {
@@ -2136,7 +2162,7 @@ async function onInitActivationStep(state) {
         action: state.data?.action || { name: actionName, activation: actionType },
         detail: state.data?.detail || state.data?.effect || item?.system?.effect || "",
         tags: tags,
-        stateData: state.data
+        flowState: state
     };
 
     let cancelActivation = false;
@@ -2207,7 +2233,8 @@ async function onInitActivationStep(state) {
         actionName,
         item,
         actionData,
-        cancelAction
+        cancelAction,
+        flowState: state
     });
 
     if (cancelActivation) {
@@ -2227,7 +2254,7 @@ async function statRollTargetSelectStep(state) {
     }
 
     // If target already provided (e.g. via executeStatRoll), skip
-    if (state.data.targetToken || state.data.chooseToken === false) {
+    if (state.la_extraData?.targetTokenId || state.la_extraData?.chooseToken === false) {
         return true;
     }
 
@@ -2254,7 +2281,8 @@ async function statRollTargetSelectStep(state) {
 
     if (targets && targets.length > 0) {
         const targetToken = targets[0];
-        state.data.targetToken = targetToken;
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.targetTokenId = targetToken.id;
 
         let targetVal = 10;
         const targetActor = targetToken.actor;
@@ -2267,7 +2295,7 @@ async function statRollTargetSelectStep(state) {
             targetVal = foundry.utils.getProperty(targetActor, path) || 10;
         }
 
-        state.data.targetVal = targetVal;
+        state.la_extraData.targetVal = targetVal;
 
         // Update title with difficulty
         const currentTitle = state.data.title || `${statName} Check`;
@@ -2285,7 +2313,7 @@ async function statRollTargetSelectStep(state) {
 async function throwChoiceStep(state) {
     if (!game.settings.get('lancer-automations', 'enableThrowFlow'))
         return true;
-    if (state.data?.is_throw)
+    if (state.la_extraData?.is_throw)
         return true;
 
     const item = state.item;
@@ -2326,12 +2354,13 @@ async function throwChoiceStep(state) {
 
     if (result === null)
         return false;
-    state.data.is_throw = isThrow;
+    state.la_extraData = state.la_extraData || {};
+    state.la_extraData.is_throw = isThrow;
     return true;
 }
 
 async function throwDeployStep(state) {
-    if (!state.data?.is_throw)
+    if (!state.la_extraData?.is_throw)
         return true;
 
     const item = state.item;
@@ -2367,17 +2396,6 @@ async function throwDeployStep(state) {
     return true;
 }
 
-async function beginThrowWeaponFlow(weapon) {
-    const WeaponAttackFlow = CONFIG.lancer?.flowClasses?.WeaponAttackFlow;
-    if (WeaponAttackFlow) {
-        const flow = new WeaponAttackFlow(weapon);
-        flow.state.data.is_throw = true;
-        await flow.begin();
-    } else {
-        await weapon.beginWeaponAttackFlow(true);
-    }
-}
-
 /**
  * Flow step that injects the Knockback checkbox into the damage HUD.
  * Runs before showDamageHUD in DamageRollFlow.
@@ -2397,7 +2415,7 @@ async function knockbackDamageStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
     const kb = state.data?._csmKnockback;
-    if (!kb || !kb.enabled)
+    if (!kb?.enabled)
         return true;
 
     const distance = kb.value || 1;
@@ -2427,6 +2445,43 @@ async function knockbackDamageStep(state) {
     });
 
     return true;
+}
+
+/** Flow step: injects the No Bonus Dmg checkbox into the damage HUD. */
+async function noBonusDmgInjectStep(state) {
+    if (ActiveFlowState.current?._csmNoBonusDmg) {
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData._csmNoBonusDmg = { ...ActiveFlowState.current._csmNoBonusDmg };
+    }
+    injectNoBonusDmgCheckbox(state);
+    return true;
+}
+
+/**
+ * Wraps rollNormalDamage and rollCritDamage so that when No Bonus Dmg is active,
+ * bonus_damage is cleared immediately before each roll step executes.
+ * This is more reliable than insertStepAfter because it runs synchronously
+ * inside the same call frame as _collectBonusDamage.
+ */
+function wrapRollDamageForNoBonusDmg(flowSteps) {
+    for (const stepName of ['rollNormalDamage', 'rollCritDamage']) {
+        const orig = flowSteps.get(stepName);
+        if (!orig)
+            continue;
+        flowSteps.set(stepName, async function noBonusDmgWrapped(state) {
+            if (ActiveFlowState.current?._csmNoBonusDmg && !state.la_extraData?._csmNoBonusDmg) {
+                state.la_extraData = state.la_extraData || {};
+                state.la_extraData._csmNoBonusDmg = { ...ActiveFlowState.current._csmNoBonusDmg };
+            }
+            if (state.la_extraData?._csmNoBonusDmg?.enabled) {
+                state.data.bonus_damage = [];
+                for (const t of (state.data.damage_hud_data?.targets || [])) {
+                    t.bonusDamage = [];
+                }
+            }
+            return orig(state);
+        });
+    }
 }
 
 /**
@@ -2526,6 +2581,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Register Knockback steps
     flowSteps.set('lancer-automations:knockbackInject', knockbackInjectStep);
     flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
+    // Register No Bonus Dmg steps
+    flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
     // Register Throw steps
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
@@ -2569,9 +2626,12 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-automations:onDamage');
     flows.get('DamageRollFlow')?.insertStepAfter('lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:noBonusDmgInject');
 
     // Wrap rollReliable so knockback-only flows (no damage dice) don't abort
     wrapRollReliable(flowSteps);
+    // Wrap rollNormalDamage/rollCritDamage to suppress bonus damage when No Bonus Dmg is active
+    wrapRollDamageForNoBonusDmg(flowSteps);
 
     // Wrap applySelfHeat to honour heat immunity and resistance
     wrapApplySelfHeat(flowSteps);
@@ -2630,7 +2690,7 @@ function openResetMovementDialog(token) {
         },
         default: "revert"
     }, {
-        classes: ["lancer-dialog-base"],
+        classes: ["lancer-dialog-base", "lancer-no-title"],
         width: 400,
         height: 250
     }).render(true);
@@ -2639,6 +2699,7 @@ function openResetMovementDialog(token) {
 Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
+    registerFlowStatePersistence();
 
     game.keybindings.register('lancer-automations', 'resetMovement', {
         name: 'Reset Movement',
@@ -2673,8 +2734,6 @@ Hooks.once('ready', async () => {
             const actor = tokenDoc.actor;
             if (!actor)
                 continue;
-            if (actor.getFlag("lancer-automations", "ephemeral_bonuses")?.length)
-                await actor.setFlag("lancer-automations", "ephemeral_bonuses", []);
         }
     }
 
@@ -2805,30 +2864,22 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "immovable",
         name: "Immovable",
         img: "modules/lancer-automations/icons/immovable.svg",
         description: "Cannot be moved"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "disengage",
         name: "Disengage",
         img: "modules/lancer-automations/icons/disengage.svg",
         description: "You ignore engagement and your movement does not provoke reactions"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "destroyed",
         name: "Destroyed",
         img: "modules/lancer-automations/icons/destroyed.svg",
         description: "You are destroyed"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "grappling",
         name: "Grappling",
         img: "modules/lancer-automations/icons/grappling.svg",
@@ -2837,9 +2888,7 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
         ])
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "grappled",
         name: "Grappled",
         img: "modules/lancer-automations/icons/grappled.svg",
@@ -2848,44 +2897,32 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
         ])
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "falling",
         name: "Falling",
         img: "modules/lancer-automations/icons/falling.svg",
         description: "Characters take damage when they fall 3 or more spaces and cannot recover before hitting the ground. Characters fall 10 spaces per round in normal gravity, but can't fall in zero-G or very low-G environments. They take 3 Kinetic AP (armour piercing) damage for every three spaces fallen, to a maximum of 9 Kinetic AP. Falling is a type of involuntary movement."
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "lagging",
         name: "Lagging",
         img: "modules/lancer-automations/icons/lagging.svg",
         description: "You can only take a quick action"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "infection",
         name: "Infection",
         img: "modules/lancer-automations/icons/infection.svg",
         description: "Works in the same way as burn but target heat instead"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "throttled",
         name: "Throttled",
         img: "modules/lancer-automations/icons/throttled.svg",
         description: "Deals Half damage, heat, and burn on attacks"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "blinded",
         name: "Blinded",
         img: "modules/lancer-automations/icons/blinded.svg",
         description: "Light of sight reduced to 1"
-    });
-
-    CONFIG.statusEffects.push({
+    }, {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
@@ -3011,14 +3048,17 @@ Hooks.on('ready', async () => {
         getCumulativeMoveData,
         getIntentionalMoveData,
         getMovementHistory,
-        beginThrowWeaponFlow,
         processEffectConsumption,
         handleTrigger,
         registerUserHelper,
         getUserHelper,
         getActiveGMId,
         getTokenOwnerUserId,
-        delayedTokenAppearance
+        delayedTokenAppearance,
+        // Tests
+        tests: {
+            cardStack: CardStackTests
+        }
     });
     game.socket.on('module.lancer-automations', handleSocketEvent);
 
@@ -3029,6 +3069,7 @@ Hooks.on('ready', async () => {
 });
 
 Hooks.on('renderChatMessage', (app, html, data) => {
+    bindChatMessageStateInterceptor(app, html);
     // Process damage cards for immunities and resistances
     if (html.find('.lancer-damage-targets').length) {
         // Get the damage types from the message
@@ -3116,9 +3157,9 @@ Hooks.on('renderChatMessage', (app, html, data) => {
         // If it's a regular hit, check if the roll was 20+ (which means it was downgraded)
         if (hitChip.length && hitChip.hasClass('hit')) {
             const rollTotalStr = target.find('.dice-total').text();
-            const rollTotal = parseInt(rollTotalStr, 10);
+            const rollTotal = Number.parseInt(rollTotalStr, 10);
 
-            if (!isNaN(rollTotal) && rollTotal >= 20) {
+            if (!Number.isNaN(rollTotal) && rollTotal >= 20) {
                 hitChip.css({
                     'background-color': '#eab308',
                     'color': '#000',

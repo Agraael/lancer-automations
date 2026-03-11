@@ -57,7 +57,7 @@ interface LancerActorSystem {
     overcharge?: number;
     overcharge_sequence?: string;
     meltdown_timer?: number | null;
-    loadout?: any;
+    loadout?: LancerLoadout;
     pilot?: any;
     notes?: string;
     stress_repair_cost?: number;
@@ -100,6 +100,27 @@ interface LancerActorSystem {
     [key: string]: any;
 }
 
+interface LancerLoadout {
+    ai_cap: { max: number; min: number; value: number };
+    frame: { id: string; status: string; value: any };
+    limited_bonus: number;
+    sp: { max: number; min: number; value: number };
+    systems: any[];
+    weapon_mounts: LancerWeaponMount[];
+}
+
+interface LancerWeaponMount {
+    bracing: boolean;
+    slots: LancerMountSlot[];
+    type: string;
+}
+
+interface LancerMountSlot {
+    weapon: { id: string; status: string; value: any } | null;
+    mod: { id: string; status: string; value: any } | null;
+    size: string;
+}
+
 /**
  * Minimal Lancer item system type declarations.
  */
@@ -107,6 +128,7 @@ interface LancerItemSystem {
     // ─── Universal ───────────────────────────────────────────────────────────
     lid: string;
     equipped?: boolean;
+    destroyed?: boolean;
 
     // ─── Text / display ──────────────────────────────────────────────────────
     description?: string;

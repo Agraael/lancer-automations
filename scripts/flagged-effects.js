@@ -1,4 +1,4 @@
-/* global CONFIG, canvas, game, Dialog, ChatMessage, ui */
+/* global CONFIG, canvas, game, ChatMessage, ui */
 
 function log(...args) {
     console.log("lancer-automations |", ...args);
@@ -159,7 +159,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         }
     }
 
-    if (resolvedEffectData && resolvedEffectData.isCustom && !resolvedEffectData.icon) {
+    if (resolvedEffectData?.isCustom && !resolvedEffectData.icon) {
         resolvedEffectData.icon = "icons/svg/mystery-man.svg";
     }
 
@@ -735,8 +735,8 @@ export function findEffectOnToken(token, identifier) {
                 e.name === identifier ||
                 laFlags?.effect === identifier ||
                 qolFlags?.effect === identifier ||
-                (e.name && e.name.toLowerCase().includes(identifierPathTail)) ||
-                (e.statuses && e.statuses.has(identifierPathTail))
+                (e.name?.toLowerCase().includes(identifierPathTail)) ||
+                (e.statuses?.has(identifierPathTail))
             );
         });
     }
@@ -786,14 +786,12 @@ export async function consumeEffectCharge(effect) {
             log(`Consuming charge for group ${groupId}: ${newStack} remaining`);
             await actor.updateEmbeddedDocuments("ActiveEffect", updates);
         }
+    } else if (newStack <= 0) {
+        log(`Consumption depleted for ${effect.name}, removing effect`);
+        await effect.delete();
     } else {
-        if (newStack <= 0) {
-            log(`Consumption depleted for ${effect.name}, removing effect`);
-            await effect.delete();
-        } else {
-            log(`Consuming charge for ${effect.name}: ${newStack} remaining`);
-            await effect.update(/** @type {any} */({ "flags.statuscounter.value": newStack, "flags.statuscounter.visible": newStack > 1 }));
-        }
+        log(`Consuming charge for ${effect.name}: ${newStack} remaining`);
+        await effect.update(/** @type {any} */({ "flags.statuscounter.value": newStack, "flags.statuscounter.visible": newStack > 1 }));
     }
 
     return true;
@@ -966,8 +964,8 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
             return (
                 e.name?.toLowerCase().includes(lowerName) ||
                 e.statuses?.has(lowerName) ||
-                (flagName && flagName.toLowerCase().includes(lowerName)) ||
-                (legacyFlagName && legacyFlagName.toLowerCase().includes(lowerName))
+                (flagName?.toLowerCase().includes(lowerName)) ||
+                (legacyFlagName?.toLowerCase().includes(lowerName))
             );
         });
     });
@@ -1170,8 +1168,8 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count) {
  * @returns {Array<ActiveEffect>} Array of flagged effects
  */
 export function getAllEffects(target) {
-    const actor = /** @type {Actor} */(/** @type {any} */ (target).actor || (target instanceof Actor ? target : target)); // Simple normalization
-    if (!actor || !actor.effects)
+    const actor = /** @type {Actor} */(/** @type {any} */ (target).actor || target); // Simple normalization
+    if (!actor?.effects)
         return [];
 
     return [...actor.effects];

@@ -1,4 +1,4 @@
-/*global window */
+/* global Sequence, Sequencer, canvas, game, ui, Hooks, Dialog, ChatMessage, CONST */
 
 /**
  * Main function to manage delayed token appearance
@@ -44,7 +44,7 @@ export async function delayedTokenAppearance() {
                     label: "Confirm",
                     callback: (html) => {
                         const val = html.find('[name="rounds"]').val();
-                        const value = typeof val === 'string' ? parseInt(val) : 1;
+                        const value = typeof val === 'string' ? Number.parseInt(val) : 1;
                         resolve(value);
                     }
                 },
@@ -55,7 +55,7 @@ export async function delayedTokenAppearance() {
                 }
             },
             default: "ok"
-        }).render(true);
+        }, {classes: ['lancer-dialog-base'] }).render(true);
     });
 
     if (!rounds)
@@ -233,8 +233,8 @@ export function initDelayedAppearanceHook() {
         });
 
         // Preload the appearance animation for all clients
-        if (window.Sequencer) {
-            await window.Sequencer.Preloader.preloadForClients([
+        if (typeof Sequencer !== "undefined") {
+            await Sequencer.Preloader.preloadForClients([
                 "jb2a.extras.tmfx.inpulse.circle.01.normal"
             ]);
         }
@@ -247,9 +247,9 @@ export function initDelayedAppearanceHook() {
                 if (placeholder) {
                     await placeholder.delete();
                     const tokenObject = canvas.tokens.get(data.originalTokenId);
-                    if (tokenObject && window.Sequence) {
+                    if (tokenObject && typeof Sequence !== "undefined") {
                         const tokenSize = tokenObject.document.width; // Grid units
-                        new window.Sequence()
+                        new Sequence()
                             .effect()
                             .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
                             .atLocation(tokenObject)

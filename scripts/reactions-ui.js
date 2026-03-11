@@ -1,4 +1,4 @@
-/*global console, game, Dialog, ChatMessage, canvas, $, foundry */
+/*global console, game, Dialog, canvas, $, foundry */
 import { ReactionManager, stringToAsyncFunction } from "./reaction-manager.js";
 import { hasReactionAvailable } from "./misc-tools.js";
 
@@ -91,8 +91,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             }
         };
 
-        if (activationType === "none") {
-        } else if (activationType === "flow") {
+        if (activationType === "none") { /* empty */ } else if (activationType === "flow") {
             return itemActivation();
         } else if (activationType === "macro" || activationType === "code") {
             if (activationMode === "instead") {
@@ -149,8 +148,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             await game.modules.get('lancer-automations').api.executeSimpleActivation(actor, flowData);
         };
 
-        if (activationType === "none") {
-        } else if (activationType === "flow") {
+        if (activationType === "none") { /* empty */ } else if (activationType === "flow") {
             return showChatActivation();
         } else if (activationType === "macro" || activationType === "code") {
             if (activationMode === "instead") {
@@ -281,7 +279,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         const resolvePath = (obj, path) => {
             if (!path)
                 return undefined;
-            const cleanPath = path.replace(/\[(\d+)\]/g, '.$1').replace(/^\./, '');
+            const cleanPath = path.replaceAll(/\[(\d+)\]/g, '.$1').replace(/^\./, '');
 
             let val = foundry.utils.getProperty(obj, cleanPath);
             if (val !== undefined)
@@ -653,7 +651,7 @@ function renderReactionDialog(popupData) {
             closeDetailPanel();
             activeReactionDialog = null;
         }
-    }, { top: 450, left: 150 });
+    }, { top: 450, left: 150, classes: ['dialog', 'lancer-dialog-base', 'lancer-no-title']});
 
     activeReactionDialog.render(true);
 }

@@ -10,8 +10,8 @@ import { hasReactionAvailable, getActorMaxThreat } from "./misc-tools.js";
 
 export { getMinGridDistance };
 
-const THREAT_AURA_NAMES = ["Threat_detail", "Threat"];
-const isThreatAura = (a) => THREAT_AURA_NAMES.includes(a.config.name);
+const THREAT_AURA_NAMES = new Set(["Threat_detail", "Threat"]);
+const isThreatAura = (a) => THREAT_AURA_NAMES.has(a.config.name);
 
 function getDispositionData(t1, t2) {
     const tokenFactions = game.modules.get("token-factions")?.api;
@@ -141,7 +141,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         }
 
         if (!isTriggered) {
-            const hasGaaSupport = manager && manager.getTokenAuras(reactor).some(a => isThreatAura(a));
+            const hasGaaSupport = manager?.getTokenAuras(reactor).some(a => isThreatAura(a));
 
             if (!hasGaaSupport) {
                 const maxThreat = await getActorMaxThreat(reactor.actor);
@@ -239,7 +239,7 @@ export function displayOverwatch(reactors, target) {
                     }
                 });
             }
-        }, { top: 450, left: 150 }).render(true);
+        }, { top: 450, left: 150,classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
     } else if (mode === 'c') {
         ChatMessage.create({
             author: game.userId,
@@ -441,7 +441,7 @@ export function canEngage(token1, token2) {
         if (statusName === "hidden" && token.document.hidden)
             return true;
 
-        if (api && api.findEffectOnToken) {
+        if (api?.findEffectOnToken) {
             if (api.findEffectOnToken(token, statusName))
                 return true;
         }

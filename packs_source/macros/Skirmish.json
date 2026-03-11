@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Skirmish",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/skirmish.svg",
+    "command_source": "Skirmish.js"
+}

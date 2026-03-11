@@ -33,16 +33,16 @@ function getReactionsOnMech(mech) {
 }
 
 function getReactionsOnUnlinkedMech(token) {
-    const items = token.document.actor.items?.filter(x => typeof x.system.tags !== 'undefined');
+    const items = token.document.actor.items?.filter(x => x.system.tags !== undefined);
     return items ? getReactionNamesFromItems(items) : [];
 }
 
 function getReactionsOnPilot(pilot) {
     const response = [];
     const items = pilot.items.filter(x => x.type === 'talent');
-    for (let i = 0; i < items.length; i++) {
-        let curRank = items[i].system.curr_rank;
-        let talentRanks = items[i].system.ranks;
+    for (const element of items) {
+        let curRank = element.system.curr_rank;
+        let talentRanks = element.system.ranks;
         for (let j = 0; j < talentRanks.length; j++) {
             let actions = talentRanks[j].actions;
             for (const action of actions) {
@@ -228,7 +228,7 @@ export function displayOverwatch(reactors, target) {
                     }
                 });
             }
-        }, { top: 450, left: 150 }).render(true);
+        }, { top: 450, left: 150, classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
     } else if (mode === 'c') {
         ChatMessage.create({
             author: game.userId,
@@ -268,8 +268,8 @@ function getActorMaxThreat(actor) {
 
             for (const range of ranges) {
                 if (range.type === "Threat") {
-                    const val = parseInt(range.val);
-                    if (!isNaN(val) && val > maxThreat) {
+                    const val = Number.parseInt(range.val);
+                    if (!Number.isNaN(val) && val > maxThreat) {
                         maxThreat = val;
                     }
                 }

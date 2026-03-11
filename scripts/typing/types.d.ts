@@ -12,6 +12,13 @@ interface TriggerDataBase {
 
 // ─── Shared subtypes ─────────────────────────────────────────────────────────
 
+interface FlowState {
+    injectFlowExtraData(extraData: object): void;
+    getFlowExtraData(): object;
+    injectBonus(bonus: object): void;
+    [key: string]: any;
+}
+
 interface ActionData {
     type: "action" | "attack" | "tech";
     title: string;
@@ -20,7 +27,7 @@ interface ActionData {
     attack_type?: string;
     isInvade?: boolean;
     tags: Array<{ lid: string;[key: string]: any }>;
-    stateData: any;
+    flowState: FlowState;
 }
 
 interface MoveInfo {
@@ -235,15 +242,17 @@ interface LancerAutomationsAPI {
     knockBackToken(token: Token, direction: object, distance: number): Promise<void>;
     applyKnockbackMoves(token: Token, moves: object[]): Promise<void>;
     startChoiceCard(options?: {
-        mode?: "or" | "and";
-        choices?: Array<{ text: string; icon?: string; callback?: Function; data?: any }>;
+        mode?: "or" | "and" | "vote" | "vote-hidden";
+        choices?: Array<{ text: string; icon?: string; callback?: Function; data?: any; value?: any;[key: string]: any }>;
         title?: string;
         description?: string;
         icon?: string;
         headerClass?: string;
         userIdControl?: string | string[] | null;
         traceData?: any;
-    }): Promise<true | null>;
+        numberToChoose?: number;
+        selectionValidator?: (selected: any[]) => { valid: boolean; message?: string };
+    }): Promise<any[] | true | null>;
     revertMovement(token: Token): Promise<void>;
     clearMovementHistory(token: Token): void;
     getActiveGMId(): string | null;
@@ -269,7 +278,6 @@ interface LancerAutomationsAPI {
     addConstantBonus(actor: any, bonus: object, options?: object): Promise<void>;
     removeConstantBonus(actor: any, bonusId: string): Promise<void>;
     getGlobalBonuses(actor: any): any[];
-    injectBonusToNextRoll(actor: any, bonus: object): void;
 
     // ScanAPI
     performSystemScan(token: Token, target: Token, options?: object): Promise<void>;

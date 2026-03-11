@@ -1,6 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken } from "./interactive-tools.js";
+import { chooseToken, choseMount, InteractiveAPI } from "./interactive-tools.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
 
 const STAT_PATHS = {
@@ -124,7 +124,7 @@ export function isItemAvailable(item, reactionPath) {
     if (item.type === "talent" && reactionPath) {
         const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
         if (rankMatch) {
-            const requiredRank = parseInt(rankMatch[1]) + 1;
+            const requiredRank = Number.parseInt(rankMatch[1]) + 1;
             if ((item.system?.curr_rank || 0) < requiredRank) {
                 return false;
             }
@@ -134,7 +134,7 @@ export function isItemAvailable(item, reactionPath) {
     if (item.type === "mech_weapon" && reactionPath) {
         const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
         if (profileMatch) {
-            const requiredProfile = parseInt(profileMatch[1]);
+            const requiredProfile = Number.parseInt(profileMatch[1]);
             const currentProfile = item.system?.selected_profile_index ?? 0;
             if (currentProfile !== requiredProfile) {
                 return false;
@@ -158,7 +158,7 @@ export function hasReactionAvailable(tokenOrActor) {
  * @returns {Promise<Item>} The updated item.
  */
 export async function addItemTag(item, tagData) {
-    if (!item || !tagData || !tagData.id)
+    if (!item || !tagData?.id)
         return item;
 
     const currentTags = globalThis.foundry.utils.deepClone(item.system?.tags || []);
@@ -250,7 +250,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
         }
     }
 
-    if (targetToken && targetToken.actor) {
+    if (targetToken?.actor) {
         const targetActor = targetToken.actor;
         rollTitle = rollTitle || `${upperStat} Save`;
 
@@ -273,15 +273,17 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
 
     const flowOptions = { path: statPath, title: rollTitle };
     const flow = new StatRollFlow(actor, flowOptions);
+    flow.state.la_extraData = flow.state.la_extraData || {};
+
     if (targetToken) {
-        flow.state.data.targetToken = targetToken;
+        flow.state.la_extraData.targetTokenId = targetToken.id;
         chooseTokenInFlow = false;
     }
-    flow.state.data.targetVal = targetVal;
-    flow.state.data.chooseToken = chooseTokenInFlow;
+    flow.state.la_extraData.targetVal = targetVal;
+    flow.state.la_extraData.chooseToken = chooseTokenInFlow;
 
     if (restExtraData && typeof restExtraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, restExtraData);
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, restExtraData);
     }
 
     const completed = await flow.begin();
@@ -343,11 +345,43 @@ export async function executeDamageRoll(attacker, targets, damageValue, damageTy
     foundry.utils.mergeObject(flowData, options);
     const flow = new DamageRollFlow(actor.uuid, flowData);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
 }
+
+async function beginWeaponThrowFlow(weapon, options, extraData = {}) {
+    const WeaponAttackFlow = game.lancer.flows.get("WeaponAttackFlow");
+    if (!WeaponAttackFlow) {
+        return { completed: false };
+    }
+    const flow = new WeaponAttackFlow(weapon, options);
+    if (extraData && typeof extraData === 'object') {
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
+    }
+    flow.state.la_extraData = flow.state.la_extraData || {};
+    flow.state.la_extraData.is_throw = true;
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+
+async function beginWeaponAttackFlow(weapon, options, extraData = {}) {
+    const WeaponAttackFlow = game.lancer.flows.get("WeaponAttackFlow");
+    if (!WeaponAttackFlow) {
+        return { completed: false };
+    }
+    const flow = new WeaponAttackFlow(weapon, options);
+    if (extraData && typeof extraData === 'object') {
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
+
+
 
 export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     const BasicAttackFlow = game.lancer.flows.get("BasicAttackFlow");
@@ -356,7 +390,7 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new BasicAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -369,7 +403,7 @@ export async function executeTechAttack(actor, options = {}, extraData = {}) {
     }
     const flow = new TechAttackFlow(actor.uuid, options);
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -434,7 +468,7 @@ export async function executeReactorMeltdown(token, turns = null) {
                 close: () => resolve(null),
                 render: (html) => {
                     html.find('.lancer-item-card').click(function () {
-                        const turnValue = parseInt($(this).data('turn'));
+                        const turnValue = Number.parseInt($(this).data('turn'));
                         if (turnValue) {
                             resolve(turnValue);
                             dialog.close();
@@ -442,7 +476,7 @@ export async function executeReactorMeltdown(token, turns = null) {
                     });
                 }
             }, {
-                classes: ["lancer-dialog-base"],
+                classes: ["lancer-dialog-base", 'lancer-no-title'],
                 width: 450
             });
             dialog.render(true);
@@ -585,13 +619,8 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
     const uuid = item?.uuid || actor.uuid;
     const flow = new SimpleActivationFlow(uuid, options);
 
-    // // Ensure state.item is correctly populated for the flow steps
-    // if (item) {
-    //     flow.state.item = item;
-    // }
-
     if (extraData && typeof extraData === 'object') {
-        foundry.utils.mergeObject(flow.state.data, extraData);
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
     const completed = await flow.begin();
     return { completed, flow };
@@ -810,6 +839,180 @@ export async function updateTokenSystem(token, data) {
     }
 }
 
+/**
+ * Executes a Skirmish action: target validation, weapon selection, and attack/damage flow.
+ * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
+ * @returns {Promise<void>}
+ */
+export async function executeSkirmish(actorOrToken) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+
+    if (!actor) {
+        ui.notifications.error("lancer-automations | skirmish requires a token.");
+        return;
+    }
+
+    // 2. Weapon Selection
+    // Filter: 1 one/mount , no superheavy.
+    // Display non-fitting weapons as unselectable.
+    const filterPredicate = (w) => {
+        const size = w.system?.size || w.system?.type || "";
+        return size.toLowerCase() !== 'superheavy';
+    };
+
+    const choices = await choseMount(actor, 1, filterPredicate, null, "SKIRMISH");
+    if (!choices || choices.length === 0)
+        return;
+
+    const chosen = choices[0];
+    let weapons;
+    if (chosen.slots) {
+        weapons = chosen.slots
+            .map(s => s.weapon?.value)
+            .filter(Boolean);
+    } else {
+        weapons = [chosen];
+    }
+
+    if (weapons.length === 1) {
+        await beginWeaponAttackFlow(weapons[0]);
+    } else {
+        let primaryChosen = false;
+        const choices = weapons.map(weapon => ({
+            text: weapon.name,
+            icon: weapon.img,
+            callback: async () => {
+                const extraData = {};
+                if (primaryChosen) {
+                    extraData._csmNoBonusDmg = { enabled: true };
+                }
+                primaryChosen = true;
+                await beginWeaponAttackFlow(weapon, {}, extraData);
+            }
+        }));
+
+        await InteractiveAPI.startChoiceCard({
+            title: "SKIRMISH WEAPON ORDER",
+            description: "Select weapons in order. First is primary, others get no bonus damage.",
+            mode: "and",
+            choices
+        });
+    }
+}
+
+/**
+ * Executes a Barrage action: attacks with either two different mounts or one superheavy mount.
+ * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
+ * @returns {Promise<void>}
+ */
+export async function executeBarrage(actorOrToken) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+
+    if (!actor) {
+        ui.notifications.error("lancer-automations | barrage requires a token.");
+        return;
+    }
+
+    // Helper to check if a mount or weapon contains a Superheavy weapon
+    const hasSuperheavy = (selectedItem) => {
+        if (selectedItem?.slots) {
+            return selectedItem.slots.some(s => {
+                const w = s.weapon?.value;
+                if (!w) {
+                    return false;
+                }
+                const size = w.system?.size || w.system?.type || "";
+                return size.toLowerCase() === 'superheavy';
+            });
+        }
+        const size = selectedItem?.system?.size || selectedItem?.system?.type || "";
+        return size.toLowerCase() === 'superheavy';
+    };
+
+    // 2. Weapon Selection Validator
+    // 1 mount = valid if superheavy weapon equipped
+    // 2 mounts = valid if both DO NOT have superheavy weapons (and they must be different mounts, which the interface enforces)
+    const barrageValidator = (selected) => {
+        if (selected.length === 0)
+            return { valid: false, message: "Select 1 Superheavy mount or 2 different mounts.", level: "info" };
+
+        if (selected.length === 1) {
+            const isSH = hasSuperheavy(selected[0]);
+            return isSH
+                ? { valid: true, message: "Superheavy weapon selected.", level: "success" }
+                : { valid: false, message: "Single mount must have a Superheavy weapon. Or select 2 mounts.", level: "error" };
+        }
+
+        if (selected.length === 2) {
+            const anySH = selected.some(s => hasSuperheavy(s));
+            return anySH
+                ? { valid: false, message: "Cannot mix a Superheavy weapon with another mount.", level: "error" }
+                : { valid: true, message: "2 mounts selected.", level: "success" };
+        }
+
+        return { valid: false, message: "Invalid selection.", level: "error" };
+    };
+
+    const choices = await choseMount(actor, 2, null, null, "BARRAGE", barrageValidator);
+    if (!choices || choices.length === 0)
+        return;
+
+    // Helper to fire all weapons on a single mount (AND card if multiple)
+    const fireMountWeapons = async (mount) => {
+        let weapons;
+        if (mount.slots) {
+            weapons = mount.slots
+                .map(s => s.weapon?.value)
+                .filter(Boolean);
+        } else {
+            weapons = [mount];
+        }
+
+        const options = { half_damage: true };
+        const extraData = { _csmNoBonusDmg: { enabled: true } };
+
+        if (weapons.length === 1) {
+            await beginWeaponAttackFlow(weapons[0], options, extraData);
+        } else if (weapons.length > 1) {
+            const choices = weapons.map(weapon => ({
+                text: weapon.name,
+                icon: weapon.img,
+                callback: async () => {
+                    await beginWeaponAttackFlow(weapon, options, extraData);
+                }
+            }));
+            await InteractiveAPI.startChoiceCard({
+                title: "WEAPON ORDER",
+                description: `Firing weapons from ${mount.type || "Mount"}. All attacks receive half damage and no bonus damage.`,
+                mode: "and",
+                choices
+            });
+        }
+    };
+
+    if (choices.length === 1) {
+        // Superheavy, just fire its weapons
+        await fireMountWeapons(choices[0]);
+    } else {
+        // 2 mounts, create an AND card for mount order
+        const mountChoices = choices.map((mount, index) => ({
+            text: `Fire ${mount.name || mount.type || "Mount " + (index + 1)}`,
+            icon: mount.slots?.[0]?.weapon?.value?.img || "icons/svg/item-bag.svg",
+            callback: async () => {
+                await fireMountWeapons(mount);
+            }
+        }));
+
+        await InteractiveAPI.startChoiceCard({
+            title: "BARRAGE MOUNT ORDER",
+            description: "Select which mount to trigger. All attacks receive half damage and no bonus damage.",
+            mode: "and",
+            choices: mountChoices
+        });
+    }
+}
+
+
 // ---------------------------------------------------------------------------
 // Weapon / Item utility functions (bonus-aware)
 // ---------------------------------------------------------------------------
@@ -930,7 +1133,7 @@ export async function getMaxWeaponRanges_WithBonus(input) {
         const { tags, range } = _getItemBaseData(weapon);
         await _applyItemBonuses(weapon, actor, tags, range);
         for (const r of range) {
-            const val = parseInt(r.val) || 0;
+            const val = Number.parseInt(r.val) || 0;
             if (maxPerType[r.type] === undefined || val > maxPerType[r.type]) {
                 maxPerType[r.type] = val;
             }
@@ -965,7 +1168,7 @@ export async function getMaxWeaponReach_WithBonus(input) {
         await _applyItemBonuses(weapon, actor, tags, range);
         for (const r of range) {
             if (REACH_RANGE_TYPES.has(r.type)) {
-                const val = parseInt(r.val) || 0;
+                const val = Number.parseInt(r.val) || 0;
                 if (val > max) {
                     max = val;
                 }
@@ -974,7 +1177,7 @@ export async function getMaxWeaponReach_WithBonus(input) {
         // Check throw tag
         const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
         if (thrownTag) {
-            const throwVal = parseInt(thrownTag.val || thrownTag.num_val) || 0;
+            const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
             if (throwVal > max) {
                 max = throwVal;
             }
@@ -1031,5 +1234,9 @@ export const MiscAPI = {
     getMaxWeaponRanges_WithBonus,
     getMaxWeaponReach_WithBonus,
     getWeaponType,
-    getItemType
+    getItemType,
+    executeSkirmish,
+    executeBarrage,
+    beginWeaponThrowFlow,
+    beginWeaponAttackFlow
 };

@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Barrage",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/barrage.svg",
+    "command_source": "Barrage.js"
+}

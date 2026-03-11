@@ -1,4 +1,4 @@
-/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, FileReader, CodeMirror */
+/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, CodeMirror */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { openItemBrowserDialog } from "./misc-tools.js";
@@ -28,8 +28,8 @@ export function stringToFunction(str, args = [], reaction = null) {
         const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck'];
         const foundKeywords = blockingKeywords.filter(k => trimmed.includes(k));
 
-        const sensitiveTriggers = ['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved'];
-        const foundTriggers = reaction?.triggers?.filter(t => sensitiveTriggers.includes(t)) || [];
+        const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
+        const foundTriggers = reaction?.triggers?.filter(t => sensitiveTriggers.has(t)) || [];
 
         const isForceSync = reaction?.forceSynchronous;
 
@@ -57,7 +57,7 @@ export function stringToAsyncFunction(str, args = [], name = "lancer-automations
     }
 
     // Sanitize name for sourceURL (no spaces, alphanumeric/dashes)
-    const sanitizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const sanitizedName = name.toLowerCase().replaceAll(/[^a-z0-9]/g, '-');
     const sourcePath = `modules/lancer-automations/dynamic/${sanitizedName}.js`;
     const codeWithSourceURL = trimmed + `\n\n//# sourceURL=${sourcePath}`;
 
@@ -170,7 +170,7 @@ export class ReactionManager {
 
     static async createFolder(name) {
         const folders = ReactionManager.getFolders();
-        if (folders.find(f => f.name === name))
+        if (folders.some(f => f.name === name))
             return;
         folders.push({ name: name, items: [] });
         await ReactionManager.saveFolders(folders);
@@ -236,7 +236,7 @@ export class ReactionManager {
                     ...def,
                     reactions: def.reactions.map((r, i) => {
                         const savedSub = saved.reactions[i];
-                        return savedSub?.enabled !== undefined ? { ...r, enabled: savedSub.enabled } : r;
+                        return savedSub?.enabled === undefined ? r : { ...r, enabled: savedSub.enabled };
                     })
                 };
             } else {
@@ -292,48 +292,42 @@ export class ReactionManager {
         a.download = `lancer-activations-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
+        a.remove();
         URL.revokeObjectURL(url);
 
         ui.notifications.info("Activations exported successfully.");
     }
 
     static async importReactions(file, mode = "merge") {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    const data = JSON.parse(/** @type {string} */ (event.target.result));
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
 
-                    if (!data.itemReactions && !data.generalReactions) {
-                        throw new Error("Invalid activation file format.");
-                    }
+            if (!data.itemReactions && !data.generalReactions) {
+                throw new Error("Invalid activation file format.");
+            }
 
-                    if (mode === "replace") {
-                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, data.itemReactions || {});
-                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, data.generalReactions || {});
-                    } else {
-                        const existingItem = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
-                        const existingGeneral = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+            if (mode === "replace") {
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, data.itemReactions || {});
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, data.generalReactions || {});
+            } else {
+                const existingItem = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+                const existingGeneral = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
-                        const mergedItem = { ...existingItem, ...data.itemReactions };
-                        const mergedGeneral = { ...existingGeneral, ...data.generalReactions };
+                const mergedItem = { ...existingItem, ...data.itemReactions };
+                const mergedGeneral = { ...existingGeneral, ...data.generalReactions };
 
-                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, mergedItem);
-                        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, mergedGeneral);
-                    }
-                    clearScriptCache();
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, mergedItem);
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, mergedGeneral);
+            }
+            clearScriptCache();
 
-                    ui.notifications.info(`Activations imported successfully (${mode} mode).`);
-                    resolve(true);
-                } catch (e) {
-                    ui.notifications.error(`Failed to import activations: ${e.message}`);
-                    reject(e);
-                }
-            };
-            reader.onerror = () => reject(new Error("Failed to read file."));
-            reader.readAsText(file);
-        });
+            ui.notifications.info(`Activations imported successfully (${mode} mode).`);
+            return true;
+        } catch (e) {
+            ui.notifications.error(`Failed to import activations: ${e.message}`);
+            return false;
+        }
     }
 }
 
@@ -346,7 +340,7 @@ export class ReactionConfig extends FormApplication {
         return mergeObject(super.defaultOptions, {
             title: "Activation Manager",
             id: "reaction-manager-config",
-            classes: [...super.defaultOptions.classes, "lancer-no-title"],
+            classes: [...super.defaultOptions.classes, 'lancer-dialog-base', 'lancer-no-title'],
             template: `modules/lancer-automations/templates/reaction-config.html`,
             width: 800,
             height: 850,
@@ -415,7 +409,7 @@ export class ReactionConfig extends FormApplication {
             if (!itemData || !path || path === "system.trigger" || path === "system")
                 return null;
             try {
-                const pathParts = path.split(/\.|\[|\]/).filter(p => p !== "");
+                const pathParts = path.split(/[.[\]]/).filter(p => p !== "");
                 let current = itemData;
                 for (const part of pathParts) {
                     if (current && (typeof current === 'object' || Array.isArray(current))) {
@@ -426,6 +420,7 @@ export class ReactionConfig extends FormApplication {
                 }
                 return current?.name || null;
             } catch (e) {
+                console.warn("lancer-automations | Error resolving action name:", e);
                 return null;
             }
         };
@@ -499,7 +494,7 @@ export class ReactionConfig extends FormApplication {
                 allReactions.push(validReactions[0]);
             } else {
                 const first = validReactions[0];
-                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
                 const itemInfo = itemMap.get(lid);
                 const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
 
@@ -565,7 +560,7 @@ export class ReactionConfig extends FormApplication {
                 defaultList.push(validReactions[0]);
             } else {
                 const first = validReactions[0];
-                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
                 const itemInfo = itemMap.get(lid);
                 const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
 
@@ -629,7 +624,7 @@ export class ReactionConfig extends FormApplication {
                 if (validReactions.length === 1) {
                     defaultList.push(validReactions[0]);
                 } else {
-                    const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(t => t).join(", ");
+                    const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
                     defaultList.push({
                         name: name,
                         lid: null,
@@ -721,15 +716,15 @@ export class ReactionConfig extends FormApplication {
         const allTriggerSet = new Set();
         for (const r of [...allReactions, ...defaultList]) {
             const trigStr = r.triggers || "";
-            trigStr.split(", ").filter(t => t).forEach(t => allTriggerSet.add(t.trim()));
+            trigStr.split(", ").filter(Boolean).forEach(t => allTriggerSet.add(t.trim()));
             if (r.reactions) {
                 r.reactions.forEach(sub => {
                     const subTrig = sub.triggers || "";
-                    subTrig.split(", ").filter(t => t).forEach(t => allTriggerSet.add(t.trim()));
+                    subTrig.split(", ").filter(Boolean).forEach(t => allTriggerSet.add(t.trim()));
                 });
             }
         }
-        const allTriggers = [...allTriggerSet].sort();
+        const allTriggers = [...allTriggerSet].sort((a, b) => a.localeCompare(b));
 
         const userScripts = ReactionManager.getStartupScripts();
         const startupScripts = [
@@ -903,7 +898,7 @@ export class ReactionConfig extends FormApplication {
                         }
                     },
                     default: "ok"
-                }, { classes: ["lancer-automations-dialog"] }).render(true);
+                }, { classes: ["lancer-automations-dialog", 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
             });
             if (name) {
                 await ReactionManager.createFolder(name);
@@ -936,7 +931,7 @@ export class ReactionConfig extends FormApplication {
                         }
                     },
                     default: "ok"
-                }, { classes: ["lancer-automations-dialog"] }).render(true);
+                }, { classes: ["lancer-automations-dialog", 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
             });
             if (newName && newName !== oldName) {
                 await ReactionManager.renameFolder(oldName, newName);
@@ -974,7 +969,7 @@ export class ReactionConfig extends FormApplication {
                         }
                     },
                     default: "keep"
-                }, { classes: ["lancer-automations-dialog"] }).render(true);
+                }, { classes: ["lancer-automations-dialog", 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
             });
             if (!result)
                 return;
@@ -1059,21 +1054,11 @@ export class ReactionConfig extends FormApplication {
 
     _onHelp(event) {
         event.preventDefault();
-        const content = `
+        const content = /*html*/`
         <div style="font-family: 'Roboto', sans-serif; line-height: 1.5;">
-            <p>Each activation can be either <strong>General</strong> (global) or <strong>Item-based</strong>.</p>
-            <p>An activation listens for a specific <strong>Trigger</strong> (e.g., <code>onDamage</code> fires when a token deals damage).</p>
-            <hr>
-            <p>Activations are checked for every token in combat. If a token has the activation available, the <strong>Evaluation Function</strong> is executed.</p>
-            <p>If the evaluation returns <code>true</code>, the activation triggers and appears in the popup window.</p>
-            <p><em>(Note: Different data is passed to the evaluation function depending on the trigger type.)</em></p>
-            <hr>
-            <p>You can also execute <strong>Macros</strong> or plain <strong>JS Code</strong> when activating the activation from the popup.</p>
-            <p>Useful functions available in this module:</p>
-            <ul>
-                <li><code>isHostile(token1, token2)</code></li>
-                <li><code>isFriendly(token1, token2)</code></li>
-            </ul>
+            <p>This system got  bigger to a point  i cant explain it in a few words.</p>
+            <p>As always the maint reference  if the <a href="https://github.com/Agraael/lancer-automations/blob/main/README.md">readme.md</a> file and <a href="https://github.com/Agraael/lancer-automations/blob/main/API_REFERENCE.md">api.md</a> file.</p>
+            <p>You can ask me questions if you dont understand something on <a href="https://discord.com/channels/426286410496999425/1436087781666455642">discord</a>.</p>
         </div>
         `;
 
@@ -1087,7 +1072,7 @@ export class ReactionConfig extends FormApplication {
                 }
             },
             default: "ok"
-        }, { width: 500 }).render(true);
+        }, { width: 500, classes: ["lancer-automations-dialog", 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
     }
 
     async _onAddReaction(event) {
@@ -1106,7 +1091,7 @@ export class ReactionConfig extends FormApplication {
             const entry = generals[name];
             if (!entry)
                 return;
-            const reaction = (Array.isArray(entry.reactions) && typeof index !== 'undefined')
+            const reaction = (Array.isArray(entry.reactions) && index !== undefined)
                 ? entry.reactions[index]
                 : entry;
             if (!reaction)
@@ -1120,7 +1105,7 @@ export class ReactionConfig extends FormApplication {
             if (!entry)
                 return;
 
-            const reactionIndex = (typeof index !== 'undefined') ? index : 0;
+            const reactionIndex = (index === undefined) ? 0 : index;
             const reaction = entry.reactions[reactionIndex];
             new ReactionEditor({ isGeneral: false, lid, reaction, reactionIndex: reactionIndex }).render(true);
         }
@@ -1157,7 +1142,7 @@ export class ReactionConfig extends FormApplication {
             const defaultEntry = getDefaultGeneralReactionRegistry()[name];
             if (!defaultEntry)
                 return;
-            const reaction = (Array.isArray(defaultEntry.reactions) && typeof index !== 'undefined')
+            const reaction = (Array.isArray(defaultEntry.reactions) && index !== undefined)
                 ? foundry.utils.deepClone(defaultEntry.reactions[index])
                 : foundry.utils.deepClone(defaultEntry);
             if (!reaction)
@@ -1192,7 +1177,7 @@ export class ReactionConfig extends FormApplication {
             if (index !== undefined && index !== null && index !== '') {
                 if (!Array.isArray(userSaved[name].reactions))
                     userSaved[name].reactions = [];
-                const i = parseInt(index);
+                const i = Number.parseInt(index);
                 if (!userSaved[name].reactions[i])
                     userSaved[name].reactions[i] = {};
                 userSaved[name].reactions[i].enabled = checked;
@@ -1215,7 +1200,7 @@ export class ReactionConfig extends FormApplication {
                     userItemSettings[lid] = {
                         itemType: defaults[lid].itemType,
                         reactions: defaults[lid].reactions.map((r, i) =>
-                            i === parseInt(index) ? { enabled: checked } : { enabled: r.enabled !== false }
+                            i === Number.parseInt(index) ? { enabled: checked } : { enabled: r.enabled !== false }
                         )
                     };
                 }
@@ -1280,8 +1265,7 @@ export class ReactionConfig extends FormApplication {
         new StartupScriptEditor({ script, manager: this }).render(true);
     }
 
-    async _updateObject(event, formData) {
-    }
+    async _updateObject(event, formData) {}
 
     async close(options = {}) {
         if (this._needsReload) {
@@ -1405,12 +1389,9 @@ export class StartupScriptEditor extends FormApplication {
 }
 
 export class ReactionEditor extends FormApplication {
-    constructor(object, options) {
-        super(object, options);
-    }
 
     static get defaultOptions() {
-        return mergeObject(super.defaultOptions, {
+        return foundry.utils.mergeObject(super.defaultOptions, {
             title: "Edit Activation",
             id: "reaction-editor",
             template: `modules/lancer-automations/templates/reaction-editor.html`,
@@ -1465,7 +1446,7 @@ export class ReactionEditor extends FormApplication {
                                 break;
                             }
                         }
-                        if (actionData && actionData.name) {
+                        if (actionData?.name) {
                             foundActionName = actionData.name;
                         } else {
                             foundActionName = item.name;
@@ -1591,11 +1572,11 @@ export class ReactionEditor extends FormApplication {
         const onlyOnSourceMatchCheckbox = html.find('input[name="onlyOnSourceMatch"]');
         const triggerCheckboxes = html.find('input[name^="trigger."]');
 
-        const sourceMatchTriggers = [
+        const sourceMatchTriggers = new Set([
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
             'onInitAttack', 'onInitTechAttack', 'onKnockback', 'onDeploy'
-        ];
+        ]);
 
         const toggleSourceMatchTriggers = () => {
             const isSourceMatch = onlyOnSourceMatchCheckbox.filter(':checked').length > 0;
@@ -1603,7 +1584,7 @@ export class ReactionEditor extends FormApplication {
 
             triggerCheckboxes.each(function () {
                 const triggerName = $(this).attr('name').replace('trigger.', '');
-                let isCompatible = sourceMatchTriggers.includes(triggerName);
+                let isCompatible = sourceMatchTriggers.has(triggerName);
 
                 // onDeploy source matching only makes sense for Item reactions, not General
                 if (triggerName === 'onDeploy' && isGeneral) {
@@ -1803,7 +1784,7 @@ export class ReactionEditor extends FormApplication {
             }
 
             if (detectedActionType) {
-                const options = ["Reaction", "Free Action", "Quick Action", "Full Action", "Protocol", "Other"];
+                const options = new Set(["Reaction", "Free Action", "Quick Action", "Full Action", "Protocol", "Other"]);
 
                 const $options = actionTypeSelect.find('option');
                 $options.css('color', '');
@@ -1816,14 +1797,14 @@ export class ReactionEditor extends FormApplication {
                     }
                 });
 
-                if (autoSelect && (options.includes(detectedActionType) || detectedActionType === "Other")) {
-                    actionTypeSelect.val(options.includes(detectedActionType) ? detectedActionType : "Other");
+                if (autoSelect && (options.has(detectedActionType) || detectedActionType === "Other")) {
+                    actionTypeSelect.val(options.has(detectedActionType) ? detectedActionType : "Other");
                     actionTypeSelect.trigger('change');
                 }
             }
 
             if (detectedFrequency) {
-                const options = ["1/Round", "Unlimited", "1/Scene", "1/Combat", "Other"];
+                const options = new Set(["1/Round", "Unlimited", "1/Scene", "1/Combat", "Other"]);
                 const $options = frequencySelect.find('option');
                 $options.css('color', '');
                 $options.each(function () {
@@ -1835,8 +1816,8 @@ export class ReactionEditor extends FormApplication {
                     }
                 });
 
-                if (autoSelect && (options.includes(detectedFrequency) || detectedFrequency === "Other")) {
-                    frequencySelect.val(options.includes(detectedFrequency) ? detectedFrequency : "Other");
+                if (autoSelect && (options.has(detectedFrequency) || detectedFrequency === "Other")) {
+                    frequencySelect.val(options.has(detectedFrequency) ? detectedFrequency : "Other");
                 }
             }
 
@@ -2052,7 +2033,7 @@ export class ReactionEditor extends FormApplication {
             width: 800,
             height: 600,
             resizable: true,
-            classes: ["dialog", "expanded-editor-dialog"]
+            classes: ["dialog", "expanded-editor-dialog", 'lancer-dialog-base', 'lancer-no-title']
         }).render(true);
     }
 
@@ -2214,7 +2195,7 @@ export class ReactionEditor extends FormApplication {
                 default: "cancel"
             }, {
                 width: 400,
-                classes: ["lancer-dialog-base", "lancer-action-browser-dialog"]
+                classes: ["lancer-dialog-base", "lancer-action-browser-dialog", 'lancer-no-title']
             });
             dialog.render(true);
         });
@@ -2491,6 +2472,6 @@ export class ReactionEditor extends FormApplication {
 
                 setTimeout(() => searchInput.focus(), 50);
             }
-        }, { width: 600, height: 560, classes: ['lancer-reaction-editor', 'lancer-deployable-browser', 'lancer-no-title'] }).render(true);
+        }, { width: 600, height: 560, classes: ['lancer-reaction-editor', 'lancer-deployable-browser', 'lancer-dialog-base', 'lancer-no-title'] }).render(true);
     }
 }

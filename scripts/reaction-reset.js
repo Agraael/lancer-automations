@@ -48,7 +48,7 @@ export class ReactionReset extends FormApplication {
 
                             ui.notifications.info("Lancer Reaction Checker: Module reset to defaults.");
 
-                            window.location.reload();
+                            globalThis.location.reload();
                         } catch (err) {
                             ui.notifications.error("Error resetting module: " + err.message);
                             console.error(err);
@@ -61,7 +61,7 @@ export class ReactionReset extends FormApplication {
                 }
             },
             default: "no"
-        }).render(true);
+        }, { classes: ['lancer-dialog-base'] }).render(true);
         return this;
     }
 }
