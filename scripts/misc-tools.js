@@ -1,6 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive-tools.js";
+import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
 
 const STAT_PATHS = {

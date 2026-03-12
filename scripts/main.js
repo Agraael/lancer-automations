@@ -18,7 +18,7 @@ import { cancelRulerDrag ,
     getActiveGMId, getTokenOwnerUserId,
     showVoteCardOnVoter, receiveVoteSubmission,
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter
-} from './interactive-tools.js';
+} from './interactive/index.js';
 import {
     EffectsAPI,
     setEffect,
@@ -1630,8 +1630,8 @@ async function onStructureStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStructure = actor?.system?.structure?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
-
-    await handleTrigger('onStructure', { triggeringToken: token, remainingStructure, rollResult });
+    const triggerData = { triggeringToken: token, remainingStructure, rollResult };
+    await handleTrigger('onStructure', triggerData);
     return true;
 }
 
@@ -1641,8 +1641,8 @@ async function onStressStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStress = actor?.system?.stress?.value ?? 0;
     const rollResult = state.data?.result?.roll?.total;
-
-    await handleTrigger('onStress', { triggeringToken: token, remainingStress, rollResult });
+    const triggerData = { triggeringToken: token, remainingStress, rollResult };
+    await handleTrigger('onStress', triggerData);
     return true;
 }
 
