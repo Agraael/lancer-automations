@@ -499,7 +499,7 @@ export async function openChoiceMenu() {
  * @param {string} bg  CSS colour
  * @returns {string}
  */
-function _laPopupSectionLabel(text, bg) {
+export function _laPopupSectionLabel(text, bg) {
     return `<span style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
 }
 
@@ -508,7 +508,7 @@ function _laPopupSectionLabel(text, bg) {
  * @param {JQuery} popup
  * @param {JQuery} html  Dialog render-callback html element
  */
-function _laPositionPopup(popup, html) {
+export function _laPositionPopup(popup, html) {
     $('body').append(popup);
     const dlg = html.closest('.app');
     const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
@@ -521,7 +521,9 @@ function _laPositionPopup(popup, html) {
     let py = dlgOffset.top;
     if (py + ph > wy - 10)
         py = wy - ph - 10;
-    popup.css({ left: Math.max(10, px), top: Math.max(10, py) });
+    const finalLeft = Math.max(10, px);
+    popup.css({ left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
+    popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
     popup.find('.la-detail-close').on('click', () => popup.remove());
     $(document).one('click', () => popup.remove());
 }

@@ -650,7 +650,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const selectedTurns = triggerData.actionData.flowState.selectedTurns;
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
-                        effectNames: "lancer.statusIconsNames.reactor_meltdown",
+                        effectNames: "reactor_meltdown",
                         duration: { label: 'end', turns: selectedTurns, rounds: 0 }
                     });
                     if (validTokens.length > 0)

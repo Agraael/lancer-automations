@@ -481,7 +481,9 @@ export async function executeReactorMeltdown(token, turns = null) {
                 }
             }, {
                 classes: ["lancer-dialog-base", 'lancer-no-title'],
-                width: 450
+                width: 480,
+                top: 450,
+                left: 150
             });
             dialog.render(true);
         });

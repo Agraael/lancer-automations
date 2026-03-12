@@ -64,6 +64,7 @@ import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
 import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
+import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
@@ -891,6 +892,17 @@ function registerSettings() {
         config: true,
         type: Boolean,
         default: true
+    });
+
+    // ── Alt Structure ──
+    game.settings.register('lancer-automations', 'enableAltStruct', {
+        name: 'Alternative Structure & Stress Rules',
+        hint: 'Enable integrated alt-structure rules (alternative to the standalone lancer-alt-structure module). Requires page reload. Disable if the standalone lancer-alt-structure module is also active.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => ui.notifications.info("lancer-automations: Alt Structure setting changed — reload required.")
     });
 
     // ── Vision ──
@@ -2724,9 +2736,12 @@ Hooks.on('init', () => {
 Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     registerModuleFlows(flowSteps, flows);
     insertModuleFlowSteps(flowSteps, flows);
+    registerAltStructFlowSteps(flowSteps, flows);
 });
 
 Hooks.once('ready', async () => {
+    initAltStructReady();
+
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
         const flows = game.lancer?.flows;
         flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
