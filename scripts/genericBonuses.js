@@ -433,9 +433,7 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
             }
         }
         /*
-        // Lancer-Automations: This is the old ephemeral bonus system utilizing actor flags.
-        // It has been deprecated in favor of storing ephemeral bonuses entirely inside the active flow's state.la_extraData.flow_bonus,
-        // to avoid concurrency issues when an actor is in multiple flows simultaneously. We keep this commented out for future reference.
+        // This is the old ephemeral bonus system utilizing actor flags.
         const ephemerals = sourceActor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
         const rem = [];
         let consumed = false;

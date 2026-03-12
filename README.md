@@ -6,9 +6,16 @@
 [![GitHub downloads (total)](https://img.shields.io/github/downloads/Agraael/lancer-automations/module.zip?style=for-the-badge&label=downloads%20(total))](https://github.com/Agraael/lancer-automations/releases/latest)
 [![GitHub downloads (latest version)](https://img.shields.io/github/downloads/Agraael/lancer-automations/latest/module.zip?style=for-the-badge&label=downloads%20(latest))](https://github.com/Agraael/lancer-automations/releases/latest)
 
-> I'm a bit shy about that, but one day someone asked if they could give me money, feels good. Anyway, here's the thing.
->
-> In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
+
+<details>
+<summary>patreon...</summary>
+
+I'm a bit shy about that, but one day someone asked if they could give me money, feels good. Anyway, here's the thing.
+
+In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
+</details>
+
+---
 
 I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
 
