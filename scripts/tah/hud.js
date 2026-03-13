@@ -1,4 +1,4 @@
-/* global $, window, game */
+/* global $, window, game, CONFIG */
 
 import { laDetailPopup, laRenderWeaponBody, laBindPopupBehavior, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeStatRoll, getActorActionItems, hasReactionAvailable } from '../misc-tools.js';
@@ -100,6 +100,10 @@ export class LancerHUD {
         this._pendingCol4Refresh = null;
         this._pendingCol3Refresh = null;
         this._refreshTimer       = null;
+        this._statusPanel          = null;
+        this._statusPanelAnchor    = null;
+        this._subtypePanel         = null;
+        this._suppressRefreshDepth = 0;
     }
 
     bind(token) {
@@ -127,7 +131,9 @@ export class LancerHUD {
     }
 
     /** Debounced full refresh — coalesces rapid successive updates into one render. */
-    scheduleRefresh(delay = 150) {
+    scheduleRefresh(delay = 100) {
+        if (this._suppressRefreshDepth > 0)
+            return;
         clearTimeout(this._refreshTimer);
         this._refreshTimer = setTimeout(() => this.refresh(), delay);
     }
@@ -143,8 +149,14 @@ export class LancerHUD {
     }
 
     refresh() {
-        if (!this._token)
+        if (!this._token || this._suppressRefreshDepth > 0)
             return;
+        // Status panel open — sync rows in-place, never close+reopen it
+        if (this._statusPanel?.is(':visible')) {
+            this.updateStatsInPlace();
+            this._syncStatusPanelRows();
+            return;
+        }
         const pending4 = this._pendingCol4Refresh;
         this._pendingCol4Refresh = null;
         if (pending4?.anchor && this._c4) {
@@ -232,17 +244,29 @@ export class LancerHUD {
         for (const cat of categories) {
             const row = this._makeRow(cat.label, true);
             row.on('mouseenter', () => {
-                if (row.hasClass('la-hud-active') && c2.is(':visible')) {
-                    _cancelCollapse();
+                _cancelCollapse();
+                if (/** @type {any} */ (cat).isStatusPanel) {
+                    if (row.hasClass('la-hud-active') && this._statusPanel?.is(':visible'))
+                        return;
+                    this._setActive(c1, row, true);
+                    closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
+                    this._openStatusPanel(row);
                     return;
                 }
+                if (row.hasClass('la-hud-active') && c2.is(':visible'))
+                    return;
+                if (this._statusPanel) {
+                    this._statusPanel.stop(true).remove();
+                    this._statusPanel = null;
+                }
                 this._setActive(c1, row, true);
-                // collapse c3+c4 before replacing c2
                 closeCol(c3, 80);
                 closeCol(c4, 80);
-                c2.find('.la-hud-col-label').text(cat.colLabel);
-                this._openCol(c2, cat.getItems(), row);
-                c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() { $(this).css('pointerEvents', ''); });
+                c2.find('.la-hud-col-label').text(/** @type {any} */ (cat).colLabel);
+                this._openCol(c2, /** @type {any} */ (cat).getItems(), row);
+                c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
+                    $(this).css('pointerEvents', '');
+                });
             });
             c1.append(row);
         }
@@ -260,11 +284,16 @@ export class LancerHUD {
                 closeCol(c2);
                 closeCol(c3);
                 closeCol(c4);
+                if (this._subtypePanel) { this._subtypePanel.remove(); this._subtypePanel = null; }
+                if (this._statusPanel) {
+                    this._statusPanel.stop(true).remove();
+                    this._statusPanel = null;
+                }
                 _clearC1Active();
                 $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
                     $(this).remove();
                 });
-            }, 500);
+            }, 300);
         };
         const _cancelCollapse = () => clearTimeout(_leaveTimer);
         this._scheduleCollapse = _scheduleCollapse;
@@ -374,13 +403,17 @@ export class LancerHUD {
                         this._c3.find('.la-hud-col-label').text(item.childColLabel ?? '');
                         this._c3.css({ left: col.position().left + col.outerWidth() });
                         this._openCol(this._c3, item.getChildren(), row);
-                        this._c3.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() { $(this).css('pointerEvents', ''); });
+                        this._c3.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
+                            $(this).css('pointerEvents', '');
+                        });
                     } else if (col === this._c3) {
                         this._c4AnchorRow = row;
                         this._c4.find('.la-hud-col-label').text(item.childColLabel ?? '');
                         this._c4.css({ left: this._c3.position().left + this._c3.outerWidth() });
                         this._openCol(this._c4, item.getChildren(), row);
-                        this._c4.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() { $(this).css('pointerEvents', ''); });
+                        this._c4.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
+                            $(this).css('pointerEvents', '');
+                        });
                     }
                 });
             }
@@ -407,6 +440,7 @@ export class LancerHUD {
             ...(isMech ? [this._catTalents()] : []),
             this._catSkills(),
             this._catUtility(),
+            this._catStatuses(),
         ];
     }
 
@@ -931,9 +965,12 @@ export class LancerHUD {
         const sys = item.system;
         const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
         const hasActivationTag = (sys.tags ?? []).some(t => ACTIVATION_TAGS.includes(t.lid));
-        if (hasActivationTag || (sys.actions ?? []).length) return true;
-        if (this._getInvadeOptions(actor).some(opt => opt.item?.id === item.id)) return true;
-        if (getItemDeployables(item, actor).length) return true;
+        if (hasActivationTag || (sys.actions ?? []).length)
+            return true;
+        if (this._getInvadeOptions(actor).some(opt => opt.item?.id === item.id))
+            return true;
+        if (getItemDeployables(item, actor).length)
+            return true;
         return false;
     }
 
@@ -1289,7 +1326,8 @@ export class LancerHUD {
             const ranks    = sys?.ranks ?? [];
             const currRank = sys?.curr_rank ?? 0;
             Array.from({ length: currRank }, (_, rankIdx) => ranks[rankIdx]).forEach((rank, rankIdx) => {
-                if (!rank) return;
+                if (!rank)
+                    return;
                 const counters = rank.counters ?? [];
                 counters.forEach((counter, cidx) => {
                     const min     = 0;
@@ -1316,6 +1354,375 @@ export class LancerHUD {
             });
         }
         return items;
+    }
+
+    // ── STATUSES panel ────────────────────────────────────────────────────────
+
+    _catStatuses() {
+        return { label: 'Statuses', isStatusPanel: true };
+    }
+
+    _syncStatusPanelRows() {
+        if (!this._statusPanel || !this._actor) return;
+        const actor = this._actor;
+        const hasSC = !!game.modules.get('statuscounter')?.active;
+        this._statusPanel.find('[data-status-id]').each(function() {
+            const el = $(this);
+            const sid = el.attr('data-status-id');
+            const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
+            const nowActive = effects.length > 0;
+            el.data('active', nowActive);
+            el.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
+            const totalStack = hasSC ? effects.reduce((sum, /** @type {any} */ e) => sum + (e.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
+            const parts = [];
+            if (hasSC && totalStack > 1) parts.push(`×${totalStack}`);
+            if (effects.length > 1) parts.push(`[${effects.length}]`);
+            el.find('.la-status-badge').text(parts.join(' '));
+        });
+    }
+
+    _refreshStatusPanel() {
+        if (this._statusPanel && this._statusPanelAnchor)
+            this._openStatusPanel(this._statusPanelAnchor);
+    }
+
+    _openStatusPanel(anchorRow) {
+        if (this._statusPanel) {
+            this._statusPanel.stop(true).remove();
+            this._statusPanel = null;
+        }
+        this._statusPanelAnchor = anchorRow;
+        const actor = this._actor;
+        const token = this._token;
+        if (!actor || !token) return;
+
+        // ── Module checks ──────────────────────────────────────────────────────
+        const hasSC  = !!game.modules.get('statuscounter')?.active;
+        const hasTCS = !!game.modules.get('temporary-custom-statuses')?.active;
+        const tcsApi = hasTCS ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
+        const customSaved = hasTCS ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
+
+        // ── Data helpers ───────────────────────────────────────────────────────
+        const allStatuses = (/** @type {any} */ (CONFIG).statusEffects ?? [])
+            .filter(/** @type {any} */ s => s.id)
+            .sort(/** @type {any} */ (a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
+
+        const getEffectsForStatus = (/** @type {string} */ sid) =>
+            /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
+
+        const getStack = (/** @type {any} */ eff) =>
+            hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
+
+        const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
+
+        const isCustomActive = (/** @type {string} */ name) =>
+            /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ e =>
+                e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
+                (e.getFlag?.('temporary-custom-statuses', 'originalName') === name || e.name === name) &&
+                !e.disabled
+            );
+
+        const getStatusBadge = (/** @type {any} */ s) => {
+            const effects = getEffectsForStatus(s.id);
+            if (!effects.length) return '';
+            const totalStack = hasSC ? effects.reduce((sum, e) => sum + getStack(e), 0) : 0;
+            const parts = [];
+            if (hasSC && totalStack > 1) parts.push(`×${totalStack}`);
+            if (effects.length > 1) parts.push(`[${effects.length}]`);
+            return parts.join(' ');
+        };
+
+        const buildStatusTooltip = (/** @type {any} */ s) => {
+            const effects = getEffectsForStatus(s.id);
+            const lines = [];
+            if (s.description) lines.push(`<div style="color:#bbb;margin-bottom:4px;line-height:1.4;">${s.description}</div>`);
+            for (const eff of effects) {
+                const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                const sc = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
+                let label = 'Base Effect';
+                if (la?.consumption) label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (la.consumption?.trigger ?? la.consumption?.type ?? 'Effect')}`;
+                else if (la?.linkedBonusId) label = 'Bonus Effect';
+                const stackStr = sc && sc > 1 ? ` ×${sc}` : '';
+                if (effects.length > 1 || stackStr) lines.push(`<div style="font-weight:bold;color:#fff;margin-top:4px;">${label}${stackStr}</div>`);
+                const dur = la?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
+                if (dur?.label) lines.push(`<div style="color:#aaa;font-size:0.85em;margin-top:2px;">Duration: ${dur.label}</div>`);
+            }
+            return lines.length ? lines.join('') : null;
+        };
+
+        // ── Styles ─────────────────────────────────────────────────────────────
+        const S_PANEL      = 'display:flex;flex-direction:row;gap:4px;background:#f5f5f5;border:2px solid #991e2a;border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.8em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;';
+        const S_STATUS_GRID = `overflow-y:auto;overflow-x:hidden;max-height:420px;padding:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;min-width:500px;`;
+        const S_STATUS_ROW  = `display:flex;align-items:center;gap:5px;padding:1px 5px;margin-bottom:0;cursor:pointer;border-radius:2px;border-left:3px solid transparent;`;
+        const S_RIGHT_COL   = `display:flex;flex-direction:column;gap:4px;width:160px;flex-shrink:0;padding:4px;`;
+        const S_UTIL_BTN    = `padding:4px 6px;background:#991e2a;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;width:100%;text-align:left;`;
+        const S_CUSTOM_LIST = `overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;`;
+        const S_PANEL_HEADER = `background:#991e2a;color:#fff;padding:3px 8px;font-size:0.75em;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;border-radius:1px;margin-bottom:4px;flex-shrink:0;`;
+        const S_TOOLTIP     = 'position:fixed;z-index:9999;background:#1a1a1a;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:260px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);';
+
+        // ── In-place helpers ───────────────────────────────────────────────────
+        const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive) => {
+            rowEl.data('active', nowActive);
+            rowEl.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
+        };
+        const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
+            rowEl.find('.la-status-badge').text(getStatusBadge(s));
+        };
+
+        // ── Tooltip helper ─────────────────────────────────────────────────────
+        const showTooltip = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
+            const tip = buildStatusTooltip(s);
+            if (!tip) return null;
+            const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">${tip}</div>`);
+            $('body').append(tt);
+            const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
+            const ttH = tt.outerHeight() ?? 0;
+            const top = Math.min(rect.top, window.innerHeight - ttH - 8);
+            tt.css({ top, left: rect.right + 6 });
+            return tt;
+        };
+
+        // ── Status grid ────────────────────────────────────────────────────────
+        const gridEl = $(`<div style="${S_STATUS_GRID}"></div>`);
+        for (const s of allStatuses) {
+            const active = isActive(s);
+            const badge  = getStatusBadge(s);
+            const bg     = active ? '#b8d4f0' : BG_DEFAULT;
+            const border = active ? '#1a4a7a' : 'transparent';
+            const rowEl = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};" data-status-id="${s.id}">
+                <img src="${s.icon ?? s.img ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
+                <span class="la-status-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${game.i18n.localize(s.name ?? s.id)}</span>
+                <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
+            </div>`);
+            rowEl.data('active', active);
+
+            let tooltipEl = /** @type {any} */ (null);
+            rowEl.on('mouseenter', function() {
+                if (!$(this).data('active')) $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
+                tooltipEl = showTooltip($(this), s);
+            }).on('mouseleave', function() {
+                tooltipEl?.remove(); tooltipEl = null;
+                const a = $(this).data('active');
+                $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
+            });
+
+            // Left-click: toggle / increment / open subtype manager
+            rowEl.on('click', async () => {
+                const effects = getEffectsForStatus(s.id);
+                if (effects.length > 1) {
+                    this._openSubtypeManager(actor, s, effects, rowEl);
+                    return;
+                }
+                this._suppressRefreshDepth++;
+                try {
+                    if (hasSC && effects.length === 1) {
+                        const eff = effects[0];
+                        await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
+                    } else {
+                        await /** @type {any} */ (token).toggleEffect(s);
+                    }
+                    updateRowBadge(rowEl, s);
+                    setRowActive(rowEl, isActive(s));
+                } finally {
+                    this._suppressRefreshDepth--;
+                }
+            });
+
+            // Right-click: decrement / delete
+            rowEl.on('contextmenu', async (ev) => {
+                ev.preventDefault();
+                const effects = getEffectsForStatus(s.id);
+                if (effects.length > 1) {
+                    this._openSubtypeManager(actor, s, effects, rowEl);
+                    return;
+                }
+                if (effects.length === 0) {
+                    // Right-click on inactive: same as left-click toggle
+                    this._suppressRefreshDepth++;
+                    try {
+                        await /** @type {any} */ (token).toggleEffect(s);
+                        updateRowBadge(rowEl, s);
+                        setRowActive(rowEl, isActive(s));
+                    } finally {
+                        this._suppressRefreshDepth--;
+                    }
+                    return;
+                }
+                this._suppressRefreshDepth++;
+                try {
+                    const eff = effects[0];
+                    const stack = getStack(eff);
+                    if (hasSC && stack > 1) {
+                        await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
+                    } else {
+                        await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                    }
+                    updateRowBadge(rowEl, s);
+                    setRowActive(rowEl, isActive(s));
+                } finally {
+                    this._suppressRefreshDepth--;
+                }
+            });
+
+            gridEl.append(rowEl);
+        }
+
+        // ── Right column ───────────────────────────────────────────────────────
+        const rightEl = $(`<div style="${S_RIGHT_COL}"></div>`);
+
+        const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+        if (laApi?.executeEffectManager) {
+            const emBtn = $(`<button style="${S_UTIL_BTN}">Effect Manager</button>`);
+            emBtn.on('click', () => laApi.executeEffectManager());
+            rightEl.append(emBtn);
+        }
+        const clearBtn = $(`<button style="${S_UTIL_BTN}background:#444;">Clear All Effects</button>`);
+        clearBtn.on('click', async () => {
+            this._suppressRefreshDepth++;
+            try {
+                const ids = /** @type {any[]} */ ([...actor.effects]).map(/** @type {any} */ e => e.id);
+                if (ids.length) await actor.deleteEmbeddedDocuments('ActiveEffect', ids);
+                gridEl.find('[data-status-id]').each(function() {
+                    setRowActive($(this), false);
+                    $(this).find('.la-status-badge').text('');
+                });
+            } finally {
+                this._suppressRefreshDepth--;
+            }
+        });
+        rightEl.append(clearBtn);
+
+        if (hasTCS) {
+            rightEl.append($(`<div style="${S_PANEL_HEADER}">Custom</div>`));
+            const customListEl = $(`<div style="${S_CUSTOM_LIST}"></div>`);
+            for (const cs of /** @type {any[]} */ (customSaved)) {
+                const active = isCustomActive(cs.name);
+                const bg     = active ? '#b8d4f0' : BG_DEFAULT;
+                const border = active ? '#1a4a7a' : 'transparent';
+                const cRow = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};">
+                    <img src="${cs.icon ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cs.name}</span>
+                </div>`);
+                cRow.on('mouseenter', function() {
+                    if (!$(this).data('active')) $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
+                }).on('mouseleave', function() {
+                    const a = $(this).data('active');
+                    $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
+                });
+                cRow.data('active', active);
+                cRow.on('click', async () => {
+                    this._suppressRefreshDepth++;
+                    try {
+                        if (isCustomActive(cs.name)) {
+                            const eff = /** @type {any[]} */ ([...actor.effects]).find(/** @type {any} */ e =>
+                                e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
+                                (e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name)
+                            );
+                            if (eff) await tcsApi.removeStatus(actor, eff.id);
+                        } else {
+                            await tcsApi.addStatus(actor, cs.name, cs.icon, 1);
+                        }
+                        setRowActive(cRow, isCustomActive(cs.name));
+                    } finally {
+                        this._suppressRefreshDepth--;
+                    }
+                });
+                customListEl.append(cRow);
+            }
+            if (!customSaved.length)
+                customListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No custom statuses</div>`));
+            rightEl.append(customListEl);
+        }
+
+        // ── Assemble panel ──────────────────────────────────────────────────────
+        const panel = $(`<div style="${S_PANEL}"></div>`);
+        const leftWrap = $(`<div style="display:flex;flex-direction:column;flex:1;min-width:0;"></div>`);
+        const header = $(`<div style="${S_COL_LABEL}">Statuses</div>`);
+        leftWrap.append(header, gridEl);
+        panel.append(leftWrap, rightEl);
+
+        const topInHud  = anchorRow.offset().top - this._el.offset().top;
+        const leftInHud = /** @type {any} */ (this._el.children().first()).outerWidth();
+        panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
+
+        this._el.append(panel);
+        panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
+        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 140);
+        this._statusPanel = panel;
+    }
+
+    _openSubtypeManager(actor, statusConfig, effects, anchorRow) {
+        if (this._subtypePanel) { this._subtypePanel.remove(); this._subtypePanel = null; }
+        const hasSC = !!game.modules.get('statuscounter')?.active;
+        const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
+        const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
+        const S_PANEL = 'background:#2a2a2a;border:1px solid #991e2a;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.6);font-family:inherit;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;min-width:180px;';
+        const S_HDR   = 'background:#991e2a;color:#fff;padding:2px 6px;display:flex;justify-content:space-between;align-items:center;border-radius:2px 2px 0 0;';
+        const S_ROW   = 'display:flex;align-items:center;gap:4px;padding:2px 6px;border-bottom:1px solid #3a3a3a;';
+        const S_BTN   = 'display:inline-block;border-radius:2px;cursor:pointer;width:18px;height:16px;line-height:16px;font-weight:bold;flex-shrink:0;text-align:center;user-select:none;';
+
+        const panel = $(`<div style="${S_PANEL}position:absolute;z-index:20;"></div>`);
+        const hdr   = $(`<div style="${S_HDR}">${statusName} <span class="la-sub-close" style="cursor:pointer;margin-left:8px;opacity:0.8;">✕</span></div>`);
+        const body  = $(`<div></div>`);
+        panel.append(hdr, body);
+        hdr.find('.la-sub-close').on('click', () => { panel.remove(); this._subtypePanel = null; });
+
+        const refresh = () => {
+            const current = /** @type {any[]} */ ([...actor.effects]).filter(e => effects.some(/** @type {any} */ o => o.id === e.id));
+            if (!current.length) { panel.remove(); this._subtypePanel = null; this._syncStatusPanelRows(); return; }
+            body.empty();
+            for (const eff of current) {
+                const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                let label = 'Base';
+                if (la?.consumption) label = 'Consume';
+                else if (la?.linkedBonusId) label = 'Bonus';
+                const stack = getStack(eff);
+                const row = $(`<div style="${S_ROW}" data-eid="${eff.id}">
+                    <span style="flex:1;color:#ccc;text-transform:none;letter-spacing:0;">${label}</span>
+                    <span style="color:#fff;min-width:18px;text-align:center;">×${stack}</span>
+                    ${hasSC ? `<span class="la-sub-minus" style="${S_BTN}background:#555;color:#fff;">−</span>` : ''}
+                    ${hasSC ? `<span class="la-sub-plus"  style="${S_BTN}background:#3a6a3a;color:#fff;">+</span>` : ''}
+                    <span class="la-sub-del" style="${S_BTN}background:#6a2a2a;color:#fff;">✕</span>
+                </div>`);
+                row.find('.la-sub-minus').on('click', async () => {
+                    const e = /** @type {any} */ (actor.effects).get(eff.id);
+                    if (!e) return;
+                    const s = getStack(e);
+                    if (s > 1) await e.update({ 'flags.statuscounter.value': s - 1, 'flags.statuscounter.visible': s - 1 > 1 });
+                    else await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                    refresh();
+                });
+                row.find('.la-sub-plus').on('click', async () => {
+                    const e = /** @type {any} */ (actor.effects).get(eff.id);
+                    if (!e) return;
+                    const s = getStack(e);
+                    await e.update({ 'flags.statuscounter.value': s + 1, 'flags.statuscounter.visible': true });
+                    refresh();
+                });
+                row.find('.la-sub-del').on('click', async () => {
+                    await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                    refresh();
+                });
+                body.append(row);
+            }
+            this._syncStatusPanelRows();
+        };
+
+        refresh();
+        panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
+        $('body').append(panel);
+        this._subtypePanel = panel;
+
+        // Slide up from the row — fixed to body, animates like the HUD columns (opacity + position)
+        const rect     = anchorRow[0].getBoundingClientRect();
+        const panelH   = panel.outerHeight() || 0;
+        const panelW   = panel.outerWidth()  || 200;
+        const goAbove  = rect.top - panelH > 4;
+        const finalTop = goAbove ? rect.top - panelH : rect.bottom;
+        const startTop = goAbove ? rect.top           : rect.bottom - panelH;
+        const left     = Math.min(rect.left, window.innerWidth - panelW - 8);
+        panel.css({ position: 'fixed', top: startTop, left, zIndex: 9999, opacity: 0, width: 'fit-content' });
+        panel.animate({ top: finalTop, opacity: 1 }, 140);
     }
 
     _weaponItem(weapon, modItem, mount = null) {
@@ -1535,11 +1942,11 @@ export class LancerHUD {
         const ocLabels = ['—', '1d3', '1d6', '1d6+4'];
         const ocColor    = oc > 0 ? '#f88040' : '#555';
         const SEP = `<span style="color:#444;">│</span>`;
-        const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.4em;height:1.4em;vertical-align:middle;opacity:${repairs > 0 ? 1 : 0.3};">`;
+        const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.28em;height:1.28em;vertical-align:middle;opacity:${repairs > 0 ? 1 : 0.3};">`;
         const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
-        const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.4em;height:1.4em;vertical-align:middle;opacity:${reaction ? 1 : 0.3};">`;
+        const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.28em;height:1.28em;vertical-align:middle;opacity:${reaction ? 1 : 0.3};">`;
         const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}🛡</span>` : '';
-        return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:3px 10px 5px;font-size:0.85em;color:#888;width:max-content;pointer-events:none;">` +
+        return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:4px 10px 5px;font-size:0.84em;color:#888;width:max-content;pointer-events:none;">` +
             `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
             `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` +
             `</div>` +
@@ -1571,7 +1978,7 @@ export class LancerHUD {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     _saveOpenPath() {
-        if (!this._el || !this._c2?.is(':visible'))
+        if (!this._el)
             return null;
         const getActiveIdx = col => {
             let idx = -1, i = 0;
@@ -1585,6 +1992,13 @@ export class LancerHUD {
             return idx;
         };
         const c1 = this._el.children().first();
+        // Status panel open: c2 is hidden but c1 has an active row
+        if (this._statusPanel?.is(':visible')) {
+            const c1Idx = getActiveIdx(c1);
+            return c1Idx >= 0 ? { c1Idx, statusPanel: true } : null;
+        }
+        if (!this._c2?.is(':visible'))
+            return null;
         const path = { c1Idx: getActiveIdx(c1) };
         if (path.c1Idx < 0)
             return null;
@@ -1603,6 +2017,8 @@ export class LancerHUD {
         if (!c1Row.length)
             return;
         c1Row.trigger('mouseenter');
+        if (path.statusPanel)
+            return;
         if ((path.c2Idx ?? -1) < 0)
             return;
         const c2Row = this._c2.find('.la-hud-row').eq(path.c2Idx);
