@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, $ */
+/* global canvas, PIXI, game, ui, $, Dialog */
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -146,19 +146,62 @@ export async function pickupWeaponToken(ownerToken) {
         return null;
     }
 
-    const selected = await chooseToken(ownerToken, {
-        count: 1,
-        includeSelf: false,
-        selection: thrownTokens,
-        title: "PICK UP WEAPON",
-        description: `${thrownTokens.length} thrown weapon(s) available.`,
-        icon: "fas fa-hand"
+    const choices = thrownTokens.map((t, idx) => {
+        const flags = t.document.flags?.['lancer-automations'];
+        return { idx, token: t, name: flags?.weaponName || t.name, img: t.document?.texture?.src || 'icons/svg/item-bag.svg' };
+    });
+    const listHtml = choices.map(c => `
+        <div class="la-pickup-item" data-idx="${c.idx}"
+             style="display:flex;align-items:center;padding:5px 8px;border:1px solid #444;margin-bottom:3px;
+                    cursor:pointer;border-radius:3px;background:rgba(255,255,255,0.03);transition:all 0.15s;">
+            <img src="${c.img}" style="width:28px;height:28px;object-fit:contain;margin-right:8px;border:1px solid #333;flex-shrink:0;">
+            <div style="flex:1;">
+                <div style="font-weight:bold;">${c.name}</div>
+                <div style="font-size:0.68em;opacity:0.45;text-transform:uppercase;font-weight:bold;letter-spacing:0.5px;">Thrown Weapon</div>
+            </div>
+            <i class="fas fa-check" style="color:#ff6400;margin-left:6px;font-size:0.85em;visibility:hidden;"></i>
+        </div>`).join('');
+    const content = `
+        <div class="lancer-dialog-header">
+            <div class="lancer-dialog-title">PICK UP WEAPON</div>
+            <div class="lancer-dialog-subtitle">${choices.length} thrown weapon(s) available.</div>
+        </div>
+        <div class="lancer-dialog-body" style="padding:10px;">
+            <div style="max-height:350px;overflow-y:auto;padding-right:5px;">${listHtml}</div>
+        </div>`;
+    const pickedToken = await new Promise(resolveDialog => {
+        let selectedIdx = null;
+        new Dialog({
+            title: 'Pick Up Weapon',
+            content,
+            buttons: {
+                confirm: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: 'Pick Up',
+                    callback: () => resolveDialog(selectedIdx !== null ? choices[selectedIdx].token : null),
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: 'Cancel',
+                    callback: () => resolveDialog(null),
+                },
+            },
+            default: 'confirm',
+            render: (html) => {
+                const confirmBtn = html.parent().find('button.confirm');
+                confirmBtn.prop('disabled', true);
+                html.find('.la-pickup-item').on('click', function() {
+                    html.find('.la-pickup-item').css({ 'border-color': '#444', background: 'rgba(255,255,255,0.03)' }).find('i').css('visibility', 'hidden');
+                    selectedIdx = Number.parseInt($(this).data('idx'));
+                    $(this).css({ 'border-color': '#ff6400', background: 'rgba(255,100,0,0.05)' }).find('i').css('visibility', 'visible');
+                    confirmBtn.prop('disabled', false);
+                });
+            },
+        }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 400, top: 450, left: 150 }).render(true);
     });
 
-    if (!selected || selected.length === 0)
+    if (!pickedToken)
         return null;
-
-    const pickedToken = selected[0];
     const flags = pickedToken.document?.flags?.['lancer-automations'];
     const weaponId = flags?.weaponId;
     const weaponName = flags?.weaponName || "Weapon";
@@ -593,6 +636,45 @@ export async function openEndActivationMenu(token) {
     return null;
 }
 
+
+/**
+ * Get the effective actions for an item, merging system.actions with extra actions
+ * stored in the 'lancer-automations.extraActions' flag.
+ * @param {Item} item
+ * @returns {Array} Array of action objects
+ */
+export function getItemActions(item) {
+    if (!item)
+        return [];
+    const systemActions = item.system?.actions ?? [];
+    const extraActions = item.getFlag?.('lancer-automations', 'extraActions') || [];
+    return [...systemActions, ...extraActions];
+}
+
+/**
+ * Add extra action objects to an item via flags (system.actions is read-only due to Lancer's TypeDataModel).
+ * Stores action objects in the 'lancer-automations.extraActions' flag.
+ * @param {Item} item                                       The Foundry Item document to update
+ * @param {Object|Array<Object>} actions                    A single action object or array of action objects
+ * @returns {Promise<Item|null>} The updated item, or null on failure
+ */
+export async function addExtraActions(item, actions) {
+    if (!item) {
+        ui.notifications.error("addExtraActions: item is required.");
+        return null;
+    }
+    const newActions = Array.isArray(actions) ? actions : [actions];
+    if (newActions.length === 0) {
+        return item;
+    }
+
+    const existing = item.getFlag('lancer-automations', 'extraActions') || [];
+    const merged = [...existing, ...newActions];
+
+    await item.setFlag('lancer-automations', 'extraActions', merged);
+    console.log(`lancer-automations | addExtraActions: Added action(s) to ${item.name}:`, newActions);
+    return item;
+}
 
 /**
  * Add extra deployable LIDs to an item via flags (system.deployables is read-only due to Lancer's TypeDataModel).
@@ -1257,6 +1339,7 @@ export function getWeapons(entity) {
 
     return actor.items.filter(i =>
         i.type === 'mech_weapon' ||
+        i.type === 'pilot_weapon' ||
         (i.system?.type?.toLowerCase() === 'weapon')
     );
 }
@@ -1309,4 +1392,96 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
         ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
     }
     return chosenWeapon;
+}
+
+/**
+ * Called from the createToken hook for every newly placed token.
+ * When the "Link Manually Placed Deployables" setting is on, detects deployable tokens
+ * placed by hand (no existing lancer-automations owner flag), finds candidate owner tokens,
+ * and either auto-links (single candidate or all linked actors) or prompts via chooseToken
+ * (multiple candidates where any owner actor is unlinked).
+ * After linking, fires the onDeploy trigger.
+ * @param {TokenDocument} tokenDocument
+ */
+export async function handleManualDeployLink(tokenDocument) {
+    if (!game.settings.get('lancer-automations', 'linkManualDeploy'))
+        return;
+    if (tokenDocument.actor?.type !== 'deployable')
+        return;
+    // Skip if already linked by placeDeployable
+    if (tokenDocument.flags?.['lancer-automations']?.deployedItem)
+        return;
+
+    const deployableActor = tokenDocument.actor;
+    const deployableLid = deployableActor?.system?.lid;
+    if (!deployableLid)
+        return;
+
+    // Find scene tokens whose actor owns an item that produces this deployable LID
+    const allTokens = canvas.tokens?.placeables ?? [];
+    const candidateTokens = allTokens.filter(t => {
+        if (t.document.id === tokenDocument.id)
+            return false;
+        if (!t.actor)
+            return false;
+        return t.actor.items.some(item => getItemDeployables(item, t.actor).includes(deployableLid));
+    });
+
+    if (candidateTokens.length === 0)
+        return;
+
+    let ownerToken;
+    const needsPicker = candidateTokens.length > 1
+        || candidateTokens.some(t => !t.document.actorLink);
+
+    if (needsPicker) {
+        const deployableToken = canvas.tokens.get(tokenDocument.id);
+        const picked = await chooseToken(deployableToken ?? candidateTokens[0], {
+            count: 1,
+            includeSelf: false,
+            selection: candidateTokens,
+            title: "LINK DEPLOYABLE",
+            description: `Which token owns the deployed ${deployableActor.name}?`,
+            icon: "cci cci-deployable"
+        });
+        if (!picked || picked.length === 0)
+            return;
+        ownerToken = picked[0];
+    } else {
+        ownerToken = candidateTokens[0];
+    }
+
+    const ownerActor = ownerToken.actor;
+    const ownerName = ownerActor.name ?? "";
+
+    // Find the item on the owner that grants this deployable (first match)
+    const systemItem = ownerActor.items.find(item =>
+        getItemDeployables(item, ownerActor).includes(deployableLid)
+    ) ?? null;
+
+    // Stamp ownership flags onto the token
+    await tokenDocument.update({
+        flags: {
+            'lancer-automations': {
+                deployedItem: true,
+                deployableName: deployableActor.name,
+                deployableId: deployableActor.id,
+                ownerActorUuid: ownerActor.uuid,
+                ownerName,
+                systemItemId: systemItem?.id ?? null
+            }
+        }
+    });
+
+    // Fire onDeploy trigger
+    const api = game.modules.get('lancer-automations')?.api;
+    if (api?.handleTrigger) {
+        const deployableToken = canvas.tokens.get(tokenDocument.id);
+        await api.handleTrigger('onDeploy', {
+            triggeringToken: ownerToken,
+            item: systemItem,
+            deployedTokens: deployableToken ? [deployableToken] : [],
+            deployType: "deployable"
+        });
+    }
 }

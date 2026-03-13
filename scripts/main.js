@@ -17,7 +17,8 @@ import { cancelRulerDrag ,
     drawMovementTrace,
     getActiveGMId, getTokenOwnerUserId,
     showVoteCardOnVoter, receiveVoteSubmission,
-    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter
+    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
+    handleManualDeployLink
 } from './interactive/index.js';
 import {
     EffectsAPI,
@@ -76,35 +77,26 @@ const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTu
 let deployableConnectionsGraphic = null;
 
 // Cache reaction items per actor; invalidated on actor/item changes
-const _reactionItemsCache = new Map();
-
 Hooks.on('lancer-automations.clearCaches', () => {
     cachedFlatGeneralReactions = null;
     cachedNonActionReactionsByTrigger.clear();
-    _reactionItemsCache.clear();
-});
-
-Hooks.on('updateActor', (actor) => {
-    _reactionItemsCache.delete(actor.id);
-    for (const [id, entry] of _reactionItemsCache) {
-        if (entry.pilotId === actor.id)
-            _reactionItemsCache.delete(id);
-    }
 });
 
 Hooks.on('createItem', (item) => {
-    if (item.parent?.id)
-        _reactionItemsCache.delete(item.parent.id);
-});
-
-Hooks.on('deleteItem', (item) => {
-    if (item.parent?.id)
-        _reactionItemsCache.delete(item.parent.id);
-});
-
-Hooks.on('updateItem', (item) => {
-    if (item.parent?.id)
-        _reactionItemsCache.delete(item.parent.id);
+    if (!item.parent)
+        return;
+    const itemTypes = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"]);
+    if (!itemTypes.has(item.type))
+        return;
+    let tokens;
+    if (item.parent.isToken) {
+        const t = canvas.tokens?.placeables?.find(t => t.document === item.parent.token);
+        tokens = t ? [t] : [];
+    } else {
+        tokens = canvas.tokens?.placeables?.filter(t => t.actor?.id === item.parent.id) ?? [];
+    }
+    for (const token of tokens)
+        checkOnInitReactions(token, item);
 });
 
 function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter) {
@@ -144,13 +136,8 @@ function getReactionItems(token) {
     if (!actor)
         return [];
 
-    const cached = _reactionItemsCache.get(actor.id);
-    if (cached)
-        return cached.items;
-
     const itemTypes = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"]);
     let items = actor.items.filter(item => itemTypes.has(item.type));
-    let pilotId = null;
 
     if (actor.type === "mech") {
         let pilot = null;
@@ -159,28 +146,18 @@ function getReactionItems(token) {
         if (pilotRef) {
             if (typeof pilotRef === 'object' && pilotRef.id) {
                 const idStr = pilotRef.id;
-                if (idStr.startsWith('Actor.')) {
-                    pilot = fromUuidSync(idStr);
-                } else {
-                    pilot = game.actors.get(idStr);
-                }
+                pilot = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
             } else if (typeof pilotRef === 'string') {
-                if (pilotRef.startsWith('Actor.')) {
-                    pilot = fromUuidSync(pilotRef);
-                } else {
-                    pilot = game.actors.get(pilotRef);
-                }
+                pilot = pilotRef.startsWith('Actor.') ? fromUuidSync(pilotRef) : game.actors.get(pilotRef);
             }
         }
 
         if (pilot) {
-            pilotId = pilot.id;
             const pilotItems = pilot.items.filter(item => itemTypes.has(item.type));
             items = items.concat(pilotItems);
         }
     }
 
-    _reactionItemsCache.set(actor.id, { items, pilotId });
     return items;
 }
 
@@ -207,10 +184,10 @@ function getAllSceneTokens() {
     });
 }
 
-async function checkOnInitReactions(token) {
+async function checkOnInitReactions(token, filterItem = null) {
     const api = game.modules.get('lancer-automations').api;
     // 1. Check Item-based onInit
-    const items = getReactionItems(token);
+    const items = filterItem ? [filterItem] : getReactionItems(token);
 
     for (const item of items) {
         const lid = getItemLID(item);
@@ -978,6 +955,15 @@ function registerSettings() {
         config: false,
         type: String,
         default: ""
+    });
+
+    game.settings.register('lancer-automations', 'linkManualDeploy', {
+        name: 'Link Manually Placed Deployables',
+        hint: 'When a deployable token is dragged onto the scene, automatically link it to an owner token and fire the onDeploy trigger. If the owner actor is unlinked (e.g. NPC), prompts to choose the owner token.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
     });
 }
 
@@ -2278,19 +2264,23 @@ async function statRollTargetSelectStep(state) {
     }
 
     // Infer stat from path (e.g. system.hull -> HULL)
+    const STATS = new Set(['AGI', 'HULL', 'ENG', 'SYS', 'GRIT', 'TIER']);
     let statName = "STAT";
     if (state.data.path) {
         const parts = state.data.path.split('.');
         statName = parts[parts.length - 1].toUpperCase();
     }
 
-    const targets = await chooseToken(token, {
-        title: `${statName} SAVE TARGET`,
-        description: `Select a target to make it a Skill Save (Optional)`,
-        count: 1,
-        range: null,
-        includeSelf: true // Allow self-targeting if needed
-    });
+    let targets = [];
+    if (STATS.has(state.data.title)) {
+        targets = await chooseToken(token, {
+            title: `${statName} SAVE TARGET`,
+            description: `Select a target to make it a Skill Save (Optional)`,
+            count: 1,
+            range: null,
+            includeSelf: true // Allow self-targeting if needed
+        });
+    }
 
     if (targets && targets.length > 0) {
         const targetToken = targets[0];
@@ -3537,6 +3527,7 @@ Hooks.on('createToken', (tokenDocument, options, userId) => {
         return;
     setTimeout(() => {
         checkOnInitReactions(token);
+        handleManualDeployLink(tokenDocument);
     }, 100);
 });
 

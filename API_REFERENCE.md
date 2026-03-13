@@ -891,6 +891,34 @@ await api.addExtraDeploymentLids(myNpcFeature, ["dep_turret_t1", "dep_turret_t2"
 
 ---
 
+#### `addExtraActions(item, actions)`
+Adds extra action objects to an item via flags (`lancer-automations.extraActions`).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The Foundry Item document to update |
+| `actions` | `Object\|Array<Object>` | A single action object or array of action objects to add |
+
+**Returns:** `Promise<Item>`
+
+**Example:**
+```js
+await api.addExtraActions(myItem, { name: "Suppressive Fire", activation: "Quick", detail: "..." });
+```
+
+---
+
+#### `getItemActions(item)`
+Returns the effective actions for an item, merging `system.actions` with any extras stored via `addExtraActions`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `Item` | The item document |
+
+**Returns:** `Object[]`
+
+---
+
 #### `getItemDeployables(item, actor)`
 Returns the effective deployable LIDs for an item, merging `system.deployables` with
 extra LIDs from the `lancer-automations.extraDeployables` flag. For NPC actors, applies

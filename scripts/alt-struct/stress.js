@@ -529,6 +529,7 @@ export async function handleNoStressRemaining(state) {
             }
         }
     }
+
     // Case 2: remStress = 0 (critical reactor failure)
     else if (remStress === 0) {
     // Add Critical Meltdown button

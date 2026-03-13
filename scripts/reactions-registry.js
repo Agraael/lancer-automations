@@ -955,6 +955,86 @@ export function getDefaultGeneralReactionRegistry() {
         }
 
     };
+
+    builtInDefaults["Mount"] = {
+        category: "General",
+        triggers: ["onActivation", "onStatusRemoved"],
+        triggerDescription: "Manual / dismount.",
+        effectDescription: "Pilot mounts mech.",
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        frequency: "Other",
+        actionType: "Quick Action",
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken) {
+            if (triggerType === "onActivation")
+                return reactorToken.actor?.type === 'pilot';
+            if (triggerType === "onStatusRemoved") {
+                const effectName = triggerData.effect?.name ?? triggerData.statusId ?? "";
+                return reactorToken.id === triggerData.triggeringToken?.id
+                    && effectName.startsWith("Mount:");
+            }
+            return false;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            if (triggerType === "onActivation") {
+                if (reactorToken.actor?.type !== 'pilot')
+                    return;
+                const pilotName = reactorToken.actor.name;
+                const pilotActorId = reactorToken.actor.id;
+
+                // Choose mech at range 1
+                const targets = await api.chooseToken(reactorToken, {
+                    range: 1,
+                    includeSelf: false,
+                    filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
+                    title: "MOUNT",
+                    description: `${pilotName} is mounting. Choose the mech to board.`,
+                    icon: "cci cci-pilot"
+                });
+                const mechToken = targets?.[0];
+                if (!mechToken)
+                    return;
+
+                // Apply Mount effect, store pilot ref
+                await api.setEffect(
+                    mechToken.id,
+                    { name: `Mount: ${pilotName}`, isCustom: true },
+                    { label: 'indefinite' },
+                    `${pilotName} is mounted`,
+                    reactorToken.id,
+                    { pilotActorId }
+                );
+
+                // Remove pilot token
+                await reactorToken.document.delete();
+            }
+
+            if (triggerType === "onStatusRemoved") {
+                // Respawn pilot on dismount
+                const pilotActorId = triggerData.effect?.flags?.['lancer-automations']?.pilotActorId;
+                if (!pilotActorId)
+                    return;
+                const pilotActor = game.actors.get(pilotActorId);
+                if (!pilotActor)
+                    return;
+
+                await api.placeToken({
+                    actor: pilotActor,
+                    origin: reactorToken,
+                    range: 1,
+                    count: 1,
+                    title: "DISMOUNT",
+                    description: `${pilotActor.name} dismounts from ${reactorToken.name}.`,
+                    icon: "cci cci-pilot"
+                });
+            }
+        }
+    };
+
     return { ...builtInDefaults, ...externalGeneralReactions };
 }
 

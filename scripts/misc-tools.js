@@ -2,6 +2,127 @@ import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken 
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
 import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
+import { getItemActions } from "./interactive/deployables.js";
+
+/** Maps activation type strings to the NPC feature tag LID that signals that activation. */
+export const ACTIVATION_TAG_MAP = {
+    'Quick':      'tg_quick_action',
+    'Full':       'tg_full_action',
+    'Quick Tech': 'tg_quick_tech',
+    'Full Tech':  'tg_full_tech',
+    'Protocol':   'tg_protocol',
+    'Reaction':   'tg_reaction',
+    'Free':       'tg_free_action',
+    'Invade':     'tg_invade',
+};
+
+/**
+ * Returns all actor items (with their source item) whose activation matches `activationType`.
+ *
+ * - Mech / pilot: scans loadout systems, weapon slots (weapon + mod), and frame passive actions.
+ *   Uses `getItemActions(item)` so extraActions flags are included.
+ * - NPC: scans npc_feature items by tag (e.g. tg_quick_action → "Quick").
+ *   Also checks getItemActions() in case an NPC feature has an explicit actions array.
+ *
+ * @param {Actor} actor
+ * @param {string} activationType  e.g. "Quick", "Full", "Quick Tech", "Full Tech", "Invade"
+ * @returns {{ action: Object, sourceItem: Item }[]}
+ */
+export function getActorActionItems(actor, activationType) {
+    const results = [];
+
+    if (actor?.type === 'npc') {
+        const tagLid = ACTIVATION_TAG_MAP[activationType];
+        for (const item of (actor.items ?? [])) {
+            if (item.type !== 'npc_feature')
+                continue;
+            const itemTags = item.system?.tags ?? [];
+            if (tagLid && itemTags.some(t => t.lid === tagLid)) {
+                results.push({
+                    action: {
+                        name: item.name,
+                        activation: activationType,
+                        detail: item.system?.effect ?? '',
+                        tags: itemTags,
+                    },
+                    sourceItem: item,
+                });
+            }
+            for (const action of getItemActions(item)) {
+                if (action.activation === activationType)
+                    results.push({ action, sourceItem: item });
+            }
+        }
+    } else {
+        for (const s of (actor?.system?.loadout?.systems ?? [])) {
+            const item = s?.value;
+            if (!item)
+                continue;
+            for (const action of getItemActions(item)) {
+                if (action.activation === activationType)
+                    results.push({ action, sourceItem: item });
+            }
+        }
+        for (const mount of (actor?.system?.loadout?.weapon_mounts ?? [])) {
+            for (const slot of (mount.slots ?? [])) {
+                const weapon = slot.weapon?.value;
+                if (weapon) {
+                    for (const action of getItemActions(weapon)) {
+                        if (action.activation === activationType)
+                            results.push({ action, sourceItem: weapon });
+                    }
+                }
+                const mod = slot.mod?.value;
+                if (mod) {
+                    for (const action of getItemActions(mod)) {
+                        if (action.activation === activationType)
+                            results.push({ action, sourceItem: mod });
+                    }
+                }
+            }
+        }
+        const frame = actor?.system?.loadout?.frame?.value;
+        if (frame) {
+            for (const action of (frame.system?.core_system?.active_actions ?? [])) {
+                if (action.activation === activationType)
+                    results.push({ action, sourceItem: frame });
+            }
+            for (const action of (frame.system?.core_system?.passive_actions ?? [])) {
+                if (action.activation === activationType)
+                    results.push({ action, sourceItem: frame });
+            }
+            for (const trait of (frame.system?.traits ?? [])) {
+                for (const action of (trait.actions ?? [])) {
+                    if (action.activation === activationType)
+                        results.push({ action, sourceItem: frame });
+                }
+            }
+        }
+
+        // Pilot items: talents (by rank) and core bonuses only
+        const pilot = actor?.system?.pilot?.value;
+        if (pilot) {
+            for (const item of (pilot.items ?? [])) {
+                if (item.type === 'talent') {
+                    const currRank = item.system?.curr_rank ?? 0;
+                    for (let n = 0; n < currRank; n++) {
+                        for (const action of (item.system?.ranks?.[n]?.actions ?? [])) {
+                            if (action.activation === activationType)
+                                results.push({ action, sourceItem: item });
+                        }
+                    }
+                } else if (item.type === 'core_bonus') {
+                    for (const action of getItemActions(item)) {
+                        if (action.activation === activationType)
+                            results.push({ action, sourceItem: item });
+                    }
+                }
+            }
+        }
+    }
+
+    return results;
+}
 
 const STAT_PATHS = {
     HULL: "system.hull",
@@ -299,7 +420,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     };
 }
 
-export async function executeDamageRoll(attacker, targets, damageValue, damageType, title = "Damage Roll", options = {}, extraData = {}) {
+export async function executeDamageRoll(attacker, targets, damageValue = null, damageType = null, title = "Damage Roll", options = {}, extraData = {}) {
     const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
     if (!DamageRollFlow) {
         return { completed: false };
@@ -320,14 +441,11 @@ export async function executeDamageRoll(attacker, targets, damageValue, damageTy
     }
 
     const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
-    const resolvedType = typeMap[damageType.toLowerCase()] || "Kinetic";
+    const resolvedType = damageType ? (typeMap[damageType.toLowerCase()] || "Kinetic") : "Kinetic";
 
     const flowData = {
         title: title,
-        damage: [{
-            val: String(damageValue),
-            type: resolvedType
-        }],
+        damage: damageValue != null ? [{ val: String(damageValue), type: resolvedType }] : [],
         tags: options.tags || [],
         hit_results: options.hit_results || [],
         has_normal_hit: options.has_normal_hit !== undefined ? options.has_normal_hit : true,
@@ -850,7 +968,7 @@ export async function updateTokenSystem(token, data) {
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
  * @returns {Promise<void>}
  */
-export async function executeSkirmish(actorOrToken) {
+export async function executeSkirmish(actorOrToken, bypassMount = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
     if (!actor) {
@@ -858,26 +976,34 @@ export async function executeSkirmish(actorOrToken) {
         return;
     }
 
-    // 2. Weapon Selection
-    // Filter: 1 one/mount , no superheavy.
-    // Display non-fitting weapons as unselectable.
-    const filterPredicate = (w) => {
-        const size = w.system?.size || w.system?.type || "";
-        return size.toLowerCase() !== 'superheavy';
-    };
-
-    const choices = await choseMount(actor, 1, filterPredicate, null, "SKIRMISH");
-    if (!choices || choices.length === 0)
-        return;
-
-    const chosen = choices[0];
     let weapons;
-    if (chosen.slots) {
-        weapons = chosen.slots
-            .map(s => s.weapon?.value)
+    if (bypassMount) {
+        weapons = (bypassMount.slots ?? [])
+            .map(s => s.weapon?.value ?? (s.weapon?.id ? actor.items.get(s.weapon.id) : null))
             .filter(Boolean);
+        if (!weapons.length)
+            return;
     } else {
-        weapons = [chosen];
+        // 2. Weapon Selection
+        // Filter: 1 one/mount , no superheavy.
+        // Display non-fitting weapons as unselectable.
+        const filterPredicate = (w) => {
+            const size = w.system?.size || w.system?.type || "";
+            return size.toLowerCase() !== 'superheavy';
+        };
+
+        const choices = await choseMount(actor, 1, filterPredicate, null, "SKIRMISH");
+        if (!choices || choices.length === 0)
+            return;
+
+        const chosen = choices[0];
+        if (chosen.slots) {
+            weapons = chosen.slots
+                .map(s => s.weapon?.value)
+                .filter(Boolean);
+        } else {
+            weapons = [chosen];
+        }
     }
 
     if (weapons.length === 1) {
@@ -907,11 +1033,35 @@ export async function executeSkirmish(actorOrToken) {
 }
 
 /**
+ * Executes a Fight action for a pilot: choose one pilot weapon and attack.
+ * @param {Actor|Token|TokenDocument} actorOrToken
+ * @param {Item|null} bypassWeapon  Direct weapon item to attack with (skips selection dialog).
+ * @returns {Promise<void>}
+ */
+export async function executeFight(actorOrToken, bypassWeapon = null) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return;
+    let weapon = bypassWeapon;
+    if (!weapon) {
+        const choices = await choseMount(actor, 1, null, null, 'FIGHT');
+        if (!choices?.length)
+            return;
+        const chosen = choices[0];
+        weapon = chosen.slots
+            ? chosen.slots.find(/** @type {any} */ s => s.weapon?.value)?.weapon?.value ?? null
+            : chosen;
+    }
+    if (weapon)
+        await beginWeaponAttackFlow(weapon);
+}
+
+/**
  * Executes a Barrage action: attacks with either two different mounts or one superheavy mount.
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
  * @returns {Promise<void>}
  */
-export async function executeBarrage(actorOrToken) {
+export async function executeBarrage(actorOrToken, bypassMount = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
     if (!actor) {
@@ -959,7 +1109,9 @@ export async function executeBarrage(actorOrToken) {
         return { valid: false, message: "Invalid selection.", level: "error" };
     };
 
-    const choices = await choseMount(actor, 2, null, null, "BARRAGE", barrageValidator);
+    const choices = bypassMount
+        ? [bypassMount]
+        : await choseMount(actor, 2, null, null, "BARRAGE", barrageValidator);
     if (!choices || choices.length === 0)
         return;
 
@@ -968,7 +1120,7 @@ export async function executeBarrage(actorOrToken) {
         let weapons;
         if (mount.slots) {
             weapons = mount.slots
-                .map(s => s.weapon?.value)
+                .map(s => s.weapon?.value ?? (s.weapon?.id ? actor.items.get(s.weapon.id) : null))
                 .filter(Boolean);
         } else {
             weapons = [mount];
@@ -1193,6 +1345,50 @@ export async function getMaxWeaponReach_WithBonus(input) {
 }
 
 /**
+ * Returns the maximum range value per range type for any item.
+ * Covers: item.system.range, per-action ranges, tg_thrown tag ("Thrown"), and deployRange flag ("Deploy").
+ * Actor bonuses are applied when an actor is available.
+ * @param {Item} item
+ * @param {Actor} [actor] - Defaults to item.parent.
+ * @returns {Promise<Object>} e.g. { Range: 5, Cone: 5, Thrown: 3, Deploy: 3 }
+ */
+export async function getMaxItemRanges_WithBonus(item, actor) {
+    if (!item) return {};
+    const a = actor ?? item.parent ?? null;
+
+    // Base range + tags (handles mech_weapon profiles)
+    const { tags, range: baseRange } = _getItemBaseData(item);
+
+    // Ranges from each action
+    const actionRanges = (item.system?.actions ?? []).flatMap(action => (action.range ?? []).map(r => ({ ...r })));
+
+    const allRanges = [...baseRange, ...actionRanges];
+
+    // Apply actor bonuses
+    await _applyItemBonuses(item, a, tags, allRanges);
+
+    // tg_thrown tag → "Thrown" range type
+    const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+    if (thrownTag) {
+        const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
+        if (throwVal > 0) allRanges.push({ type: "Thrown", val: throwVal });
+    }
+
+    // deployRange flag → "Deploy" range type
+    const deployRange = item.getFlag?.("lancer-automations", "deployRange");
+    if (deployRange) allRanges.push({ type: "Deploy", val: deployRange });
+
+    // Compute max per type
+    const maxPerType = {};
+    for (const r of allRanges) {
+        const val = Number.parseInt(r.val) || 0;
+        if (val > 0 && (maxPerType[r.type] === undefined || val > maxPerType[r.type]))
+            maxPerType[r.type] = val;
+    }
+    return maxPerType;
+}
+
+/**
  * Returns the weapon subtype string (e.g. "Superheavy Rifle", "Melee").
  * Synchronous — no bonus application.
  * @param {Item} item
@@ -1270,6 +1466,7 @@ export const MiscAPI = {
     getActorMaxThreat,
     getMaxWeaponRanges_WithBonus,
     getMaxWeaponReach_WithBonus,
+    getMaxItemRanges_WithBonus,
     getWeaponType,
     getItemType,
     executeSkirmish,

@@ -1,7 +1,8 @@
 /* global canvas, PIXI, game, ui, $ */
 
 import { startChoiceCard, startVoteCard } from "./network.js";
-import { resolveDeployable, getItemDeployables } from "./deployables.js";
+import { resolveDeployable, getItemDeployables, getItemActions } from "./deployables.js";
+import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
 
 /**
  * Opens a dialog to select and throw a weapon.
@@ -491,43 +492,6 @@ export async function openChoiceMenu() {
  * @returns {Promise<any[]|null>} Resolves to an array of selected mounts/items, or null if cancelled.
  */
 
-// ── Shared dialog helpers ─────────────────────────────────────────────────────
-
-/**
- * Returns a coloured section-label badge for detail popups.
- * @param {string} text
- * @param {string} bg  CSS colour
- * @returns {string}
- */
-export function _laPopupSectionLabel(text, bg) {
-    return `<span style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
-}
-
-/**
- * Appends a popup next to the parent dialog, then binds close + outside-click dismiss.
- * @param {JQuery} popup
- * @param {JQuery} html  Dialog render-callback html element
- */
-export function _laPositionPopup(popup, html) {
-    $('body').append(popup);
-    const dlg = html.closest('.app');
-    const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
-    const dlgW = dlg.outerWidth() ?? 480;
-    const pw = popup.outerWidth(), ph = popup.outerHeight();
-    const wx = window.innerWidth, wy = window.innerHeight;
-    let px = dlgOffset.left + dlgW + 8;
-    if (px + pw > wx - 10)
-        px = dlgOffset.left - pw - 8;
-    let py = dlgOffset.top;
-    if (py + ph > wy - 10)
-        py = wy - ph - 10;
-    const finalLeft = Math.max(10, px);
-    popup.css({ left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
-    popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
-    popup.find('.la-detail-close').on('click', () => popup.remove());
-    $(document).one('click', () => popup.remove());
-}
-
 /**
  * Builds and renders the standard multi-select choice dialog.
  * Used by choseMount, choseSystem, choseTrait.
@@ -665,8 +629,18 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 if (profiles.length > 1 && profiles[activeProfileIndex]) {
                     profileName = profiles[activeProfileIndex].name;
                 }
-                const allTags = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
-                const hasLoadingTag = allTags.some(t => t.lid === 'tg_loading' || t.id === 'tg_loading');
+                const allTags     = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
+                const hasLoading  = allTags.some(t => t.lid === 'tg_loading'  || t.id === 'tg_loading');
+                const hasRecharge = allTags.some(t => t.lid === 'tg_recharge' || t.id === 'tg_recharge');
+                const hasLimited  = allTags.some(t => t.lid === 'tg_limited'  || t.id === 'tg_limited');
+                const loadStatus   = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')   : '';
+                const chargeStatus = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED')  : '';
+                let usesText = '';
+                if (hasLimited) {
+                    const val = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
+                    const max = sys.uses == null ? 0 : typeof sys.uses === 'number' ? 0 : (sys.uses.max ?? 0);
+                    usesText = `${val}/${max}`;
+                }
 
                 return {
                     id: w.id,
@@ -676,7 +650,10 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     modItem: s.mod?.value || null,
                     destroyed: !!sys.destroyed,
                     disabled: !!sys.disabled,
-                    unloaded: sys.loaded === false && hasLoadingTag,
+                    unloaded: loadStatus === 'UNLOADED',
+                    loadStatus,
+                    chargeStatus,
+                    usesText,
                     fitsFilter: !filterPredicate || filterPredicate(w),
                     type: sys?.active_profile?.type || sys?.type || "",
                     size: sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || ""),
@@ -723,8 +700,18 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             } else if (profiles.length > 1 && profiles[activeProfileIndex]) {
                 profileName = profiles[activeProfileIndex].name;
             }
-            const allTagsNonMech = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
-            const hasLoadingTagNonMech = allTagsNonMech.some(t => t.lid === 'tg_loading' || t.id === 'tg_loading');
+            const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
+            const hasLoadingNM    = allTagsNonMech.some(t => t.lid === 'tg_loading'  || t.id === 'tg_loading');
+            const hasRechargeNM   = allTagsNonMech.some(t => t.lid === 'tg_recharge' || t.id === 'tg_recharge');
+            const hasLimitedNM    = allTagsNonMech.some(t => t.lid === 'tg_limited'  || t.id === 'tg_limited');
+            const loadStatusNM    = hasLoadingNM  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
+            const chargeStatusNM  = hasRechargeNM ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
+            let usesTextNM = '';
+            if (hasLimitedNM) {
+                const val = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
+                const max = sys.uses == null ? 0 : typeof sys.uses === 'number' ? 0 : (sys.uses.max ?? 0);
+                usesTextNM = `${val}/${max}`;
+            }
 
             return {
                 item,
@@ -734,7 +721,10 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     img: item.img,
                     destroyed,
                     disabled: !!sys.disabled,
-                    unloaded: sys.loaded === false && hasLoadingTagNonMech,
+                    unloaded: loadStatusNM === 'UNLOADED',
+                    loadStatus: loadStatusNM,
+                    chargeStatus: chargeStatusNM,
+                    usesText: usesTextNM,
                     fitsFilter,
                     type: sys?.weapon_type || sys?.active_profile?.type || "",
                     size: sys?.weapon_type ? "" : (sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || "")),
@@ -764,7 +754,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const counts = {};
             const uniqueWeapons = [];
             for (const w of weaponData) {
-                const key = `${w.name}|${w.mod || ""}|${w.destroyed}|${w.disabled}|${w.unloaded}`;
+                const key = `${w.name}|${w.mod || ""}|${w.destroyed}|${w.disabled}|${w.loadStatus}|${w.chargeStatus}|${w.usesText}`;
                 if (!counts[key]) {
                     counts[key] = 0;
                     uniqueWeapons.push({ ...w, key });
@@ -777,16 +767,9 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 let nameStyle = "font-weight: bold;";
                 let statusTags = "";
 
-                if (w.destroyed) {
-                    statusTags += `<span style="font-size: 0.7em; background: #b71c1c; color: #fff; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">✕ DESTROYED</span>`;
-                } else {
-                    if (w.disabled) {
-                        nameStyle += " color: #ff9800;"; // Orange
-                        statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
-                    }
-                    if (w.unloaded) {
-                        statusTags += `<span style="font-size: 0.7em; background: #ffeb3b; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">UNLOADED</span>`;
-                    }
+                if (w.disabled) {
+                    nameStyle += " color: #ff9800;";
+                    statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
                 }
 
                 const sizeTypeArr = [w.size, w.type].filter(Boolean);
@@ -800,7 +783,15 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 }
 
                 const countStr = counts[w.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[w.key]}</span>` : "";
-                const modHtml = w.mod ? `<div style="font-size: 0.8em; opacity: 0.9; background: rgba(255,100,0,0.15); border: 1px solid rgba(255,100,0,0.3); border-radius: 4px; padding: 1px 6px; display: inline-block; margin-top: 2px; color: #ff6400;">MOD: ${w.mod}</div>` : "";
+                const S_TAG     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
+                const S_TAG_RED = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
+                const bottomParts = [];
+                if (w.destroyed)    bottomParts.push(`<span style="${S_TAG_RED}">✕ DESTROYED</span>`);
+                if (w.mod)          bottomParts.push(`<span style="${S_TAG}">MOD: ${w.mod}</span>`);
+                if (w.loadStatus)   bottomParts.push(`<span style="${S_TAG}">${w.loadStatus}</span>`);
+                if (w.chargeStatus) bottomParts.push(`<span style="${S_TAG}">${w.chargeStatus}</span>`);
+                if (w.usesText)     bottomParts.push(`<span style="${S_TAG}">${w.usesText}</span>`);
+                const modHtml = bottomParts.length ? `<div style="margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;">${bottomParts.join('')}</div>` : "";
 
                 return `
                     <div style="${style}">
@@ -841,7 +832,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 }
                 if (allProfiles.length === 0)
                     return null;
-                return { name: wItem.name, img: wItem.img, size: wd.size, type: wd.type, mod: wd.mod || null, modItem: wd.modItem || null, profiles: allProfiles };
+                return { name: wItem.name, img: wItem.img, size: wd.size, type: wd.type, mod: wd.mod || null, modItem: wd.modItem || null, profiles: allProfiles, actions: sys.actions ?? [], activeProfile: sys.selected_profile_index ?? 0 };
             }).filter(Boolean);
 
             return {
@@ -868,74 +859,19 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 if (!choice.weaponDetails?.length)
                     return;
 
-                const _renderProfile = (p, showName) => {
-                    const nameHdr = showName && p.name
-                        ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${p.name}</div>`
-                        : '';
-                    const damageHtml = p.damage?.length
-                        ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
-                        : '';
-                    const rangeHtml = p.range?.length
-                        ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ')}</div></div>`
-                        : '';
-                    const tagsHtml = p.tags?.length
-                        ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${p.tags.map(t => {
-                            const rawName = t._resolvedName ?? t.name ?? t.lid ?? t.id ?? '';
-                            const tagText = String(rawName).replaceAll('{VAL}', t.val ?? '');
-                            return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tagText}</span>`;
-                        }).join('')}</div>`
-                        : '';
-                    const onHitHtml = p.on_hit
-                        ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.on_hit}</div></div>`
-                        : '';
-                    const effectHtml = p.effect
-                        ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.effect}</div></div>`
-                        : '';
-                    return `${nameHdr}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
-                };
-
                 const detailHtml = choice.weaponDetails.map(wd => {
                     const wName = choice.weaponDetails.length > 1
                         ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>`
                         : '';
-                    let modHtml = '';
-                    if (wd.mod) {
-                        const ms = wd.modItem?.system;
-                        const modEffect = ms?.effect || ms?.description || '';
-                        const modTagsArr = ms?.tags ?? [];
-                        const modTagsHtml = modTagsArr.length
-                            ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${modTagsArr.map(t => {
-                                const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-                                return `<span style="background:rgba(255,255,255,0.08);border:1px solid #555;border-radius:3px;padding:0 5px;font-size:0.72em;color:#ccc;">${tn}</span>`;
-                            }).join('')}</div>`
-                            : '';
-                        const modBody = modEffect
-                            ? `<div style="font-size:0.8em;color:#bbb;margin-top:3px;line-height:1.3;">${modEffect}</div>${modTagsHtml}`
-                            : modTagsHtml;
-                        modHtml = `<div style="margin-bottom:8px;padding:5px 7px;background:rgba(255,100,0,0.07);border:1px solid rgba(255,100,0,0.35);border-radius:3px;">
-                            <div style="font-size:0.72em;font-weight:bold;color:#ff6400;letter-spacing:0.4px;margin-bottom:2px;">MOD · ${wd.mod}</div>
-                            ${modBody}
-                        </div>`;
-                    }
-                    const showProfileNames = wd.profiles.length > 1;
-                    const profilesHtml = wd.profiles
-                        .map(p => _renderProfile(p, showProfileNames))
-                        .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
-                    return `${wName}${modHtml}${profilesHtml}`;
+                    return wName + laRenderWeaponBody(wd.profiles, { actions: wd.actions, modName: wd.mod, modItem: wd.modItem, activeProfileIndex: wd.activeProfile });
                 }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
 
-                const popup = $(`
-                    <div class="la-weapon-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #4a1010;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                        <div style="background:linear-gradient(90deg,#2d0a0a,#1a0808);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5a1515;border-radius:4px 4px 0 0;">
-                            <div>
-                                <div style="font-weight:bold;font-size:0.95em;color:#fff;">${choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '')}</div>
-                                <div style="font-size:0.72em;color:#aaa;">${choice.weaponDetails.length > 1 ? choice.weaponDetails.map(w => w.name).join(' / ') : [choice.weaponDetails[0]?.size, choice.weaponDetails[0]?.type].filter(Boolean).join(' · ')}</div>
-                            </div>
-                            <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                        </div>
-                        <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${detailHtml}</div>
-                    </div>`);
-                _laPositionPopup(popup, html);
+                const title = choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '');
+                const subtitle = choice.weaponDetails.length > 1
+                    ? choice.weaponDetails.map(w => w.name).join(' / ')
+                    : [choice.weaponDetails[0]?.size, choice.weaponDetails[0]?.type].filter(Boolean).join(' · ');
+                const popup = laDetailPopup('la-weapon-detail-popup', title, subtitle, detailHtml, 'weapon');
+                laPositionPopup(popup, html);
             },
             resolve
         });
@@ -988,7 +924,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
                 selectable: !destroyed && fitsFilter,
                 effect: sys?.effect || "",
                 tags: sys?.tags ?? [],
-                actions: sys?.actions ?? [],
+                actions: getItemActions(item),
                 deployableLids: getItemDeployables(item, actor),
                 deployableActors: []
             });
@@ -1017,7 +953,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
                     selectable: !destroyed && fitsFilter,
                     effect: sys?.effect || "",
                     tags: sys?.tags ?? [],
-                    actions: sys?.actions ?? [],
+                    actions: getItemActions(item),
                     deployableLids: getItemDeployables(item, actor),
                     deployableActors: []
                 });
@@ -1096,61 +1032,13 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
                 if (!choice.effect && !choice.tags?.length && !choice.actions?.length && !choice.deployableActors?.length)
                     return;
 
-                const effectHtml = choice.effect
-                    ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${choice.effect}</div></div>`
-                    : '';
-
-                const tagsHtml = choice.tags?.length
-                    ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${choice.tags.map(t => {
-                        const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-                        return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tn}</span>`;
-                    }).join('')}</div>`
-                    : '';
-
-                const actionsHtml = choice.actions?.length
-                    ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('ACTIONS', '#1a5c3a')}${choice.actions.map(a => {
-                        const aEffect = a.detail || a.effect || '';
-                        return `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;">
-                            <div style="font-size:0.78em;font-weight:bold;color:#ccc;">${a.name || ''}${a.activation ? `<span style="font-size:0.85em;font-weight:normal;color:#888;margin-left:6px;">[${a.activation}]</span>` : ''}</div>
-                            ${aEffect ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${aEffect}</div>` : ''}
-                        </div>`;
-                    }).join('')}</div>`
-                    : '';
-
-                const deployablesHtml = choice.deployableActors?.length
-                    ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('DEPLOYABLE', '#4a1070')}${choice.deployableActors.map(dep => {
-                        const ds = dep.system;
-                        const statPairs = [
-                            ds?.hp?.max != null ? `HP ${ds.hp.max}` : null,
-                            ds?.size != null ? `Size ${ds.size}` : null,
-                            ds?.armor != null && ds.armor > 0 ? `Armor ${ds.armor}` : null,
-                            ds?.evasion != null ? `Evasion ${ds.evasion}` : null,
-                            ds?.edef != null ? `E-Def ${ds.edef}` : null,
-                            ds?.speed != null && ds.speed > 0 ? `Speed ${ds.speed}` : null,
-                            ds?.heatcap != null && ds.heatcap > 0 ? `Heat ${ds.heatcap}` : null,
-                            ds?.save != null && ds.save > 0 ? `Save ${ds.save}` : null
-                        ].filter(Boolean);
-                        const depEffect = ds?.effect || '';
-                        return `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;">
-                            <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${dep.name}</div>
-                            ${statPairs.length ? `<div style="font-size:0.75em;color:#aaa;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${depEffect ? '4' : '0'}px;">${statPairs.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
-                            ${depEffect ? `<div style="font-size:0.77em;color:#bbb;line-height:1.3;">${depEffect}</div>` : ''}
-                        </div>`;
-                    }).join('')}</div>`
-                    : '';
-
-                const popup = $(`
-                    <div class="la-system-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #1a4a10;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                        <div style="background:linear-gradient(90deg,#0d2d0a,#081a08);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a5a15;border-radius:4px 4px 0 0;">
-                            <div>
-                                <div style="font-weight:bold;font-size:0.95em;color:#fff;">${choice.item.name}</div>
-                                <div style="font-size:0.72em;color:#aaa;">${[choice.systemType, choice.sp > 0 ? `${choice.sp} SP` : ''].filter(Boolean).join(' · ')}</div>
-                            </div>
-                            <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                        </div>
-                        <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${effectHtml}${tagsHtml}${actionsHtml}${deployablesHtml}</div>
-                    </div>`);
-                _laPositionPopup(popup, html);
+                const bodyHtml = laRenderTextSection('EFFECT', choice.effect, '#e65100')
+                    + laRenderTags(choice.tags)
+                    + laRenderActions(choice.actions)
+                    + laRenderDeployables(choice.deployableActors);
+                const subtitle = [choice.systemType, choice.sp > 0 ? `${choice.sp} SP` : ''].filter(Boolean).join(' · ');
+                const popup = laDetailPopup('la-system-detail-popup', choice.item.name, subtitle, bodyHtml, 'system');
+                laPositionPopup(popup, html);
             },
             resolve
         });
@@ -1198,7 +1086,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
             selectable: !destroyed && fitsFilter,
             effect: sys?.effect || "",
             tags: sys?.tags ?? [],
-            actions: sys?.actions ?? []
+            actions: getItemActions(item)
         });
     }
 
@@ -1256,40 +1144,11 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
                     return String(s ?? '').replaceAll(/\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
                 };
 
-                const effectHtml = choice.effect
-                    ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${_resolveTierStr(choice.effect)}</div></div>`
-                    : '';
-
-                const tagsHtml = choice.tags?.length
-                    ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${choice.tags.map(t => {
-                        const raw = String(t.name ?? t.lid ?? t.id ?? '');
-                        const resolved = _resolveTierStr(raw).replaceAll('{VAL}', _resolveTierStr(t.val ?? ''));
-                        return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${resolved}</span>`;
-                    }).join('')}</div>`
-                    : '';
-
-                const actionsHtml = choice.actions?.length
-                    ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('ACTIONS', '#1a5c3a')}${choice.actions.map(a => {
-                        const aEffect = _resolveTierStr(a.detail || a.effect || '');
-                        return `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;">
-                            <div style="font-size:0.78em;font-weight:bold;color:#ccc;">${a.name || ''}${a.activation ? `<span style="font-size:0.85em;font-weight:normal;color:#888;margin-left:6px;">[${a.activation}]</span>` : ''}</div>
-                            ${aEffect ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${aEffect}</div>` : ''}
-                        </div>`;
-                    }).join('')}</div>`
-                    : '';
-
-                const popup = $(`
-                    <div class="la-trait-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #1a3a5c;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                        <div style="background:linear-gradient(90deg,#0a1d2d,#081318);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a3a5c;border-radius:4px 4px 0 0;">
-                            <div>
-                                <div style="font-weight:bold;font-size:0.95em;color:#fff;">${choice.item.name}</div>
-                                <div style="font-size:0.72em;color:#aaa;">TRAIT · T${tier}</div>
-                            </div>
-                            <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                        </div>
-                        <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${effectHtml}${tagsHtml}${actionsHtml}</div>
-                    </div>`);
-                _laPositionPopup(popup, html);
+                const bodyHtml = laRenderTextSection('EFFECT', choice.effect, '#e65100', _resolveTierStr)
+                    + laRenderTags(choice.tags, _resolveTierStr)
+                    + laRenderActions(choice.actions, _resolveTierStr);
+                const popup = laDetailPopup('la-trait-detail-popup', choice.item.name, `TRAIT · T${tier}`, bodyHtml, 'trait');
+                laPositionPopup(popup, html);
             },
             resolve
         });
@@ -1446,29 +1305,10 @@ export async function chooseInvade(actorOrToken) {
 
                 const _showInvadeDetailPopup = (inv) => {
                     $('.la-invade-detail-popup').remove();
-
-                    const effectHtml = inv.detail
-                        ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${inv.detail}</div></div>`
-                        : '';
-                    const tagsHtml = inv.tags?.length
-                        ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${inv.tags.map(t => {
-                            const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-                            return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tn}</span>`;
-                        }).join('')}</div>`
-                        : '';
-
-                    const popup = $(`
-                        <div class="la-invade-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #4a1010;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                            <div style="background:linear-gradient(90deg,#2d0a0a,#1a0808);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5a1515;border-radius:4px 4px 0 0;">
-                                <div>
-                                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${inv.name}</div>
-                                    <div style="font-size:0.72em;color:#aaa;">${inv.sourceItemName}</div>
-                                </div>
-                                <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                            </div>
-                            <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${effectHtml}${tagsHtml}</div>
-                        </div>`);
-                    _laPositionPopup(popup, html);
+                    const bodyHtml = laRenderTextSection('EFFECT', inv.detail, '#e65100')
+                        + laRenderTags(inv.tags);
+                    const popup = laDetailPopup('la-invade-detail-popup', inv.name, inv.sourceItemName, bodyHtml, 'weapon');
+                    laPositionPopup(popup, html);
                 };
 
                 listItems.on('contextmenu', function(e) {
@@ -1502,12 +1342,12 @@ export async function chooseInvade(actorOrToken) {
  * @param {Actor|Token} actorOrToken
  * @returns {Promise<void>}
  */
-export async function executeInvade(actorOrToken) {
+export async function executeInvade(actorOrToken, bypassChoice = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return;
 
-    const selected = await chooseInvade(actor);
+    const selected = bypassChoice ?? await chooseInvade(actor);
     if (!selected)
         return;
 

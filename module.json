@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.5.10",
+    "version": "2.6.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -15,7 +15,8 @@
     "esmodules": [
         "scripts/overwatch.js",
         "scripts/main.js",
-        "scripts/grapple.js"
+        "scripts/grapple.js",
+        "scripts/tah/index.js"
     ],
     "styles": [
         "styles/codemirror-dark.css",

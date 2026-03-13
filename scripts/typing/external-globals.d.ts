@@ -254,5 +254,10 @@ type PathHexArray = PathHexStep[] & {
 declare function fromUuid(uuid: string): Promise<any>;
 declare function fromUuidSync(uuid: string): any;
 
+// ─── DiceTerm (foundry-vtt-types omits results on the base RollTerm) ─────────
+declare class DiceTerm extends RollTerm {
+    results: { result: number; active: boolean; discarded: boolean; hidden?: boolean }[];
+}
+
 // ─── Startup script globals ───────────────────────────────────────────────────
 declare const api: LancerAutomationsAPI;

@@ -1,7 +1,7 @@
 /* global game, ui, canvas, $ */
 
 import { applyEffectsToTokens } from "../flagged-effects.js";
-import { _laPopupSectionLabel, _laPositionPopup } from "../interactive/combat.js";
+import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
 
 const structTableTitles = [
@@ -60,28 +60,30 @@ function isValidActor(actor) {
 async function createCrushingHitRoll(damage) {
     const roll = new Roll(`${damage}d6kl1`);
     await roll.evaluate({ allowInteractive: false });
-    roll.terms[0].results = roll.terms[0].results.map(r => ({
+    const term0 = /** @type {DiceTerm} */ (roll.terms[0]);
+    term0.results = term0.results.map(r => ({
         result: 1,
         active: r.active,
         discarded: r.discarded,
         hidden: true
     }));
-    roll._total = 1;
+    /** @type {any} */ (roll)._total = 1;
     return roll;
 }
 
 async function createDirectHitRoll(damage) {
     const roll = new Roll(`${damage}d6kl1`);
     await roll.evaluate({ allowInteractive: false });
-    if (roll.terms[0].results.length > 0) {
-        roll.terms[0].results[0] = {
+    const term0 = /** @type {DiceTerm} */ (roll.terms[0]);
+    if (term0.results.length > 0) {
+        term0.results[0] = {
             result: 1,
             active: true,
             discarded: false,
             hidden: true
         };
     }
-    roll._total = 1;
+    /** @type {any} */ (roll)._total = 1;
     return roll;
 }
 
@@ -584,68 +586,37 @@ async function showSystemTraumaDialog(actor, traumaType) {
                     if (!item?.detail)
                         return;
 
-                    let detailHtml = '';
+                    let title = '', subtitle = '', bodyHtml = '', theme = 'weapon';
                     if (item.type === "mount" && item.detail.weaponDetails?.length) {
-                        const _renderProfile = (p, showName) => {
-                            const nameHdr = showName && p.name ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${p.name}</div>` : '';
-                            const damageHtml = p.damage?.length ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>` : '';
-                            const rangeHtml = p.range?.length ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ')}</div></div>` : '';
-                            const tagsHtml = p.tags?.length ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${p.tags.map(t => {
-                                const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-                                return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tn}</span>`;
-                            }).join('')}</div>` : '';
-                            const onHitHtml = p.on_hit ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.on_hit}</div></div>` : '';
-                            const effectHtml = p.effect ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${p.effect}</div></div>` : '';
-                            return `${nameHdr}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
-                        };
-                        detailHtml = item.detail.weaponDetails.map(wd => {
-                            const wName = item.detail.weaponDetails.length > 1 ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>` : '';
+                        bodyHtml = item.detail.weaponDetails.map(wd => {
+                            const wName = item.detail.weaponDetails.length > 1
+                                ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>`
+                                : '';
                             const showProfileNames = wd.profiles.length > 1;
-                            const profilesHtml = wd.profiles.map(p => _renderProfile(p, showProfileNames)).join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
+                            const profilesHtml = wd.profiles
+                                .map(p => laRenderWeaponProfile(p, showProfileNames))
+                                .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
                             return `${wName}${profilesHtml}`;
                         }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
-
-                        const headerTitle = item.detail.weaponDetails.length > 1 ? item.sublabel : (item.detail.weaponDetails[0]?.name ?? '');
-                        const headerSub = item.detail.weaponDetails.length > 1 ? item.detail.weaponDetails.map(w => w.name).join(' / ') : [item.detail.weaponDetails[0]?.size, item.detail.weaponDetails[0]?.type].filter(Boolean).join(' · ');
-                        const popup = $(`
-                            <div class="la-trauma-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #4a1010;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                                <div style="background:linear-gradient(90deg,#2d0a0a,#1a0808);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5a1515;border-radius:4px 4px 0 0;">
-                                    <div>
-                                        <div style="font-weight:bold;font-size:0.95em;color:#fff;">${headerTitle}</div>
-                                        <div style="font-size:0.72em;color:#aaa;">${headerSub}</div>
-                                    </div>
-                                    <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                                </div>
-                                <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${detailHtml}</div>
-                            </div>`);
-                        _laPositionPopup(popup, html);
+                        title = item.detail.weaponDetails.length > 1 ? item.sublabel : (item.detail.weaponDetails[0]?.name ?? '');
+                        subtitle = item.detail.weaponDetails.length > 1
+                            ? item.detail.weaponDetails.map(w => w.name).join(' / ')
+                            : [item.detail.weaponDetails[0]?.size, item.detail.weaponDetails[0]?.type].filter(Boolean).join(' · ');
                     } else if (item.type === "system") {
                         const d = item.detail;
                         if (!d.effect && !d.tags?.length && !d.actions?.length)
                             return;
-                        const effectHtml = d.effect ? `<div style="margin-bottom:6px;">${_laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${d.effect}</div></div>` : '';
-                        const tagsHtml = d.tags?.length ? `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${d.tags.map(t => {
-                            const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-                            return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${tn}</span>`;
-                        }).join('')}</div>` : '';
-                        const actionsHtml = d.actions?.length ? `<div style="margin-bottom:4px;">${_laPopupSectionLabel('ACTIONS', '#1a5c3a')}${d.actions.map(a => {
-                            const aEffect = a.detail || a.effect || '';
-                            return `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#ccc;">${a.name || ''}${a.activation ? `<span style="font-size:0.85em;font-weight:normal;color:#888;margin-left:6px;">[${a.activation}]</span>` : ''}</div>${aEffect ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${aEffect}</div>` : ''}</div>`;
-                        }).join('')}</div>` : '';
-                        detailHtml = `${effectHtml}${tagsHtml}${actionsHtml}`;
-                        const popup = $(`
-                            <div class="la-trauma-detail-popup" style="position:fixed;z-index:10000;background:#181818;border:1px solid #1a4a10;border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
-                                <div style="background:linear-gradient(90deg,#0d2d0a,#081a08);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1a5a15;border-radius:4px 4px 0 0;">
-                                    <div>
-                                        <div style="font-weight:bold;font-size:0.95em;color:#fff;">${item.data.name}</div>
-                                        <div style="font-size:0.72em;color:#aaa;">${item.sublabel}</div>
-                                    </div>
-                                    <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
-                                </div>
-                                <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${detailHtml}</div>
-                            </div>`);
-                        _laPositionPopup(popup, html);
+                        title = item.data.name;
+                        subtitle = item.sublabel;
+                        bodyHtml = laRenderTextSection('EFFECT', d.effect, '#e65100')
+                            + laRenderTags(d.tags)
+                            + laRenderActions(d.actions);
+                        theme = 'system';
+                    } else {
+                        return;
                     }
+                    const popup = laDetailPopup('la-trauma-detail-popup', title, subtitle, bodyHtml, theme);
+                    laPositionPopup(popup, html);
                 });
 
                 html.find('.la-choice-item:not(.unselectable)').on('click', function() {
