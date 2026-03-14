@@ -87,6 +87,34 @@ async function createDirectHitRoll(damage) {
     return roll;
 }
 
+/**
+ * Pre-roll step for 1-structure NPCs: bypass the table entirely and show
+ * an immediate "Crushing Hit – destroyed" card, mirroring oneStructFlowStep
+ * from csm-lancer-qol. Injected before preStructureRollChecks in StructureFlow.
+ */
+export async function npcOneStructStep(state) {
+    const actor = state.actor;
+    if (!actor?.is_npc() || actor.system.structure.max !== 1)
+        return true;
+
+    if (!state.data)
+        state.data = {};
+    state.data.title = "Crushing Hit";
+    state.data.desc = "Your mech is damaged beyond repair \u2013 it is destroyed. You may still exit it as normal.";
+    state.data.result = undefined;
+
+    const onStructureStep = game.lancer.flowSteps?.get("lancer-automations:onStructure");
+    if (onStructureStep)
+        await onStructureStep(state);
+
+    const printStructureCard = game.lancer.flowSteps?.get("printStructureCard");
+    if (printStructureCard)
+        await printStructureCard(state);
+
+    await actor.update({ "system.structure.value": actor.system.structure.value - 1 });
+    return false;
+}
+
 export async function altRollStructure(state) {
     if (!state.data)
         throw new TypeError(`Structure roll flow data missing!`);

@@ -38,6 +38,8 @@ The end goal is to move everything I need for my campaign into this module, so i
 - [Item Flags & Injection](#item-flags--injection)
 - [Automation System](#automation-system)
 - [Optional Features](#optional-features)
+  - [Lancer Automations HUD (Beta)](#lancer-automations-hud-beta)
+  - [Alternative Structure Automations](#alternative-structure-automations)
 - [Built-in Macros](#built-in-macros)
 - [API Reference](#api-reference)
 - [NPC Implementation Examples](#npc-implementation-examples)
@@ -650,6 +652,28 @@ When [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras
 - `api.createAura(owner, config)`: creates an aura on a token. Accepts lambda functions as macro callbacks, the module intercepts and routes them transparently with no need to create actual macro documents.
 - `api.deleteAuras(owner)`: removes all auras from a token
 
+### Lancer Automations HUD (Beta)
+
+<img align="right" src="doc/img/lancer-automations-hud.png" width="40%"/>
+
+For a while I ran a heavily modified version of Token Action HUD for my own sessions. I've now rebuilt it directly into the module. It's still what I'd call a beta, but it's available.
+
+The HUD gives you quick access to all your mech's actions, weapons, systems, frame abilities, talents, skills, and statuses from a single cascading menu attached to your token. If you have [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) installed, hovering weapon or skill entries will display their range or threat aura directly on the canvas.
+
+It is available as an optional setting in Module Settings > Lancer Automations.
+
+<br clear="right"/>
+
+---
+
+### Alternative Structure Automations
+
+I use an alternative structure system in my games. The automation for it is built into the module and available as an optional setting.
+
+Enable it in Module Settings > Lancer Automations.
+
+---
+
 ### Drag Vision Mitigation
 
 When configured in module settings, a token's vision radius is reduced during drag. This is useful to prevent accidentally revealing too much of the map while moving a token. The reduction is a multiplier you set. `1.0` means no change, lower values shrink the vision radius during the drag.
@@ -835,7 +859,7 @@ Places a smoke zone (soft cover) that persists until the start of the Strider's 
 
 ## Planned Features
 
-- **Token Action HUD** built for Lancer Automations. Currently using a custom HUD in my sessions, eventually I'll make a proper integration for this module.
+- More built-in item activations for the personal activation set
 
 ---
 

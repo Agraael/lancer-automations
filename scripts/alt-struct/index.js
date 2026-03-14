@@ -1,7 +1,7 @@
 /* global game, ui */
 
 import { altRollStress, insertEngheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
-import { altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow } from "./structure.js";
+import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow } from "./structure.js";
 
 // Captured during registerAltStructFlowSteps, used in initAltStructReady
 let _flowSteps = null;
@@ -38,7 +38,7 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
 
     // ── Save originals for potential rollback in initAltStructReady ──
     const structureStepKeys = [
-        "rollStructureTable", "checkStructureMultipleOnes",
+        "npcOneStructStep", "rollStructureTable", "checkStructureMultipleOnes",
         "structureInsertHullCheckButton", "structureInsertSecondaryRollButton",
         "applyStructureEffects", "selectDestructionTargetDirectHitFallback",
         "selectDestructionTargetCrushingHitFallback", "handleDirectHitHullCheckResult",
@@ -68,6 +68,7 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
     _addedFlowKeys.push(...newFlowKeys);
 
     // ── Structure flow steps ──
+    flowSteps.set("npcOneStructStep", npcOneStructStep);
     flowSteps.set("rollStructureTable", altRollStructure);
     flowSteps.set("checkStructureMultipleOnes", structCheckMultipleOnes);
     flowSteps.set("structureInsertHullCheckButton", insertHullCheckButton);
@@ -87,6 +88,7 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
         if (idx > -1)
             StructureFlow.steps.splice(idx, 0, "applyStructureEffects");
     }
+    flows.get("StructureFlow")?.insertStepBefore?.("preStructureRollChecks", "npcOneStructStep");
 
     const SecondaryStructureFlow = flows.get("SecondaryStructureFlow");
     if (SecondaryStructureFlow?.steps) {

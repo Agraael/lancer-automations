@@ -104,6 +104,8 @@ export class LancerHUD {
         this._statusPanelAnchor    = null;
         this._subtypePanel         = null;
         this._suppressRefreshDepth = 0;
+        this._searchActive         = false;
+        this._categories           = null;
     }
 
     bind(token) {
@@ -123,6 +125,8 @@ export class LancerHUD {
         this._pendingCol4Refresh = null;
         clearTimeout(this._refreshTimer);
         this._refreshTimer = null;
+        this._searchActive = false;
+        this._categories   = null;
         $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
             $(this).remove();
         });
@@ -191,6 +195,7 @@ export class LancerHUD {
             return;
 
         const categories = this._buildCategories();
+        this._categories = categories;
 
         const actor = this._actor;
         const tokenName = this._token.name ?? actor.name ?? '';
@@ -216,6 +221,13 @@ export class LancerHUD {
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
+        // ── Search icon + input ──────────────────────────────────────────────────
+        const menuLabel = c1.find('.la-hud-col-label');
+        menuLabel.css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
+        const searchIcon = $(`<span class="la-hud-search-toggle" title="Search" style="cursor:pointer;opacity:0.55;font-size:1.15em;padding-left:4px;line-height:1;flex-shrink:0;">⌕</span>`);
+        menuLabel.append(searchIcon);
+        const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid #991e2a;font-size:0.8em;font-family:inherit;outline:none;">`);
+        menuLabel.after(searchBar);
         c1.prepend(statsEl);
         c1.prepend(titleEl);
 
@@ -244,6 +256,7 @@ export class LancerHUD {
         for (const cat of categories) {
             const row = this._makeRow(cat.label, true);
             row.on('mouseenter', () => {
+                this._searchActive = false;
                 _cancelCollapse();
                 if (/** @type {any} */ (cat).isStatusPanel) {
                     if (row.hasClass('la-hud-active') && this._statusPanel?.is(':visible'))
@@ -281,10 +294,14 @@ export class LancerHUD {
         const _scheduleCollapse = () => {
             clearTimeout(_leaveTimer);
             _leaveTimer = setTimeout(() => {
+                if (this._searchActive)
+                    return;
                 closeCol(c2);
                 closeCol(c3);
                 closeCol(c4);
-                if (this._subtypePanel) { this._subtypePanel.remove(); this._subtypePanel = null; }
+                if (this._subtypePanel) {
+                    this._subtypePanel.remove(); this._subtypePanel = null;
+                }
                 if (this._statusPanel) {
                     this._statusPanel.stop(true).remove();
                     this._statusPanel = null;
@@ -306,6 +323,41 @@ export class LancerHUD {
         c2.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
         c3.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
         c4.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
+        // Leaving any c1 category row toward the header area schedules collapse
+        c1.on('mouseleave', '.la-hud-row', _scheduleCollapse);
+        // Title / stats / menu-label area is above the item list — hovering it closes open columns
+        titleEl.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
+        statsEl.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
+        menuLabel.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
+
+        // ── Search toggle + live-filter ──────────────────────────────────────────
+        searchIcon.on('click', (ev) => {
+            ev.stopPropagation();
+            if (searchBar.is(':visible')) {
+                searchBar.val('').slideUp(120);
+                searchIcon.css('opacity', '0.55');
+                this._searchActive = false;
+                closeCol(c2); closeCol(c3); closeCol(c4);
+            } else {
+                searchBar.css({ display: 'none' }).slideDown(120, () => searchBar.trigger('focus'));
+                searchIcon.css('opacity', '1');
+            }
+        });
+        searchBar.on('input', () => {
+            const q = searchBar.val().trim().toLowerCase();
+            if (!q) {
+                this._searchActive = false;
+                closeCol(c2); return;
+            }
+            this._searchActive = true;
+            _cancelCollapse();
+            this._openSearchResults(c2, this._collectSearchResults(q));
+        });
+        searchBar.on('keydown', (ev) => {
+            if (ev.key === 'Escape')
+                searchIcon.trigger('click');
+        });
+        searchBar.on('focus', () => _cancelCollapse());
     }
 
     // ── Generic column populator ──────────────────────────────────────────────
@@ -1363,7 +1415,8 @@ export class LancerHUD {
     }
 
     _syncStatusPanelRows() {
-        if (!this._statusPanel || !this._actor) return;
+        if (!this._statusPanel || !this._actor)
+            return;
         const actor = this._actor;
         const hasSC = !!game.modules.get('statuscounter')?.active;
         this._statusPanel.find('[data-status-id]').each(function() {
@@ -1375,8 +1428,10 @@ export class LancerHUD {
             el.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
             const totalStack = hasSC ? effects.reduce((sum, /** @type {any} */ e) => sum + (e.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
             const parts = [];
-            if (hasSC && totalStack > 1) parts.push(`×${totalStack}`);
-            if (effects.length > 1) parts.push(`[${effects.length}]`);
+            if (hasSC && totalStack > 1)
+                parts.push(`×${totalStack}`);
+            if (effects.length > 1)
+                parts.push(`[${effects.length}]`);
             el.find('.la-status-badge').text(parts.join(' '));
         });
     }
@@ -1394,7 +1449,8 @@ export class LancerHUD {
         this._statusPanelAnchor = anchorRow;
         const actor = this._actor;
         const token = this._token;
-        if (!actor || !token) return;
+        if (!actor || !token)
+            return;
 
         // ── Module checks ──────────────────────────────────────────────────────
         const hasSC  = !!game.modules.get('statuscounter')?.active;
@@ -1424,28 +1480,36 @@ export class LancerHUD {
 
         const getStatusBadge = (/** @type {any} */ s) => {
             const effects = getEffectsForStatus(s.id);
-            if (!effects.length) return '';
+            if (!effects.length)
+                return '';
             const totalStack = hasSC ? effects.reduce((sum, e) => sum + getStack(e), 0) : 0;
             const parts = [];
-            if (hasSC && totalStack > 1) parts.push(`×${totalStack}`);
-            if (effects.length > 1) parts.push(`[${effects.length}]`);
+            if (hasSC && totalStack > 1)
+                parts.push(`×${totalStack}`);
+            if (effects.length > 1)
+                parts.push(`[${effects.length}]`);
             return parts.join(' ');
         };
 
         const buildStatusTooltip = (/** @type {any} */ s) => {
             const effects = getEffectsForStatus(s.id);
             const lines = [];
-            if (s.description) lines.push(`<div style="color:#bbb;margin-bottom:4px;line-height:1.4;">${s.description}</div>`);
+            if (s.description)
+                lines.push(`<div style="color:#bbb;margin-bottom:4px;line-height:1.4;">${s.description}</div>`);
             for (const eff of effects) {
                 const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const sc = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
                 let label = 'Base Effect';
-                if (la?.consumption) label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (la.consumption?.trigger ?? la.consumption?.type ?? 'Effect')}`;
-                else if (la?.linkedBonusId) label = 'Bonus Effect';
+                if (la?.consumption)
+                    label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (la.consumption?.trigger ?? la.consumption?.type ?? 'Effect')}`;
+                else if (la?.linkedBonusId)
+                    label = 'Bonus Effect';
                 const stackStr = sc && sc > 1 ? ` ×${sc}` : '';
-                if (effects.length > 1 || stackStr) lines.push(`<div style="font-weight:bold;color:#fff;margin-top:4px;">${label}${stackStr}</div>`);
+                if (effects.length > 1 || stackStr)
+                    lines.push(`<div style="font-weight:bold;color:#fff;margin-top:4px;">${label}${stackStr}</div>`);
                 const dur = la?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
-                if (dur?.label) lines.push(`<div style="color:#aaa;font-size:0.85em;margin-top:2px;">Duration: ${dur.label}</div>`);
+                if (dur?.label)
+                    lines.push(`<div style="color:#aaa;font-size:0.85em;margin-top:2px;">Duration: ${dur.label}</div>`);
             }
             return lines.length ? lines.join('') : null;
         };
@@ -1472,7 +1536,8 @@ export class LancerHUD {
         // ── Tooltip helper ─────────────────────────────────────────────────────
         const showTooltip = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
             const tip = buildStatusTooltip(s);
-            if (!tip) return null;
+            if (!tip)
+                return null;
             const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">${tip}</div>`);
             $('body').append(tt);
             const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
@@ -1498,7 +1563,8 @@ export class LancerHUD {
 
             let tooltipEl = /** @type {any} */ (null);
             rowEl.on('mouseenter', function() {
-                if (!$(this).data('active')) $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
+                if (!$(this).data('active'))
+                    $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 tooltipEl = showTooltip($(this), s);
             }).on('mouseleave', function() {
                 tooltipEl?.remove(); tooltipEl = null;
@@ -1581,7 +1647,8 @@ export class LancerHUD {
             this._suppressRefreshDepth++;
             try {
                 const ids = /** @type {any[]} */ ([...actor.effects]).map(/** @type {any} */ e => e.id);
-                if (ids.length) await actor.deleteEmbeddedDocuments('ActiveEffect', ids);
+                if (ids.length)
+                    await actor.deleteEmbeddedDocuments('ActiveEffect', ids);
                 gridEl.find('[data-status-id]').each(function() {
                     setRowActive($(this), false);
                     $(this).find('.la-status-badge').text('');
@@ -1604,7 +1671,8 @@ export class LancerHUD {
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cs.name}</span>
                 </div>`);
                 cRow.on('mouseenter', function() {
-                    if (!$(this).data('active')) $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
+                    if (!$(this).data('active'))
+                        $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 }).on('mouseleave', function() {
                     const a = $(this).data('active');
                     $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
@@ -1618,7 +1686,8 @@ export class LancerHUD {
                                 e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
                                 (e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name)
                             );
-                            if (eff) await tcsApi.removeStatus(actor, eff.id);
+                            if (eff)
+                                await tcsApi.removeStatus(actor, eff.id);
                         } else {
                             await tcsApi.addStatus(actor, cs.name, cs.icon, 1);
                         }
@@ -1652,7 +1721,9 @@ export class LancerHUD {
     }
 
     _openSubtypeManager(actor, statusConfig, effects, anchorRow) {
-        if (this._subtypePanel) { this._subtypePanel.remove(); this._subtypePanel = null; }
+        if (this._subtypePanel) {
+            this._subtypePanel.remove(); this._subtypePanel = null;
+        }
         const hasSC = !!game.modules.get('statuscounter')?.active;
         const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
@@ -1665,17 +1736,23 @@ export class LancerHUD {
         const hdr   = $(`<div style="${S_HDR}">${statusName} <span class="la-sub-close" style="cursor:pointer;margin-left:8px;opacity:0.8;">✕</span></div>`);
         const body  = $(`<div></div>`);
         panel.append(hdr, body);
-        hdr.find('.la-sub-close').on('click', () => { panel.remove(); this._subtypePanel = null; });
+        hdr.find('.la-sub-close').on('click', () => {
+            panel.remove(); this._subtypePanel = null;
+        });
 
         const refresh = () => {
             const current = /** @type {any[]} */ ([...actor.effects]).filter(e => effects.some(/** @type {any} */ o => o.id === e.id));
-            if (!current.length) { panel.remove(); this._subtypePanel = null; this._syncStatusPanelRows(); return; }
+            if (!current.length) {
+                panel.remove(); this._subtypePanel = null; this._syncStatusPanelRows(); return;
+            }
             body.empty();
             for (const eff of current) {
                 const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 let label = 'Base';
-                if (la?.consumption) label = 'Consume';
-                else if (la?.linkedBonusId) label = 'Bonus';
+                if (la?.consumption)
+                    label = 'Consume';
+                else if (la?.linkedBonusId)
+                    label = 'Bonus';
                 const stack = getStack(eff);
                 const row = $(`<div style="${S_ROW}" data-eid="${eff.id}">
                     <span style="flex:1;color:#ccc;text-transform:none;letter-spacing:0;">${label}</span>
@@ -1686,15 +1763,19 @@ export class LancerHUD {
                 </div>`);
                 row.find('.la-sub-minus').on('click', async () => {
                     const e = /** @type {any} */ (actor.effects).get(eff.id);
-                    if (!e) return;
+                    if (!e)
+                        return;
                     const s = getStack(e);
-                    if (s > 1) await e.update({ 'flags.statuscounter.value': s - 1, 'flags.statuscounter.visible': s - 1 > 1 });
-                    else await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                    if (s > 1)
+                        await e.update({ 'flags.statuscounter.value': s - 1, 'flags.statuscounter.visible': s - 1 > 1 });
+                    else
+                        await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                     refresh();
                 });
                 row.find('.la-sub-plus').on('click', async () => {
                     const e = /** @type {any} */ (actor.effects).get(eff.id);
-                    if (!e) return;
+                    if (!e)
+                        return;
                     const s = getStack(e);
                     await e.update({ 'flags.statuscounter.value': s + 1, 'flags.statuscounter.visible': true });
                     refresh();
@@ -1942,11 +2023,11 @@ export class LancerHUD {
         const ocLabels = ['—', '1d3', '1d6', '1d6+4'];
         const ocColor    = oc > 0 ? '#f88040' : '#555';
         const SEP = `<span style="color:#444;">│</span>`;
-        const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.28em;height:1.28em;vertical-align:middle;opacity:${repairs > 0 ? 1 : 0.3};">`;
+        const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;opacity:${repairs > 0 ? 1 : 0.3};">`;
         const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
-        const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.28em;height:1.28em;vertical-align:middle;opacity:${reaction ? 1 : 0.3};">`;
+        const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.47em;height:1.47em;vertical-align:middle;opacity:${reaction ? 1 : 0.3};">`;
         const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}🛡</span>` : '';
-        return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:4px 10px 5px;font-size:0.84em;color:#888;width:max-content;pointer-events:none;">` +
+        return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:5px 12px 6px;font-size:0.97em;color:#888;width:max-content;">` +
             `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
             `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` +
             `</div>` +
@@ -1954,6 +2035,74 @@ export class LancerHUD {
             `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabels[Math.min(oc, 3)]}</span>${SEP}${reactionImg}${reactionNum}` +
             `</div>` +
             `</div>`;
+    }
+
+    _collectSearchResults(query) {
+        const results = [];
+        const seen = new Map(); // normalized label → index in results
+        const walk = (items, catLabel) => {
+            for (const item of (items ?? [])) {
+                if (item.isSectionLabel)
+                    continue;
+                if (item.onClick) {
+                    const text = item.label.replace(/<[^>]+>/g, '').toLowerCase();
+                    if (text.includes(query)) {
+                        if (seen.has(text)) {
+                            // Merge category name into existing entry
+                            const idx = seen.get(text);
+                            if (!results[idx]._catLabel.split(' · ').includes(catLabel))
+                                results[idx]._catLabel += ' · ' + catLabel;
+                        } else {
+                            seen.set(text, results.length);
+                            results.push({ ...item, _catLabel: catLabel });
+                        }
+                    }
+                }
+                // Recurse into children regardless — many actions are nested under sub-headers
+                if (item.getChildren)
+                    walk(item.getChildren(), catLabel);
+            }
+        };
+        for (const cat of (this._categories ?? [])) {
+            if (cat.isStatusPanel)
+                continue;
+            walk(cat.getItems?.(), cat.label);
+        }
+        return results;
+    }
+
+    _openSearchResults(col, results) {
+        col.children(':not(.la-hud-col-label)').remove();
+        col.find('.la-hud-col-label').text('Results');
+        // Align top with first category row — same calculation _openCol uses for anchorRow
+        const firstRow = this._el.children().first().find('.la-hud-row').first();
+        const colTop = firstRow.length ? firstRow.offset().top - this._el.offset().top : 0;
+        col.css('top', colTop);
+        if (!results.length) {
+            col.append($(`<div style="${S_MUTED}">No results</div>`));
+        } else {
+            for (const item of results) {
+                const row = this._makeRow(item.label, false, item.icon ?? null, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
+                if (item.highlightBg) {
+                    const bc = item.highlightBorderColor ?? item.highlightBg;
+                    row.data('restingBg', item.highlightBg).data('restingBorder', bc).data('hoverBg', brighten(item.highlightBg));
+                    row.css({ background: item.highlightBg, borderLeftColor: bc });
+                }
+                if (item.hoverData) {
+                    const hd = item.hoverData; const token = this._token;
+                    row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
+                    row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
+                }
+                row.css('flex-wrap', 'wrap').prepend($(`<span style="width:100%;font-size:0.58em;color:#991e2a;text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;">${item._catLabel}</span>`));
+                row.on('click', () => item.onClick(row));
+                if (item.onRightClick)
+                    row.on('contextmenu', ev => {
+                        ev.preventDefault(); item.onRightClick(row);
+                    });
+                col.append(row);
+            }
+        }
+        col.stop(true).css({ opacity: 0, marginLeft: -10 }).show().animate({ opacity: 1, marginLeft: 0 }, 140);
     }
 
     _showPopupAt(popup, anchorEl) {
@@ -1992,6 +2141,9 @@ export class LancerHUD {
             return idx;
         };
         const c1 = this._el.children().first();
+        // Search active: don't save column state
+        if (this._searchActive)
+            return { searchActive: true };
         // Status panel open: c2 is hidden but c1 has an active row
         if (this._statusPanel?.is(':visible')) {
             const c1Idx = getActiveIdx(c1);
@@ -2010,7 +2162,7 @@ export class LancerHUD {
     }
 
     _restoreOpenPath(path) {
-        if (!path || path.c1Idx < 0)
+        if (!path || path.searchActive || path.c1Idx < 0)
             return;
         const c1 = this._el.children().first();
         const c1Row = c1.find('.la-hud-row').eq(path.c1Idx);

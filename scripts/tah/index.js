@@ -30,6 +30,7 @@ Hooks.on('init', () => {
         config: true,
         type: Boolean,
         default: false,
+        requiresReload: true,
         onChange: en => {
             if (!en)
                 hud.unbind();
