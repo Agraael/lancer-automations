@@ -11,15 +11,12 @@ function enabled() {
     return game.settings.get(MODULE, SETTING);
 }
 
-/** True if actor is the mech token's actor OR its linked pilot. */
+/** True if actor is any bound token's actor OR its linked pilot. */
 function isRelevantActor(actorId) {
-    if (!hud._token)
-        return false;
-    if (hud._token.actor?.id === actorId)
-        return true;
-    // Pilot linked to the mech
-    const pilotId = hud._token.actor?.system?.pilot?.value?.id;
-    return !!pilotId && pilotId === actorId;
+    return (hud._tokens ?? []).some(t =>
+        t.actor?.id === actorId ||
+        t.actor?.system?.pilot?.value?.id === actorId
+    );
 }
 
 Hooks.on('init', () => {
@@ -48,11 +45,14 @@ Hooks.on('init', () => {
 
 // ── Token selection ──────────────────────────────────────────────────────────
 
-Hooks.on('controlToken', (token, controlled) => {
+Hooks.on('controlToken', () => {
     if (!enabled())
         return;
-    if (controlled && ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type))
-        hud.bind(token);
+    const all = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(t =>
+        ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner
+    );
+    if (all.length > 0)
+        hud.bind(all);
     else
         hud.unbind();
 });
@@ -112,7 +112,7 @@ Hooks.on('deleteActiveEffect', (effect) => {
 Hooks.on('updateToken', (tokenDoc) => {
     if (!enabled())
         return;
-    if (hud._token?.id === tokenDoc.id){
+    if ((hud._tokens ?? []).some(t => t.id === tokenDoc.id)) {
         hud.scheduleRefresh();
         hud.updateStatsInPlace();
     }

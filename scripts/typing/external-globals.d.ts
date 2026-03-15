@@ -136,6 +136,7 @@ interface Actor {
 }
 
 interface Token {
+    actor?: Actor | null;
     elevationruler?: { measurementHistory?: any[];[key: string]: any };
     _movement?: { points: number[];[key: string]: any } | null;
     effects?: PIXI.Container & { bg?: any;[key: string]: any };

@@ -103,6 +103,7 @@ export class LancerHUD {
         this._c4              = null;
         this._c4AnchorRow       = null;
         this._token              = null;
+        this._tokens             = [];
         this._pendingCol4Refresh = null;
         this._pendingCol3Refresh = null;
         this._refreshTimer       = null;
@@ -119,12 +120,16 @@ export class LancerHUD {
         this._c4SourceItem  = null;   // c3 item whose getChildren() fills c4
     }
 
-    async bind(token) {
+    async bind(tokens) {
+        const arr = Array.isArray(tokens) ? tokens : [tokens];
         this.unbind();
-        if (!token.actor?.isOwner)
+        const valid = arr.filter(t => t.actor?.isOwner);
+        if (!valid.length)
             return;
-        this._token = token;
-        const actor = token.actor;
+        this._tokens = valid;
+        this._token  = valid[0];
+        // Pre-cache deployables for the primary token only
+        const actor = this._token.actor;
         const lids = [];
         for (const item of actor.items)
             for (const lid of getItemDeployables(item, actor))
@@ -138,7 +143,8 @@ export class LancerHUD {
         const el = this._el;
         this._el = this._c2 = this._c3 = this._c4 = null;
         this._c4AnchorRow = null;
-        this._token = null;
+        this._token   = null;
+        this._tokens  = [];
         this._pendingCol3Refresh = null;
         this._pendingCol4Refresh = null;
         clearTimeout(this._refreshTimer);
@@ -236,7 +242,9 @@ export class LancerHUD {
         this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
-        const tokenName = this._token.name ?? actor.name ?? '';
+        const tokenName = this._tokens.length > 1
+            ? `${this._tokens.length} TOKENS`
+            : (this._token.name ?? actor.name ?? '');
         const S_TOKEN_TITLE = [
             'padding:6px 12px 5px',
             'background:#1a1a1a',
@@ -369,6 +377,7 @@ export class LancerHUD {
         this._statusPanelInstance = new StatusPanel({
             actor: this._actor,
             token: this._token,
+            tokens: this._tokens,
             el:    hud,
             cancelCollapse:  _cancelCollapse,
             scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
@@ -449,9 +458,26 @@ export class LancerHUD {
     // ── Generic column populator ──────────────────────────────────────────────
     // col       — jQuery element to populate
     // items     — Item[] (see shape above)
+    // ── Multi-token intersection filter ──────────────────────────────────────
+
+    _filterIntersect(items) {
+        if (this._tokens.length <= 1)
+            return items;
+        const others = this._tokens.slice(1).map(t => t.actor);
+        return items.filter(item => {
+            if (item.isSectionLabel || item.inputCell)
+                return true;
+            const lid = item.hoverData?.item?.system?.lid;
+            if (!lid)
+                return true; // universal action (Basic Attack, Stabilize, etc.)
+            return others.every(a => /** @type {any} */ (a).items.some(i => i.system?.lid === lid));
+        });
+    }
+
     // anchorRow — the parent row this column aligns with vertically
 
     _openCol(col, items, anchorRow, { reposition = true } = {}) {
+        const filteredItems = this._filterIntersect(items);
         col.children(':not(.la-hud-col-label)').remove();
         // Use page-relative offset minus hud offset so the result is correct
         // regardless of which column anchorRow lives in (c1 or c2).
@@ -460,12 +486,12 @@ export class LancerHUD {
             col.css({ top: topInHud });
         }
 
-        if (!items.length) {
+        if (!filteredItems.length) {
             col.append(`<div style="${S_MUTED}">Empty</div>`);
             return;
         }
 
-        for (const item of items) {
+        for (const item of filteredItems) {
             if (item.isSectionLabel) {
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
                 col.append(`<div style="${S_COL_LABEL};display:flex;align-items:center;">${iconHtml}${item.label}</div>`);
@@ -555,6 +581,11 @@ export class LancerHUD {
                             this._pendingCol4Refresh = { fn: item.refreshCol4, anchor: this._c4AnchorRow };
                     }
                     await item.onClick();
+                    if (this._tokens.length > 1 && item.broadcastFn) {
+                        for (const t of this._tokens.slice(1)) {
+                            try { await item.broadcastFn(t, t.actor); } catch(e) { console.error('[TAH broadcast]', e); }
+                        }
+                    }
                 });
             }
             if (item.onRightClick) {
@@ -638,10 +669,11 @@ export class LancerHUD {
 
     // ── Category list — reorder these lines to reorder the HUD ──────────────
     _buildCategories() {
-        const isMech       = this._actor.type === 'mech';
-        const isDeployable = this._actor.type === 'deployable';
-        const isPilot      = this._actor.type === 'pilot';
-        const isNpc        = this._actor.type === 'npc';
+        const types        = this._tokens.map(t => t.actor?.type);
+        const isMech       = types.every(t => t === 'mech');
+        const isDeployable = types.every(t => t === 'deployable');
+        const isPilot      = types.every(t => t === 'pilot');
+        const isNpc        = types.every(t => t === 'npc');
         return [
             this._catAttacks(),
             ...(isDeployable ? [] : [this._catWeapons()]),
@@ -739,7 +771,7 @@ export class LancerHUD {
             label: 'Actions',
             colLabel: 'Actions',
             getItems: () => [
-                { label: 'Reload', icon: 'modules/lancer-automations/icons/reload.svg', onClick: () => reloadOneWeapon(token), onRightClick: ap({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
+                { label: 'Reload', icon: 'modules/lancer-automations/icons/reload.svg', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: ap({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
                 { label: 'Mount',  icon: 'systems/lancer/assets/icons/white/mech.svg',  onClick: () => executeSimpleActivation(actor, { title: 'Mount',  action: { name: 'Mount',  activation: 'Full' }, detail: 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.' }), onRightClick: ap({ name: 'Mount',  activation: 'Full', detail: 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.' }) },
                 { label: 'Jockey', icon: 'modules/lancer-automations/icons/ram.svg',    onClick: () => executeSimpleActivation(actor, { title: 'Jockey', action: { name: 'Jockey', activation: 'Full' }, detail: 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).' }), onRightClick: ap({ name: 'Jockey', activation: 'Full', detail: 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).' }) },
                 ...this._getActionsByActivation(actor, 'Quick', 'Actions'),
@@ -805,20 +837,20 @@ export class LancerHUD {
             colLabel: 'Attacks',
             getItems: () => [
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
-                    { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
-                    { label: 'Ram',               icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Ram',               action: { name: 'Ram',               activation: 'Quick' }, detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }),               onRightClick: ap({ name: 'Ram',               activation: 'Quick', detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }) },
-                    { label: 'Grapple',           icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Grapple',           action: { name: 'Grapple',           activation: 'Quick' }, detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }),                                                                                                                         onRightClick: ap({ name: 'Grapple',           activation: 'Quick', detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }) },
-                    { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
+                    { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
+                    { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
+                    { label: 'Ram',               icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Ram',               action: { name: 'Ram',               activation: 'Quick' }, detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }),               broadcastFn: (t, a) => executeSimpleActivation(a, { title: 'Ram',     action: { name: 'Ram',     activation: 'Quick' }, detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }), onRightClick: ap({ name: 'Ram',               activation: 'Quick', detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }) },
+                    { label: 'Grapple',           icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Grapple',           action: { name: 'Grapple',           activation: 'Quick' }, detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }),                                                                                                                         broadcastFn: (t, a) => executeSimpleActivation(a, { title: 'Grapple', action: { name: 'Grapple', activation: 'Quick' }, detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }),                     onRightClick: ap({ name: 'Grapple',           activation: 'Quick', detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }) },
+                    { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
                 ] : []),
                 ...(actor.type === 'pilot' ? [
-                    { label: 'Fight', icon: 'systems/lancer/assets/icons/white/melee.svg', onClick: () => executeFight(actor), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) },
+                    { label: 'Fight', icon: 'systems/lancer/assets/icons/white/melee.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) },
                 ] : []),
                 { isSectionLabel: true, label: 'Tools' },
-                { label: 'Basic Attack',  icon: 'systems/lancer/assets/icons/mech_weapon.svg',                  onClick: () => executeBasicAttack(actor) },
-                { label: 'Damage',        icon: 'systems/lancer/assets/icons/melee.svg',                   onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic') },
-                { label: 'Throw Weapon',  icon: 'systems/lancer/assets/icons/thrown.svg',              onClick: () => openThrowMenu(actor) },
-                { label: 'Pickup Weapon', icon: 'modules/lancer-automations/icons/pickup.svg',             onClick: () => pickupWeaponToken(token), keepOpen: true },
+                { label: 'Basic Attack',  icon: 'systems/lancer/assets/icons/mech_weapon.svg', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a) },
+                { label: 'Damage',        icon: 'systems/lancer/assets/icons/melee.svg',       onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic') },
+                { label: 'Throw Weapon',  icon: 'systems/lancer/assets/icons/thrown.svg',      onClick: () => openThrowMenu(actor),    broadcastFn: (t, a) => openThrowMenu(a) },
+                { label: 'Pickup Weapon', icon: 'modules/lancer-automations/icons/pickup.svg', onClick: () => pickupWeaponToken(token), broadcastFn: (t) => pickupWeaponToken(t), keepOpen: true },
             ].map(it => it.isSectionLabel || !it.onClick
                 ? it
                 : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Attacks' } }),
@@ -914,6 +946,17 @@ export class LancerHUD {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
         const basicChildren = () => {
+            const BCAST = {
+                'Boost':     { name: 'Boost',     activation: 'Quick' },
+                'Aid':       { name: 'Aid',        activation: 'Quick' },
+                'Hide':      { name: 'Hide',       activation: 'Quick' },
+                'Search':    { name: 'Search',     activation: 'Quick' },
+                'Shut Down': { name: 'Shut Down',  activation: 'Quick' },
+                'Handle':    { name: 'Handle',     activation: 'Protocol/Quick' },
+                'Interact':  { name: 'Interact',   activation: 'Protocol/Quick' },
+                'Prepare':   { name: 'Prepare',    activation: 'Quick' },
+                'Eject':     { name: 'Eject',      activation: 'Quick' },
+            };
             const items = [
                 { label: 'Boost',     icon: 'modules/lancer-automations/icons/speedometer.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Boost',       action: { name: 'Boost',       activation: 'Quick'          }, detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }) },
                 { label: 'Aid',       icon: 'modules/lancer-automations/icons/medical-pack.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Aid',       action: { name: 'Aid',       activation: 'Quick'          }, detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }) },
@@ -926,8 +969,12 @@ export class LancerHUD {
                 { label: 'Eject',     icon: 'modules/lancer-automations/icons/parachute.svg',              onClick: () => executeSimpleActivation(actor, { title: 'Eject',     action: { name: 'Eject',     activation: 'Quick'          }, detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }),                                                                                                                                 onRightClick: ap({ name: 'Eject',     activation: 'Quick',          detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }) },
             ];
             if (actor.type === 'mech')
-                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
-            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
+                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
+            return items.map(it => {
+                const act = BCAST[it.label];
+                const broadcastFn = act ? (_t, a) => executeSimpleActivation(a, { title: it.label, action: act, detail: '' }) : it.broadcastFn;
+                return { ...it, broadcastFn, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } };
+            });
         };
         return {
             label: 'Quick Actions',
@@ -940,14 +987,23 @@ export class LancerHUD {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
         const basicChildren = () => {
+            const BCAST = {
+                'Boot Up':   { name: 'Boot Up',   activation: 'Full' },
+                'Disengage': { name: 'Disengage', activation: 'Full' },
+                'Dismount':  { name: 'Dismount',  activation: 'Full' },
+            };
             const items = [
                 { label: 'Boot Up',   icon: 'modules/lancer-automations/icons/boot.svg',      onClick: () => executeSimpleActivation(actor, { title: 'Boot Up',   action: { name: 'Boot Up',   activation: 'Full' }, detail: 'You can BOOT UP a mech that you are piloting as a full action, clearing SHUT DOWN and restoring your mech to a powered state.' }),                                                                                                                                                                                                     onRightClick: ap({ name: 'Boot Up',   activation: 'Full', detail: 'You can BOOT UP a mech that you are piloting as a full action, clearing SHUT DOWN and restoring your mech to a powered state.' }) },
                 { label: 'Disengage', icon: 'modules/lancer-automations/icons/disengage.svg', onClick: () => executeSimpleActivation(actor, { title: 'Disengage', action: { name: 'Disengage', activation: 'Full' }, detail: 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.' }),                                                                                                                                                                                                                         onRightClick: ap({ name: 'Disengage', activation: 'Full', detail: 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.' }) },
                 { label: 'Dismount',  icon: 'modules/lancer-automations/icons/dismount.svg',  onClick: () => executeSimpleActivation(actor, { title: 'Dismount',  action: { name: 'Dismount',  activation: 'Full' }, detail: 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.' }), onRightClick: ap({ name: 'Dismount',  activation: 'Full', detail: 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.' }) },
             ];
             if (actor.type === 'mech')
-                items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose one: Cool your mech, clearing all heat and ending the EXPOSED status; or Spend 1 Repair to heal your mech for half its max HP (rounded up).' }) });
-            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
+                items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose one: Cool your mech, clearing all heat and ending the EXPOSED status; or Spend 1 Repair to heal your mech for half its max HP (rounded up).' }) });
+            return items.map(it => {
+                const act = BCAST[it.label];
+                const broadcastFn = act ? (_t, a) => executeSimpleActivation(a, { title: it.label, action: act, detail: '' }) : it.broadcastFn;
+                return { ...it, broadcastFn, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } };
+            });
         };
         return {
             label: 'Full Action',
@@ -969,8 +1025,8 @@ export class LancerHUD {
                 const isDeployable = actor.type === 'deployable' || actor.type === 'pilot';
                 const items = [
                     ...(isDeployable ? [] : [
-                        { label: 'Brace',     icon: 'modules/lancer-automations/icons/brace.svg',         highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Brace',     action: { name: 'Brace',     activation: 'Reaction' }, detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }), onRightClick: ap({ name: 'Brace',     activation: 'Reaction', detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }) },
-                        { label: 'Overwatch', icon: 'systems/lancer/assets/icons/reaction.svg',     highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Overwatch', action: { name: 'Overwatch', activation: 'Reaction' }, detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }),                                                                                                                                                                                                                                                                                                                                                                                                                                     onRightClick: ap({ name: 'Overwatch', activation: 'Reaction', detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }) },
+                        { label: 'Brace',     icon: 'modules/lancer-automations/icons/brace.svg',         highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Brace',     action: { name: 'Brace',     activation: 'Reaction' }, detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }), broadcastFn: (_t, a) => executeSimpleActivation(a, { title: 'Brace',     action: { name: 'Brace',     activation: 'Reaction' }, detail: '' }), onRightClick: ap({ name: 'Brace',     activation: 'Reaction', detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }) },
+                        { label: 'Overwatch', icon: 'systems/lancer/assets/icons/reaction.svg',     highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Overwatch', action: { name: 'Overwatch', activation: 'Reaction' }, detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }), broadcastFn: (_t, a) => executeSimpleActivation(a, { title: 'Overwatch', action: { name: 'Overwatch', activation: 'Reaction' }, detail: '' }), onRightClick: ap({ name: 'Overwatch', activation: 'Reaction', detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }) },
                     ]),
                     ...this._getActionsByActivation(actor, 'Reaction', 'Actions'),
                 ];
@@ -992,7 +1048,7 @@ export class LancerHUD {
             label: 'Protocols',
             colLabel: 'Protocols',
             getItems: () => [
-                ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), onRightClick: ap({ name: 'Overcharge', activation: 'Protocol', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets at the start of your next scene.' }) }] : []),
+                ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: ap({ name: 'Overcharge', activation: 'Protocol', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets at the start of your next scene.' }) }] : []),
                 ...this._getActionsByActivation(actor, 'Protocol', 'Actions'),
             ].map(it => /** @type {any} */ (it).hoverData || !it.onClick ? it : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }),
         };
@@ -1084,8 +1140,8 @@ export class LancerHUD {
         ];
 
         const gameplayItems = [
-            { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token) },
-            { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow() },
+            { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
+            { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginFullRepairFlow() },
             ...(isMechOrNpc ? [
                 {
                     label: 'Structure',
@@ -1160,6 +1216,7 @@ export class LancerHUD {
                         badge: status.badge ?? null,
                         badgeColor: status.badgeColor ?? null,
                         icon: item.img ?? null,
+                        hoverData: { actor, item, action: null, category: 'Systems' },
                         ...(this._systemHasChildren(item, actor) ? { childColLabel: item.name, getChildren: () => this._systemChildren(item, actor) } : {}),
                         highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
                         highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
@@ -1170,7 +1227,6 @@ export class LancerHUD {
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
                             toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p, this._depthCallbacks()) });
                         },
-                        hoverData: { actor, item, action: null, category: 'Systems' },
                     };
                 });
             },
@@ -1868,12 +1924,14 @@ export class LancerHUD {
                         label: 'ATTACK',
                         icon: 'systems/lancer/assets/icons/mech_weapon.svg',
                         onClick: () => weapon.beginWeaponAttackFlow(),
+                        broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */ (w).beginWeaponAttackFlow(); },
                         onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                     },
                     {
                         label: 'FIGHT',
                         icon: 'systems/lancer/assets/icons/white/melee.svg',
                         onClick: () => executeFight(actor, weapon),
+                        broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); executeFight(a, w); },
                     },
                 ],
                 modItem,
@@ -1890,6 +1948,7 @@ export class LancerHUD {
                     label: 'ATTACK',
                     icon: 'systems/lancer/assets/icons/mech_weapon.svg',
                     onClick: () => weapon.beginWeaponAttackFlow(),
+                    broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */ (w).beginWeaponAttackFlow(); },
                     onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                 },
                 {
@@ -1900,6 +1959,10 @@ export class LancerHUD {
                     onClick: () => isSuperHeavy
                         ? executeBarrage(actor, bypassMount)
                         : executeSkirmish(actor, bypassMount),
+                    broadcastFn: (t, a) => {
+                        const bm = { slots: [{ weapon: { value: /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid) } }] };
+                        return isSuperHeavy ? executeBarrage(a, bm) : executeSkirmish(a, bm);
+                    },
                 },
             ],
             modItem,
@@ -2005,6 +2068,18 @@ export class LancerHUD {
                         si.beginActivationFlow(rankIdx ?? 0);
                     else
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
+                },
+                broadcastFn: (t, a) => {
+                    const si = /** @type {any} */ (sourceItem);
+                    if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
+                        const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
+                        if (equiv) equiv.beginSystemFlow();
+                    } else if (si?.type === 'talent') {
+                        const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
+                        if (equiv) equiv.beginActivationFlow(rankIdx ?? 0);
+                    } else {
+                        executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' });
+                    }
                 },
                 onRightClick: this._actionPopup(action, sourceItem),
                 hoverData: { actor, item: sourceItem ?? null, action, category },

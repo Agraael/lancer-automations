@@ -32,9 +32,10 @@ const S_COL_LABEL = [
 ].join(';') + ';';
 
 export class StatusPanel {
-    constructor({ actor, token, el, cancelCollapse, scheduleCollapse, incDepth, decDepth }) {
+    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth }) {
         this._actor           = actor;
         this._token           = token;
+        this._tokens          = tokens ?? [token];
         this._el              = el;
         this._cancelCollapse  = cancelCollapse;
         this._scheduleCollapse = scheduleCollapse;
@@ -245,7 +246,7 @@ export class StatusPanel {
                         const eff = effects[0];
                         await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                     } else {
-                        await /** @type {any} */ (token).toggleEffect(s);
+                        for (const t of this._tokens) await /** @type {any} */ (t).toggleEffect(s);
                     }
                     updateRowBadge(rowEl, s);
                     setRowActive(rowEl, isActive(s));
@@ -266,7 +267,7 @@ export class StatusPanel {
                     // Right-click on inactive: same as left-click toggle
                     this._incDepth();
                     try {
-                        await /** @type {any} */ (token).toggleEffect(s);
+                        for (const t of this._tokens) await /** @type {any} */ (t).toggleEffect(s);
                         updateRowBadge(rowEl, s);
                         setRowActive(rowEl, isActive(s));
                     } finally {
@@ -282,6 +283,11 @@ export class StatusPanel {
                         await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                     } else {
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                        // Broadcast removal to all other tokens
+                        for (const t of this._tokens.slice(1)) {
+                            const te = [...t.actor.effects].find(e => e.statuses?.has(s.id) && !e.disabled);
+                            if (te) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [te.id]);
+                        }
                     }
                     updateRowBadge(rowEl, s);
                     setRowActive(rowEl, isActive(s));
@@ -375,9 +381,13 @@ export class StatusPanel {
                             const eff = effs[0];
                             await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                         } else if (effs.length === 0) {
-                            await tcsApi.addStatus(actor, cs.name, cs.icon, 1);
+                            for (const t of this._tokens) await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
                         } else {
                             await tcsApi.removeStatus(actor, effs[0].id);
+                            for (const t of this._tokens.slice(1)) {
+                                const eff = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
+                                if (eff) await tcsApi.removeStatus(t.actor, eff.id);
+                            }
                         }
                         updateCRow();
                     } finally {
@@ -396,7 +406,7 @@ export class StatusPanel {
                     if (effs.length === 0) {
                         this._incDepth();
                         try {
-                            await tcsApi.addStatus(actor, cs.name, cs.icon, 1);
+                            for (const t of this._tokens) await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
                             updateCRow();
                         } finally {
                             this._decDepth();
@@ -411,6 +421,10 @@ export class StatusPanel {
                             await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                         } else {
                             await tcsApi.removeStatus(actor, eff.id);
+                            for (const t of this._tokens.slice(1)) {
+                                const oe = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
+                                if (oe) await tcsApi.removeStatus(t.actor, oe.id);
+                            }
                         }
                         updateCRow();
                     } finally {

@@ -273,6 +273,62 @@ export function hasReactionAvailable(tokenOrActor) {
 }
 
 /**
+ * Sets reaction availability for an actor.
+ * @param {Token|Actor} actorOrToken
+ * @param {boolean} value  true = reaction available, false = reaction spent
+ * @returns {Promise<void>}
+ */
+export async function setReaction(actorOrToken, value) {
+    const actor = actorOrToken?.actor ?? actorOrToken;
+    if (!actor)
+        return;
+    await actor.update({ "system.action_tracker.reaction": Boolean(value) });
+}
+
+/**
+ * Sets a resource value on an item — uses, loaded, charged, or talent counter.
+ *
+ * Detection order:
+ *   1. Talent items               → system.counters[counterIndex].value (clamped to counter min/max)
+ *   2. Items with uses.max > 0    → system.uses.value (clamped 0..max)
+ *   3. Items with a loaded field  → system.loaded (Boolean(nb))
+ *   4. Items with a charged field → system.charged (Boolean(nb))
+ *
+ * @param {Item} item
+ * @param {number|boolean} nb  Target value. For loaded/charged: truthy/falsy. For uses/counters: number.
+ * @param {number} [counterIndex=0]  For talent items: index into system.counters.
+ * @returns {Promise<void>}
+ */
+export async function setItemResource(item, nb, counterIndex = 0) {
+    if (!item) return;
+
+    if (item.type === 'talent') {
+        const counters = item.system?.counters ?? [];
+        const counter = counters[counterIndex];
+        if (!counter) return;
+        const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(nb))));
+        await item.update({ [`system.counters.${counterIndex}.value`]: clamped });
+        return;
+    }
+
+    const uses = item.system?.uses;
+    if (uses && uses.max > 0) {
+        const clamped = Math.max(0, Math.min(uses.max, Math.round(Number(nb))));
+        await item.update({ "system.uses.value": clamped });
+        return;
+    }
+
+    if (item.system?.loaded !== undefined) {
+        await item.update({ "system.loaded": Boolean(nb) });
+        return;
+    }
+
+    if (item.system?.charged !== undefined) {
+        await item.update({ "system.charged": Boolean(nb) });
+    }
+}
+
+/**
  * Adds a tag to an item.
  * @param {Item} item - The item document to modify.
  * @param {Object} tagData - The tag object to add (e.g. { id: "tg_heat_self", val: "2" }).
@@ -1461,6 +1517,8 @@ export const MiscAPI = {
     executeSimpleActivation,
     executeReactorMeltdown,
     executeReactorExplosion,
+    setReaction,
+    setItemResource,
     addItemTag,
     removeItemTag,
     findItemByLid,

@@ -51,6 +51,9 @@
   - [`getMaxWeaponReach_WithBonus`](#getmaxweaponreach_withbonusinput)
   - [`getWeaponType`](#getweapontypeitem)
   - [`getItemType`](#getitemtypeitem)
+- [Resource Management](#resource-management)
+  - [`setReaction`](#setreactionactorotoken-value)
+  - [`setItemResource`](#setitemresourceitem-nb-counterindex)
 - [Interactive Player Tools](#interactive-player-tools)
   - [`chooseToken`](#choosetokencastertoken-options)
   - [`placeZone`](#placezonecastertoken-options)
@@ -592,6 +595,41 @@ Returns the Lancer item type string (e.g. `"Weapon"`, `"System"`, `"mech_weapon"
 | `item` | `Item` | The item to inspect |
 
 **Returns:** `string`
+
+---
+
+## Resource Management
+
+#### `setReaction(actorOrToken, value)`
+
+Sets the reaction availability flag on an actor's action tracker.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actorOrToken` | `Token\|Actor` | The token or actor to update |
+| `value` | `boolean` | `true` = reaction available, `false` = reaction spent |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `setItemResource(item, nb, counterIndex?)`
+
+Sets a resource value on an item. Auto-detects the resource type.
+
+Detection order:
+1. **Talent** → `system.counters[counterIndex].value` (clamped to counter `min`/`max`)
+2. **Uses** (`uses.max > 0`) → `system.uses.value` (clamped `0..max`)
+3. **Loaded** → `system.loaded` (`Boolean(nb)`)
+4. **Charged** → `system.charged` (`Boolean(nb)`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `item` | `Item` | *required* | The item document to update |
+| `nb` | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
+| `counterIndex` | `number` | `0` | For talent items: which counter to update. |
+
+**Returns:** `Promise<void>`
 
 ---
 

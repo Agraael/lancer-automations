@@ -590,7 +590,7 @@ export function getDefaultGeneralReactionRegistry() {
             forceSynchronous: true,
             triggerSelf: true,
             triggerOther: false,
-            outOfCombat: true,
+            outOfCombat: false,
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onUpdate") {
                     const c = triggerData.change || {};
