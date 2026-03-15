@@ -745,11 +745,24 @@ Returns an array of all weapon, mech_weapon, and npc_feature (Weapon) items on a
 
 ---
 
-#### `reloadOneWeapon(actorOrToken, targetName)`
+#### `reloadOneWeapon(actorOrToken, targetName?)`
 
 Prompts to select and reload an unloaded Loading weapon on an actor.
 
 **Returns:** `Promise<Item|null>`
+
+---
+
+#### `rechargeSystem(actorOrToken, targetName?)`
+
+Prompts to select a depleted system and restores it. Targets `mech_system`, `pilot_gear`, and NPC non-weapon features with `tg_limited` (uses ≤ 0) or `tg_recharge` (`charged === false`).
+
+**Returns:** `Promise<Item|null>`
+
+**Example:**
+```js
+await api.rechargeSystem(reactorToken);
+```
 
 ---
 
@@ -891,19 +904,20 @@ await api.addExtraDeploymentLids(myNpcFeature, ["dep_turret_t1", "dep_turret_t2"
 
 ---
 
-#### `addExtraActions(item, actions)`
-Adds extra action objects to an item via flags (`lancer-automations.extraActions`).
+#### `addExtraActions(target, actions)`
+Adds extra action objects via flags (`lancer-automations.extraActions`). Accepts an Item, Token, or Actor. Items store on the item; tokens/actors store on the actor.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `item` | `Item` | The Foundry Item document to update |
+| `target` | `Item\|Token\|Actor` | The document to update |
 | `actions` | `Object\|Array<Object>` | A single action object or array of action objects to add |
 
-**Returns:** `Promise<Item>`
+**Returns:** `Promise<Item|Actor>`
 
 **Example:**
 ```js
 await api.addExtraActions(myItem, { name: "Suppressive Fire", activation: "Quick", detail: "..." });
+await api.addExtraActions(myToken, { name: "Custom Strike", activation: "Quick", detail: "..." });
 ```
 
 ---
@@ -916,6 +930,36 @@ Returns the effective actions for an item, merging `system.actions` with any ext
 | `item` | `Item` | The item document |
 
 **Returns:** `Object[]`
+
+---
+
+#### `getActorActions(tokenOrActor)`
+Returns extra actions stored on an actor/token via `addExtraActions`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tokenOrActor` | `Token\|Actor` | The token or actor to read from |
+
+**Returns:** `Object[]`
+
+---
+
+#### `removeExtraActions(target, filter?)`
+Removes extra actions from an item, token, or actor.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `target` | `Item\|Token\|Actor` | The document to update |
+| `filter` | `Function\|string\|string[]\|null` | Predicate, action name, array of names, or null to clear all |
+
+**Returns:** `Promise<void>`
+
+**Example:**
+```js
+await api.removeExtraActions(myToken, "Custom Strike");   // by name
+await api.removeExtraActions(myItem, a => a.activation === "Quick"); // by predicate
+await api.removeExtraActions(myToken);                    // clear all
+```
 
 ---
 
@@ -1044,9 +1088,13 @@ These functions accept either a string `tokenId` or a `Token` document/object.
       },
       unintentional: number,
       nbBoostUsed: number,
-      startPosition: { x, y }
+      startPosition: { x, y },
+      movementCap: number   // max movement allowed this turn; set at turn start to actor speed (0 if immobilized)
   }
   ```
+
+- **`increaseMovementCap(tokenOrId, value)`**
+  Adds `value` to the token's movement cap for the current turn. Used by the Boost general reaction to grant extra movement.
 
 ---
 
