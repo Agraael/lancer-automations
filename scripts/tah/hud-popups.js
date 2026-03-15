@@ -16,7 +16,8 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
     const pw = popup.outerWidth(), ph = popup.outerHeight();
     const wx = window.innerWidth,  wy = window.innerHeight;
     let px = offset.left + anchorEl.outerWidth() + 2;
-    if (px + pw > wx - 10)
+    const flipped = px + pw > wx - 10;
+    if (flipped)
         px = offset.left - pw - 2;
     let py = offset.top;
     if (py + ph > wy - 10)
@@ -27,6 +28,29 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
     laBindPopupBehavior(popup);
     // Hovering the popup keeps columns alive
     popup.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
+    // Invisible bridge over the gap between the anchor row and the popup — prevents
+    // mouseleave from firing on the HUD while the mouse crosses the gap.
+    if (!flipped) {
+        const anchorRight = offset.left + anchorEl.outerWidth();
+        const bridgeW = finalLeft - anchorRight;
+        if (bridgeW > 0) {
+            const bridge = $('<div class="la-hud-popup-bridge">').css({
+                position: 'fixed',
+                left: anchorRight,
+                top: Math.max(10, py),
+                width: bridgeW,
+                height: Math.min(ph, anchorEl.outerHeight() + 20),
+                zIndex: 9998,
+                pointerEvents: 'all',
+            });
+            bridge.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
+            $('body').append(bridge);
+            const mo = new MutationObserver(() => {
+                if (!document.contains(popup[0])) { bridge.remove(); mo.disconnect(); }
+            });
+            mo.observe(document.body, { childList: true });
+        }
+    }
 }
 
 /**
