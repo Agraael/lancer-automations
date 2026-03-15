@@ -36,6 +36,14 @@ Hooks.on('init', () => {
                 hud.unbind();
         },
     });
+    game.settings.register(MODULE, 'tah.clickToOpen', {
+        name: 'TAH: Click to Open',
+        hint: 'Open HUD categories and sub-menus on click instead of hover. Takes effect on next HUD render.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+    });
 });
 
 // ── Token selection ──────────────────────────────────────────────────────────

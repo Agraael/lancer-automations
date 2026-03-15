@@ -110,6 +110,7 @@ export class LancerHUD {
         this._suppressRefreshDepth = 0;
         this._searchActive         = false;
         this._categories           = null;
+        this._clickToOpen          = false;
         // Track what's currently open in each column for in-place refresh
         this._c2Category    = null;   // category whose getItems() fills c2
         this._c2AnchorRow   = null;   // c1 row that opened c2
@@ -144,6 +145,7 @@ export class LancerHUD {
         this._refreshTimer = null;
         this._searchActive = false;
         this._categories   = null;
+        $(document).off('mousedown.la-hud-cto');
         $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
             $(this).remove();
         });
@@ -230,6 +232,8 @@ export class LancerHUD {
 
         const categories = this._buildCategories();
         this._categories = categories;
+        const clickToOpen = game.settings.get('lancer-automations', 'tah.clickToOpen') ?? false;
+        this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
         const tokenName = this._token.name ?? actor.name ?? '';
@@ -289,22 +293,25 @@ export class LancerHUD {
 
         for (const cat of categories) {
             const row = this._makeRow(cat.label, true);
-            row.on('mouseenter', () => {
+            const openCat = () => {
                 this._searchActive = false;
                 _cancelCollapse();
                 if (/** @type {any} */ (cat).isStatusPanel) {
-                    if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible)
+                    if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible) {
+                        if (clickToOpen) { this._statusPanelInstance.close(); _clearC1Active(); }
                         return;
+                    }
                     this._setActive(c1, row, true);
                     closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
                     this._statusPanelInstance.open(row);
                     return;
                 }
-                if (row.hasClass('la-hud-active') && c2.is(':visible'))
+                if (row.hasClass('la-hud-active') && c2.is(':visible')) {
+                    if (clickToOpen) { closeCol(c2); closeCol(c3); closeCol(c4); _clearC1Active(); }
                     return;
-                if (this._statusPanelInstance?.isVisible) {
-                    this._statusPanelInstance.close();
                 }
+                if (this._statusPanelInstance?.isVisible)
+                    this._statusPanelInstance.close();
                 this._setActive(c1, row, true);
                 closeCol(c3, 80);
                 closeCol(c4, 80);
@@ -315,7 +322,21 @@ export class LancerHUD {
                 c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
                     $(this).css('pointerEvents', '');
                 });
-            });
+            };
+            if (clickToOpen) {
+                row.on('mouseenter', () => {
+                    _cancelCollapse();
+                    if (!row.hasClass('la-hud-active'))
+                        row.css({ background: BG_HOVER });
+                });
+                row.on('mouseleave', () => {
+                    if (!row.hasClass('la-hud-active'))
+                        row.css({ background: row.data('restingBg') ?? BG_DEFAULT });
+                });
+                row.on('click', openCat);
+            } else {
+                row.on('mouseenter', openCat);
+            }
             c1.append(row);
         }
 
@@ -350,28 +371,49 @@ export class LancerHUD {
             token: this._token,
             el:    hud,
             cancelCollapse:  _cancelCollapse,
-            scheduleCollapse: _scheduleCollapse,
+            scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
             incDepth: () => this._suppressRefreshDepth++,
             decDepth: () => this._suppressRefreshDepth--,
         });
         hud.on('mouseleave', () => {
-            _clearC1Active();
-            _scheduleCollapse();
+            if (!clickToOpen) {
+                _clearC1Active();
+                _scheduleCollapse();
+            }
         }).on('mouseenter', _cancelCollapse);
-        c2.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
-        c3.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
-        c4.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
-        // Leaving any c1 category row toward the header area schedules collapse
-        c1.on('mouseleave', '.la-hud-row', _scheduleCollapse);
+        if (!clickToOpen) {
+            c2.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
+            c3.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
+            c4.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
+            // Leaving any c1 category row toward the header area schedules collapse
+            c1.on('mouseleave', '.la-hud-row', _scheduleCollapse);
+        } else {
+            c2.on('mouseenter', _cancelCollapse);
+            c3.on('mouseenter', _cancelCollapse);
+            c4.on('mouseenter', _cancelCollapse);
+            // Click outside the HUD to collapse
+            $(document).on('mousedown.la-hud-cto', (ev) => {
+                if (!this._el) return;
+                if (!$.contains(this._el[0], /** @type {Element} */ (ev.target)) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length) {
+                    closeCol(c2); closeCol(c3); closeCol(c4);
+                    this._statusPanelInstance?.close();
+                    _clearC1Active();
+                    $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() { $(this).remove(); });
+                }
+            });
+        }
         // Title / stats / menu-label area is above the item list — hovering it closes open columns
         titleEl.on('mouseenter', () => {
-            _clearC1Active(); _scheduleCollapse();
+            _clearC1Active();
+            if (!clickToOpen) _scheduleCollapse();
         });
         statsEl.on('mouseenter', () => {
-            _clearC1Active(); _scheduleCollapse();
+            _clearC1Active();
+            if (!clickToOpen) _scheduleCollapse();
         });
         menuLabel.on('mouseenter', () => {
-            _clearC1Active(); _scheduleCollapse();
+            _clearC1Active();
+            if (!clickToOpen) _scheduleCollapse();
         });
 
         // ── Search toggle + live-filter ──────────────────────────────────────────
@@ -479,7 +521,7 @@ export class LancerHUD {
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
 
-            if (col !== this._c4) {
+            if (col !== this._c4 && !this._clickToOpen) {
                 row.on('mouseenter', () => {
                     $('.la-hud-popup').remove();
                     if (col === this._c2 && !hasChildren) {
@@ -535,13 +577,24 @@ export class LancerHUD {
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
             }
             if (hasChildren) {
-                row.on('mouseenter', () => {
+                const openChild = () => {
                     if (col === this._c2 && row.hasClass('la-hud-active') && this._c3.is(':visible')) {
-                        this._cancelCollapse();
+                        if (this._clickToOpen) {
+                            closeCol(this._c3);
+                            closeCol(this._c4);
+                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                        } else {
+                            this._cancelCollapse();
+                        }
                         return;
                     }
                     if (col === this._c3 && row.hasClass('la-hud-active') && this._c4.is(':visible')) {
-                        this._cancelCollapse();
+                        if (this._clickToOpen) {
+                            closeCol(this._c4);
+                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                        } else {
+                            this._cancelCollapse();
+                        }
                         return;
                     }
                     this._setActive(col, row);
@@ -552,7 +605,11 @@ export class LancerHUD {
                         this._c4AnchorRow = row;
                         this._openChildCol(this._c3, this._c4, item, rawChildren, row);
                     }
-                });
+                };
+                if (this._clickToOpen)
+                    row.on('click', openChild);
+                else
+                    row.on('mouseenter', openChild);
             }
 
             col.append(row);
