@@ -27,6 +27,7 @@ import {
     consumeEffectCharge,
     processDurationEffects,
     initCollapseHook,
+    findEffectOnToken,
 } from "./flagged-effects.js";
 import {
     getMovementPathHexes, drawDebugPath
@@ -269,7 +270,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         if (typeof reaction.evaluate === 'function') {
             const result = reaction.evaluate(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
-                console.warn(`lancer-automations | evaluate for "${reactionName}" is async. Async evaluate functions run asynchronously and cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck. Consider making it synchronous.`);
+                console.error(`lancer-automations | evaluate for "${reactionName}" is async. Evaluate functions must be synchronous.`);
                 result.then(val => { /* fire-and-forget async evaluate */ });
                 shouldTrigger = false;
             } else {
@@ -279,7 +280,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
             const result = evalFunc(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise) {
-                console.warn(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Async evaluate cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck.`);
+                console.error(`lancer-automations | String evaluate for "${reactionName}" returned a Promise. Evaluate functions must be synchronous.`);
                 shouldTrigger = false;
             } else {
                 shouldTrigger = result;
@@ -427,7 +428,7 @@ async function checkReactions(triggerType, data) {
                     if (typeof reaction.evaluate === 'function') {
                         const result = reaction.evaluate(triggerType, enrichedData, token, item, activationName, api);
                         if (result instanceof Promise) {
-                            console.warn(`lancer-automations | evaluate for "${item.name}" is async. Async evaluate functions run asynchronously and cannot use cancel(). Consider making it synchronous.`);
+                            console.error(`lancer-automations | evaluate for "${item.name}" is async. Evaluate functions must be synchronous.`);
                             result.then(val => { /* fire-and-forget */ });
                             shouldTrigger = false;
                         } else {
@@ -438,7 +439,7 @@ async function checkReactions(triggerType, data) {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
                             const result = evalFunc(triggerType, enrichedData, token, item, activationName, api);
                             if (result instanceof Promise) {
-                                console.warn(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Async evaluate cannot use cancelAction/cancelAttack/cancelTechAttack/cancelCheck.`);
+                                console.error(`lancer-automations | String evaluate for "${item.name}" returned a Promise. Evaluate functions must be synchronous.`);
                                 shouldTrigger = false;
                             } else {
                                 shouldTrigger = result;
@@ -862,6 +863,15 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'enableMovementCapDetection', {
+        name: 'Movement Cap Detection [beta]',
+        hint: 'Automatically cancel drag movement that would exceed the token\'s movement cap during combat. Requires Elevation Ruler Fork.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'showDeployableLines', {
         name: 'Show Deployable Lines',
         hint: 'If enabled, hovering over tokens you own will draw subtle red lines connecting them to their active deployables and thrown weapons.',
@@ -1249,84 +1259,177 @@ async function handleSocketEvent({ action, payload }) {
     }
 }
 
-const cumulativeMoveData = new Map();
-const intentionalMoveData = new Map();
-const fullMoveData = new Map();
+// Move history flags on token document:
+//   lancer-automations.moveHistory  = { moves: Array<{ distanceMoved, isDrag, isFreeMovement, boostSet, startPos }> }
+//   lancer-automations.movementCap  = number
 
-function clearMoveData(tokenOrId) {
-    const tokenId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
-    cumulativeMoveData.delete(tokenId);
-    intentionalMoveData.delete(tokenId);
-    fullMoveData.delete(tokenId);
+function _getMoveHistoryDoc(tokenOrId) {
+    if (typeof tokenOrId === 'string')
+        return canvas.tokens.get(tokenOrId)?.document ?? null;
+    return tokenOrId?.document ?? tokenOrId ?? null;
 }
 
-function undoMoveData(tokenOrId, distance) {
-    const tokenId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
-    const current = cumulativeMoveData.get(tokenId) || 0;
-    const newVal = Math.max(0, current - distance);
-    cumulativeMoveData.set(tokenId, newVal);
+function _getMoveHistoryData(tokenOrId) {
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    return doc?.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
+}
 
-    const currentIntentional = intentionalMoveData.get(tokenId) || 0;
-    const newIntentional = Math.max(0, currentIntentional - distance);
-    intentionalMoveData.set(tokenId, newIntentional);
+function _writeMoveHistory(tokenDoc, data) {
+    if (!tokenDoc)
+        return;
+    foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', data);
+    if (tokenDoc.isOwner)
+        tokenDoc.update({ 'flags.lancer-automations.moveHistory': data });
+}
 
-    const history = fullMoveData.get(tokenId);
-    if (history && history.length > 0) {
-        history.pop();
+function _writeMovementCap(tokenDoc, value) {
+    if (!tokenDoc)
+        return;
+    foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.movementCap', value);
+    if (tokenDoc.isOwner)
+        tokenDoc.update({ 'flags.lancer-automations.movementCap': value });
+}
+
+function clearMoveData(tokenOrId) {
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    if (!doc)
+        return;
+    foundry.utils.setProperty(doc.flags, 'lancer-automations.moveHistory', null);
+    if (doc.isOwner) {
+        doc.unsetFlag('lancer-automations', 'moveHistory');
     }
+    initMovementCap(doc);
+}
+
+function undoMoveData(tokenOrId, _distance) {
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    if (!doc)
+        return;
+    const data = doc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
+    const moves = (data.moves || []).slice(0, -1);
+    _writeMoveHistory(doc, { ...data, moves });
 }
 
 function getCumulativeMoveData(tokenOrId) {
-    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
-    return cumulativeMoveData.get(tokenDocId) || 0;
+    const data = _getMoveHistoryData(tokenOrId);
+    return (data.moves || []).filter(m => !m.isFreeMovement).reduce(
+        (acc, m) => ({ moved: acc.moved + m.distanceMoved, cost: acc.cost + (m.movementCost ?? m.distanceMoved) }),
+        { moved: 0, cost: 0 }
+    );
 }
 
 function getIntentionalMoveData(tokenOrId) {
-    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
-    return intentionalMoveData.get(tokenDocId) || 0;
+    const data = _getMoveHistoryData(tokenOrId);
+    return (data.moves || []).filter(m => m.isDrag && !m.isFreeMovement).reduce(
+        (acc, m) => ({ moved: acc.moved + m.distanceMoved, cost: acc.cost + (m.movementCost ?? m.distanceMoved) }),
+        { moved: 0, cost: 0 }
+    );
+}
+
+function getMovementCap(tokenOrId) {
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    return doc?.getFlag('lancer-automations', 'movementCap') ?? 0;
 }
 
 function getMovementHistory(tokenOrId) {
-    const tokenDocId = typeof tokenOrId === 'string' ? tokenOrId : (tokenOrId?.document?.id || tokenOrId?.id);
-    const history = fullMoveData.get(tokenDocId);
-    if (!history || history.length === 0) {
+    const data = _getMoveHistoryData(tokenOrId);
+    const moves = data.moves || [];
+    if (moves.length === 0)
         return { exists: false };
-    }
     let totalMoved = 0;
-    let intentionalRegular = 0;
-    let intentionalFree = 0;
-    let unintentional = 0;
+    let totalCost = 0;
+    let intentionalRegularMoved = 0;
+    let intentionalRegularCost = 0;
+    let intentionalFreeMoved = 0;
+    let intentionalFreeCost = 0;
+    let unintentionalMoved = 0;
+    let unintentionalCost = 0;
     let nbBoostUsed = 0;
-    let startPosition = history[0].startPos;
+    const startPosition = moves[0].startPos;
 
-    for (const move of history) {
-        totalMoved += move.distanceMoved;
+    for (const move of moves) {
+        const moved = move.distanceMoved;
+        const cost = move.movementCost ?? move.distanceMoved;
+        totalMoved += moved;
+        totalCost += cost;
         if (move.isDrag) {
             if (move.isFreeMovement) {
-                intentionalFree += move.distanceMoved;
+                intentionalFreeMoved += moved;
+                intentionalFreeCost += cost;
             } else {
-                intentionalRegular += move.distanceMoved;
+                intentionalRegularMoved += moved;
+                intentionalRegularCost += cost;
             }
             if (move.boostSet && move.boostSet.length > 0) {
                 nbBoostUsed += move.boostSet.length;
             }
         } else {
-            unintentional += move.distanceMoved;
+            unintentionalMoved += moved;
+            unintentionalCost += cost;
         }
     }
 
     return {
         exists: true,
         totalMoved,
+        totalCost,
         intentional: {
-            total: intentionalRegular + intentionalFree,
-            regular: intentionalRegular,
-            free: intentionalFree
+            total: intentionalRegularMoved + intentionalFreeMoved,
+            totalCost: intentionalRegularCost + intentionalFreeCost,
+            regular: intentionalRegularMoved,
+            regularCost: intentionalRegularCost,
+            free: intentionalFreeMoved,
+            freeCost: intentionalFreeCost
         },
-        unintentional,
+        unintentional: unintentionalMoved,
+        unintentionalCost,
         nbBoostUsed,
-        startPosition
+        startPosition,
+        movementCap: getMovementCap(tokenOrId)
     };
+}
+
+function initMovementCap(token) {
+    const doc = _getMoveHistoryDoc(token);
+    if (!doc)
+        return;
+    const isImmobilized = !!findEffectOnToken(token, 'immobilized');
+    const speed = isImmobilized ? 0 : (token.actor?.system?.speed ?? 0);
+    _writeMovementCap(doc, speed);
+}
+
+function increaseMovementCap(tokenOrId, value) {
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    if (!doc)
+        return;
+    _writeMovementCap(doc, getMovementCap(tokenOrId) + value);
+}
+
+/**
+ * Compute move distances from preUpdateToken options.
+ * Uses ElevationRuler segment data when available, falls back to 2D grid measurement.
+ * @param {object} options           preUpdateToken options
+ * @param {object} startPos          {x, y}
+ * @param {object} endPos            {x, y}
+ * @param {number} [elevationFallback=0]  elevation value used only in fallback path
+ * @returns {{ distanceMoved: number, movementCost: number, isFreeMovement: boolean }}
+ *   distanceMoved — physical squares traveled (no terrain penalty overhead)
+ *   movementCost  — squares consumed from movement cap (includes terrain penalty)
+ */
+function _computeMoveData(options, startPos, endPos, elevationFallback = 0) {
+    const isFreeMovement = options.lancerFreeMovement
+        ?? (game.modules.get('elevationruler')?.api?.Settings?.FORCE_FREE_MOVEMENT || false);
+
+    if (options.lancerSegmentDistance !== undefined) {
+        const distanceMoved = Math.max(0, Math.round(options.lancerSegmentCost - (options.lancerTerrainPenalty ?? 0)));
+        const movementCost = Math.round(options.lancerSegmentCost);
+        return { distanceMoved, movementCost, isFreeMovement };
+    }
+
+    // Fallback: no ElevationRuler data available
+    const dist2D = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
+    const distanceMoved = dist2D + Math.floor(elevationFallback);
+    return { distanceMoved, movementCost: distanceMoved, isFreeMovement };
 }
 
 async function handleTokenMove(document, change, options, userId) {
@@ -1348,17 +1451,10 @@ async function handleTokenMove(document, change, options, userId) {
     const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
     const elevationMoved = change.elevation ?? document.elevation;
 
-    const distanceMoved = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
-
     const isDrag = 'rulerSegment' in options || options.isDrag;
     const isTeleport = !!options.teleport;
 
-    // Check for Elevation Ruler free movement (not counted in cumulative boost tracking)
-    let isFreeMovement = false;
-    const elevationRulerSettings = game.modules.get('elevationruler')?.api?.Settings;
-    if (elevationRulerSettings?.FORCE_FREE_MOVEMENT) {
-        isFreeMovement = true;
-    }
+    const { distanceMoved, movementCost, isFreeMovement } = _computeMoveData(options, startPos, endPos, elevationMoved);
 
     const moveInfo = {
         isInvoluntary: !isDrag,
@@ -1373,23 +1469,22 @@ async function handleTokenMove(document, change, options, userId) {
         }, {})
     };
 
-    // Update Cumulative (Total) Movement
-    const prev = cumulativeMoveData.get(document.id) || 0;
-    const cumulative = prev + distanceMoved;
-    if (!isFreeMovement) {
-        cumulativeMoveData.set(document.id, cumulative);
-        // Intentional: Only if Voluntary (isDrag) AND not Free
-        if (isDrag) {
-            const prevIntentional = intentionalMoveData.get(document.id) || 0;
-            intentionalMoveData.set(document.id, prevIntentional + distanceMoved);
-        }
-    }
+    // Read existing history from flag (synchronous in-memory read)
+    // Outside of combat, always start fresh so history reflects only the current movement.
+    const tokenDoc = document.document;
+    const inCombat = !!game.combat?.active;
+    const existingData = (inCombat ? tokenDoc.getFlag('lancer-automations', 'moveHistory') : null) ?? { moves: [] };
+    const existingMoves = existingData.moves || [];
+
+    // Compute prior intentional cost for boost detection (uses movementCost to count terrain correctly)
+    const prevIntentional = existingMoves
+        .filter(m => m.isDrag && !m.isFreeMovement)
+        .reduce((acc, m) => acc + (m.movementCost ?? m.distanceMoved), 0);
 
     // Boost detection only when enabled
     if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
         const speed = token.actor?.system?.speed || 0;
-        const currentIntentional = intentionalMoveData.get(document.id) || 0;
-        const prevIntentional = (currentIntentional - distanceMoved);
+        const currentIntentional = prevIntentional + movementCost;
 
         const boostSet = [];
         if (speed > 0) {
@@ -1406,19 +1501,28 @@ async function handleTokenMove(document, change, options, userId) {
 
         // Debug notification for boost detection testing
         if (game.settings.get('lancer-automations', 'debugBoostDetection')) {
-            ui.notifications.info(`${token.name}: moved ${distanceMoved}, intentional ${currentIntentional}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
+            ui.notifications.info(`${token.name}: moved ${distanceMoved} (cost ${movementCost}), intentional ${prevIntentional + movementCost}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
         }
     }
 
-    const history = fullMoveData.get(document.id) || [];
-    history.push({
-        distanceMoved,
-        isDrag,
-        isFreeMovement,
-        boostSet: moveInfo.boostSet || [],
-        startPos
-    });
-    fullMoveData.set(document.id, history);
+    // Build updated move history and persist (only in combat — outside combat, keep in-memory only for the trigger call)
+    const newData = {
+        ...existingData,
+        moves: [...existingMoves, {
+            distanceMoved,
+            movementCost,
+            isDrag,
+            isFreeMovement,
+            boostSet: moveInfo.boostSet || [],
+            startPos
+        }]
+    };
+    if (inCombat) {
+        foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', newData);
+        const isLastSegment = !options.rulerSegment || options.lastRulerSegment === true;
+        if (tokenDoc.isOwner && isLastSegment)
+            tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
+    }
 
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
 }
@@ -3057,6 +3161,9 @@ Hooks.on('ready', async () => {
         getCumulativeMoveData,
         getIntentionalMoveData,
         getMovementHistory,
+        getMovementCap,
+        increaseMovementCap,
+        initMovementCap,
         processEffectConsumption,
         handleTrigger,
         registerUserHelper,
@@ -3209,7 +3316,7 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
 
     const resetButtonHtml = `
     <div class="control-icon lancer-ruler-reset-button" title="Revert Last Movement">
-        <i class="fas fa-undo"></i>
+        <i class="fas fa-shoe-prints fa-fw"></i>
     </div>
   `;
 
@@ -3250,6 +3357,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
         const startingToken = startingCombatant?.token ? canvas.tokens.get(startingCombatant.token.id) : null;
         if (startingToken) {
             clearMoveData(startingToken.document.id);
+            initMovementCap(startingToken);
             await handleTrigger('onTurnStart', { triggeringToken: startingToken });
             processDurationEffects('start', startingToken.id);
         }
@@ -3600,8 +3708,25 @@ Hooks.on('renderSettings', (app, html) => {
 
 
 Hooks.on('preUpdateToken', (document, change, options, userId) => {
-    if (options.IgnorePreMove)
+
+    //debug
+    // if ('rulerSegment' in options || options.isDrag) {
+    //     console.log('lancer-automations | preUpdateToken ruler segment:', {
+    //         lancerSegmentDistance: options.lancerSegmentDistance,
+    //         lancerSegmentCost: options.lancerSegmentCost,
+    //         lancerTerrainPenalty: options.lancerTerrainPenalty,
+    //         lancerFreeMovement: options.lancerFreeMovement
+    //     });
+    // }
+
+    if (options.IgnorePreMove) {
+        const isDrag = 'rulerSegment' in options || options.isDrag;
+        if (isDrag) {
+            const token = canvas.tokens.get(document.id);
+            handleTokenMove(token, change, options, userId);
+        }
         return true;
+    }
 
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
@@ -3622,7 +3747,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
         const elevationToMove = change.elevation ?? document.elevation;
 
-        const distanceToMove = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
+        const { distanceMoved: distanceToMove, movementCost: moveToMovementCost, isFreeMovement: moveIsFreeMovement } = _computeMoveData(options, startPos, endPos);
 
         const isTeleport = !!options.teleport;
         const shouldCalculatePath = game.settings.get('lancer-automations', 'enablePathHexCalculation');
@@ -3686,8 +3811,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 userIdControl: userIdControl ?? getActiveGMId(),
                 traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: null } : null,
                 choices: [
-                    { text: "Confirm", icon: "fas fa-check", callback: async () => {} },
-                    { text: "Ignore",
+                    { text: "Stop movement", icon: "fas fa-check", callback: async () => {} },
+                    { text: "Continue movement",
                         icon: "fas fa-times",
                         callback: async () => {
                         // Re-submit the original movement with a flag to bypass preUpdateToken
@@ -3730,12 +3855,12 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     userIdControl: userIdControl ?? getActiveGMId(),
                     traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
                     choices: [
-                        { text: "Confirm",
+                        { text: "Change movement",
                             icon: "fas fa-check",
                             callback: async () => {
                                 executeChange();
                             } },
-                        { text: "Ignore",
+                        { text: "Continue movement",
                             icon: "fas fa-times",
                             callback: async () => {
                             // Re-submit the original movement with a flag to bypass preUpdateToken
@@ -3756,6 +3881,21 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 executeChange();
             }
         };
+
+        // Movement cap check: block the move if it would exceed the cap (combat only, non-free moves)
+        if (game.settings.get('lancer-automations', 'enableMovementCapDetection')
+            && game.combat?.active && !moveIsFreeMovement && moveToMovementCost > 0) {
+            const cap = getMovementCap(token);
+            const history = getMovementHistory(token);
+            const spent = history.exists ? history.intentional.regularCost : 0;
+            if (spent <= cap && spent + moveToMovementCost > cap) {
+                const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
+                triggerData.cancelTriggeredMove(
+                    `Not enough movement points (${spent + moveToMovementCost} > ${cap}). ` +
+                    `Increase your movement cap with Boost, or hold <b>${freeKey}</b> for free movement.`
+                );
+            }
+        }
 
         // Call handleTrigger without await. If onPreMove reactions are synchronous,
         // cancelUpdate will be set to true before we check it on the next line.
@@ -3786,18 +3926,22 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 Hooks.on('updateToken', async function(document, change, options, userId) {
     if (game.user.id !== userId)
         return;
-    if (options.IgnorePreMove)
+    const hasPositionChange = change.x !== undefined || change.y !== undefined || change.elevation !== undefined;
+    if (!hasPositionChange)
+        return;
+
+    if (options.rulerSegment && !options.lastRulerSegment)
         return;
 
     const token = canvas.tokens.get(document.id);
     if (!token)
         return;
 
-    // Await the physical canvas animation to complete so distance
-    // evaluations on `onUpdate` use the token's final rendered position.
-    if ((change.x !== undefined || change.y !== undefined || change.elevation !== undefined) && document.object?.animationName) {
-        await CanvasAnimation.getAnimation(document.object.animationName)?.promise;
+    if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // a bit sketchy but it works
+        const anim = CanvasAnimation.getAnimation(document.object?.animationName);
+        if (anim)
+            await anim.promise;
     }
-
     await handleTrigger("onUpdate", { triggeringToken: token, document, change, options });
 });

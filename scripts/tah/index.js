@@ -104,8 +104,10 @@ Hooks.on('deleteActiveEffect', (effect) => {
 Hooks.on('updateToken', (tokenDoc) => {
     if (!enabled())
         return;
-    if (hud._token?.id === tokenDoc.id)
+    if (hud._token?.id === tokenDoc.id){
         hud.scheduleRefresh();
+        hud.updateStatsInPlace();
+    }
 });
 
 // ── Combat (turn/round advance resets action tracker) ────────────────────────

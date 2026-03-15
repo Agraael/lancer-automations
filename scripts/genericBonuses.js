@@ -525,7 +525,7 @@ function getFlowTags(flowType, state) {
     return tags;
 }
 
-export async function isBonusApplicable(bonus, flowTags, state) {
+export function isBonusApplicable(bonus, flowTags, state) {
     if (bonus.rollTypes && Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0) {
         const hasMatch = bonus.rollTypes.some(t => flowTags.has(t.toLowerCase()));
         if (!hasMatch)
@@ -537,7 +537,7 @@ export async function isBonusApplicable(bonus, flowTags, state) {
             const context = bonus.context || {};
             let result;
             if (typeof bonus.condition === 'function') {
-                result = await bonus.condition(state, state.actor, state.data, context);
+                result = bonus.condition(state, state.actor, state.data, context);
             } else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
                 if (bonus.condition.startsWith('@@fn:')) {
                     const src = bonus.condition.slice('@@fn:'.length);
@@ -553,11 +553,15 @@ export async function isBonusApplicable(bonus, flowTags, state) {
                         );
                         serializedConditionCache.set(src, fn);
                     }
-                    result = await fn(state, state.actor, state.data, context);
+                    result = fn(state, state.actor, state.data, context);
                 } else {
                     const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
-                    result = await fn(state, state.actor, state.data, context);
+                    result = fn(state, state.actor, state.data, context);
                 }
+            }
+            if (result instanceof Promise) {
+                console.error(`lancer-automations | evaluate for "${bonus.name}" is async. Bonus condition must be synchronous.`);
+                return false;
             }
             if (!result)
                 return false;

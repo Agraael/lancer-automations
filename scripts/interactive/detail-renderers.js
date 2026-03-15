@@ -299,9 +299,20 @@ export function laRenderActionDetail(action, opts = {}) {
 
 /** @type {Record<string,{border:string,gradFrom:string,gradTo:string,headerBorder:string}>} */
 const THEMES = {
+    default: { border: '#383838', gradFrom: '#1c1c1c', gradTo: '#111111', headerBorder: '#484848' },
     weapon: { border: '#4a1010', gradFrom: '#2d0a0a', gradTo: '#1a0808', headerBorder: '#5a1515' },
     system: { border: '#1a4a10', gradFrom: '#0d2d0a', gradTo: '#081a08', headerBorder: '#1a5a15' },
     trait:  { border: '#1a3a5c', gradFrom: '#0a1d2d', gradTo: '#081318', headerBorder: '#1a3a5c' },
+    frame:       { border: '#5a4210', gradFrom: '#2d2008', gradTo: '#1a1505', headerBorder: '#6a5015' },
+    protocol:    { border: '#404040', gradFrom: '#202020', gradTo: '#141414', headerBorder: '#555555' },
+    reaction:    { border: '#3a105c', gradFrom: '#1d0830', gradTo: '#110520', headerBorder: '#4a1570' },
+    free_action: { border: '#0a4a40', gradFrom: '#052520', gradTo: '#021a18', headerBorder: '#0a6a58' },
+    talent:      { border: '#5a3800', gradFrom: '#2d1c00', gradTo: '#1a1000', headerBorder: '#6a4800' },
+    core_bonus:  { border: '#5c1a50', gradFrom: '#300d2a', gradTo: '#1c0818', headerBorder: '#7a2070' },
+    deployable:  { border: '#0a3a4a', gradFrom: '#051d25', gradTo: '#021015', headerBorder: '#0a4a5a' },
+    invade:      { border: '#1a1a5c', gradFrom: '#0d0d30', gradTo: '#08081c', headerBorder: '#2020a0' },
+    tech:        { border: '#105a5a', gradFrom: '#052d2d', gradTo: '#021a1a', headerBorder: '#107a7a' },
+    action:      { border: '#4a2800', gradFrom: '#251400', gradTo: '#160c00', headerBorder: '#5a3200' },
 };
 
 /**
@@ -314,7 +325,7 @@ const THEMES = {
  * @returns {JQuery}
  */
 export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weapon') {
-    const t = THEMES[theme] ?? THEMES.weapon;
+    const t = THEMES[theme] ?? THEMES.default;
     return $(`
         <div class="${cssClass}" style="position:fixed;z-index:10000;background:#181818;border:1px solid ${t.border};border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
             <div style="background:linear-gradient(90deg,${t.gradFrom},${t.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${t.headerBorder};border-radius:4px 4px 0 0;">

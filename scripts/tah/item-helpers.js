@@ -1,3 +1,4 @@
+/* global $ */
 /**
  * Generic HUD item children helpers for lancer-automations.
  * Builds col4 item lists from Foundry item data.
@@ -9,6 +10,21 @@ import { laDetailPopup, laRenderActionDetail } from '../interactive/detail-rende
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
 const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
+
+export function activationTheme(/** @type {string|null|undefined} */ activation) {
+    const a = (activation ?? '').toLowerCase().replaceAll(/[\s-]+/g, '_');
+    if (a === 'protocol')
+        return 'protocol';
+    if (a === 'reaction')
+        return 'reaction';
+    if (a === 'free_action' || a === 'free')
+        return 'free_action';
+    if (a === 'quick_tech' || a === 'full_tech')
+        return 'tech';
+    if (a === 'quick' || a === 'quick_action' || a === 'full' || a === 'full_action')
+        return 'action';
+    return 'weapon';
+}
 
 /**
  * Inspects any Lancer item and returns its availability status for display in the HUD.
@@ -123,10 +139,11 @@ export function getActivationIcon(actionOrActivation) {
  * @param {Array}   [opts.defaultActions=[]]  Items shown at the very top (e.g. SKIRMISH / BARRAGE)
  * @param {Item}    [opts.modItem=null]        Weapon mod item
  * @param {Function} [opts.showPopup=null]     (popup, rowEl) => void — if provided, actions get right-click detail popups
+ * @param {Function} [opts.onActivate=null]   (action) => void — if provided, actions get an onClick handler
  * @returns {Array}
  */
 export function laHudItemChildren(item, opts = {}) {
-    const { defaultActions = [], modItem = null, showPopup = null } = opts;
+    const { defaultActions = [], modItem = null, showPopup = null, onActivate = null } = opts;
     const sys = item.system;
     const profiles = sys.profiles ?? [];
     const activeIdx = sys.selected_profile_index ?? 0;
@@ -159,12 +176,12 @@ export function laHudItemChildren(item, opts = {}) {
             const entry = {
                 label: a.name,
                 icon: getActivationIcon(a),
-                onClick: () => console.warn('[lancer-automations] TODO: activate action', a.name),
+                onClick: onActivate ? () => onActivate(a) : null,
             };
             entry.onRightClick = (row) => {
                 const bodyHtml = laRenderActionDetail(a, { sourceName: source?.name });
                 const subtitle = a.activation ?? '';
-                const popup = laDetailPopup('la-hud-popup la-hud-action-popup', a.name, subtitle, bodyHtml, 'system');
+                const popup = laDetailPopup('la-hud-popup la-hud-action-popup', a.name, subtitle, bodyHtml, activationTheme(a.activation));
                 if (showPopup)
                     showPopup(popup, row);
             };
@@ -179,4 +196,69 @@ export function laHudItemChildren(item, opts = {}) {
     }
 
     return items;
+}
+
+/**
+ * Appends an interactive uses/loading/charged pips section to a detail popup body.
+ * Call as `postRender` on any item popup that might have limited/loading/recharge tags.
+ * Does nothing if the item has none of those tags.
+ * @param {any} item   Foundry Item document
+ * @param {any} popup  jQuery popup element (from laDetailPopup)
+ */
+export function appendItemPips(item, popup) {
+    const sys = item.system;
+    const allTags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
+    const hasLoading  = allTags.some(t => t.lid === 'tg_loading');
+    const hasRecharge = allTags.some(t => t.lid === 'tg_recharge');
+    const hasLimited  = allTags.some(t => t.lid === 'tg_limited');
+    if (!hasLoading && !hasRecharge && !hasLimited)
+        return;
+
+    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
+    const S_PIP = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
+    const pipsWrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+    popup.children().last().prepend(pipsWrap);
+
+    const rebuild = () => {
+        pipsWrap.empty();
+        const s = item.system;
+        if (hasLoading) {
+            const loaded = s.loaded !== false;
+            const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
+            pip.on('click', async () => {
+                await /** @type {any} */ (item).update({ 'system.loaded': !item.system.loaded });
+                rebuild();
+            });
+            pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading</span>`), pip));
+        }
+        if (hasRecharge) {
+            const charged = s.charged !== false;
+            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
+            pip.on('click', async () => {
+                await /** @type {any} */ (item).update({ 'system.charged': !item.system.charged });
+                rebuild();
+            });
+            pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged</span>`), pip));
+        }
+        if (hasLimited && s.uses != null) {
+            const isObj = typeof s.uses !== 'number';
+            const val = isObj ? (s.uses.value ?? 0) : s.uses;
+            const max = isObj ? (s.uses.max ?? 0) : s.uses;
+            if (max > 0) {
+                const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
+                for (let i = 1; i <= max; i++) {
+                    const n = i;
+                    const pip = $(`<span style="${S_PIP}color:${n <= val ? '#3a9e6e' : '#444'};">${n <= val ? '⬢' : '⬡'}</span>`);
+                    pip.on('click', async () => {
+                        const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
+                        await /** @type {any} */ (item).update(isObj ? { 'system.uses.value': newVal } : { 'system.uses': newVal });
+                        rebuild();
+                    });
+                    usesRow.append(pip);
+                }
+                pipsWrap.append(usesRow);
+            }
+        }
+    };
+    rebuild();
 }

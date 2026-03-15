@@ -67,6 +67,8 @@ interface FlagConfig {
     Token: {
         "lancer-automations": {
             fallStartElevation?: number;
+            moveHistory?: MoveHistoryData;
+            movementCap?: number;
             [key: string]: any;
         };
         "token-factions"?: {

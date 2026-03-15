@@ -78,24 +78,23 @@ const suppressArcherReaction = {
                     return;
 
                 // Apply suppress and impaired
-                if (api?.applyEffectsToTokens) {
-                    await api.applyEffectsToTokens({
-                        tokens: [target],
-                        effectNames: [
-                            {
-                                name: "Suppress",
-                                icon: "worlds/Lancer/VTT stuff/virtual-marker.svg",
-                                isCustom: true
-                            },
-                            "impaired"
-                        ],
-                        note: "Suppressed by Archer",
-                        duration: { label: 'end', turns: 1, rounds: 0, overrideTurnOriginId: reactorToken.id },
-                    }, {
-                        suppressSourceId: reactorToken.id,
-                        suppressSourceName: reactorToken.name
-                    });
-                }
+                await api.applyEffectsToTokens({
+                    tokens: [target],
+                    effectNames: [
+                        {
+                            name: "Suppress",
+                            icon: "worlds/Lancer/VTT stuff/virtual-marker.svg",
+                            isCustom: true
+                        },
+                        "impaired"
+                    ],
+                    note: "Suppressed by Archer",
+                    duration: { label: 'end', turns: 1, rounds: 0, overrideTurnOriginId: reactorToken.id },
+                }, {
+                    suppressSourceId: reactorToken.id,
+                    suppressSourceName: reactorToken.name
+                });
+
             } else if (triggerType === "onDamage") {
                 const target = triggerData.target;
                 const token = target.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === target.actor?.id);
@@ -127,6 +126,84 @@ const suppressArcherReaction = {
                     }
                 }
             }
+        }
+    }]
+};
+
+/** @type {ReactionGroup} */
+const movingTargetSniperReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onPreMove"],
+        triggerSelf: false,
+        triggerOther: true,
+        outOfCombat: false,
+        actionType: "Reaction",
+        frequency: "1/Round",
+        autoActivate: true,
+        forceSynchronous: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const mover = triggerData.triggeringToken;
+            if (triggerData.moveInfo?.isInvoluntary)
+                return false;
+            if (triggerData.distanceToTrigger > 20)
+                return false;
+            if (api.isFriendly(reactorToken, mover))
+                return false;
+            return true;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const mover = triggerData.triggeringToken;
+            triggerData.cancelTriggeredMove?.(
+                `Moving Target: ${mover.name} is in the Sniper's sights. Give up this movement or proceed and face an attack with the Anti-materiel Rifle.`,
+                true,
+                api.getTokenOwnerUserId(mover)
+            );
+        }
+    }, {
+        triggers: ["onMove"],
+        triggerSelf: false,
+        triggerOther: true,
+        outOfCombat: false,
+        actionType: "Reaction",
+        frequency: "1/Round",
+        autoActivate: false,
+        activationType: "code",
+        activationMode: "after",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const mover = triggerData.triggeringToken;
+            if (triggerData.moveInfo?.isInvoluntary)
+                return false;
+            if (triggerData.distanceToTrigger > 20)
+                return false;
+            if (api.isFriendly(reactorToken, mover))
+                return false;
+            return true;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const mover = triggerData.triggeringToken;
+
+            const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
+            if (!rifle) {
+                ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
+                return;
+            }
+
+            const isLoaded = rifle.system?.loaded !== false;
+            if (!isLoaded) {
+                await api.reloadOneWeapon(reactorToken);
+                ChatMessage.create({
+                    content: `<div class="lancer-chat-message"><b>${reactorToken.name} — Moving Target</b><br>The Anti-materiel Rifle wasn't loaded. ${reactorToken.name} reloads.</div>`,
+                    speaker: ChatMessage.getSpeaker({ token: reactorToken })
+                });
+                return;
+            }
+
+            game.user.updateTokenTargets([mover.id]);
+            await api.beginWeaponAttackFlow(rifle, {});
         }
     }]
 };
@@ -967,6 +1044,7 @@ api.registerDefaultItemReactions({
     },
     "npc-rebake_npcf_moving_target_archer": movingTargetArcherReaction,
     "npcf_moving_target_archer": movingTargetArcherReaction,
+    "npcf_moving_target_sniper": movingTargetSniperReaction,
     "Maneuver": {
         category: "NPC",
         itemType: "npc_feature",
@@ -1004,7 +1082,7 @@ api.registerDefaultItemReactions({
                 return triggerData.success === true;
             },
         }, {
-            triggers: ["onMove"],
+            triggers: ["onActivation"],
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: false,
@@ -1014,19 +1092,17 @@ api.registerDefaultItemReactions({
             activationType: "code",
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
-                return triggerData.moveInfo?.isBoost === true;
+                return triggerData.actionName === "Boost";
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const hasSoftCover = api.findEffectOnToken(reactorToken, e => e.name === "Soft Cover");
                 if (!hasSoftCover) {
-                    if (api?.applyEffectToTokens) {
-                        await api.applyEffectToTokens({
-                            tokens: [reactorToken],
-                            effectNames: ["cover_soft"],
-                            note: "Fast Vehicle Boost",
-                            duration: { label: 'start', turns: 1, rounds: 0 }
-                        });
-                    }
+                    await api.applyEffectsToTokens({
+                        tokens: [reactorToken],
+                        effectNames: ["cover_soft"],
+                        note: "Fast Vehicle Boost",
+                        duration: { label: 'start', turns: 1, rounds: 0 }
+                    });
                 }
             }
         }],
@@ -1117,7 +1193,7 @@ api.registerDefaultItemReactions({
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onHit") {
                     const targets = triggerData.targets?.map(t => t.target) || (triggerData.target ? [triggerData.target] : []);
-                    if (targets.length && api?.applyEffectToTokens) {
+                    if (targets.length) {
                         await api.applyEffectToTokens({
                             tokens: targets,
                             effectNames: ["lancer.statusIconsNames.impaired"],

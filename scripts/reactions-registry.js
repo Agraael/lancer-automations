@@ -34,8 +34,8 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                await api.executeSimpleActivation(reactorToken.actor, {
+            activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                api.executeSimpleActivation(reactorToken.actor, {
                     title: "Overwatch",
                     action: {
                         name: "Overwatch",
@@ -113,7 +113,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                         return;
 
-                    await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg", "jb2a.shield.01.intro.blue"]);
+                    await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg", "jb2a.shield.01.intro.blue", "modules/lancer-automations/SFX/Brace.svg"]);
                     validTokens.forEach(token => {
                         let sequence = new Sequence()
                             .sound()
@@ -125,7 +125,18 @@ export function getDefaultGeneralReactionRegistry() {
                             .filter("Glow", { color: 0x4169E1 })
                             .playbackRate(1.3)
                             .atLocation(token)
-                            .waitUntilFinished(-400);
+                            .waitUntilFinished(-400)
+                            .effect()
+                            .file("modules/lancer-automations/SFX/Brace.svg")
+                            .attachTo(token, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                            .scaleIn(0.01, 500)
+                            .scale(0.09)
+                            .scaleOut(0.01, 900)
+                            .filter("Glow", { distance: 2, color: 0x000000 })
+                            .aboveInterface()
+                            .duration(3000)
+                            .fadeIn(400)
+                            .fadeOut(800);
                         sequence.play();
                     });
                 }
@@ -256,15 +267,30 @@ export function getDefaultGeneralReactionRegistry() {
                     "jb2a.zoning.inward.square.once.redyellow.01.01",
                 ]);
 
-                let sequence = new Sequence();
+
                 for (const target of targetsWithLockOn) {
-                    sequence
+                    let sequence = new Sequence()
                         .sound()
                         .file("modules/lancer-weapon-fx/soundfx/LockOn.ogg")
-                        .volume(weaponFx.api.getEffectVolume(0.8));
-                    sequence.effect().file("jb2a.zoning.inward.square.once.redyellow.01.01").atLocation(target).scaleToObject(1.6);
+                        .volume(weaponFx.api.getEffectVolume(0.8))
+                        .effect()
+                        .file("modules/lancer-automations/SFX/Lockon.svg")
+                        .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                        .scaleIn(0.01, 500)
+                        .scale(0.09)
+                        .scaleOut(0.01, 900)
+                        .filter("Glow", { distance: 2, color: 0x000000 })
+                        .aboveInterface()
+                        .duration(3000)
+                        .fadeIn(400)
+                        .fadeOut(800)
+                        .effect()
+                        .file("jb2a.zoning.inward.square.once.redyellow.01.01")
+                        .atLocation(target)
+                        .scaleToObject(1.6);
+                    sequence.play();
                 }
-                sequence.play();
+
             }
         },
         "Bolster": {
@@ -315,13 +341,23 @@ export function getDefaultGeneralReactionRegistry() {
                             .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
+                            .file("modules/lancer-automations/SFX/Bolster.svg")
+                            .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                            .scaleIn(0.01, 500)
+                            .scale(0.09)
+                            .scaleOut(0.01, 900)
+                            .filter("Glow", { distance: 2, color: 0x000000 })
+                            .aboveInterface()
+                            .duration(3000)
+                            .fadeIn(400)
+                            .fadeOut(800)
+                            .effect()
                             .file("jb2a.zoning.inward.circle.once.bluegreen.01.01")
                             .scaleToObject(1.5)
                             .filter("Glow", { color: 0x36c11a })
                             .playbackRate(1.3)
                             .atLocation(target)
                             .waitUntilFinished(-400);
-
                         sequence.play();
                     });
                 }
@@ -473,6 +509,32 @@ export function getDefaultGeneralReactionRegistry() {
                     if (api.executeFall) {
                         await api.executeFall(reactorToken);
                     }
+
+                    const weaponFx = game.modules.get("lancer-weapon-fx");
+                    if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                        return;
+
+                    await Sequencer.Preloader.preloadForClients([
+                        "modules/lancer-automations/SFX/fall.mp3",
+                        "modules/lancer-automations/SFX/falling.svg"
+                    ]);
+                    new Sequence()
+                        .sound()
+                        .file("modules/lancer-automations/SFX/fall.mp3")
+                        .volume(weaponFx.api.getEffectVolume(0.7))
+                        .atLocation(reactorToken)
+                        .effect()
+                        .file("modules/lancer-automations/SFX/falling.svg")
+                        .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                        .scaleIn(0.01, 500)
+                        .scale(0.09)
+                        .scaleOut(0.01, 900)
+                        .filter("Glow", { distance: 2, color: 0x000000 })
+                        .aboveInterface()
+                        .duration(3000)
+                        .fadeIn(400)
+                        .fadeOut(800)
+                        .play();
                 }
             }, {
                 triggers: ["onDamage"],
@@ -494,7 +556,7 @@ export function getDefaultGeneralReactionRegistry() {
                     await Sequencer.Preloader.preloadForClients([
                         "jb2a.impact.boulder.02",
                         "jb2a.impact.ground_crack.white.01",
-                        "worlds/Lancer/VTT%20stuff/SFX/IMPACT.mp3"
+                        "modules/lancer-automations/SFX/IMPACT.mp3"
                     ]);
                     const scale = Math.floor(reactorToken.actor?.system?.size || 1);
                     let sequence = new Sequence()
@@ -508,7 +570,7 @@ export function getDefaultGeneralReactionRegistry() {
                         .scale(scale / 2)
                         .belowTokens()
                         .sound()
-                        .file("worlds/Lancer/VTT%20stuff/SFX/IMPACT.mp3")
+                        .file("modules/lancer-automations/SFX/IMPACT.mp3")
                         .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
                         .waitUntilFinished();
 
@@ -770,12 +832,39 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
 
-                await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PowerDown.ogg"]);
+                await Sequencer.Preloader.preloadForClients([
+                    "modules/lancer-automations/SFX/shutdown.wav",
+                    "modules/lancer-automations/SFX/Shutdown.svg",
+                    "jb2a.extras.tmfx.inpulse.circle.02.normal",
+                    "jb2a.smoke.plumes.01.grey"
+                ]);
                 new Sequence()
                     .sound()
-                    .file("modules/lancer-weapon-fx/soundfx/PowerDown.ogg")
+                    .file("modules/lancer-automations/SFX/shutdown.wav")
                     .volume(weaponFx.api.getEffectVolume(0.7))
                     .atLocation(reactorToken)
+                    .effect()
+                    .file("jb2a.extras.tmfx.inpulse.circle.02.normal")
+                    .atLocation(reactorToken)
+                    .scaleToObject(2)
+                    .effect()
+                    .file("jb2a.smoke.plumes.01.grey")
+                    .atLocation(reactorToken, { offset: { x: 0, y: -0.5 }, gridUnits: true })
+                    .scaleToObject(2)
+                    .opacity(0.5)
+                    .fadeIn(500)
+                    .fadeOut(1500)
+                    .effect()
+                    .file("modules/lancer-automations/SFX/Shutdown.svg")
+                    .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                    .scaleIn(0.01, 500)
+                    .scale(0.09)
+                    .scaleOut(0.01, 900)
+                    .filter("Glow", { distance: 2, color: 0x000000 })
+                    .aboveInterface()
+                    .duration(3000)
+                    .fadeIn(400)
+                    .fadeOut(800)
                     .play();
             }
         },
@@ -826,8 +915,19 @@ export function getDefaultGeneralReactionRegistry() {
                     .atLocation(reactorToken)
                     .scale(1.1)
                     .sound()
-                    .file("worlds/Lancer/VTT%20stuff/SFX/PuffSmoke.wav")
+                    .file("modules/lancer-automations/SFX/PuffSmoke.wav")
                     .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
+                    .effect()
+                    .file("modules/lancer-automations/SFX/Hide.svg")
+                    .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                    .scaleIn(0.01, 500)
+                    .scale(0.09)
+                    .scaleOut(0.01, 900)
+                    .filter("Glow", { distance: 2, color: 0x000000 })
+                    .aboveInterface()
+                    .duration(3000)
+                    .fadeIn(400)
+                    .fadeOut(800)
                     .play();
             }
         },
@@ -962,6 +1062,7 @@ export function getDefaultGeneralReactionRegistry() {
         triggerDescription: "Manual / dismount.",
         effectDescription: "Pilot mounts mech.",
         triggerSelf: true,
+        onlyOnSourceMatch: true,
         triggerOther: false,
         outOfCombat: true,
         autoActivate: true,
@@ -1032,6 +1133,63 @@ export function getDefaultGeneralReactionRegistry() {
                     icon: "cci cci-pilot"
                 });
             }
+        }
+    };
+
+    builtInDefaults["Boost"] = {
+        category: "General",
+        triggers: ["onActivation"],
+        triggerDescription: "You use the Boost action",
+        effectDescription: "Increases your movement cap by your SPEED",
+        actionType: "Quick Action",
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            if (api.findEffectOnToken(reactorToken, 'slowed')) {
+                ui.notifications.warn(`${reactorToken.name} is Slowed and cannot Boost.`);
+                return false;
+            }
+            return true;
+        },
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const speed = reactorToken.actor?.system?.speed ?? 0;
+            api.increaseMovementCap(reactorToken, speed);
+
+            const weaponFx = game.modules.get("lancer-weapon-fx");
+            if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                return;
+
+            await Sequencer.Preloader.preloadForClients([
+                "modules/lancer-automations/SFX/boost.wav",
+                "modules/lancer-automations/SFX/Boost.svg",
+                "jb2a.zoning.directional.once.bluegreen.line200.02"
+            ]);
+            new Sequence()
+                .sound()
+                .file("modules/lancer-automations/SFX/boost.wav")
+                .volume(weaponFx.api.getEffectVolume(0.3))
+                .effect()
+                .file("jb2a.zoning.directional.once.bluegreen.line200.02")
+                .scaleToObject(1.5)
+                .filter("Glow", { color: 0x00CED1 })
+                .atLocation(reactorToken)
+                .effect()
+                .file("modules/lancer-automations/SFX/Boost.svg")
+                .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                .scaleIn(0.01, 500)
+                .scale(0.09)
+                .scaleOut(0.01, 900)
+                .filter("Glow", { distance: 2, color: 0x000000 })
+                .aboveInterface()
+                .duration(3000)
+                .fadeIn(400)
+                .fadeOut(800)
+                .play();
         }
     };
 

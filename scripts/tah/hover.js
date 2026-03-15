@@ -235,20 +235,6 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
  * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, token?: any, isEntering: boolean, isLeaving: boolean }} data
  */
 export async function onHudRowHover({ actor, item, action, category, token, isEntering }) {
-    const parts = [];
-    if (category)
-        parts.push(`[${category}]`);
-    if (actor?.name)
-        parts.push(`Actor: ${actor.name}`);
-    if (item?.name)
-        parts.push(`Item: ${item.name}`);
-    if (action?.name)
-        parts.push(`Action: ${action.name}`);
-    if (action?.activation)
-        parts.push(`[${action.activation}]`);
-
-    console.log((isEntering ? 'Entering: ' : 'Leaving: ') + parts.join('  |  '));
-
     if (!token)
         return;
 

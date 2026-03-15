@@ -165,8 +165,12 @@ export async function revertMovement(token, destination = null) {
     };
 
     if (game.modules.get("elevationruler")?.active) {
-        const history = token.elevationruler?.measurementHistory;
+        const history = token["elevationruler"]?.measurementHistory;
         if (history && history.length >= 2) {
+            if (!token.document.isOwner) {
+                ui.notifications.warn(`You do not own ${token.name} and cannot revert their movement.`);
+                return false;
+            }
             const currentPos = { x: token.document.x, y: token.document.y };
             const newLastPoint = history[history.length - 2];
             const updates = {};
@@ -184,13 +188,10 @@ export async function revertMovement(token, destination = null) {
             await token.document.update(updates, /** @type {any} */ ({ isUndo: true }));
             game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
 
-            const newHistory = token.elevationruler?.measurementHistory;
-            return !newHistory || newHistory.length < 2;
+            const remaining = token["elevationruler"]?.measurementHistory;
+            return !remaining || remaining.length < 2;
         } else {
-            await token.document.unsetFlag("elevationruler", "movementHistory");
-            if (token.elevationruler) {
-                token.elevationruler.measurementHistory = [];
-            }
+            await game.modules.get("elevationruler")?.api?.clearTokenMovementHistory(token);
             ui.notifications.info("Movement history cleared.");
             return true;
         }
@@ -221,28 +222,30 @@ export async function clearMovementHistory(tokens, revert = false) {
         return;
     }
 
+    const lancerAutomations = game.modules.get('lancer-automations');
     for (const token of tokenList) {
         if (revert) {
             while (true) {
                 const isClean = await revertMovement(token);
                 if (isClean)
                     break;
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 250));
             }
         }
 
-        await token.document.unsetFlag("elevationruler", "movementHistory");
-        if (token.elevationruler) {
-            token.elevationruler.measurementHistory = [];
-        }
-        const lancerAutomations = game.modules.get('lancer-automations');
+        await game.modules.get("elevationruler")?.api?.clearTokenMovementHistory(token);
+
         if (lancerAutomations?.api?.clearMoveData) {
             lancerAutomations.api.clearMoveData(token.document.id);
         }
     }
-
     const tokenNames = tokenList.map(t => t.name).join(", ");
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
+}
+
+export async function resetMovementCap(token) {
+    const api = game.modules.get('lancer-automations')?.api;
+    api.initMovementCap(token.document.id);
 }
 
 /**
@@ -701,9 +704,9 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 profileName = profiles[activeProfileIndex].name;
             }
             const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
-            const hasLoadingNM    = allTagsNonMech.some(t => t.lid === 'tg_loading'  || t.id === 'tg_loading');
-            const hasRechargeNM   = allTagsNonMech.some(t => t.lid === 'tg_recharge' || t.id === 'tg_recharge');
-            const hasLimitedNM    = allTagsNonMech.some(t => t.lid === 'tg_limited'  || t.id === 'tg_limited');
+            const hasLoadingNM    = allTagsNonMech.some(t => t.lid === 'tg_loading');
+            const hasRechargeNM   = allTagsNonMech.some(t => t.lid === 'tg_recharge');
+            const hasLimitedNM    = allTagsNonMech.some(t => t.lid === 'tg_limited');
             const loadStatusNM    = hasLoadingNM  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
             const chargeStatusNM  = hasRechargeNM ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
             let usesTextNM = '';
@@ -786,11 +789,16 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 const S_TAG     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
                 const S_TAG_RED = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
                 const bottomParts = [];
-                if (w.destroyed)    bottomParts.push(`<span style="${S_TAG_RED}">✕ DESTROYED</span>`);
-                if (w.mod)          bottomParts.push(`<span style="${S_TAG}">MOD: ${w.mod}</span>`);
-                if (w.loadStatus)   bottomParts.push(`<span style="${S_TAG}">${w.loadStatus}</span>`);
-                if (w.chargeStatus) bottomParts.push(`<span style="${S_TAG}">${w.chargeStatus}</span>`);
-                if (w.usesText)     bottomParts.push(`<span style="${S_TAG}">${w.usesText}</span>`);
+                if (w.destroyed)
+                    bottomParts.push(`<span style="${S_TAG_RED}">✕ DESTROYED</span>`);
+                if (w.mod)
+                    bottomParts.push(`<span style="${S_TAG}">MOD: ${w.mod}</span>`);
+                if (w.loadStatus)
+                    bottomParts.push(`<span style="${S_TAG}">${w.loadStatus}</span>`);
+                if (w.chargeStatus)
+                    bottomParts.push(`<span style="${S_TAG}">${w.chargeStatus}</span>`);
+                if (w.usesText)
+                    bottomParts.push(`<span style="${S_TAG}">${w.usesText}</span>`);
                 const modHtml = bottomParts.length ? `<div style="margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;">${bottomParts.join('')}</div>` : "";
 
                 return `

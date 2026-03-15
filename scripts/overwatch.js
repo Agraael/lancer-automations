@@ -46,7 +46,7 @@ export function isHostile(reactor, mover) {
     return (d.is1Good && d.is2Bad) || (d.is1Bad && d.is2Good);
 }
 
-export async function checkOverwatchCondition(reactor, mover, startPos) {
+export function checkOverwatchCondition(reactor, mover, startPos) {
     if (reactor.id === mover.id)
         return false;
 
@@ -68,7 +68,7 @@ export async function checkOverwatchCondition(reactor, mover, startPos) {
         }
     }
 
-    const maxThreat = await getActorMaxThreat(reactor.actor);
+    const maxThreat = getActorMaxThreat(reactor.actor);
     const distanceStart = getMinGridDistance(mover, reactor, startPos);
 
     return distanceStart <= maxThreat;

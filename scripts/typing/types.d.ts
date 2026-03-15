@@ -10,6 +10,49 @@ interface TriggerDataBase {
     [key: string]: any;
 }
 
+// ─── Move history types ───────────────────────────────────────────────────────
+
+interface MoveHistoryEntry {
+    distanceMoved: number;
+    movementCost: number;
+    isDrag: boolean;
+    isFreeMovement: boolean;
+    boostSet: number[];
+    startPos: { x: number; y: number };
+}
+
+interface MoveHistoryData {
+    moves: MoveHistoryEntry[];
+}
+
+/** Returned when getMovementHistory has data. */
+interface MovementHistoryResult {
+    exists: true;
+    /** Physical squares traveled (no terrain penalty overhead). */
+    totalMoved: number;
+    /** Movement cap consumed (terrain penalty counted). */
+    totalCost: number;
+    intentional: {
+        total: number;
+        totalCost: number;
+        regular: number;
+        regularCost: number;
+        free: number;
+        freeCost: number;
+    };
+    unintentional: number;
+    unintentionalCost: number;
+    nbBoostUsed: number;
+    startPosition: { x: number; y: number };
+    movementCap: number;
+}
+
+/** Physical distance + cap cost for a set of moves. */
+interface MoveSummary {
+    moved: number;
+    cost: number;
+}
+
 // ─── Shared subtypes ─────────────────────────────────────────────────────────
 
 interface FlowState {
@@ -240,7 +283,7 @@ interface LancerAutomationsAPI {
     // InteractiveAPI
     chooseToken(sourceToken: Token, options?: object): Promise<Token[] | null>;
     knockBackToken(token: Token, direction: object, distance: number): Promise<void>;
-    applyKnockbackMoves(token: Token, moves: object[]): Promise<void>;
+    applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any): Promise<void>;
     startChoiceCard(options?: {
         mode?: "or" | "and" | "vote" | "vote-hidden";
         choices?: Array<{ text: string; icon?: string; callback?: Function; data?: any; value?: any;[key: string]: any }>;
@@ -255,6 +298,11 @@ interface LancerAutomationsAPI {
     }): Promise<any[] | true | null>;
     revertMovement(token: Token): Promise<void>;
     clearMovementHistory(token: Token): void;
+    clearMoveData(tokenOrId: Token | string): void;
+    undoMoveData(tokenOrId: Token | string, distance?: number): void;
+    getMovementCap(tokenOrId: Token | string): number;
+    initMovementCap(token: Token): void;
+    increaseMovementCap(tokenOrId: Token | string, value: number): void;
     getActiveGMId(): string | null;
     getTokenOwnerUserId(token: Token): string[];
 
@@ -290,8 +338,9 @@ interface LancerAutomationsAPI {
 
     // Main helpers
     handleTrigger(triggerType: TriggerType, data: object): Promise<void>;
-    getMovementHistory(token: Token | string): object;
-    getCumulativeMoveData(token: Token): object[];
+    getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };
+    getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;
+    getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;
     executeStatRoll(actor: any, stat: string, title: string, sourceToken?: Token): Promise<any>;
 
     [key: string]: any;
@@ -311,7 +360,6 @@ type ReactionCallback = (
 ) => any;
 
 interface ReactionConfig {
-    name?: string;
     category?: string;
     itemType?: string;
     triggers: TriggerType[];

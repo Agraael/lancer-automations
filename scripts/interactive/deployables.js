@@ -278,6 +278,60 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 }
 
 /**
+ * Module-level cache: lid → { name, img }.
+ * Populated lazily by `getDeployableInfo`. Benefits the whole module.
+ * @type {Map<string, { name: string, img: string } | null>}
+ */
+const _deployableInfoCache = new Map();
+
+/**
+ * Get the name and img for a deployable LID.
+ * Checks world actors first (sync), then the cache, then async-resolves from compendium and caches.
+ * Returns a plain `{ name, img }` object — never the full Actor to keep it lightweight.
+ *
+ * @param {string} lid
+ * @param {any} [ownerActor] - Used by resolveDeployable for folder search
+ * @returns {Promise<{ name: string, img: string } | null>}
+ */
+/**
+ * Synchronous read from the deployable info cache (populated by `getDeployableInfo`).
+ * Returns null if not yet cached — call `getDeployableInfo` first to warm the cache.
+ * @param {string} lid
+ * @returns {{ name: string, img: string } | null}
+ */
+export function getDeployableInfoSync(lid) {
+    if (!lid)
+        return null;
+    const worldActor = /** @type {any} */ (game.actors)?.find(
+        /** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid
+    );
+    if (worldActor)
+        return { name: worldActor.name, img: worldActor.img };
+    return _deployableInfoCache.get(lid) ?? null;
+}
+
+export async function getDeployableInfo(lid, ownerActor = null) {
+    if (!lid)
+        return null;
+    // World actor takes priority — most accurate, no cache needed
+    const worldActor = /** @type {any} */ (game.actors)?.find(
+        /** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid
+    );
+    if (worldActor)
+        return { name: worldActor.name, img: worldActor.img };
+    // Cache hit
+    if (_deployableInfoCache.has(lid))
+        return _deployableInfoCache.get(lid);
+    // Async resolve from compendium and populate cache
+    const resolved = await resolveDeployable(lid, ownerActor);
+    const info = resolved.deployable
+        ? { name: resolved.deployable.name, img: resolved.deployable.img }
+        : null;
+    _deployableInfoCache.set(lid, info);
+    return info;
+}
+
+/**
  * Place a deployable token on the scene with interactive placement.
  * @param {Object} [options={}]
  * @param {Actor|string|Array<Actor|string>} [options.deployable] - A deployable Actor, LID string, or array of them
@@ -652,28 +706,75 @@ export function getItemActions(item) {
 }
 
 /**
- * Add extra action objects to an item via flags (system.actions is read-only due to Lancer's TypeDataModel).
- * Stores action objects in the 'lancer-automations.extraActions' flag.
- * @param {Item} item                                       The Foundry Item document to update
+ * Add extra action objects to an item, token, or actor via flags.
+ * - Item: stores in item's 'lancer-automations.extraActions' flag (system.actions is read-only)
+ * - Token / Actor: stores in actor's 'lancer-automations.extraActions' flag
+ * @param {Item|Token|Actor} target                         Item, Token, or Actor to attach actions to
  * @param {Object|Array<Object>} actions                    A single action object or array of action objects
- * @returns {Promise<Item|null>} The updated item, or null on failure
+ * @returns {Promise<Item|Actor|null>} The updated document, or null on failure
  */
-export async function addExtraActions(item, actions) {
-    if (!item) {
-        ui.notifications.error("addExtraActions: item is required.");
+export async function addExtraActions(target, actions) {
+    if (!target) {
+        ui.notifications.error("addExtraActions: target is required.");
         return null;
     }
     const newActions = Array.isArray(actions) ? actions : [actions];
-    if (newActions.length === 0) {
-        return item;
-    }
+    if (newActions.length === 0)
+        return null;
 
-    const existing = item.getFlag('lancer-automations', 'extraActions') || [];
+    // Resolve to a Foundry document that supports getFlag/setFlag
+    const t = /** @type {any} */ (target);
+    const doc = t.actor ?? t.document ?? t;
+
+    const existing = doc.getFlag('lancer-automations', 'extraActions') || [];
     const merged = [...existing, ...newActions];
 
-    await item.setFlag('lancer-automations', 'extraActions', merged);
-    console.log(`lancer-automations | addExtraActions: Added action(s) to ${item.name}:`, newActions);
-    return item;
+    await doc.setFlag('lancer-automations', 'extraActions', merged);
+    console.log(`lancer-automations | addExtraActions: Added action(s) to ${doc.name}:`, newActions);
+    return doc;
+}
+
+/**
+ * Get extra actions stored on a token or actor via addExtraActions.
+ * @param {Token|Actor} tokenOrActor
+ * @returns {Array<Object>}
+ */
+export function getActorActions(tokenOrActor) {
+    if (!tokenOrActor)
+        return [];
+    const t = /** @type {any} */ (tokenOrActor);
+    const doc = t.actor ?? t.document ?? t;
+    return doc.getFlag?.('lancer-automations', 'extraActions') || [];
+}
+
+/**
+ * Remove extra actions from an item, token, or actor.
+ * Accepts a predicate to select which actions to remove, a name string, or an array of names.
+ * If no filter is provided, clears all extra actions.
+ * @param {Item|Token|Actor} target
+ * @param {Function|string|string[]|null} [filter]  (action) => boolean, name string, or array of name strings
+ * @returns {Promise<void>}
+ */
+export async function removeExtraActions(target, filter = null) {
+    if (!target)
+        return;
+    const t = /** @type {any} */ (target);
+    const doc = t.actor ?? t.document ?? t;
+    const existing = doc.getFlag?.('lancer-automations', 'extraActions') || [];
+    if (existing.length === 0)
+        return;
+
+    let kept;
+    if (!filter) {
+        kept = [];
+    } else if (typeof filter === 'function') {
+        kept = existing.filter(a => !filter(a));
+    } else {
+        const names = Array.isArray(filter) ? filter : [filter];
+        kept = existing.filter(a => !names.includes(a.name));
+    }
+
+    await doc.setFlag('lancer-automations', 'extraActions', kept);
 }
 
 /**
@@ -1373,7 +1474,10 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
     }
 
     const weapons = getWeapons(actor);
-    const unloadedWeapons = weapons.filter(w => w.system.tags?.some(t => t.id === "tg_loading") && w.system.loaded === false);
+    const unloadedWeapons = weapons.filter(w => {
+        const tags = [...(w.system.active_profile?.tags ?? []), ...(w.system.all_base_tags ?? w.system.tags ?? [])];
+        return tags.some(t => t.lid === 'tg_loading') && w.system.loaded === false;
+    });
 
     if (unloadedWeapons.length === 0) {
         ui.notifications.warn(`${name} has no unloaded weapons to reload!`);
@@ -1392,6 +1496,73 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
         ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
     }
     return chosenWeapon;
+}
+
+/**
+ * Prompts the user to pick a depleted system from an actor and restores its uses or charged state.
+ * Targets system items (mech_system, pilot_gear, NPC non-weapon features) with tg_limited (uses <= 0) or tg_recharge (charged === false).
+ * @param {Actor|Token|TokenDocument} actorOrToken
+ * @param {string} [targetName]
+ * @returns {Promise<Item|null>}
+ */
+export async function rechargeSystem(actorOrToken, targetName) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    const name = targetName || actorOrToken?.name || actor?.name || "Target";
+
+    if (!actor) {
+        ui.notifications.warn("No valid actor provided for recharging.");
+        return null;
+    }
+
+    const depletedItems = actor.items.filter(item => {
+        if (item.type === 'mech_weapon' || item.type === 'pilot_weapon') return false;
+        if (item.system?.type?.toLowerCase() === 'weapon') return false;
+        const sys = item.system;
+        const tags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
+        const hasLimited = tags.some(t => t.lid === 'tg_limited');
+        const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
+        if (hasLimited) {
+            const val = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
+            if (val <= 0) return true;
+        }
+        if (hasRecharge && sys.charged === false) return true;
+        return false;
+    });
+
+    if (depletedItems.length === 0) {
+        ui.notifications.warn(`${name} has no depleted systems to recharge!`);
+        return null;
+    }
+
+    const chosen = await pickItem(depletedItems, {
+        title: "CHOOSE SYSTEM TO RECHARGE",
+        description: `Select which of ${name}'s systems to recharge:`,
+        icon: "fas fa-bolt",
+        formatText: (item) => `Recharge ${item.name}`
+    });
+
+    if (!chosen) return null;
+
+    const sys = chosen.system;
+    const tags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
+    const hasLimited = tags.some(t => t.lid === 'tg_limited');
+    const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
+    const update = /** @type {any} */ ({});
+
+    if (hasLimited) {
+        if (typeof sys.uses === 'number') {
+            update['system.uses'] = sys.uses_max ?? sys.max_uses ?? 0;
+        } else {
+            update['system.uses.value'] = sys.uses?.max ?? 0;
+        }
+    }
+    if (hasRecharge) {
+        update['system.charged'] = true;
+    }
+
+    await chosen.update(update);
+    ui.notifications.info(`${name}'s ${chosen.name} recharged!`);
+    return chosen;
 }
 
 /**

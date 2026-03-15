@@ -108,7 +108,7 @@ export function getActorActionItems(actor, activationType) {
                     for (let n = 0; n < currRank; n++) {
                         for (const action of (item.system?.ranks?.[n]?.actions ?? [])) {
                             if (action.activation === activationType)
-                                results.push({ action, sourceItem: item });
+                                results.push({ action, sourceItem: item, rankIdx: n });
                         }
                     }
                 } else if (item.type === 'core_bonus') {
@@ -1240,7 +1240,7 @@ function _getActorWeapons(actor) {
 /**
  * Applies tag and range bonuses from actor onto the given tags/range arrays (mutates in-place).
  */
-async function _applyItemBonuses(item, actor, tags, range) {
+function _applyItemBonuses(item, actor, tags, range) {
     if (!actor) {
         return;
     }
@@ -1251,7 +1251,7 @@ async function _applyItemBonuses(item, actor, tags, range) {
     const flowTags = new Set(["all", "attack"]);
     const state = { actor, item, data: { tags, range } };
     for (const bonus of bonuses) {
-        if (!await isBonusApplicable(bonus, flowTags, state)) {
+        if (!isBonusApplicable(bonus, flowTags, state)) {
             continue;
         }
         if (bonus.type === "tag") {
@@ -1282,14 +1282,14 @@ export async function getItemTags_WithBonus(item, actor) {
 /**
  * Returns the maximum range value per range type across all weapons of the input.
  * @param {Actor|Token|Item|Array} input
- * @returns {Promise<Object>} e.g. { Range: 25, Burst: 3 }
+ * @returns {Object} e.g. { Range: 25, Burst: 3 }
  */
-export async function getMaxWeaponRanges_WithBonus(input) {
+export function getMaxWeaponRanges_WithBonus(input) {
     const { weapons, actor } = _resolveWeaponsAndActor(input);
     const maxPerType = {};
     for (const weapon of weapons) {
         const { tags, range } = _getItemBaseData(weapon);
-        await _applyItemBonuses(weapon, actor, tags, range);
+        _applyItemBonuses(weapon, actor, tags, range);
         for (const r of range) {
             const val = Number.parseInt(r.val) || 0;
             if (maxPerType[r.type] === undefined || val > maxPerType[r.type]) {
@@ -1303,12 +1303,12 @@ export async function getMaxWeaponRanges_WithBonus(input) {
 /**
  * Returns the maximum threat range for an actor, accounting for active bonuses.
  * @param {Actor} actor
- * @returns {Promise<number>}
+ * @returns {number}
  */
-export async function getActorMaxThreat(actor) {
+export function getActorMaxThreat(actor) {
     if (!actor)
         return 0;
-    const ranges = await getMaxWeaponRanges_WithBonus(actor);
+    const ranges = getMaxWeaponRanges_WithBonus(actor);
     return ranges.Threat || 1;
 }
 
@@ -1353,7 +1353,8 @@ export async function getMaxWeaponReach_WithBonus(input) {
  * @returns {Promise<Object>} e.g. { Range: 5, Cone: 5, Thrown: 3, Deploy: 3 }
  */
 export async function getMaxItemRanges_WithBonus(item, actor) {
-    if (!item) return {};
+    if (!item)
+        return {};
     const a = actor ?? item.parent ?? null;
 
     // Base range + tags (handles mech_weapon profiles)
@@ -1371,12 +1372,14 @@ export async function getMaxItemRanges_WithBonus(item, actor) {
     const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
     if (thrownTag) {
         const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
-        if (throwVal > 0) allRanges.push({ type: "Thrown", val: throwVal });
+        if (throwVal > 0)
+            allRanges.push({ type: "Thrown", val: throwVal });
     }
 
     // deployRange flag → "Deploy" range type
     const deployRange = item.getFlag?.("lancer-automations", "deployRange");
-    if (deployRange) allRanges.push({ type: "Deploy", val: deployRange });
+    if (deployRange)
+        allRanges.push({ type: "Deploy", val: deployRange });
 
     // Compute max per type
     const maxPerType = {};

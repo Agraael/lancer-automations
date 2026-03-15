@@ -1,13 +1,17 @@
 /* global $, window, game, CONFIG */
 
-import { laDetailPopup, laRenderWeaponBody, laBindPopupBehavior, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeStatRoll, getActorActionItems, hasReactionAvailable } from '../misc-tools.js';
-import { executeInvade, openThrowMenu, clearMovementHistory } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon } from '../interactive/deployables.js';
+import { laRenderWeaponBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, getActorActionItems, hasReactionAvailable } from '../misc-tools.js';
+import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../reinforcement.js';
-import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus } from './item-helpers.js';
+import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
 import { onHudRowHover } from './hover.js';
+import { buildStatsHtml } from './stats-bar.js';
+import { collectSearchResults, openSearchResults } from './search.js';
+import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
+import { StatusPanel } from './status-panel.js';
 
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
@@ -77,6 +81,7 @@ function brighten(hex, amount = 25) {
     return `rgb(${r},${g},${b})`;
 }
 
+
 const ICON_TECH_QUICK = 'systems/lancer/assets/icons/tech_quick.svg';
 const ICON_TECH_FULL  = 'systems/lancer/assets/icons/tech_full.svg';
 
@@ -86,6 +91,7 @@ const ICON_TECH_FULL  = 'systems/lancer/assets/icons/tech_full.svg';
 //
 // Category shape: { label, colLabel, getItems: () => Item[] }
 // Item shape:     { label, childColLabel?, getChildren?: () => Item[], onClick?: () => void, onRightClick?: (rowEl) => void }
+
 
 // ── LancerHUD ─────────────────────────────────────────────────────────────────
 
@@ -100,19 +106,30 @@ export class LancerHUD {
         this._pendingCol4Refresh = null;
         this._pendingCol3Refresh = null;
         this._refreshTimer       = null;
-        this._statusPanel          = null;
-        this._statusPanelAnchor    = null;
-        this._subtypePanel         = null;
+        this._statusPanelInstance  = null;
         this._suppressRefreshDepth = 0;
         this._searchActive         = false;
         this._categories           = null;
+        // Track what's currently open in each column for in-place refresh
+        this._c2Category    = null;   // category whose getItems() fills c2
+        this._c2AnchorRow   = null;   // c1 row that opened c2
+        this._c3SourceItem  = null;   // c2 item whose getChildren() fills c3
+        this._c3AnchorRow   = null;   // c2 row that opened c3
+        this._c4SourceItem  = null;   // c3 item whose getChildren() fills c4
     }
 
-    bind(token) {
+    async bind(token) {
         this.unbind();
         if (!token.actor?.isOwner)
             return;
         this._token = token;
+        const actor = token.actor;
+        const lids = [];
+        for (const item of actor.items)
+            for (const lid of getItemDeployables(item, actor))
+                lids.push(lid);
+        if (lids.length)
+            await Promise.all(lids.map(lid => getDeployableInfo(lid, actor)));
         this._render();
     }
 
@@ -134,6 +151,18 @@ export class LancerHUD {
             el.stop(true).animate({ opacity: 0, left: '-=18' }, 180, () => el.remove());
     }
 
+    /**
+     * Returns `{ incDepth, decDepth }` bound to this HUD's suppress counter.
+     * Pass to any out-of-column click handler (popups, pips, etc.) that calls
+     * item/actor.update() and must not trigger a full HUD re-render.
+     */
+    _depthCallbacks() {
+        return {
+            incDepth: () => this._suppressRefreshDepth++,
+            decDepth: () => this._suppressRefreshDepth--,
+        };
+    }
+
     /** Debounced full refresh — coalesces rapid successive updates into one render. */
     scheduleRefresh(delay = 100) {
         if (this._suppressRefreshDepth > 0)
@@ -149,16 +178,22 @@ export class LancerHUD {
     updateStatsInPlace() {
         if (!this._actor || !this._el)
             return;
-        this._el.find('#la-hud-stats').replaceWith($(this._buildStatsHtml(this._actor)));
+        this._el.find('#la-hud-stats').replaceWith($(buildStatsHtml(this._actor, this._token)));
     }
 
     refresh() {
         if (!this._token || this._suppressRefreshDepth > 0)
             return;
         // Status panel open — sync rows in-place, never close+reopen it
-        if (this._statusPanel?.is(':visible')) {
+        if (this._statusPanelInstance?.isVisible) {
             this.updateStatsInPlace();
-            this._syncStatusPanelRows();
+            this._statusPanelInstance.syncRows();
+            return;
+        }
+        // Detail popup open — refresh visible columns in-place, never full re-render
+        if ($('.la-hud-popup').length) {
+            this.updateStatsInPlace();
+            this._refreshColumnsInPlace();
             return;
         }
         const pending4 = this._pendingCol4Refresh;
@@ -179,7 +214,6 @@ export class LancerHUD {
         this._c4AnchorRow = null;
         if (el)
             el.stop(true).remove();
-        $('.la-hud-popup').stop(true).remove();
         this._render(false);
         this._restoreOpenPath(openPath);
     }
@@ -217,7 +251,7 @@ export class LancerHUD {
             ev.preventDefault(); actor.sheet?.render(true);
         });
 
-        const statsEl = $(this._buildStatsHtml(actor));
+        const statsEl = $(buildStatsHtml(actor, this._token));
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
@@ -259,22 +293,23 @@ export class LancerHUD {
                 this._searchActive = false;
                 _cancelCollapse();
                 if (/** @type {any} */ (cat).isStatusPanel) {
-                    if (row.hasClass('la-hud-active') && this._statusPanel?.is(':visible'))
+                    if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible)
                         return;
                     this._setActive(c1, row, true);
                     closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
-                    this._openStatusPanel(row);
+                    this._statusPanelInstance.open(row);
                     return;
                 }
                 if (row.hasClass('la-hud-active') && c2.is(':visible'))
                     return;
-                if (this._statusPanel) {
-                    this._statusPanel.stop(true).remove();
-                    this._statusPanel = null;
+                if (this._statusPanelInstance?.isVisible) {
+                    this._statusPanelInstance.close();
                 }
                 this._setActive(c1, row, true);
                 closeCol(c3, 80);
                 closeCol(c4, 80);
+                this._c2Category = cat; this._c2AnchorRow = row;
+                this._c3SourceItem = null; this._c4SourceItem = null;
                 c2.find('.la-hud-col-label').text(/** @type {any} */ (cat).colLabel);
                 this._openCol(c2, /** @type {any} */ (cat).getItems(), row);
                 c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
@@ -299,13 +334,7 @@ export class LancerHUD {
                 closeCol(c2);
                 closeCol(c3);
                 closeCol(c4);
-                if (this._subtypePanel) {
-                    this._subtypePanel.remove(); this._subtypePanel = null;
-                }
-                if (this._statusPanel) {
-                    this._statusPanel.stop(true).remove();
-                    this._statusPanel = null;
-                }
+                this._statusPanelInstance?.close();
                 _clearC1Active();
                 $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
                     $(this).remove();
@@ -316,6 +345,15 @@ export class LancerHUD {
         this._scheduleCollapse = _scheduleCollapse;
         this._cancelCollapse   = _cancelCollapse;
         this._clearC1Active    = _clearC1Active;
+        this._statusPanelInstance = new StatusPanel({
+            actor: this._actor,
+            token: this._token,
+            el:    hud,
+            cancelCollapse:  _cancelCollapse,
+            scheduleCollapse: _scheduleCollapse,
+            incDepth: () => this._suppressRefreshDepth++,
+            decDepth: () => this._suppressRefreshDepth--,
+        });
         hud.on('mouseleave', () => {
             _clearC1Active();
             _scheduleCollapse();
@@ -326,9 +364,15 @@ export class LancerHUD {
         // Leaving any c1 category row toward the header area schedules collapse
         c1.on('mouseleave', '.la-hud-row', _scheduleCollapse);
         // Title / stats / menu-label area is above the item list — hovering it closes open columns
-        titleEl.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
-        statsEl.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
-        menuLabel.on('mouseenter', () => { _clearC1Active(); _scheduleCollapse(); });
+        titleEl.on('mouseenter', () => {
+            _clearC1Active(); _scheduleCollapse();
+        });
+        statsEl.on('mouseenter', () => {
+            _clearC1Active(); _scheduleCollapse();
+        });
+        menuLabel.on('mouseenter', () => {
+            _clearC1Active(); _scheduleCollapse();
+        });
 
         // ── Search toggle + live-filter ──────────────────────────────────────────
         searchIcon.on('click', (ev) => {
@@ -351,7 +395,7 @@ export class LancerHUD {
             }
             this._searchActive = true;
             _cancelCollapse();
-            this._openSearchResults(c2, this._collectSearchResults(q));
+            openSearchResults(c2, collectSearchResults(q, this._categories), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
         });
         searchBar.on('keydown', (ev) => {
             if (ev.key === 'Escape')
@@ -365,12 +409,14 @@ export class LancerHUD {
     // items     — Item[] (see shape above)
     // anchorRow — the parent row this column aligns with vertically
 
-    _openCol(col, items, anchorRow) {
+    _openCol(col, items, anchorRow, { reposition = true } = {}) {
         col.children(':not(.la-hud-col-label)').remove();
         // Use page-relative offset minus hud offset so the result is correct
         // regardless of which column anchorRow lives in (c1 or c2).
-        const topInHud = anchorRow.offset().top - this._el.offset().top;
-        col.css({ top: topInHud });
+        if (reposition && anchorRow) {
+            const topInHud = anchorRow.offset().top - this._el.offset().top;
+            col.css({ top: topInHud });
+        }
 
         if (!items.length) {
             col.append(`<div style="${S_MUTED}">Empty</div>`);
@@ -383,7 +429,46 @@ export class LancerHUD {
                 col.append(`<div style="${S_COL_LABEL};display:flex;align-items:center;">${iconHtml}${item.label}</div>`);
                 continue;
             }
-            const hasChildren = !!item.getChildren;
+            if (item.inputCell) {
+                const S_BTN  = 'color:#111;cursor:pointer;font-size:0.7em;line-height:1;padding:0 3px;flex-shrink:0;user-select:none;';
+                const S_LBL  = 'flex:1;overflow:hidden;min-width:0;';
+                const S_PAN  = 'display:inline-block;white-space:nowrap;padding-right:8px;';
+                const hasMax  = item.max != null;
+                const min     = item.min ?? (hasMax ? 0 : -Infinity);
+                const max     = item.max ?? Infinity;
+                const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
+                const valColor = (v) => hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
+                const restingBg = (v) => hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
+                const borderColor = (v) => hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : '#991e2a') : '#991e2a';
+                const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;`;
+                let cell;
+                if (item.subtype === 'increment') {
+                    let cur = item.getValue();
+                    const valText = () => hasMax ? `${cur}/${max}` : `${cur}`;
+                    const S_VAL  = `min-width:22px;text-align:center;font-weight:600;font-size:1em;color:${valColor(cur)};`;
+                    cell = $(`<div style="${S_CELL}background:${restingBg(cur)};border-left-color:${borderColor(cur)};">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><div style="display:flex;align-items:center;gap:4px;"><span class="la-dec-btn" style="${S_BTN}">◄</span><span class="la-inc-val" style="${S_VAL}">${valText()}</span><span class="la-inc-btn" style="${S_BTN}">►</span></div></div>`);
+                    const step = item.step ?? 1;
+                    const suppress = () => { this._suppressRefreshDepth++; setTimeout(() => this._suppressRefreshDepth--, 300); };
+                    const updateDisplay = () => { cell.find('.la-inc-val').css('color', valColor(cur)).text(valText()); cell.data('restingBg', restingBg(cur)).css('borderLeftColor', borderColor(cur)); };
+                    cell.find('.la-dec-btn').on('click', (ev) => { ev.stopPropagation(); if (cur <= min) return; suppress(); cur = Math.max(min, cur - step); item.onValueChanged(cur); updateDisplay(); });
+                    cell.find('.la-inc-btn').on('click', (ev) => { ev.stopPropagation(); if (cur >= max) return; suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay(); });
+                    cell.data('restingBg', restingBg(cur));
+                } else {
+                    cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><input type="number" class="la-type-val" value="${item.getValue()}" style="width:44px;text-align:center;background:#fff;border:1px solid #bbb;color:#111;font-size:0.9em;padding:2px 4px;"></div>`);
+                    cell.find('.la-type-val').on('change', (ev) => { ev.stopPropagation(); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v)) item.onValueChanged(v); }).on('click mousedown', (ev) => ev.stopPropagation());
+                    cell.data('restingBg', BG_DEFAULT);
+                }
+                cell.on('mouseenter', () => {
+                    this._cancelCollapse?.(); cell.css({ background: BG_HOVER });
+                    const clip = cell.find('.la-hud-clip')[0]; const pan = cell.find('.la-hud-pan')[0];
+                    if (clip && pan) { const overflow = pan.scrollWidth - clip.clientWidth; if (overflow > 4) $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' }); }
+                });
+                cell.on('mouseleave', () => { cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT }); cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' }); });
+                col.append(cell);
+                continue;
+            }
+            const rawChildren = item.getChildren ? item.getChildren() : null;
+            const hasChildren = rawChildren !== null;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
 
             if (item.highlightBg) {
@@ -404,6 +489,9 @@ export class LancerHUD {
                         closeCol(this._c3, 80);
                         closeCol(this._c4, 80);
                     } else if (col === this._c3 && !hasChildren) {
+                        col.find('.la-hud-active').each(function() {
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                        });
                         closeCol(this._c4, 80);
                     }
                 });
@@ -430,7 +518,14 @@ export class LancerHUD {
             if (item.onRightClick) {
                 row.attr('title', 'Right click for details');
                 row.on('contextmenu', ev => {
-                    ev.preventDefault(); item.onRightClick(row);
+                    ev.preventDefault();
+                    if (item.keepOpen && item.refreshCol4) {
+                        if (col === this._c3)
+                            this._pendingCol3Refresh = { fn: item.refreshCol4, anchor: anchorRow };
+                        else
+                            this._pendingCol4Refresh = { fn: item.refreshCol4, anchor: this._c4AnchorRow };
+                    }
+                    item.onRightClick(row);
                 });
             }
             if (item.hoverData) {
@@ -452,26 +547,34 @@ export class LancerHUD {
                     this._setActive(col, row);
                     if (col === this._c2) {
                         closeCol(this._c4, 80);
-                        this._c3.find('.la-hud-col-label').text(item.childColLabel ?? '');
-                        this._c3.css({ left: col.position().left + col.outerWidth() });
-                        this._openCol(this._c3, item.getChildren(), row);
-                        this._c3.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
-                            $(this).css('pointerEvents', '');
-                        });
+                        this._openChildCol(col, this._c3, item, rawChildren, row);
                     } else if (col === this._c3) {
                         this._c4AnchorRow = row;
-                        this._c4.find('.la-hud-col-label').text(item.childColLabel ?? '');
-                        this._c4.css({ left: this._c3.position().left + this._c3.outerWidth() });
-                        this._openCol(this._c4, item.getChildren(), row);
-                        this._c4.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
-                            $(this).css('pointerEvents', '');
-                        });
+                        this._openChildCol(this._c3, this._c4, item, rawChildren, row);
                     }
                 });
             }
 
             col.append(row);
         }
+    }
+
+    /** Open a child column positioned to the right of parentCol and animate it in. */
+    _openChildCol(/** @type {any} */ parentCol, /** @type {any} */ childCol, /** @type {any} */ item, /** @type {any} */ children, /** @type {any} */ row) {
+        if (childCol === this._c3) {
+            this._c3SourceItem = item;
+            this._c3AnchorRow = row;
+            this._c4SourceItem = null;
+        } else if (childCol === this._c4) {
+            this._c4SourceItem = item;
+        }
+        childCol.find('.la-hud-col-label').text(item.childColLabel ?? '');
+        childCol.css({ left: parentCol.position().left + parentCol.outerWidth() });
+        this._openCol(childCol, children, row);
+        childCol.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' })
+            .show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
+                $(this).css('pointerEvents', '');
+            });
     }
 
     // ── Category / item builders ──────────────────────────────────────────────
@@ -481,14 +584,15 @@ export class LancerHUD {
         const isMech       = this._actor.type === 'mech';
         const isDeployable = this._actor.type === 'deployable';
         const isPilot      = this._actor.type === 'pilot';
+        const isNpc        = this._actor.type === 'npc';
         return [
             this._catAttacks(),
             ...(isDeployable ? [] : [this._catWeapons()]),
             this._catTech(),
             this._catActions(),
             ...(isDeployable || isPilot ? [] : [this._catDeployables()]),
-            ...(isMech ? [this._catSystems()] : []),
-            ...(isMech ? [this._catFrame()] : []),
+            ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : []),
+            ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : []),
             ...(isMech ? [this._catTalents()] : []),
             this._catSkills(),
             this._catUtility(),
@@ -601,20 +705,25 @@ export class LancerHUD {
                 const depActor = /** @type {any} */ (game.actors)?.find(
                     (/** @type {any} */ a) => a.type === 'deployable' && a.system?.lid === lid
                 );
-                const label = depActor?.name ?? lid;
-                const icon  = depActor?.img  ?? 'systems/lancer/assets/icons/deployable.svg';
+                const depIndex = depActor ? null : getDeployableInfoSync(lid);
+                const label = depActor?.name ?? depIndex?.name ?? lid;
+                const icon  = depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg';
                 deployableRows.push({
                     label,
                     icon,
                     hoverData: { actor, item, action: null, category: 'Deployables' },
                     onClick: () => deployDeployable(actor, lid, item, true),
-                    onRightClick: depActor ? (/** @type {any} */ row) => {
-                        const body = laRenderDeployables([depActor]);
+                    onRightClick: async (/** @type {any} */ row) => {
+                        let dep = depActor;
+                        if (!dep) {
+                            const resolved = await resolveDeployable(lid, actor);
+                            dep = resolved.deployable;
+                        }
+                        if (!dep)
+                            return;
                         const srcType = item.system?.type ?? '';
-                        const subtitle = `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`;
-                        const popup = laDetailPopup('la-hud-popup la-hud-deploy-popup', depActor.name, subtitle, body, 'system');
-                        this._showPopupAt(popup, row);
-                    } : null,
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
                 });
             }
         }
@@ -726,25 +835,19 @@ export class LancerHUD {
             colLabel: 'Invades',
             getItems: () => this._getInvadeOptions(actor).map(opt => ({
                 label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
-                icon: opt.item?.img ?? ICON_TECH_QUICK,
+                icon: ICON_TECH_QUICK,
                 highlightBg:          opt.destroyed ? '#ffcccc' : opt.unavailable ? '#ffe5b4' : null,
                 highlightBorderColor: opt.destroyed ? '#cc3333' : opt.unavailable ? '#cc7700' : null,
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (row) => {
-                    const existing = $('.la-hud-invade-popup');
-                    if (existing.length && existing.data('invade-name') === opt.name) {
-                        existing.remove(); return;
-                    }
-                    existing.remove();
                     const detail = laFormatDetailHtml(opt.detail);
                     const bodyHtml = detail ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>` : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    const sourceType  = opt.item?.system?.type ? ` (${opt.item.system.type})` : '';
+                    const isWeapon = opt.item?.type?.includes('weapon');
+                    const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
                     const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
                     const subtitle = (opt.isFragmentSignal ? 'Fragment Signal · Quick Tech' : 'Invade · Quick Tech') + sourceLabel;
-                    const popup = laDetailPopup('la-hud-popup la-hud-invade-popup', opt.name, subtitle, bodyHtml, 'system');
-                    popup.data('invade-name', opt.name);
-                    this._showPopupAt(popup, row);
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle, bodyHtml, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             })),
         };
@@ -755,6 +858,7 @@ export class LancerHUD {
         const ap = a => this._actionPopup(a);
         const basicChildren = () => {
             const items = [
+                { label: 'Boost',     icon: 'modules/lancer-automations/icons/speedometer.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Boost',       action: { name: 'Boost',       activation: 'Quick'          }, detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }) },
                 { label: 'Aid',       icon: 'modules/lancer-automations/icons/medical-pack.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Aid',       action: { name: 'Aid',       activation: 'Quick'          }, detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }) },
                 { label: 'Hide',      icon: 'systems/lancer/assets/icons/status_hidden.svg',         onClick: () => executeSimpleActivation(actor, { title: 'Hide',      action: { name: 'Hide',      activation: 'Quick'          }, detail: 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.' }),                                                                                                                                                                                                                                          onRightClick: ap({ name: 'Hide',      activation: 'Quick',          detail: 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.' }) },
                 { label: 'Search',    icon: 'modules/lancer-automations/icons/search.svg',                 onClick: () => executeSimpleActivation(actor, { title: 'Search',    action: { name: 'Search',    activation: 'Quick'          }, detail: 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.' }),                                                                                                                                  onRightClick: ap({ name: 'Search',    activation: 'Quick',          detail: 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.' }) },
@@ -765,7 +869,7 @@ export class LancerHUD {
                 { label: 'Eject',     icon: 'modules/lancer-automations/icons/parachute.svg',              onClick: () => executeSimpleActivation(actor, { title: 'Eject',     action: { name: 'Eject',     activation: 'Quick'          }, detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }),                                                                                                                                 onRightClick: ap({ name: 'Eject',     activation: 'Quick',          detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }) },
             ];
             if (actor.type === 'mech')
-                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
+                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
             return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
         };
         return {
@@ -865,10 +969,10 @@ export class LancerHUD {
             .filter(s => actor.system[s.key] !== undefined)
             .map(s => ({
                 label: s.label,
-                badge: `+${actor.system[s.key]}`,
+                badge: (actor.system[s.key] >= 0 ? '+' : '') + actor.system[s.key],
                 badgeColor: '#777',
                 hoverData: { actor, item: null, action: { name: s.label }, category: 'Skills' },
-                onClick: () => executeStatRoll(actor, s.key, s.label),
+                onClick: () => /** @type {any} */ (actor).beginStatFlow(s.key),
             }));
 
         const skillItems = [];
@@ -893,7 +997,6 @@ export class LancerHUD {
                 label: 'Skills',
                 colLabel: 'Skills',
                 getItems: () => [
-                    { isSectionLabel: true, label: 'Stats' },
                     ...statsItems,
                 ],
             };
@@ -945,14 +1048,28 @@ export class LancerHUD {
                     },
                 },
                 { label: 'Suicide',          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }) },
-                { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => executeReactorExplosion(token) },
+                { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token) },
             ] : []),
         ];
 
         const movementItems = [
             { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([...(/** @type {any} */ (game.user)?.targets ?? [])], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },
+            { label: 'Fall', icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token) },
             { label: 'Reset History',  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false) },
-            { label: 'Reset & Revert', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => clearMovementHistory(token, true) },
+            { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
+            { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true) },
+            {
+                inputCell: true,
+                subtype: 'type',
+                name: 'Move Cap',
+                icon: 'modules/lancer-automations/icons/path-distance.svg',
+                getValue: () => game.modules.get('lancer-automations')?.api?.getMovementCap(token) ?? 0,
+                onValueChanged: (newVal) => {
+                    const api = game.modules.get('lancer-automations')?.api;
+                    if (!api) return;
+                    api.increaseMovementCap(token, newVal - api.getMovementCap(token));
+                },
+            },
         ];
 
         return {
@@ -990,21 +1107,11 @@ export class LancerHUD {
                         highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
                         highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
                         onRightClick: (row) => {
-                            const existing = $('.la-hud-system-popup');
-                            if (existing.length && existing.data('system-id') === item.id) {
-                                existing.remove(); return;
-                            }
-                            existing.remove();
                             const effect   = sys.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
                             const desc     = sys.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                            const tagsHtml = laRenderTags(sys.tags ?? []);
-                            const bodyHtml = tagsHtml + effect + desc;
-                            if (!bodyHtml)
-                                return;
+                            const bodyHtml = laRenderTags(sys.tags ?? []) + effect + desc;
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
-                            const popup = laDetailPopup('la-hud-popup la-hud-system-popup', item.name, subtitle, bodyHtml, 'system');
-                            popup.data('system-id', item.id);
-                            this._showPopupAt(popup, row);
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p, this._depthCallbacks()) });
                         },
                         hoverData: { actor, item, action: null, category: 'Systems' },
                     };
@@ -1037,7 +1144,7 @@ export class LancerHUD {
             children.push({
                 label: 'Activate',
                 icon: getActivationIcon(activation),
-                onClick: () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation }, detail: sys.effect ?? '' }),
+                onClick: () => /** @type {any} */ (item).beginSystemFlow(),
                 onRightClick: ap({ name: item.name, activation, detail: sys.effect ?? '' }),
                 hoverData: { actor, item, action: { name: item.name, activation }, category: 'Systems' },
             });
@@ -1046,7 +1153,7 @@ export class LancerHUD {
             children.push({
                 label: action.name,
                 icon: getActivationIcon(action),
-                onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }),
+                onClick: () => /** @type {any} */ (item).beginSystemFlow(),
                 onRightClick: ap(action),
                 hoverData: { actor, item, action, category: 'Systems' },
             });
@@ -1062,18 +1169,12 @@ export class LancerHUD {
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (/** @type {any} */ row) => {
-                    const existing = $('.la-hud-invade-popup');
-                    if (existing.length && existing.data('invade-name') === opt.name) {
-                        existing.remove(); return;
-                    }
-                    existing.remove();
                     const detail = laFormatDetailHtml(opt.detail);
                     const bodyHtml = detail ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>` : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    const sourceType  = opt.item?.system?.type ? ` (${opt.item.system.type})` : '';
+                    const isWeapon = opt.item?.type?.includes('weapon');
+                    const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
                     const sourceLabel = opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
-                    const popup = laDetailPopup('la-hud-popup la-hud-invade-popup', opt.name, `Invade · Quick Tech${sourceLabel}`, bodyHtml, 'system');
-                    popup.data('invade-name', opt.name);
-                    this._showPopupAt(popup, row);
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle: `Invade · Quick Tech${sourceLabel}`, bodyHtml, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             });
         }
@@ -1082,17 +1183,22 @@ export class LancerHUD {
             children.push({ isSectionLabel: true, label: 'Deployables' });
             for (const lid of lids) {
                 const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
+                const depIndex = depActor ? null : getDeployableInfoSync(lid);
                 children.push({
-                    label: depActor?.name ?? lid,
-                    icon:  depActor?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                    label: depActor?.name ?? depIndex?.name ?? lid,
+                    icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
                     onClick: () => deployDeployable(actor, lid, item, true),
-                    onRightClick: depActor ? (/** @type {any} */ row) => {
-                        const body = laRenderDeployables([depActor]);
+                    onRightClick: async (/** @type {any} */ row) => {
+                        let dep = depActor;
+                        if (!dep) {
+                            const resolved = await resolveDeployable(lid, actor);
+                            dep = resolved.deployable;
+                        }
+                        if (!dep)
+                            return;
                         const srcType = item.system?.type ?? '';
-                        const subtitle = `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`;
-                        const popup = laDetailPopup('la-hud-popup la-hud-deploy-popup', depActor.name, subtitle, body, 'system');
-                        this._showPopupAt(popup, row);
-                    } : null,
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
                 });
             }
         }
@@ -1108,7 +1214,33 @@ export class LancerHUD {
                 const frame = actor?.system?.loadout?.frame?.value;
                 if (!frame)
                     return [{ isSectionLabel: true, label: 'No frame equipped' }];
+                const sys = frame.system;
+                const as = actor.system;
+                const frameSubtitle = [sys.manufacturer, sys.license ? `LL${sys.license_level}` : null, ...(sys.mechtype ?? []), as.size != null ? `Size ${as.size}` : null].filter(Boolean).join(' · ');
+                const stat = (/** @type {string} */ label, /** @type {any} */ val, /** @type {any} */ base = undefined) => {
+                    const delta = (val != null && base != null && val !== base) ? (val > base ? `<span style="position:absolute;bottom:2px;right:2px;color:#3a9e6e;font-size:0.55em;line-height:1;">▲</span>` : `<span style="position:absolute;bottom:2px;right:2px;color:#c33;font-size:0.55em;line-height:1;">▼</span>`) : '';
+                    return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;">${delta}<span style="font-size:0.68em;color:#666;text-transform:uppercase;letter-spacing:0.05em;">${label}</span><span style="font-size:0.95em;color:#ccc;font-weight:bold;">${val ?? '—'}</span></div>`;
+                };
+                const statGrid5 = (/** @type {string[]} */ ...cells) => `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px 4px;padding:4px 2px;">${cells.join('')}</div>`;
+                const statGrid = statGrid5;
+                const repairs = as.repairs?.max ?? as.repcap;
+                const ss = sys.stats ?? {};
+                const currentStats = statGrid5(
+                    stat('HP', as.hp?.max, ss.hp), stat('Armor', as.armor, ss.armor), stat('E-Def', as.edef, ss.edef), stat('Evasion', as.evasion, ss.evasion), stat('Heat', as.heat?.max, ss.heatcap),
+                    stat('Speed', as.speed, ss.speed), stat('Sensors', as.sensor_range, ss.sensor_range), stat('Save', as.save, ss.save), stat('Tech', as.tech_attack, ss.tech_attack), stat('Repairs', repairs, ss.repcap)
+                );
+                const mountCounts = (sys.mounts ?? []).reduce((/** @type {any} */ acc, /** @type {any} */ m) => {
+                    acc[m] = (acc[m] ?? 0) + 1;
+                    return acc;
+                }, {});
+                const mountsHtml = Object.keys(mountCounts).length ? `<div style="font-size:0.8em;color:#888;margin-top:2px;border-top:1px solid #2a2a2a;padding-top:5px;">${Object.entries(mountCounts).map(([m, n]) => `${n > 1 ? n + '× ' : ''}${m}`).join(' · ')}</div>` : '';
+                const baseStats = sys.stats ? `<details style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;"><summary style="font-size:0.72em;color:#555;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">▶ Base Stats</summary>${statGrid(stat('HP', sys.stats.hp), stat('Armor', sys.stats.armor), stat('E-Def', sys.stats.edef), stat('Evasion', sys.stats.evasion), stat('Heat', sys.stats.heatcap), stat('Speed', sys.stats.speed), stat('Sensors', sys.stats.sensor_range), stat('Save', sys.stats.save), stat('Tech', sys.stats.tech_attack), stat('Repairs', sys.stats.repcap))}</details>` : '';
                 const rows = [
+                    {
+                        label: frame.name,
+                        icon: 'systems/lancer/assets/icons/frame.svg',
+                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                    },
                     { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
                     { label: 'Core Bonus',  childColLabel: 'Core Bonus',  getChildren: () => this._coreBonusItems(actor) },
@@ -1117,15 +1249,224 @@ export class LancerHUD {
                     ...(frame.system?.traits ?? []).flatMap((/** @type {any} */ t) => t.integrated ?? []),
                     ...(frame.system?.core_system?.integrated ?? []),
                 ];
-                if (intLids.length)
-                    rows.push({ label: 'Integrated', childColLabel: 'Integrated', getChildren: () => this._frameIntegratedItems(frame, actor, intLids) });
+                const intDepLids = /** @type {string[]} */ (frame.system?.core_system?.deployables ?? []);
+                if (intLids.length || intDepLids.length)
+                    rows.push({ label: 'Integrated', childColLabel: 'Integrated', getChildren: () => this._frameIntegratedItems(frame, actor, intLids, intDepLids) });
                 return rows;
             },
         };
     }
 
+    // ── NPC Class / Systems ───────────────────────────────────────────────────
+
+    _catNpcFrame() {
+        const actor = this._actor;
+        return {
+            label: 'Class',
+            colLabel: 'Class',
+            getItems: () => {
+                const npcClass = /** @type {any} */ (actor.items.find(/** @type {any} */ i => i.type === 'npc_class'));
+                const tier = /** @type {any} */ (actor.system)?.tier ?? 1;
+                const tierClamped = Math.min(3, Math.max(1, tier));
+                const tierIcon = `systems/lancer/assets/icons/npc_tier_${tierClamped}.svg`;
+                if (!npcClass)
+                    return [{ isSectionLabel: true, label: 'No class' }];
+                const as = /** @type {any} */ (actor.system) ?? {};
+                const tierIdx = Math.max(0, Math.min(2, tierClamped - 1));
+                const bs = npcClass.system?.base_stats?.[tierIdx] ?? {};
+                const stat = (/** @type {string} */ lbl, /** @type {any} */ val, /** @type {any} */ base = undefined) => {
+                    const delta = (val != null && base != null && val !== base) ? (val > base ? `<span style="position:absolute;bottom:2px;right:2px;color:#3a9e6e;font-size:0.55em;line-height:1;">▲</span>` : `<span style="position:absolute;bottom:2px;right:2px;color:#c33;font-size:0.55em;line-height:1;">▼</span>`) : '';
+                    return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;">${delta}<span style="font-size:0.68em;color:#666;text-transform:uppercase;letter-spacing:0.05em;">${lbl}</span><span style="font-size:0.95em;color:#ccc;font-weight:bold;">${val ?? '—'}</span></div>`;
+                };
+                const grid = (/** @type {string[]} */ ...cells) => `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px 4px;padding:4px 2px;">${cells.join('')}</div>`;
+                const currentStats = grid(
+                    stat('HP',      as.hp?.max ?? as.hp,          bs.hp),
+                    stat('Armor',   as.armor,                      bs.armor),
+                    stat('E-Def',   as.edef,                       bs.edef),
+                    stat('Evasion', as.evasion,                    bs.evasion),
+                    stat('Heat',    as.heat?.max ?? as.heatcap,    bs.heatcap),
+                    stat('Speed',   as.speed,                      bs.speed),
+                    stat('Sensors', as.sensor_range,               bs.sensor_range),
+                    stat('Save',    as.save,                       bs.save),
+                    stat('Act.',    as.activations,                bs.activations),
+                    stat('Struct',  as.structure?.max ?? as.structure, bs.structure),
+                    stat('Reactor', as.stress?.max ?? as.stress,   bs.stress),
+                    '<div></div>',
+                    stat('Hull',    as.hull,                       bs.hull),
+                    stat('Agility', as.agi,                        bs.agi),
+                    stat('Systems', as.sys,                        bs.sys),
+                    stat('Eng',     as.eng,                        bs.eng),
+                );
+                const baseStats = `<details style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;"><summary style="font-size:0.72em;color:#555;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">▶ Base Stats (Tier ${tierClamped})</summary>${
+                    grid(
+                        stat('HP',      bs.hp),
+                        stat('Armor',   bs.armor),
+                        stat('E-Def',   bs.edef),
+                        stat('Evasion', bs.evasion),
+                        stat('Heat',    bs.heatcap),
+                        stat('Speed',   bs.speed),
+                        stat('Sensors', bs.sensor_range),
+                        stat('Save',    bs.save),
+                        stat('Act.',    bs.activations),
+                        stat('Struct',  bs.structure),
+                        stat('Reactor', bs.stress),
+                        '<div></div>',
+                        stat('Hull',    bs.hull),
+                        stat('Agility', bs.agi),
+                        stat('Systems', bs.sys),
+                        stat('Eng',     bs.eng),
+                    )
+                }</details>`;
+                const bodyHtml = currentStats + baseStats;
+                return [
+                    {
+                        label: npcClass.name,
+                        icon: tierIcon,
+                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({
+                            cssClass: 'la-hud-popup la-hud-npcclass-popup',
+                            dataKey: 'npcclass-id',
+                            dataValue: npcClass.id,
+                            title: npcClass.name,
+                            subtitle: [
+                                `Tier ${tierClamped}`,
+                                npcClass.system?.role ? npcClass.system.role.charAt(0).toUpperCase() + npcClass.system.role.slice(1) : null,
+                                as.size != null ? `Size ${as.size}` : (bs.size != null ? `Size ${bs.size}` : null),
+                            ].filter(Boolean).join(' · '),
+                            bodyHtml,
+                            theme: 'frame',
+                            row,
+                            showPopupAt: (p, r) => this._showPopupAt(p, r),
+                        }),
+                    },
+                    { label: 'Templates', childColLabel: 'Templates', getChildren: () => this._npcTemplateItems(actor) },
+                    { label: 'Traits',    childColLabel: 'Traits',    getChildren: () => this._npcTraitItems(actor) },
+                ];
+            },
+        };
+    }
+
+    _npcTemplateItems(/** @type {any} */ actor) {
+        const templates = actor.items.filter(/** @type {any} */ i => i.type === 'npc_template');
+        return templates.map(/** @type {any} */ tmpl => ({
+            label: tmpl.name,
+            icon: tmpl.img ?? null,
+            onRightClick: (/** @type {any} */ row) => {
+                const desc = tmpl.system?.description
+                    ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(tmpl.system.description)}</div>` : '';
+                if (!desc)
+                    return;
+                toggleDetailPopup({
+                    cssClass: 'la-hud-popup la-hud-npctemplate-popup',
+                    dataKey: 'npctemplate-id',
+                    dataValue: tmpl.id,
+                    title: tmpl.name,
+                    subtitle: 'Template',
+                    bodyHtml: desc,
+                    theme: 'frame',
+                    row,
+                    showPopupAt: (p, r) => this._showPopupAt(p, r),
+                });
+            },
+        }));
+    }
+
+    _npcTraitItems(/** @type {any} */ actor) {
+        const traits = actor.items.filter(/** @type {any} */ i => i.type === 'npc_feature' && i.system.type === 'Trait');
+        if (!traits.length)
+            return [{ isSectionLabel: true, label: 'No traits' }];
+        return traits.map(/** @type {any} */ feat => {
+            const sys = feat.system;
+            return {
+                label: feat.name,
+                icon: feat.img ?? null,
+                onRightClick: (/** @type {any} */ row) => {
+                    const tagsHtml = laRenderTags(sys.tags ?? []);
+                    const effect   = sys.effect ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
+                    const bodyHtml = tagsHtml + effect;
+                    if (!bodyHtml)
+                        return;
+                    const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
+                    toggleDetailPopup({
+                        cssClass: 'la-hud-popup la-hud-npctrait-popup',
+                        dataKey: 'npctrait-id',
+                        dataValue: feat.id,
+                        title: feat.name,
+                        subtitle: origin,
+                        bodyHtml,
+                        theme: 'trait',
+                        row,
+                        showPopupAt: (p, r) => this._showPopupAt(p, r),
+                    });
+                },
+            };
+        });
+    }
+
+    _catNpcSystems() {
+        const actor = this._actor;
+        const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
+        const ACT_LABELS = /** @type {Record<string,string>} */ ({
+            tg_quick_action: 'Quick Action',
+            tg_full_action:  'Full Action',
+            tg_protocol:     'Protocol',
+            tg_reaction:     'Reaction',
+            tg_free_action:  'Free Action',
+        });
+        return {
+            label: 'Systems',
+            colLabel: 'Systems',
+            getItems: () => {
+                const features = actor.items.filter(/** @type {any} */ i =>
+                    i.type === 'npc_feature' &&
+                    (i.system.type === 'System' || i.system.type === 'Reaction')
+                );
+                if (!features.length)
+                    return [{ isSectionLabel: true, label: 'No systems' }];
+                return /** @type {any[]} */ (features).map(item => {
+                    const sys = item.system;
+                    const status = getItemStatus(item);
+                    const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${item.name}</s>` : item.name;
+                    const actTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
+                    const actLabel = actTag ? (ACT_LABELS[actTag.lid] ?? actTag.lid) : null;
+                    const activation = actTag ? actTag.lid.replace('tg_', '').replace('_action', ' action') : null;
+                    const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
+                    return {
+                        label: labelHtml,
+                        badge: status.badge ?? null,
+                        badgeColor: status.badgeColor ?? null,
+                        icon: item.img ?? null,
+                        highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
+                        highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+                        onClick: activation ? () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation }, detail: sys.effect ?? '' }) : null,
+                        onRightClick: (/** @type {any} */ row) => {
+                            const trigger  = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
+                            const effect   = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
+                            const tagsHtml = laRenderTags(sys.tags ?? []);
+                            const bodyHtml = tagsHtml + trigger + effect;
+                            if (!bodyHtml)
+                                return;
+                            toggleDetailPopup({
+                                cssClass: 'la-hud-popup la-hud-npcsys-popup',
+                                dataKey: 'npcsys-id',
+                                dataValue: item.id,
+                                title: item.name,
+                                subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '),
+                                bodyHtml,
+                                theme: activation ? activationTheme(activation) : 'system',
+                                row,
+                                showPopupAt: (p, r) => this._showPopupAt(p, r),
+                                postRender: p => appendItemPips(item, p),
+                            });
+                        },
+                        hoverData: { actor, item, action: activation ? { name: item.name, activation } : null, category: 'Systems' },
+                    };
+                });
+            },
+        };
+    }
+
     _corePowerItems(/** @type {any} */ frame, /** @type {any} */ actor) {
-        const ap = a => this._actionPopup(a);
+        const ap = a => this._actionPopup(a, null, 'frame');
         const cs = frame.system?.core_system;
         const coreName = cs?.active_name ?? 'Core Power';
         const coreUsed = actor.system?.core_energy === 0;
@@ -1160,15 +1501,21 @@ export class LancerHUD {
                 }
                 for (const lid of (trait.deployables ?? [])) {
                     const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
+                    const depIndex = depActor ? null : getDeployableInfoSync(lid);
                     children.push({
-                        label: depActor?.name ?? lid,
-                        icon:  depActor?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                        label: depActor?.name ?? depIndex?.name ?? lid,
+                        icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
                         onClick: () => deployDeployable(actor, lid, frame, true),
-                        onRightClick: depActor ? (/** @type {any} */ row) => {
-                            const body = laRenderDeployables([depActor]);
-                            const popup = laDetailPopup('la-hud-popup la-hud-deploy-popup', depActor.name, `Deployable · ${trait.name} (Trait)`, body, 'system');
-                            this._showPopupAt(popup, row);
-                        } : null,
+                        onRightClick: async (/** @type {any} */ row) => {
+                            let dep = depActor;
+                            if (!dep) {
+                                const resolved = await resolveDeployable(lid, actor);
+                                dep = resolved.deployable;
+                            }
+                            if (!dep)
+                                return;
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${trait.name} (Trait)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        },
                     });
                 }
                 for (const lid of (trait.integrated ?? [])) {
@@ -1186,55 +1533,37 @@ export class LancerHUD {
                         });
                     }
                 }
-                if (!children.length)
-                    children.push({ isSectionLabel: true, label: 'Passive' });
-                return children;
+                return children.length ? children : null;
             },
             onRightClick: (/** @type {any} */ row) => {
-                const existing = $('.la-hud-trait-popup');
-                if (existing.length && existing.data('trait-name') === trait.name) {
-                    existing.remove(); return;
-                }
-                existing.remove();
                 const bodyHtml = trait.description
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(trait.description)}</div>`
                     : '<div style="font-size:0.82em;color:#888;">No description.</div>';
-                const popup = laDetailPopup('la-hud-popup la-hud-trait-popup', trait.name, `${frame.name} · Trait`, bodyHtml, 'system');
-                popup.data('trait-name', trait.name);
-                this._showPopupAt(popup, row);
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
 
     _coreBonusItems(/** @type {any} */ actor) {
-        const bonuses = actor.items.filter(/** @type {any} */ i => i.type === 'core_bonus');
+        const pilotActor = actor.system?.pilot?.value;
+        const bonuses = (pilotActor?.items ?? actor.items).filter(/** @type {any} */ i => i.type === 'core_bonus');
         return bonuses.map(/** @type {any} */ cb => ({
             label: cb.name,
             icon: cb.img ?? null,
             onRightClick: (/** @type {any} */ row) => {
-                const existing = $('.la-hud-cb-popup');
-                if (existing.length && existing.data('cb-id') === cb.id) {
-                    existing.remove(); return;
-                }
-                existing.remove();
                 const sys    = cb.system;
                 const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
                 const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                const bodyHtml = effect + desc;
-                if (!bodyHtml)
-                    return;
-                const popup = laDetailPopup('la-hud-popup la-hud-cb-popup', cb.name, 'Core Bonus', bodyHtml, 'system');
-                popup.data('cb-id', cb.id);
-                this._showPopupAt(popup, row);
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: effect + desc, theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
 
-    _frameIntegratedItems(/** @type {any} */ frame, /** @type {any} */ actor, /** @type {string[]} */ lids) {
+    _frameIntegratedItems(/** @type {any} */ frame, /** @type {any} */ actor, /** @type {string[]} */ lids, /** @type {string[]} */ depLids = []) {
         const items = lids
             .map(lid => /** @type {any} */ (actor.items.find(/** @type {any} */ i => i.system?.lid === lid)))
             .filter(/** @type {any} */ i => !!i);
-        return items.map(/** @type {any} */ intItem => {
+        const rows = items.map(/** @type {any} */ intItem => {
             if (intItem.type === 'mech_weapon' || intItem.type === 'pilot_weapon')
                 return this._weaponItem(intItem, null, null);
             return {
@@ -1246,14 +1575,33 @@ export class LancerHUD {
                     const sys = intItem.system;
                     const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
                     const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                    const bodyHtml = laRenderTags(sys?.tags ?? []) + effect + desc;
-                    if (!bodyHtml)
-                        return;
-                    const popup = laDetailPopup('la-hud-popup la-hud-system-popup', intItem.name, `Integrated · ${frame.name}`, bodyHtml, 'system');
-                    this._showPopupAt(popup, row);
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: laRenderTags(sys?.tags ?? []) + effect + desc, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p, this._depthCallbacks()) });
                 },
             };
         });
+        if (depLids.length) {
+            for (const lid of depLids) {
+                const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
+                const depIndex = depActor ? null : getDeployableInfoSync(lid);
+                rows.push(/** @type {any} */({
+                    label: depActor?.name ?? depIndex?.name ?? lid,
+                    icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                    hoverData: { actor, item: frame, action: null, category: 'Deployables' },
+                    onClick: () => deployDeployable(actor, lid, frame, true),
+                    onRightClick: async (/** @type {any} */ row) => {
+                        let dep = depActor;
+                        if (!dep) {
+                            const resolved = await resolveDeployable(lid, actor);
+                            dep = resolved.deployable;
+                        }
+                        if (!dep)
+                            return;
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${frame.name} (Core)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
+                }));
+            }
+        }
+        return rows;
     }
 
     _catTalents() {
@@ -1295,15 +1643,8 @@ export class LancerHUD {
                 getChildren: (actions.length || counters.length) ? () => this._talentRankActionItems(talent.system.ranks[i], talent, i) : undefined,
                 onRightClick: (row) => {
                     const key = `${talent.id}_${i}`;
-                    const existing = $('.la-hud-talent-popup');
-                    if (existing.length && existing.data('rank-key') === key) {
-                        existing.remove(); return;
-                    }
-                    existing.remove();
                     const desc = laFormatDetailHtml(rank.description ?? '');
-                    const descHtml = desc
-                        ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>`
-                        : '';
+                    const descHtml = desc ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>` : '';
                     const actionsHtml = laRenderActions(rank.actions ?? []);
                     const rankCounters = rank.counters ?? [];
                     const countersHtml = rankCounters.length
@@ -1313,11 +1654,8 @@ export class LancerHUD {
                                 <span style="font-size:0.78em;color:#aaa;">${c.value ?? 0} / ${c.max ?? 0}</span>
                             </div>`).join('')}</div>`
                         : '';
-                    const bodyHtml = (descHtml + actionsHtml + countersHtml)
-                        || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    const popup = laDetailPopup('la-hud-popup la-hud-talent-popup', rankLabel, `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, 'system');
-                    popup.data('rank-key', key);
-                    this._showPopupAt(popup, row);
+                    const bodyHtml = (descHtml + actionsHtml + countersHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, theme: 'talent', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             };
         });
@@ -1335,7 +1673,7 @@ export class LancerHUD {
             actions.forEach(action => items.push({
                 label: action.name,
                 icon: getActivationIcon(action),
-                onClick: () => executeSimpleActivation(this._actor, { title: action.name, action, detail: action.detail || '' }),
+                onClick: () => /** @type {any} */ (talent).beginActivationFlow(rankIdx),
                 onRightClick: this._actionPopup(action, talent.name),
             }));
         }
@@ -1344,25 +1682,8 @@ export class LancerHUD {
             if (hasBoth)
                 items.push({ label: 'RESOURCES', isSectionLabel: true });
             counters.forEach((counter, cidx) => {
-                const min     = 0;
-                const isEmpty = counter.value <= min;
-                const isFull  = counter.value >= counter.max;
                 const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
-                const refresh = () => this._talentRankActionItems(talent.system.ranks[rankIdx], talent, rankIdx);
-                items.push({
-                    label: counter.name,
-                    badge: `${counter.value}/${counter.max}`,
-                    badgeColor: isEmpty ? '#c33' : !isFull ? '#cc7700' : '#3a9e6e',
-                    highlightBg:          isEmpty ? '#ffcccc' : !isFull ? '#ffe5b4' : null,
-                    highlightBorderColor: isEmpty ? '#cc3333' : !isFull ? '#cc7700' : null,
-                    keepOpen: true,
-                    refreshCol4: refresh,
-                    onClick: isEmpty ? null : async () => talent.update({ [path]: counter.value - 1 }),
-                    onRightClick: isFull ? null : () => {
-                        this._pendingCol4Refresh = { fn: refresh, anchor: this._c4AnchorRow };
-                        talent.update({ [path]: counter.value + 1 });
-                    },
-                });
+                items.push(this._buildCounterRow(counter, path, talent));
             });
         }
 
@@ -1382,30 +1703,27 @@ export class LancerHUD {
                     return;
                 const counters = rank.counters ?? [];
                 counters.forEach((counter, cidx) => {
-                    const min     = 0;
-                    const isEmpty = counter.value <= min;
-                    const isFull  = counter.value >= counter.max;
                     const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
-                    const refresh = () => this._resourceItems();
-                    items.push({
-                        label: counter.name,
-                        badge: `${counter.value}/${counter.max}`,
-                        badgeColor: isEmpty ? '#c33' : !isFull ? '#cc7700' : '#3a9e6e',
-                        icon: 'modules/lancer-automations/icons/perspective-dice-two.svg',
-                        highlightBg:          isEmpty ? '#ffcccc' : !isFull ? '#ffe5b4' : null,
-                        highlightBorderColor: isEmpty ? '#cc3333' : !isFull ? '#cc7700' : null,
-                        keepOpen: true,
-                        refreshCol4: refresh,
-                        onClick: isEmpty ? null : async () => /** @type {any} */ (talent).update({ [path]: counter.value - 1 }),
-                        onRightClick: isFull ? null : () => {
-                            this._pendingCol4Refresh = { fn: refresh, anchor: this._c4AnchorRow };
-                            /** @type {any} */ (talent).update({ [path]: counter.value + 1 });
-                        },
-                    });
+                    items.push(this._buildCounterRow(counter, path, /** @type {any} */ (talent), 'modules/lancer-automations/icons/perspective-dice-two.svg'));
                 });
             });
         }
         return items;
+    }
+
+    /** Build a single increment/decrement counter row item. */
+    _buildCounterRow(/** @type {any} */ counter, path, /** @type {any} */ talent, icon = null) {
+        return {
+            inputCell: true,
+            subtype: 'increment',
+            name: counter.name,
+            ...(icon ? { icon } : {}),
+            step: 1,
+            min: 0,
+            max: counter.max,
+            getValue: () => counter.value,
+            onValueChanged: (newVal) => talent.update({ [path]: newVal }),
+        };
     }
 
     // ── STATUSES panel ────────────────────────────────────────────────────────
@@ -1414,397 +1732,6 @@ export class LancerHUD {
         return { label: 'Statuses', isStatusPanel: true };
     }
 
-    _syncStatusPanelRows() {
-        if (!this._statusPanel || !this._actor)
-            return;
-        const actor = this._actor;
-        const hasSC = !!game.modules.get('statuscounter')?.active;
-        this._statusPanel.find('[data-status-id]').each(function() {
-            const el = $(this);
-            const sid = el.attr('data-status-id');
-            const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
-            const nowActive = effects.length > 0;
-            el.data('active', nowActive);
-            el.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
-            const totalStack = hasSC ? effects.reduce((sum, /** @type {any} */ e) => sum + (e.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
-            const parts = [];
-            if (hasSC && totalStack > 1)
-                parts.push(`×${totalStack}`);
-            if (effects.length > 1)
-                parts.push(`[${effects.length}]`);
-            el.find('.la-status-badge').text(parts.join(' '));
-        });
-    }
-
-    _refreshStatusPanel() {
-        if (this._statusPanel && this._statusPanelAnchor)
-            this._openStatusPanel(this._statusPanelAnchor);
-    }
-
-    _openStatusPanel(anchorRow) {
-        if (this._statusPanel) {
-            this._statusPanel.stop(true).remove();
-            this._statusPanel = null;
-        }
-        this._statusPanelAnchor = anchorRow;
-        const actor = this._actor;
-        const token = this._token;
-        if (!actor || !token)
-            return;
-
-        // ── Module checks ──────────────────────────────────────────────────────
-        const hasSC  = !!game.modules.get('statuscounter')?.active;
-        const hasTCS = !!game.modules.get('temporary-custom-statuses')?.active;
-        const tcsApi = hasTCS ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
-        const customSaved = hasTCS ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
-
-        // ── Data helpers ───────────────────────────────────────────────────────
-        const allStatuses = (/** @type {any} */ (CONFIG).statusEffects ?? [])
-            .filter(/** @type {any} */ s => s.id)
-            .sort(/** @type {any} */ (a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
-
-        const getEffectsForStatus = (/** @type {string} */ sid) =>
-            /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
-
-        const getStack = (/** @type {any} */ eff) =>
-            hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
-
-        const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
-
-        const isCustomActive = (/** @type {string} */ name) =>
-            /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ e =>
-                e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
-                (e.getFlag?.('temporary-custom-statuses', 'originalName') === name || e.name === name) &&
-                !e.disabled
-            );
-
-        const getStatusBadge = (/** @type {any} */ s) => {
-            const effects = getEffectsForStatus(s.id);
-            if (!effects.length)
-                return '';
-            const totalStack = hasSC ? effects.reduce((sum, e) => sum + getStack(e), 0) : 0;
-            const parts = [];
-            if (hasSC && totalStack > 1)
-                parts.push(`×${totalStack}`);
-            if (effects.length > 1)
-                parts.push(`[${effects.length}]`);
-            return parts.join(' ');
-        };
-
-        const buildStatusTooltip = (/** @type {any} */ s) => {
-            const effects = getEffectsForStatus(s.id);
-            const lines = [];
-            if (s.description)
-                lines.push(`<div style="color:#bbb;margin-bottom:4px;line-height:1.4;">${s.description}</div>`);
-            for (const eff of effects) {
-                const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
-                const sc = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
-                let label = 'Base Effect';
-                if (la?.consumption)
-                    label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (la.consumption?.trigger ?? la.consumption?.type ?? 'Effect')}`;
-                else if (la?.linkedBonusId)
-                    label = 'Bonus Effect';
-                const stackStr = sc && sc > 1 ? ` ×${sc}` : '';
-                if (effects.length > 1 || stackStr)
-                    lines.push(`<div style="font-weight:bold;color:#fff;margin-top:4px;">${label}${stackStr}</div>`);
-                const dur = la?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
-                if (dur?.label)
-                    lines.push(`<div style="color:#aaa;font-size:0.85em;margin-top:2px;">Duration: ${dur.label}</div>`);
-            }
-            return lines.length ? lines.join('') : null;
-        };
-
-        // ── Styles ─────────────────────────────────────────────────────────────
-        const S_PANEL      = 'display:flex;flex-direction:row;gap:4px;background:#f5f5f5;border:2px solid #991e2a;border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.8em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;';
-        const S_STATUS_GRID = `overflow-y:auto;overflow-x:hidden;max-height:420px;padding:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;min-width:500px;`;
-        const S_STATUS_ROW  = `display:flex;align-items:center;gap:5px;padding:1px 5px;margin-bottom:0;cursor:pointer;border-radius:2px;border-left:3px solid transparent;`;
-        const S_RIGHT_COL   = `display:flex;flex-direction:column;gap:4px;width:160px;flex-shrink:0;padding:4px;`;
-        const S_UTIL_BTN    = `padding:4px 6px;background:#991e2a;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;width:100%;text-align:left;`;
-        const S_CUSTOM_LIST = `overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;`;
-        const S_PANEL_HEADER = `background:#991e2a;color:#fff;padding:3px 8px;font-size:0.75em;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;border-radius:1px;margin-bottom:4px;flex-shrink:0;`;
-        const S_TOOLTIP     = 'position:fixed;z-index:9999;background:#1a1a1a;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:260px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);';
-
-        // ── In-place helpers ───────────────────────────────────────────────────
-        const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive) => {
-            rowEl.data('active', nowActive);
-            rowEl.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
-        };
-        const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
-            rowEl.find('.la-status-badge').text(getStatusBadge(s));
-        };
-
-        // ── Tooltip helper ─────────────────────────────────────────────────────
-        const showTooltip = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
-            const tip = buildStatusTooltip(s);
-            if (!tip)
-                return null;
-            const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">${tip}</div>`);
-            $('body').append(tt);
-            const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
-            const ttH = tt.outerHeight() ?? 0;
-            const top = Math.min(rect.top, window.innerHeight - ttH - 8);
-            tt.css({ top, left: rect.right + 6 });
-            return tt;
-        };
-
-        // ── Status grid ────────────────────────────────────────────────────────
-        const gridEl = $(`<div style="${S_STATUS_GRID}"></div>`);
-        for (const s of allStatuses) {
-            const active = isActive(s);
-            const badge  = getStatusBadge(s);
-            const bg     = active ? '#b8d4f0' : BG_DEFAULT;
-            const border = active ? '#1a4a7a' : 'transparent';
-            const rowEl = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};" data-status-id="${s.id}">
-                <img src="${s.icon ?? s.img ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
-                <span class="la-status-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${game.i18n.localize(s.name ?? s.id)}</span>
-                <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
-            </div>`);
-            rowEl.data('active', active);
-
-            let tooltipEl = /** @type {any} */ (null);
-            rowEl.on('mouseenter', function() {
-                if (!$(this).data('active'))
-                    $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
-                tooltipEl = showTooltip($(this), s);
-            }).on('mouseleave', function() {
-                tooltipEl?.remove(); tooltipEl = null;
-                const a = $(this).data('active');
-                $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
-            });
-
-            // Left-click: toggle / increment / open subtype manager
-            rowEl.on('click', async () => {
-                const effects = getEffectsForStatus(s.id);
-                if (effects.length > 1) {
-                    this._openSubtypeManager(actor, s, effects, rowEl);
-                    return;
-                }
-                this._suppressRefreshDepth++;
-                try {
-                    if (hasSC && effects.length === 1) {
-                        const eff = effects[0];
-                        await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
-                    } else {
-                        await /** @type {any} */ (token).toggleEffect(s);
-                    }
-                    updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s));
-                } finally {
-                    this._suppressRefreshDepth--;
-                }
-            });
-
-            // Right-click: decrement / delete
-            rowEl.on('contextmenu', async (ev) => {
-                ev.preventDefault();
-                const effects = getEffectsForStatus(s.id);
-                if (effects.length > 1) {
-                    this._openSubtypeManager(actor, s, effects, rowEl);
-                    return;
-                }
-                if (effects.length === 0) {
-                    // Right-click on inactive: same as left-click toggle
-                    this._suppressRefreshDepth++;
-                    try {
-                        await /** @type {any} */ (token).toggleEffect(s);
-                        updateRowBadge(rowEl, s);
-                        setRowActive(rowEl, isActive(s));
-                    } finally {
-                        this._suppressRefreshDepth--;
-                    }
-                    return;
-                }
-                this._suppressRefreshDepth++;
-                try {
-                    const eff = effects[0];
-                    const stack = getStack(eff);
-                    if (hasSC && stack > 1) {
-                        await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
-                    } else {
-                        await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                    }
-                    updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s));
-                } finally {
-                    this._suppressRefreshDepth--;
-                }
-            });
-
-            gridEl.append(rowEl);
-        }
-
-        // ── Right column ───────────────────────────────────────────────────────
-        const rightEl = $(`<div style="${S_RIGHT_COL}"></div>`);
-
-        const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
-        if (laApi?.executeEffectManager) {
-            const emBtn = $(`<button style="${S_UTIL_BTN}">Effect Manager</button>`);
-            emBtn.on('click', () => laApi.executeEffectManager());
-            rightEl.append(emBtn);
-        }
-        const clearBtn = $(`<button style="${S_UTIL_BTN}background:#444;">Clear All Effects</button>`);
-        clearBtn.on('click', async () => {
-            this._suppressRefreshDepth++;
-            try {
-                const ids = /** @type {any[]} */ ([...actor.effects]).map(/** @type {any} */ e => e.id);
-                if (ids.length)
-                    await actor.deleteEmbeddedDocuments('ActiveEffect', ids);
-                gridEl.find('[data-status-id]').each(function() {
-                    setRowActive($(this), false);
-                    $(this).find('.la-status-badge').text('');
-                });
-            } finally {
-                this._suppressRefreshDepth--;
-            }
-        });
-        rightEl.append(clearBtn);
-
-        if (hasTCS) {
-            rightEl.append($(`<div style="${S_PANEL_HEADER}">Custom</div>`));
-            const customListEl = $(`<div style="${S_CUSTOM_LIST}"></div>`);
-            for (const cs of /** @type {any[]} */ (customSaved)) {
-                const active = isCustomActive(cs.name);
-                const bg     = active ? '#b8d4f0' : BG_DEFAULT;
-                const border = active ? '#1a4a7a' : 'transparent';
-                const cRow = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};">
-                    <img src="${cs.icon ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cs.name}</span>
-                </div>`);
-                cRow.on('mouseenter', function() {
-                    if (!$(this).data('active'))
-                        $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
-                }).on('mouseleave', function() {
-                    const a = $(this).data('active');
-                    $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
-                });
-                cRow.data('active', active);
-                cRow.on('click', async () => {
-                    this._suppressRefreshDepth++;
-                    try {
-                        if (isCustomActive(cs.name)) {
-                            const eff = /** @type {any[]} */ ([...actor.effects]).find(/** @type {any} */ e =>
-                                e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
-                                (e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name)
-                            );
-                            if (eff)
-                                await tcsApi.removeStatus(actor, eff.id);
-                        } else {
-                            await tcsApi.addStatus(actor, cs.name, cs.icon, 1);
-                        }
-                        setRowActive(cRow, isCustomActive(cs.name));
-                    } finally {
-                        this._suppressRefreshDepth--;
-                    }
-                });
-                customListEl.append(cRow);
-            }
-            if (!customSaved.length)
-                customListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No custom statuses</div>`));
-            rightEl.append(customListEl);
-        }
-
-        // ── Assemble panel ──────────────────────────────────────────────────────
-        const panel = $(`<div style="${S_PANEL}"></div>`);
-        const leftWrap = $(`<div style="display:flex;flex-direction:column;flex:1;min-width:0;"></div>`);
-        const header = $(`<div style="${S_COL_LABEL}">Statuses</div>`);
-        leftWrap.append(header, gridEl);
-        panel.append(leftWrap, rightEl);
-
-        const topInHud  = anchorRow.offset().top - this._el.offset().top;
-        const leftInHud = /** @type {any} */ (this._el.children().first()).outerWidth();
-        panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
-
-        this._el.append(panel);
-        panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
-        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 140);
-        this._statusPanel = panel;
-    }
-
-    _openSubtypeManager(actor, statusConfig, effects, anchorRow) {
-        if (this._subtypePanel) {
-            this._subtypePanel.remove(); this._subtypePanel = null;
-        }
-        const hasSC = !!game.modules.get('statuscounter')?.active;
-        const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
-        const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
-        const S_PANEL = 'background:#2a2a2a;border:1px solid #991e2a;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.6);font-family:inherit;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;min-width:180px;';
-        const S_HDR   = 'background:#991e2a;color:#fff;padding:2px 6px;display:flex;justify-content:space-between;align-items:center;border-radius:2px 2px 0 0;';
-        const S_ROW   = 'display:flex;align-items:center;gap:4px;padding:2px 6px;border-bottom:1px solid #3a3a3a;';
-        const S_BTN   = 'display:inline-block;border-radius:2px;cursor:pointer;width:18px;height:16px;line-height:16px;font-weight:bold;flex-shrink:0;text-align:center;user-select:none;';
-
-        const panel = $(`<div style="${S_PANEL}position:absolute;z-index:20;"></div>`);
-        const hdr   = $(`<div style="${S_HDR}">${statusName} <span class="la-sub-close" style="cursor:pointer;margin-left:8px;opacity:0.8;">✕</span></div>`);
-        const body  = $(`<div></div>`);
-        panel.append(hdr, body);
-        hdr.find('.la-sub-close').on('click', () => {
-            panel.remove(); this._subtypePanel = null;
-        });
-
-        const refresh = () => {
-            const current = /** @type {any[]} */ ([...actor.effects]).filter(e => effects.some(/** @type {any} */ o => o.id === e.id));
-            if (!current.length) {
-                panel.remove(); this._subtypePanel = null; this._syncStatusPanelRows(); return;
-            }
-            body.empty();
-            for (const eff of current) {
-                const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
-                let label = 'Base';
-                if (la?.consumption)
-                    label = 'Consume';
-                else if (la?.linkedBonusId)
-                    label = 'Bonus';
-                const stack = getStack(eff);
-                const row = $(`<div style="${S_ROW}" data-eid="${eff.id}">
-                    <span style="flex:1;color:#ccc;text-transform:none;letter-spacing:0;">${label}</span>
-                    <span style="color:#fff;min-width:18px;text-align:center;">×${stack}</span>
-                    ${hasSC ? `<span class="la-sub-minus" style="${S_BTN}background:#555;color:#fff;">−</span>` : ''}
-                    ${hasSC ? `<span class="la-sub-plus"  style="${S_BTN}background:#3a6a3a;color:#fff;">+</span>` : ''}
-                    <span class="la-sub-del" style="${S_BTN}background:#6a2a2a;color:#fff;">✕</span>
-                </div>`);
-                row.find('.la-sub-minus').on('click', async () => {
-                    const e = /** @type {any} */ (actor.effects).get(eff.id);
-                    if (!e)
-                        return;
-                    const s = getStack(e);
-                    if (s > 1)
-                        await e.update({ 'flags.statuscounter.value': s - 1, 'flags.statuscounter.visible': s - 1 > 1 });
-                    else
-                        await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                    refresh();
-                });
-                row.find('.la-sub-plus').on('click', async () => {
-                    const e = /** @type {any} */ (actor.effects).get(eff.id);
-                    if (!e)
-                        return;
-                    const s = getStack(e);
-                    await e.update({ 'flags.statuscounter.value': s + 1, 'flags.statuscounter.visible': true });
-                    refresh();
-                });
-                row.find('.la-sub-del').on('click', async () => {
-                    await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                    refresh();
-                });
-                body.append(row);
-            }
-            this._syncStatusPanelRows();
-        };
-
-        refresh();
-        panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
-        $('body').append(panel);
-        this._subtypePanel = panel;
-
-        // Slide up from the row — fixed to body, animates like the HUD columns (opacity + position)
-        const rect     = anchorRow[0].getBoundingClientRect();
-        const panelH   = panel.outerHeight() || 0;
-        const panelW   = panel.outerWidth()  || 200;
-        const goAbove  = rect.top - panelH > 4;
-        const finalTop = goAbove ? rect.top - panelH : rect.bottom;
-        const startTop = goAbove ? rect.top           : rect.bottom - panelH;
-        const left     = Math.min(rect.left, window.innerWidth - panelW - 8);
-        panel.css({ position: 'fixed', top: startTop, left, zIndex: 9999, opacity: 0, width: 'fit-content' });
-        panel.animate({ top: finalTop, opacity: 1 }, 140);
-    }
 
     _weaponItem(weapon, modItem, mount = null) {
         const sys    = weapon.system;
@@ -1820,15 +1747,9 @@ export class LancerHUD {
             highlightBg,
             highlightBorderColor,
             hoverData: { actor: this._actor, item: weapon, action: null, category: 'Weapons' },
-            onClick: () => weapon.beginWeaponAttackFlow(),
+            // onClick: () => weapon.beginWeaponAttackFlow(), // moved to ATTACK row in _weaponChildren
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
             onRightClick: (row) => {
-                const existing = $('.la-hud-weapon-popup');
-                if (existing.length && existing.data('weapon-id') === weapon.id) {
-                    existing.remove();
-                    return;
-                }
-                existing.remove();
                 let profiles = sys.profiles ?? [];
                 if (!profiles.length && weapon.type === 'npc_feature') {
                     const tierOverride = sys.tier_override ?? 0;
@@ -1845,12 +1766,8 @@ export class LancerHUD {
                     modItem: modItem ?? null,
                     activeProfileIndex: sys.selected_profile_index ?? 0,
                 });
-                if (!bodyHtml)
-                    return;
                 const subtitle = [sys.mount_type ?? sys.size, sys.weapon_type ?? sys.type].filter(Boolean).join(' · ');
-                const popup = laDetailPopup('la-hud-popup la-hud-weapon-popup', weapon.name, subtitle, bodyHtml, 'weapon');
-                popup.data('weapon-id', weapon.id);
-                this._showPopupAt(popup, row);
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
             },
         };
     }
@@ -1863,32 +1780,75 @@ export class LancerHUD {
                 return child;
             return { ...child, hoverData: { actor, item: weapon, action: child.action ?? { name: child.label, activation: child.activation ?? null }, category: 'Weapons' } };
         });
+        const addRightClicks = (children, attackLabel, bypassMountArg) => children.map(child => {
+            if (child.isSectionLabel || child.onRightClick)
+                return child;
+            // Mod row may have no onClick — handle it first
+            if (modItem && child.label === modItem.name) {
+                const modSys = modItem.system;
+                const effect = modSys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(modSys.effect)}</div>`      : '';
+                const desc   = modSys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(modSys.description)}</div>` : '';
+                const bodyHtml = laRenderTags(modSys?.tags ?? []) + effect + desc;
+                if (bodyHtml)
+                    return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle: 'Weapon Mod', bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
+            }
+            if (!child.onClick)
+                return child;
+            if (child.label === attackLabel) {
+                const mountWeapons = (bypassMountArg?.slots ?? []).map((/** @type {any} */ s) => s.weapon?.value?.name).filter(Boolean);
+                const weaponList = mountWeapons.length ? mountWeapons.join(', ') : weapon.name;
+                const title = attackLabel === 'FIGHT' ? 'Fight' : attackLabel === 'BARRAGE' ? 'Barrage' : 'Skirmish';
+                const body = `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${title} with: <b>${weaponList}</b></div>`;
+                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: attackLabel, title, subtitle: attackLabel === 'FIGHT' ? 'Full' : attackLabel === 'BARRAGE' ? 'Full' : 'Quick', bodyHtml: body, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) };
+            }
+            return child;
+        });
+        const onActivate = (a) => executeSimpleActivation(actor, { title: a.name, action: a, detail: a.detail ?? '' });
         if (actor.type === 'pilot') {
-            return addHover(laHudItemChildren(weapon, {
-                defaultActions: [{
-                    label: 'FIGHT',
-                    icon: 'systems/lancer/assets/icons/white/melee.svg',
-                    onClick: () => executeFight(actor, weapon),
-                }],
+            return addRightClicks(addHover(laHudItemChildren(weapon, {
+                defaultActions: [
+                    {
+                        label: 'ATTACK',
+                        icon: 'systems/lancer/assets/icons/mech_weapon.svg',
+                        onClick: () => weapon.beginWeaponAttackFlow(),
+                        onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                    },
+                    {
+                        label: 'FIGHT',
+                        icon: 'systems/lancer/assets/icons/white/melee.svg',
+                        onClick: () => executeFight(actor, weapon),
+                    },
+                ],
                 modItem,
                 showPopup: (popup, row) => this._showPopupAt(popup, row),
-            }));
+                onActivate,
+            })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] });
         }
         const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy';
         const bypassMount = mount ?? { slots: [{ weapon: { value: weapon } }] };
-        return addHover(laHudItemChildren(weapon, {
-            defaultActions: [{
-                label: isSuperHeavy ? 'BARRAGE' : 'SKIRMISH',
-                icon: isSuperHeavy
-                    ? 'mdi mdi-hexagon-slice-6'
-                    : 'mdi mdi-hexagon-slice-3',
-                onClick: () => isSuperHeavy
-                    ? executeBarrage(actor, bypassMount)
-                    : executeSkirmish(actor, bypassMount),
-            }],
+        const attackLabel = isSuperHeavy ? 'BARRAGE' : 'SKIRMISH';
+        return addRightClicks(addHover(laHudItemChildren(weapon, {
+            defaultActions: [
+                {
+                    label: 'ATTACK',
+                    icon: 'systems/lancer/assets/icons/mech_weapon.svg',
+                    onClick: () => weapon.beginWeaponAttackFlow(),
+                    onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                },
+                {
+                    label: attackLabel,
+                    icon: isSuperHeavy
+                        ? 'mdi mdi-hexagon-slice-6'
+                        : 'mdi mdi-hexagon-slice-3',
+                    onClick: () => isSuperHeavy
+                        ? executeBarrage(actor, bypassMount)
+                        : executeSkirmish(actor, bypassMount),
+                },
+            ],
             modItem,
             showPopup: (popup, row) => this._showPopupAt(popup, row),
-        }));
+            onActivate,
+        })), attackLabel, bypassMount);
     }
 
     _getInvadeOptions(actor) {
@@ -1956,27 +1916,22 @@ export class LancerHUD {
         return invades;
     }
 
-    _actionPopup(action, source = null) {
+    _actionPopup(action, source = null, themeOverride = null) {
         return (/** @type {any} */ row) => {
-            const existing = $('.la-hud-action-popup');
-            if (existing.length && existing.data('action-key') === action.name) {
-                existing.remove(); return;
-            }
-            existing.remove();
             const sourceName = typeof source === 'string' ? source : /** @type {any} */ (source)?.name ?? null;
             const sourceType = typeof source === 'string' ? null : /** @type {any} */ (source)?.system?.type ?? null;
-            const body = laRenderActionDetail(action, { sourceName });
+            const bodyHtml = laRenderActionDetail(action, {});
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
-            const popup = laDetailPopup('la-hud-popup la-hud-action-popup', action.name, subtitleParts.filter(Boolean).join(' · '), body, 'system');
-            popup.data('action-key', action.name);
-            this._showPopupAt(popup, row);
+            const theme = themeOverride ?? activationTheme(action.activation);
+            const sourceItem = typeof source === 'string' ? null : source;
+            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p) : null });
         };
     }
 
     _getActionsByActivation(actor, activationType, category = null) {
-        return getActorActionItems(actor, activationType).map(({ action, sourceItem }) => {
+        return getActorActionItems(actor, activationType).map(({ action, sourceItem, rankIdx }) => {
             const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };
             return {
                 label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>` : action.name,
@@ -1985,146 +1940,50 @@ export class LancerHUD {
                 icon: getActivationIcon(action) ?? sourceItem?.img ?? null,
                 highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
                 highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
-                onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' }),
+                onClick: () => {
+                    const si = /** @type {any} */ (sourceItem);
+                    if (si?.type === 'mech_system' || si?.type === 'npc_feature')
+                        si.beginSystemFlow();
+                    else if (si?.type === 'talent')
+                        si.beginActivationFlow(rankIdx ?? 0);
+                    else
+                        executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
+                },
                 onRightClick: this._actionPopup(action, sourceItem),
                 hoverData: { actor, item: sourceItem ?? null, action, category },
             };
         });
     }
 
-    _buildStatsHtml(actor) {
-        const sys = actor.system;
-        const strVal    = sys.structure?.value ?? 4;
-        const strMax    = sys.structure?.max  ?? 4;
-        const stressVal = sys.stress?.value   ?? 4;
-        const stressMax = sys.stress?.max     ?? 4;
-        const hp          = sys.hp     ?? { value: 0, max: 0 };
-        const heat        = sys.heat   ?? { value: 0, max: 0 };
-        const overshield  = sys.overshield?.value ?? 0;
-        const repairs     = sys.repairs?.value ?? 0;
-        const burn        = sys.burn ?? 0;
-        const oc          = sys.overcharge ?? 0;
-        const reaction    = sys.action_tracker?.reaction ?? false;
-
-        const lerpColor = (r1, g1, b1, r2, g2, b2, t) => {
-            const r = Math.round(r1 + (r2 - r1) * t);
-            const g = Math.round(g1 + (g2 - g1) * t);
-            const b = Math.round(b1 + (b2 - b1) * t);
-            return `rgb(${r},${g},${b})`;
-        };
-        const hpRatio    = hp.max > 0 ? hp.value / hp.max : 1;
-        const heatRatio  = heat.max > 0 ? heat.value / heat.max : 0;
-        const hpColor    = lerpColor(244, 67, 54,  76, 175, 80,  hpRatio);   // red→green
-        const heatColor  = lerpColor(136, 136, 136, 244, 67, 54, heatRatio); // grey→red
-
-        const strPips    = Array.from({ length: strMax },    (_, i) => `<span style="color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};">◆</span>`).join('');
-        const stressPips = Array.from({ length: stressMax }, (_, i) => `<span style="color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};">●</span>`).join('');
-
-        const ocLabels = ['—', '1d3', '1d6', '1d6+4'];
-        const ocColor    = oc > 0 ? '#f88040' : '#555';
-        const SEP = `<span style="color:#444;">│</span>`;
-        const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;opacity:${repairs > 0 ? 1 : 0.3};">`;
-        const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
-        const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.47em;height:1.47em;vertical-align:middle;opacity:${reaction ? 1 : 0.3};">`;
-        const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}🛡</span>` : '';
-        return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:5px 12px 6px;font-size:0.97em;color:#888;width:max-content;">` +
-            `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
-            `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` +
-            `</div>` +
-            `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-            `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabels[Math.min(oc, 3)]}</span>${SEP}${reactionImg}${reactionNum}` +
-            `</div>` +
-            `</div>`;
-    }
-
-    _collectSearchResults(query) {
-        const results = [];
-        const seen = new Map(); // normalized label → index in results
-        const walk = (items, catLabel) => {
-            for (const item of (items ?? [])) {
-                if (item.isSectionLabel)
-                    continue;
-                if (item.onClick) {
-                    const text = item.label.replace(/<[^>]+>/g, '').toLowerCase();
-                    if (text.includes(query)) {
-                        if (seen.has(text)) {
-                            // Merge category name into existing entry
-                            const idx = seen.get(text);
-                            if (!results[idx]._catLabel.split(' · ').includes(catLabel))
-                                results[idx]._catLabel += ' · ' + catLabel;
-                        } else {
-                            seen.set(text, results.length);
-                            results.push({ ...item, _catLabel: catLabel });
-                        }
-                    }
-                }
-                // Recurse into children regardless — many actions are nested under sub-headers
-                if (item.getChildren)
-                    walk(item.getChildren(), catLabel);
-            }
-        };
-        for (const cat of (this._categories ?? [])) {
-            if (cat.isStatusPanel)
-                continue;
-            walk(cat.getItems?.(), cat.label);
-        }
-        return results;
-    }
-
-    _openSearchResults(col, results) {
-        col.children(':not(.la-hud-col-label)').remove();
-        col.find('.la-hud-col-label').text('Results');
-        // Align top with first category row — same calculation _openCol uses for anchorRow
-        const firstRow = this._el.children().first().find('.la-hud-row').first();
-        const colTop = firstRow.length ? firstRow.offset().top - this._el.offset().top : 0;
-        col.css('top', colTop);
-        if (!results.length) {
-            col.append($(`<div style="${S_MUTED}">No results</div>`));
-        } else {
-            for (const item of results) {
-                const row = this._makeRow(item.label, false, item.icon ?? null, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
-                if (item.highlightBg) {
-                    const bc = item.highlightBorderColor ?? item.highlightBg;
-                    row.data('restingBg', item.highlightBg).data('restingBorder', bc).data('hoverBg', brighten(item.highlightBg));
-                    row.css({ background: item.highlightBg, borderLeftColor: bc });
-                }
-                if (item.hoverData) {
-                    const hd = item.hoverData; const token = this._token;
-                    row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
-                    row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
-                }
-                row.css('flex-wrap', 'wrap').prepend($(`<span style="width:100%;font-size:0.58em;color:#991e2a;text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;">${item._catLabel}</span>`));
-                row.on('click', () => item.onClick(row));
-                if (item.onRightClick)
-                    row.on('contextmenu', ev => {
-                        ev.preventDefault(); item.onRightClick(row);
-                    });
-                col.append(row);
-            }
-        }
-        col.stop(true).css({ opacity: 0, marginLeft: -10 }).show().animate({ opacity: 1, marginLeft: 0 }, 140);
-    }
-
     _showPopupAt(popup, anchorEl) {
-        $('body').append(popup);
-        const offset = anchorEl.offset() ?? { left: 300, top: 100 };
-        const pw = popup.outerWidth(), ph = popup.outerHeight();
-        const wx = window.innerWidth,  wy = window.innerHeight;
-        let px = offset.left + anchorEl.outerWidth() + 2;
-        if (px + pw > wx - 10)
-            px = offset.left - pw - 2;
-        let py = offset.top;
-        if (py + ph > wy - 10)
-            py = wy - ph - 10;
-        const finalLeft = Math.max(10, px);
-        popup.css({ position: 'fixed', left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
-        popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
-        laBindPopupBehavior(popup);
-        // HUD-specific: hovering the popup keeps columns alive
-        popup.on('mouseenter', this._cancelCollapse).on('mouseleave', this._scheduleCollapse);
+        showPopupAt(popup, anchorEl, {
+            cancelCollapse:   () => this._cancelCollapse?.(),
+            scheduleCollapse: () => this._scheduleCollapse?.(),
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Re-render the content of all currently-visible columns without touching the DOM
+     * structure, popups, or collapse timers. Used when a detail popup is open and an
+     * item update fires — we need badge/status indicators to update but must not destroy
+     * the existing column layout or close the popup.
+     */
+    _refreshColumnsInPlace() {
+        if (!this._c2Category?.getItems || !this._c2?.is(':visible'))
+            return;
+        this._openCol(this._c2, this._c2Category.getItems(), this._c2AnchorRow);
+
+        if (!this._c3SourceItem?.getChildren || !this._c3?.is(':visible'))
+            return;
+        // _c3AnchorRow is a c2 row that was just rebuilt above — now detached, skip reposition
+        this._openCol(this._c3, this._c3SourceItem.getChildren(), null, { reposition: false });
+
+        if (!this._c4SourceItem?.getChildren || !this._c4?.is(':visible'))
+            return;
+        this._openCol(this._c4, this._c4SourceItem.getChildren(), null, { reposition: false });
+    }
 
     _saveOpenPath() {
         if (!this._el)
@@ -2145,7 +2004,7 @@ export class LancerHUD {
         if (this._searchActive)
             return { searchActive: true };
         // Status panel open: c2 is hidden but c1 has an active row
-        if (this._statusPanel?.is(':visible')) {
+        if (this._statusPanelInstance?.isVisible) {
             const c1Idx = getActiveIdx(c1);
             return c1Idx >= 0 ? { c1Idx, statusPanel: true } : null;
         }
