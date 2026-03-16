@@ -2381,9 +2381,9 @@ export class ReactionEditor extends FormApplication {
                 <img src="${d.img}" style="width:32px;height:32px;border-radius:4px;border:1px solid #ccc;object-fit:cover;">
                 <div style="flex:1;min-width:0;">
                     <div style="font-weight:bold;font-size:0.9em;">${d.name}</div>
-                    <div style="font-size:0.78em;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.type} | <code style="background:rgba(153,30,42,0.08);color:#991e2a;padding:1px 4px;border-radius:3px;font-size:0.9em;">${d.lid}</code> <span style="opacity:0.5;">\u2014 ${d.pack}</span></div>
+                    <div style="font-size:0.78em;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.type} | <code style="background:color-mix(in srgb, var(--primary-color), transparent 92%);color:var(--primary-color);padding:1px 4px;border-radius:3px;font-size:0.9em;">${d.lid}</code> <span style="opacity:0.5;">\u2014 ${d.pack}</span></div>
                 </div>
-                <a class="copy-lid-btn" title="Copy LID" style="color:#991e2a;cursor:pointer;font-size:1.1em;"><i class="fas fa-copy"></i></a>
+                <a class="copy-lid-btn" title="Copy LID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;"><i class="fas fa-copy"></i></a>
             </div>`;
 
         new Dialog({

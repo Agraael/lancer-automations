@@ -50,7 +50,7 @@ function openStatusPicker(targetInput) {
         }
         const isSelected = alreadySelected.has(id);
         return `<div class="lancer-status-entry${isSelected ? ' selected' : ''}" data-id="${id}" title="${label}"
-            style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? '#991e2a' : 'transparent'};">
+            style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? 'var(--primary-color)' : 'transparent'};">
             <div style="width:40px;height:40px;background:#1a1a1a;border-radius:4px;display:flex;align-items:center;justify-content:center;">
                 <img src="${icon}" width="32" height="32" style="object-fit:contain;">
             </div>
@@ -85,7 +85,7 @@ function openStatusPicker(targetInput) {
         render: (html) => {
             html.find('.lancer-status-entry').on('click', function () {
                 $(this).toggleClass('selected');
-                $(this).css('border-color', $(this).hasClass('selected') ? '#991e2a' : 'transparent');
+                $(this).css('border-color', $(this).hasClass('selected') ? 'var(--primary-color)' : 'transparent');
             });
         },
         default: "confirm"
@@ -584,10 +584,10 @@ export async function executeEffectManager(options = {}) {
     const content = `
     <style>
         .te-dialog { min-width: 440px; font-family: var(--font-primary); }
-        .te-tabs { display: flex; border-bottom: 3px solid #991e2a; margin-bottom: 8px; cursor: pointer; }
+        .te-tabs { display: flex; border-bottom: 3px solid var(--primary-color); margin-bottom: 8px; cursor: pointer; }
         .te-tab { padding: 8px 14px; font-weight: 600; opacity: 0.5; font-size: 0.9em; transition: all 0.2s ease; color: #000; border-bottom: 3px solid transparent; margin-bottom: -3px; }
         .te-tab:hover { opacity: 0.8; }
-        .te-tab.active { opacity: 1; border-bottom-color: #991e2a; color: #991e2a; }
+        .te-tab.active { opacity: 1; border-bottom-color: var(--primary-color); color: var(--primary-color); }
         .te-content { display: none; padding: 8px 0; }
         .te-content.active { display: block; }
         .te-dialog .form-group { margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -596,30 +596,30 @@ export async function executeEffectManager(options = {}) {
         .te-dialog .form-group input[type="text"],
         .te-dialog .form-group input[type="number"] { flex: 1; height: 26px; font-size: 0.9em; background: #f5f5f5; border: 2px solid #999; border-radius: 4px; color: #000; padding: 0 6px; transition: border-color 0.2s ease; }
         .te-dialog .form-group select:focus,
-        .te-dialog .form-group input:focus { border-color: #991e2a; outline: none; box-shadow: 0 0 4px rgba(153,30,42,0.3); }
+        .te-dialog .form-group input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 4px color-mix(in srgb, var(--primary-color), transparent 70%); }
         .te-dialog .form-group.two-col { display: grid; grid-template-columns: 70px 1fr 70px 1fr; gap: 5px; align-items: center; }
         .te-dialog .form-group.two-col label { flex: unset; }
         .te-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
         .te-icon-option { cursor: pointer; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc; border-radius: 4px; background: #1a1a1a; transition: all 0.2s; }
         .te-icon-option img { object-fit: contain; pointer-events: none; }
-        .te-icon-option.selected { border: 2px solid #991e2a; box-shadow: 0 0 5px rgba(153,30,42,0.5); }
+        .te-icon-option.selected { border: 2px solid var(--primary-color); box-shadow: 0 0 5px color-mix(in srgb, var(--primary-color), transparent 50%); }
         .te-effect-list { max-height: 200px; overflow-y: auto; padding: 4px; margin-bottom: 8px; }
         .te-effect-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background: #f5f5f5; border: 2px solid #999; border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; transition: all 0.2s ease; }
-        .te-effect-item:hover { border-color: #991e2a; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+        .te-effect-item:hover { border-color: var(--primary-color); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
         .te-effect-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .te-delete-btn { color: #991e2a; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.2s ease; }
+        .te-delete-btn { color: var(--primary-color); cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.2s ease; }
         .te-delete-btn:hover { background: #ffe0e0; }
         .te-btn-group { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
         .te-btn { background: #f5f5f5; border: 2px solid #555; color: #000; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s ease; }
-        .te-btn:hover { background: #ffe0e0; border-color: #991e2a; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transform: translateY(-1px); }
-        .te-btn i { margin-right: 5px; color: #991e2a; }
+        .te-btn:hover { background: #ffe0e0; border-color: var(--primary-color); box-shadow: 0 2px 8px rgba(0,0,0,0.3); transform: translateY(-1px); }
+        .te-btn i { margin-right: 5px; color: var(--primary-color); }
         .te-stack-ctrl { display: flex; gap: 4px; }
-        .te-stack-ctrl i { cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: all 0.2s ease; color: #991e2a; }
+        .te-stack-ctrl i { cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: all 0.2s ease; color: var(--primary-color); }
         .te-stack-ctrl i:hover { background: #ffe0e0; }
-        .te-divider { border: none; border-top: 2px solid #991e2a; margin: 10px 0; }
-        .te-section-title { font-weight: 600; color: #991e2a; font-size: 13px; margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .te-divider { border: none; border-top: 2px solid var(--primary-color); margin: 10px 0; }
+        .te-section-title { font-weight: 600; color: var(--primary-color); font-size: 13px; margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .te-bonus-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: #f5f5f5; border: 2px solid #999; border-radius: 4px; margin-bottom: 4px; font-size: 0.9em; transition: all 0.2s ease; }
-        .te-bonus-item:hover { border-color: #991e2a; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+        .te-bonus-item:hover { border-color: var(--primary-color); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
     </style>
     <div class="te-dialog lancer-dialog-base">
         <div class="lancer-dialog-header">
@@ -645,8 +645,8 @@ export async function executeEffectManager(options = {}) {
                 <div style="display:flex; justify-content:space-between; align-items: center;">
                     <label>Apply:</label>
                     <div style="display:flex; gap:5px; align-items:center;">
-                        <span id="std-effect-label" style="font-weight:bold; color:#991e2a;">Bolster</span>
-                        <img id="std-effect-icon" src="" width="30" height="30" style="border:2px solid #991e2a; border-radius:4px; background:#1a1a1a; display:block; object-fit: contain; padding:2px;">
+                        <span id="std-effect-label" style="font-weight:bold; color:var(--primary-color);">Bolster</span>
+                        <img id="std-effect-icon" src="" width="30" height="30" style="border:2px solid var(--primary-color); border-radius:4px; background:#1a1a1a; display:block; object-fit: contain; padding:2px;">
                         x<input type="number" id="std-stack" value="1" min="1" style="width: 45px; height:30px; text-align:center;">
                     </div>
                 </div>
@@ -1049,7 +1049,7 @@ export async function executeEffectManager(options = {}) {
                 <button type="button" class="te-btn" id="bonus-add" style="width:100%;"><i class="fas fa-plus-circle"></i> Add Bonus</button>
             </div>
             <hr class="te-divider">
-            <button type="button" class="te-btn" id="bonus-clear-all" style="width:100%; border-color:#991e2a;"><i class="fas fa-trash"></i> Clear All Bonuses</button>
+            <button type="button" class="te-btn" id="bonus-clear-all" style="width:100%; border-color:var(--primary-color);"><i class="fas fa-trash"></i> Clear All Bonuses</button>
         </div>
     </div>
     `;
@@ -1137,7 +1137,7 @@ export async function executeEffectManager(options = {}) {
                 html.find('#std-effect-label').text(name);
                 html.find('#std-effect-icon').attr('src', icon).attr('title', name).show();
                 html.find('.std-effect-option').css('border-color', '#ccc').css('box-shadow', 'none');
-                $(this).css('border-color', '#991e2a').css('box-shadow', '0 0 5px rgba(153,30,42,0.5)');
+                $(this).css('border-color', 'var(--primary-color)').css('box-shadow', '0 0 5px color-mix(in srgb, var(--primary-color), transparent 50%)');
             });
 
             // Set initial state for standard grid
@@ -1360,7 +1360,7 @@ export async function executeEffectManager(options = {}) {
                             cLabel += ` ID:${consumption.itemId}`;
                         else if (consumption.itemLid)
                             cLabel += ` ${consumption.itemLid}`;
-                        consumptionText = `<span style="font-size:0.75em; color:#991e2a; margin-left:4px;">[${cLabel}]</span>`;
+                        consumptionText = `<span style="font-size:0.75em; color:var(--primary-color); margin-left:4px;">[${cLabel}]</span>`;
                     }
 
                     const item = $(`
@@ -1424,7 +1424,7 @@ export async function executeEffectManager(options = {}) {
                         if (b.uses !== undefined) {
                             const linkedEffect = actor.effects.find(e => e.getFlag("lancer-automations", "linkedBonusId") === b.id);
                             const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
-                            usesInfo = remaining === null ? ` <span style="color:#991e2a;">[uses: ${b.uses}]</span>` : ` <span style="color:#991e2a;">[${remaining}/${b.uses}]</span>`;
+                            usesInfo = remaining === null ? ` <span style="color:var(--primary-color);">[uses: ${b.uses}]</span>` : ` <span style="color:var(--primary-color);">[${remaining}/${b.uses}]</span>`;
                         }
 
                         const item = $(`

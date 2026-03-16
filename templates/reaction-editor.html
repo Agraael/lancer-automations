@@ -29,7 +29,7 @@
 
     <!-- Only On Source Match (General only - matches action name) -->
     <div class="form-group general-only"
-        style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--primary-color), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--primary-color), transparent 70%);">
         <label class="checkbox ps-tooltip"
             title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onInitAttack, onInitTechAttack, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
@@ -65,16 +65,16 @@
             <!-- {{#if foundActionName}}<span id="preview-action-name" style="margin-left: 8px;"><strong>Action:</strong>
                 {{foundActionName}}</span>
             <a class="find-action-btn" title="Change Action"
-                style="margin-left: 4px; color: #991e2a; cursor: pointer;"><i class="fas fa-bolt"></i></a>
+                style="margin-left: 4px; color: var(--primary-color); cursor: pointer;"><i class="fas fa-bolt"></i></a>
             {{/if}} -->
             <a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
-                style="margin-left: 8px; color: #991e2a; cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
+                style="margin-left: 8px; color: var(--primary-color); cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
                     class="fas fa-eye"></i></a>
-            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: #991e2a; cursor: pointer;"><i
+            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i
                     class="fas fa-search"></i> Item Finder</a>
         </span>
         <a class="find-deployable-btn" title="Find Deployable LID"
-            style="color: #991e2a; cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
+            style="color: var(--primary-color); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
             <i class="fas fa-rocket"></i> Deployable Finder
         </a>
     </div>
@@ -84,7 +84,7 @@
         <label>Action Path</label>
         <div class="form-fields">
             <input type="text" name="reactionPath" value="{{reactionPath}}">
-            <a class="find-action-btn" title="Find Action" style="margin-left: 6px; color: #991e2a; cursor: pointer;"><i
+            <a class="find-action-btn" title="Find Action" style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i
                     class="fas fa-bolt"></i></a>
         </div>
         <p class="notes">Path within <code>system</code> to the action data. Leave empty to use the item itself.
@@ -93,7 +93,7 @@
 
     <!-- Only On Source Match (Item-based only - matches item LID) -->
     <div class="form-group item-only"
-        style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: rgba(153, 30, 42, 0.1); border-radius: 4px; border: 1px solid rgba(153, 30, 42, 0.3);">
+        style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--primary-color), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--primary-color), transparent 70%);">
         <label class="checkbox ps-tooltip"
             title="When enabled, this activation will only trigger when the triggering item matches this item's LID. Only triggers that provide item data (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onKnockback) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
@@ -351,11 +351,11 @@
 <style>
     /* ===== Window Chrome ===== */
     #reaction-editor {
-        background: #991e2a;
+        background: var(--primary-color);
     }
 
     #reaction-editor .window-header {
-        background: #991e2a;
+        background: var(--primary-color);
         color: #fff;
         border-bottom: none;
     }
@@ -419,10 +419,10 @@
     .panel-header {
         margin: 0 0 8px 0;
         padding-bottom: 6px;
-        border-bottom: 2px solid #991e2a;
+        border-bottom: 2px solid var(--primary-color);
         font-size: 1.1em;
         font-weight: bold;
-        color: #991e2a;
+        color: var(--primary-color);
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
@@ -474,12 +474,12 @@
     }
 
     .trigger-item:hover {
-        background: rgba(153, 30, 42, 0.08);
+        background: color-mix(in srgb, var(--primary-color), transparent 92%);
     }
 
     .trigger-item input {
         margin-right: 4px;
-        accent-color: #991e2a;
+        accent-color: var(--primary-color);
     }
 
     /* ===== Form Inputs ===== */
@@ -495,13 +495,13 @@
     #reaction-editor input[type="text"]:focus,
     #reaction-editor select:focus,
     #reaction-editor textarea:focus {
-        border-color: #991e2a;
+        border-color: var(--primary-color);
         outline: none;
-        box-shadow: 0 0 6px rgba(153, 30, 42, 0.25);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--primary-color), transparent 75%);
     }
 
     #reaction-editor input[type="checkbox"] {
-        accent-color: #991e2a;
+        accent-color: var(--primary-color);
     }
 
     /* ===== Labels & Notes ===== */
@@ -514,8 +514,8 @@
     }
 
     #reaction-editor code {
-        background: rgba(153, 30, 42, 0.08);
-        color: #991e2a;
+        background: color-mix(in srgb, var(--primary-color), transparent 92%);
+        color: var(--primary-color);
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 0.9em;
@@ -532,7 +532,7 @@
     }
 
     .sheet-footer button[type="submit"] {
-        background: #991e2a;
+        background: var(--primary-color);
         color: #fff;
         border: none;
         border-radius: 6px;

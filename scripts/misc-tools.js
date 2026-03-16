@@ -882,7 +882,7 @@ export async function openItemBrowserDialog() {
                 <div class="lancer-item-name">${item.name} ${countLabel}</div>
                 <div class="lancer-item-details">${item.type} | LID: ${item.lid}</div>
             </div>
-            <a class="copy-lid-btn" title="Copy LID" style="color:#991e2a;cursor:pointer;font-size:1.1em;flex:0 0 auto;padding:0 4px;"><i class="fas fa-copy"></i></a>
+            <a class="copy-lid-btn" title="Copy LID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;flex:0 0 auto;padding:0 4px;"><i class="fas fa-copy"></i></a>
         </div>`;
     };
 

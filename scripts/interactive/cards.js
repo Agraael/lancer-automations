@@ -264,7 +264,7 @@ export function _updateInfoCard(cardEl, type, data) {
                 const label = `Zone ${idx + 1}`;
                 listEl.append(`
                     <div class="la-selected-target" data-zone-index="${idx}">
-                        <i class="fas fa-bullseye" style="color:#991e2a; font-size:16px;"></i>
+                        <i class="fas fa-bullseye" style="color:var(--primary-color); font-size:16px;"></i>
                         <span class="la-selected-target-name">${label}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
                     </div>`);

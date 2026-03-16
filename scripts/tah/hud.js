@@ -23,10 +23,12 @@ const S_COL  = 'display:flex;flex-direction:column;gap:2px;min-width:180px;';
 const ROW_MAX_WIDTH = 300;
 
 const S_ITEM = [
+    'box-sizing:border-box',
+    'height:30px',
     'padding:6px 12px',
     'background:#f5f5f5',
     'border:2px solid #bbb',
-    'border-left:3px solid #991e2a',
+    'border-left:3px solid var(--primary-color)',
     'font-size:1em',
     'font-weight:600',
     'color:#111',
@@ -52,7 +54,7 @@ const S_MUTED = [
 
 const S_COL_LABEL = [
     'padding:3px 12px 4px',
-    'background:#991e2a',
+    'background:var(--primary-color)',
     'color:#fff',
     'font-size:0.68em',
     'letter-spacing:1px',
@@ -61,8 +63,8 @@ const S_COL_LABEL = [
 ].join(';') + ';';
 
 const BG_DEFAULT   = '#f5f5f5';
-const BG_HOVER     = '#ffe0e0';
-const BG_ACTIVE    = '#991e2a';
+const BG_HOVER     = 'color-mix(in srgb, var(--primary-color), white 85%)';
+const BG_ACTIVE    = 'var(--primary-color)';
 const TEXT_DEFAULT = '#111';
 const TEXT_ACTIVE  = '#fff';
 
@@ -84,6 +86,8 @@ function brighten(hex, amount = 25) {
 
 const ICON_TECH_QUICK = 'systems/lancer/assets/icons/tech_quick.svg';
 const ICON_TECH_FULL  = 'systems/lancer/assets/icons/tech_full.svg';
+
+const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
 
 // ── Popup positioning ─────────────────────────────────────────────────────────
 
@@ -238,7 +242,8 @@ export class LancerHUD {
 
         const categories = this._buildCategories();
         this._categories = categories;
-        const clickToOpen = game.settings.get('lancer-automations', 'tah.clickToOpen') ?? false;
+        const clickToOpen      = game.settings.get('lancer-automations', 'tah.clickToOpen')      ?? false;
+        const hoverCloseDelay  = (game.settings.get('lancer-automations', 'tah.hoverCloseDelay') ?? 2) * 1000;
         this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
@@ -272,7 +277,7 @@ export class LancerHUD {
         menuLabel.css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
         const searchIcon = $(`<span class="la-hud-search-toggle" title="Search" style="cursor:pointer;opacity:0.55;font-size:1.15em;padding-left:4px;line-height:1;flex-shrink:0;">⌕</span>`);
         menuLabel.append(searchIcon);
-        const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid #991e2a;font-size:0.8em;font-family:inherit;outline:none;">`);
+        const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid var(--primary-color);font-size:0.8em;font-family:inherit;outline:none;">`);
         menuLabel.after(searchBar);
         c1.prepend(statsEl);
         c1.prepend(titleEl);
@@ -291,9 +296,10 @@ export class LancerHUD {
         const c2 = this._makeCol('');
         const c3 = this._makeCol('');
         const c4 = this._makeCol('');
-        c2.css({ position: 'absolute', top: 0, left: c1.outerWidth(), display: 'none' });
-        c3.css({ position: 'absolute', top: 0, left: 0,                   display: 'none' });
-        c4.css({ position: 'absolute', top: 0, left: 0,                   display: 'none' });
+        c1.css({ position: 'relative', zIndex: 4 });
+        c2.css({ position: 'absolute', top: 0, left: c1.outerWidth(), display: 'none', zIndex: 3 });
+        c3.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 2 });
+        c4.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 1 });
         hud.append(c2, c3, c4);
         this._c2 = c2;
         this._c3 = c3;
@@ -306,7 +312,9 @@ export class LancerHUD {
                 _cancelCollapse();
                 if (/** @type {any} */ (cat).isStatusPanel) {
                     if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible) {
-                        if (clickToOpen) { this._statusPanelInstance.close(); _clearC1Active(); }
+                        if (clickToOpen) {
+                            this._statusPanelInstance.close(); _clearC1Active();
+                        }
                         return;
                     }
                     this._setActive(c1, row, true);
@@ -315,7 +323,9 @@ export class LancerHUD {
                     return;
                 }
                 if (row.hasClass('la-hud-active') && c2.is(':visible')) {
-                    if (clickToOpen) { closeCol(c2); closeCol(c3); closeCol(c4); _clearC1Active(); }
+                    if (clickToOpen) {
+                        closeCol(c2); closeCol(c3); closeCol(c4); _clearC1Active();
+                    }
                     return;
                 }
                 if (this._statusPanelInstance?.isVisible)
@@ -368,7 +378,7 @@ export class LancerHUD {
                 $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
                     $(this).remove();
                 });
-            }, 300);
+            }, hoverCloseDelay);
         };
         const _cancelCollapse = () => clearTimeout(_leaveTimer);
         this._scheduleCollapse = _scheduleCollapse;
@@ -402,27 +412,33 @@ export class LancerHUD {
             c4.on('mouseenter', _cancelCollapse);
             // Click outside the HUD to collapse
             $(document).on('mousedown.la-hud-cto', (ev) => {
-                if (!this._el) return;
+                if (!this._el)
+                    return;
                 if (!$.contains(this._el[0], /** @type {Element} */ (ev.target)) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length) {
                     closeCol(c2); closeCol(c3); closeCol(c4);
                     this._statusPanelInstance?.close();
                     _clearC1Active();
-                    $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() { $(this).remove(); });
+                    $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
+                        $(this).remove();
+                    });
                 }
             });
         }
         // Title / stats / menu-label area is above the item list — hovering it closes open columns
         titleEl.on('mouseenter', () => {
             _clearC1Active();
-            if (!clickToOpen) _scheduleCollapse();
+            if (!clickToOpen)
+                _scheduleCollapse();
         });
         statsEl.on('mouseenter', () => {
             _clearC1Active();
-            if (!clickToOpen) _scheduleCollapse();
+            if (!clickToOpen)
+                _scheduleCollapse();
         });
         menuLabel.on('mouseenter', () => {
             _clearC1Active();
-            if (!clickToOpen) _scheduleCollapse();
+            if (!clickToOpen)
+                _scheduleCollapse();
         });
 
         // ── Search toggle + live-filter ──────────────────────────────────────────
@@ -474,6 +490,42 @@ export class LancerHUD {
         });
     }
 
+    // ── Item-building helpers ─────────────────────────────────────────────────
+
+    /** Returns the two highlight color props for a destroyed/unavailable status object. */
+    _statusColors(/** @type {any} */ status) {
+        return {
+            highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
+            highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+        };
+    }
+
+    /** Builds the standard effect + description + tags HTML for a system/item detail popup body. */
+    _bodyHtml(/** @type {any} */ sys) {
+        const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
+        const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
+        return laRenderTags(sys?.tags ?? []) + effect + desc;
+    }
+
+    /**
+     * Factory for simple executeSimpleActivation rows.
+     * Auto-generates onClick, broadcastFn, and onRightClick from one action definition.
+     * @param {string} label
+     * @param {string|null} icon
+     * @param {{ name: string, activation: string, [key: string]: any }} action
+     * @param {string} detail
+     * @returns {object}
+     */
+    _simpleItem(label, icon, action, detail) {
+        return {
+            label,
+            icon,
+            onClick:      () => executeSimpleActivation(this._actor, { title: action.name, action, detail }),
+            broadcastFn:  (_t, a) => executeSimpleActivation(a, { title: action.name, action, detail }),
+            onRightClick: this._actionPopup({ ...action, detail }),
+        };
+    }
+
     // anchorRow — the parent row this column aligns with vertically
 
     _openCol(col, items, anchorRow, { reposition = true } = {}) {
@@ -482,7 +534,7 @@ export class LancerHUD {
         // Use page-relative offset minus hud offset so the result is correct
         // regardless of which column anchorRow lives in (c1 or c2).
         if (reposition && anchorRow) {
-            const topInHud = anchorRow.offset().top - this._el.offset().top;
+            const topInHud = anchorRow.offset().top - this._el.offset().top - 18;
             col.css({ top: topInHud });
         }
 
@@ -507,7 +559,7 @@ export class LancerHUD {
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
                 const valColor = (v) => hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
                 const restingBg = (v) => hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
-                const borderColor = (v) => hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : '#991e2a') : '#991e2a';
+                const borderColor = (v) => hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
                 const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;`;
                 let cell;
                 if (item.subtype === 'increment') {
@@ -516,22 +568,40 @@ export class LancerHUD {
                     const S_VAL  = `min-width:22px;text-align:center;font-weight:600;font-size:1em;color:${valColor(cur)};`;
                     cell = $(`<div style="${S_CELL}background:${restingBg(cur)};border-left-color:${borderColor(cur)};">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><div style="display:flex;align-items:center;gap:4px;"><span class="la-dec-btn" style="${S_BTN}">◄</span><span class="la-inc-val" style="${S_VAL}">${valText()}</span><span class="la-inc-btn" style="${S_BTN}">►</span></div></div>`);
                     const step = item.step ?? 1;
-                    const suppress = () => { this._suppressRefreshDepth++; setTimeout(() => this._suppressRefreshDepth--, 300); };
-                    const updateDisplay = () => { cell.find('.la-inc-val').css('color', valColor(cur)).text(valText()); cell.data('restingBg', restingBg(cur)).css('borderLeftColor', borderColor(cur)); };
-                    cell.find('.la-dec-btn').on('click', (ev) => { ev.stopPropagation(); if (cur <= min) return; suppress(); cur = Math.max(min, cur - step); item.onValueChanged(cur); updateDisplay(); });
-                    cell.find('.la-inc-btn').on('click', (ev) => { ev.stopPropagation(); if (cur >= max) return; suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay(); });
+                    const suppress = () => {
+                        this._suppressRefreshDepth++; setTimeout(() => this._suppressRefreshDepth--, 300);
+                    };
+                    const updateDisplay = () => {
+                        cell.find('.la-inc-val').css('color', valColor(cur)).text(valText()); cell.data('restingBg', restingBg(cur)).css('borderLeftColor', borderColor(cur));
+                    };
+                    cell.find('.la-dec-btn').on('click', (ev) => {
+                        ev.stopPropagation(); if (cur <= min)
+                            return; suppress(); cur = Math.max(min, cur - step); item.onValueChanged(cur); updateDisplay();
+                    });
+                    cell.find('.la-inc-btn').on('click', (ev) => {
+                        ev.stopPropagation(); if (cur >= max)
+                            return; suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay();
+                    });
                     cell.data('restingBg', restingBg(cur));
                 } else {
                     cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><input type="number" class="la-type-val" value="${item.getValue()}" style="width:44px;text-align:center;background:#fff;border:1px solid #bbb;color:#111;font-size:0.9em;padding:2px 4px;"></div>`);
-                    cell.find('.la-type-val').on('change', (ev) => { ev.stopPropagation(); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v)) item.onValueChanged(v); }).on('click mousedown', (ev) => ev.stopPropagation());
+                    cell.find('.la-type-val').on('change', (ev) => {
+                        ev.stopPropagation(); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v))
+                            item.onValueChanged(v);
+                    }).on('click mousedown', (ev) => ev.stopPropagation());
                     cell.data('restingBg', BG_DEFAULT);
                 }
                 cell.on('mouseenter', () => {
                     this._cancelCollapse?.(); cell.css({ background: BG_HOVER });
                     const clip = cell.find('.la-hud-clip')[0]; const pan = cell.find('.la-hud-pan')[0];
-                    if (clip && pan) { const overflow = pan.scrollWidth - clip.clientWidth; if (overflow > 4) $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' }); }
+                    if (clip && pan) {
+                        const overflow = pan.scrollWidth - clip.clientWidth; if (overflow > 4)
+                            $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' });
+                    }
                 });
-                cell.on('mouseleave', () => { cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT }); cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' }); });
+                cell.on('mouseleave', () => {
+                    cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT }); cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
+                });
                 col.append(cell);
                 continue;
             }
@@ -583,7 +653,11 @@ export class LancerHUD {
                     await item.onClick();
                     if (this._tokens.length > 1 && item.broadcastFn) {
                         for (const t of this._tokens.slice(1)) {
-                            try { await item.broadcastFn(t, t.actor); } catch(e) { console.error('[TAH broadcast]', e); }
+                            try {
+                                await item.broadcastFn(t, t.actor);
+                            } catch(e) {
+                                console.error('[TAH broadcast]', e);
+                            }
                         }
                     }
                 });
@@ -772,8 +846,8 @@ export class LancerHUD {
             colLabel: 'Actions',
             getItems: () => [
                 { label: 'Reload', icon: 'modules/lancer-automations/icons/reload.svg', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: ap({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
-                { label: 'Mount',  icon: 'systems/lancer/assets/icons/white/mech.svg',  onClick: () => executeSimpleActivation(actor, { title: 'Mount',  action: { name: 'Mount',  activation: 'Full' }, detail: 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.' }), onRightClick: ap({ name: 'Mount',  activation: 'Full', detail: 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.' }) },
-                { label: 'Jockey', icon: 'modules/lancer-automations/icons/ram.svg',    onClick: () => executeSimpleActivation(actor, { title: 'Jockey', action: { name: 'Jockey', activation: 'Full' }, detail: 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).' }), onRightClick: ap({ name: 'Jockey', activation: 'Full', detail: 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).' }) },
+                this._simpleItem('Mount',  'systems/lancer/assets/icons/white/mech.svg', { name: 'Mount',  activation: 'Full' }, 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.'),
+                this._simpleItem('Jockey', 'modules/lancer-automations/icons/ram.svg',   { name: 'Jockey', activation: 'Full' }, 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).'),
                 ...this._getActionsByActivation(actor, 'Quick', 'Actions'),
                 ...this._getActionsByActivation(actor, 'Full', 'Actions'),
                 ...this._catReactions().getItems(),
@@ -839,8 +913,8 @@ export class LancerHUD {
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
                     { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
                     { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
-                    { label: 'Ram',               icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Ram',               action: { name: 'Ram',               activation: 'Quick' }, detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }),               broadcastFn: (t, a) => executeSimpleActivation(a, { title: 'Ram',     action: { name: 'Ram',     activation: 'Quick' }, detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }), onRightClick: ap({ name: 'Ram',               activation: 'Quick', detail: 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.' }) },
-                    { label: 'Grapple',           icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSimpleActivation(actor, { title: 'Grapple',           action: { name: 'Grapple',           activation: 'Quick' }, detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }),                                                                                                                         broadcastFn: (t, a) => executeSimpleActivation(a, { title: 'Grapple', action: { name: 'Grapple', activation: 'Quick' }, detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }),                     onRightClick: ap({ name: 'Grapple',           activation: 'Quick', detail: 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.' }) },
+                    this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
+                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.'),
                     { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
                 ] : []),
                 ...(actor.type === 'pilot' ? [
@@ -859,22 +933,47 @@ export class LancerHUD {
 
     _catWeapons() {
         const actor = this._actor;
+        const allMounts = () => {
+            const mounts = actor?.system?.loadout?.weapon_mounts ?? [];
+            const hasWeapon = m => !m.bracing && (m.slots ?? []).some(s => s.weapon?.id);
+            return [...mounts].sort((a, b) => (hasWeapon(a) ? 0 : 1) - (hasWeapon(b) ? 0 : 1));
+        };
+        const firstMountName = () => {
+            const first = allMounts()[0];
+            return first ? `${first.type} Mount` : 'Mounts';
+        };
         return {
             label: 'Weapons',
-            colLabel: actor?.type === 'npc' || actor?.type === 'pilot' ? 'Weapons' : 'Mounts',
+            colLabel: actor?.type === 'npc' || actor?.type === 'pilot' ? 'Weapons' : firstMountName(),
             getItems: () => {
                 if (actor?.type === 'npc')
                     return actor.items.filter(i => i.type === 'npc_feature' && i.system.type === 'Weapon').map(w => this._weaponItem(w, null, null));
                 if (actor?.type === 'pilot')
                     return actor.items.filter(i => i.type === 'pilot_weapon').map(w => this._weaponItem(w, null, null));
-                const mounts = actor?.system?.loadout?.weapon_mounts ?? [];
+                const MUTED = 'color:#888;font-style:italic;';
                 const result = [];
-                mounts.forEach((mount, idx) => {
-                    const slots = (mount.slots ?? []).filter(s => s.weapon?.id).map(s => ({ weapon: actor.items.get(s.weapon.id), mod: s.mod?.id ? actor.items.get(s.mod.id) : null })).filter(e => e.weapon);
-                    if (!slots.length)
+                allMounts().forEach((mount, idx) => {
+                    if (idx > 0)
+                        result.push({ label: `${mount.type} Mount` || `Mount ${idx + 1}`, isSectionLabel: true });
+                    if (mount.bracing) {
+                        result.push({ label: `<span style="${MUTED}">Locked</span>` });
                         return;
-                    result.push({ label: mount.type || `Mount ${idx + 1}`, isSectionLabel: true });
-                    slots.forEach(e => result.push(this._weaponItem(e.weapon, e.mod, mount)));
+                    }
+                    // A Flex mount with a Main (or larger) weapon has no remaining capacity
+                    const flexBlocked = mount.type === 'Flex' && (mount.slots ?? []).some(s => {
+                        if (!s.weapon?.id) return false;
+                        const w = actor.items.get(s.weapon.id);
+                        return w && (w.system?.size ?? '').toLowerCase() !== 'aux';
+                    });
+                    (mount.slots ?? []).forEach(slot => {
+                        if (slot.weapon?.id) {
+                            const weapon = actor.items.get(slot.weapon.id);
+                            const mod    = slot.mod?.id ? actor.items.get(slot.mod.id) : null;
+                            if (weapon) result.push(this._weaponItem(weapon, mod, mount));
+                        } else if (!flexBlocked) {
+                            result.push({ label: `<span style="${MUTED}">Empty</span>` });
+                        }
+                    });
                 });
                 return result;
             },
@@ -925,8 +1024,7 @@ export class LancerHUD {
             getItems: () => this._getInvadeOptions(actor).map(opt => ({
                 label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
                 icon: ICON_TECH_QUICK,
-                highlightBg:          opt.destroyed ? '#ffcccc' : opt.unavailable ? '#ffe5b4' : null,
-                highlightBorderColor: opt.destroyed ? '#cc3333' : opt.unavailable ? '#cc7700' : null,
+                ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (row) => {
@@ -946,35 +1044,20 @@ export class LancerHUD {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
         const basicChildren = () => {
-            const BCAST = {
-                'Boost':     { name: 'Boost',     activation: 'Quick' },
-                'Aid':       { name: 'Aid',        activation: 'Quick' },
-                'Hide':      { name: 'Hide',       activation: 'Quick' },
-                'Search':    { name: 'Search',     activation: 'Quick' },
-                'Shut Down': { name: 'Shut Down',  activation: 'Quick' },
-                'Handle':    { name: 'Handle',     activation: 'Protocol/Quick' },
-                'Interact':  { name: 'Interact',   activation: 'Protocol/Quick' },
-                'Prepare':   { name: 'Prepare',    activation: 'Quick' },
-                'Eject':     { name: 'Eject',      activation: 'Quick' },
-            };
             const items = [
-                { label: 'Boost',     icon: 'modules/lancer-automations/icons/speedometer.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Boost',       action: { name: 'Boost',       activation: 'Quick'          }, detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.' }) },
-                { label: 'Aid',       icon: 'modules/lancer-automations/icons/medical-pack.svg',           onClick: () => executeSimpleActivation(actor, { title: 'Aid',       action: { name: 'Aid',       activation: 'Quick'          }, detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }), onRightClick: ap({ name: 'Aid',       activation: 'Quick',          detail: 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).' }) },
-                { label: 'Hide',      icon: 'systems/lancer/assets/icons/status_hidden.svg',         onClick: () => executeSimpleActivation(actor, { title: 'Hide',      action: { name: 'Hide',      activation: 'Quick'          }, detail: 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.' }),                                                                                                                                                                                                                                          onRightClick: ap({ name: 'Hide',      activation: 'Quick',          detail: 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.' }) },
-                { label: 'Search',    icon: 'modules/lancer-automations/icons/search.svg',                 onClick: () => executeSimpleActivation(actor, { title: 'Search',    action: { name: 'Search',    activation: 'Quick'          }, detail: 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.' }),                                                                                                                                  onRightClick: ap({ name: 'Search',    activation: 'Quick',          detail: 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.' }) },
-                { label: 'Shut Down', icon: 'systems/lancer/assets/icons/status_shutdown.svg',       onClick: () => executeSimpleActivation(actor, { title: 'Shut Down', action: { name: 'Shut Down', activation: 'Quick'          }, detail: 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.' }),                                                                                                                                                                                                               onRightClick: ap({ name: 'Shut Down', activation: 'Quick',          detail: 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.' }) },
-                { label: 'Handle',    icon: 'modules/lancer-automations/icons/hand-truck.svg',             onClick: () => executeSimpleActivation(actor, { title: 'Handle',    action: { name: 'Handle',    activation: 'Protocol/Quick' }, detail: 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.' }),                                                                 onRightClick: ap({ name: 'Handle',    activation: 'Protocol/Quick', detail: 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.' }) },
-                { label: 'Interact',  icon: 'modules/lancer-automations/icons/click.svg',                  onClick: () => executeSimpleActivation(actor, { title: 'Interact',  action: { name: 'Interact',  activation: 'Protocol/Quick' }, detail: 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.' }),                                                                                                                                 onRightClick: ap({ name: 'Interact',  activation: 'Protocol/Quick', detail: 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.' }) },
-                { label: 'Prepare',   icon: 'modules/lancer-automations/icons/light-bulb.svg',             onClick: () => executeSimpleActivation(actor, { title: 'Prepare',   action: { name: 'Prepare',   activation: 'Quick'          }, detail: 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.' }),                                                                                                       onRightClick: ap({ name: 'Prepare',   activation: 'Quick',          detail: 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.' }) },
-                { label: 'Eject',     icon: 'modules/lancer-automations/icons/parachute.svg',              onClick: () => executeSimpleActivation(actor, { title: 'Eject',     action: { name: 'Eject',     activation: 'Quick'          }, detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }),                                                                                                                                 onRightClick: ap({ name: 'Eject',     activation: 'Quick',          detail: 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.' }) },
+                this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
+                this._simpleItem('Aid',       'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid',       activation: 'Quick'          }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).'),
+                this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
+                this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
+                this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
+                this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.'),
+                this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
+                this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
+                this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.'),
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
-            return items.map(it => {
-                const act = BCAST[it.label];
-                const broadcastFn = act ? (_t, a) => executeSimpleActivation(a, { title: it.label, action: act, detail: '' }) : it.broadcastFn;
-                return { ...it, broadcastFn, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } };
-            });
+            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
         };
         return {
             label: 'Quick Actions',
@@ -987,23 +1070,14 @@ export class LancerHUD {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
         const basicChildren = () => {
-            const BCAST = {
-                'Boot Up':   { name: 'Boot Up',   activation: 'Full' },
-                'Disengage': { name: 'Disengage', activation: 'Full' },
-                'Dismount':  { name: 'Dismount',  activation: 'Full' },
-            };
             const items = [
-                { label: 'Boot Up',   icon: 'modules/lancer-automations/icons/boot.svg',      onClick: () => executeSimpleActivation(actor, { title: 'Boot Up',   action: { name: 'Boot Up',   activation: 'Full' }, detail: 'You can BOOT UP a mech that you are piloting as a full action, clearing SHUT DOWN and restoring your mech to a powered state.' }),                                                                                                                                                                                                     onRightClick: ap({ name: 'Boot Up',   activation: 'Full', detail: 'You can BOOT UP a mech that you are piloting as a full action, clearing SHUT DOWN and restoring your mech to a powered state.' }) },
-                { label: 'Disengage', icon: 'modules/lancer-automations/icons/disengage.svg', onClick: () => executeSimpleActivation(actor, { title: 'Disengage', action: { name: 'Disengage', activation: 'Full' }, detail: 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.' }),                                                                                                                                                                                                                         onRightClick: ap({ name: 'Disengage', activation: 'Full', detail: 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.' }) },
-                { label: 'Dismount',  icon: 'modules/lancer-automations/icons/dismount.svg',  onClick: () => executeSimpleActivation(actor, { title: 'Dismount',  action: { name: 'Dismount',  activation: 'Full' }, detail: 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.' }), onRightClick: ap({ name: 'Dismount',  activation: 'Full', detail: 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.' }) },
+                this._simpleItem('Boot Up',   'modules/lancer-automations/icons/boot.svg',      { name: 'Boot Up',   activation: 'Full' }, 'You can BOOT UP a mech that you are piloting as a full action, clearing SHUT DOWN and restoring your mech to a powered state.'),
+                this._simpleItem('Disengage', 'modules/lancer-automations/icons/disengage.svg', { name: 'Disengage', activation: 'Full' }, 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.'),
+                this._simpleItem('Dismount',  'modules/lancer-automations/icons/dismount.svg',  { name: 'Dismount',  activation: 'Full' }, 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.'),
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose one: Cool your mech, clearing all heat and ending the EXPOSED status; or Spend 1 Repair to heal your mech for half its max HP (rounded up).' }) });
-            return items.map(it => {
-                const act = BCAST[it.label];
-                const broadcastFn = act ? (_t, a) => executeSimpleActivation(a, { title: it.label, action: act, detail: '' }) : it.broadcastFn;
-                return { ...it, broadcastFn, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } };
-            });
+            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
         };
         return {
             label: 'Full Action',
@@ -1014,7 +1088,6 @@ export class LancerHUD {
 
     _catReactions() {
         const actor = this._actor;
-        const ap = a => this._actionPopup(a);
         return {
             label: 'Reactions',
             colLabel: 'Reactions',
@@ -1025,8 +1098,8 @@ export class LancerHUD {
                 const isDeployable = actor.type === 'deployable' || actor.type === 'pilot';
                 const items = [
                     ...(isDeployable ? [] : [
-                        { label: 'Brace',     icon: 'modules/lancer-automations/icons/brace.svg',         highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Brace',     action: { name: 'Brace',     activation: 'Reaction' }, detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }), broadcastFn: (_t, a) => executeSimpleActivation(a, { title: 'Brace',     action: { name: 'Brace',     activation: 'Reaction' }, detail: '' }), onRightClick: ap({ name: 'Brace',     activation: 'Reaction', detail: 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.' }) },
-                        { label: 'Overwatch', icon: 'systems/lancer/assets/icons/reaction.svg',     highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder, onClick: () => executeSimpleActivation(actor, { title: 'Overwatch', action: { name: 'Overwatch', activation: 'Reaction' }, detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }), broadcastFn: (_t, a) => executeSimpleActivation(a, { title: 'Overwatch', action: { name: 'Overwatch', activation: 'Reaction' }, detail: '' }), onRightClick: ap({ name: 'Overwatch', activation: 'Reaction', detail: 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.' }) },
+                        { ...this._simpleItem('Brace',     'modules/lancer-automations/icons/brace.svg', { name: 'Brace',     activation: 'Reaction' }, 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
+                        { ...this._simpleItem('Overwatch', 'systems/lancer/assets/icons/reaction.svg',   { name: 'Overwatch', activation: 'Reaction' }, 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
                     ]),
                     ...this._getActionsByActivation(actor, 'Reaction', 'Actions'),
                 ];
@@ -1056,12 +1129,11 @@ export class LancerHUD {
 
     _catFreeActions() {
         const actor = this._actor;
-        const ap = a => this._actionPopup(a);
         return {
             label: 'Free Actions',
             colLabel: 'Free Actions',
             getItems: () => [
-                ...(actor.type !== 'deployable' ? [{ label: 'Squeeze', icon: 'modules/lancer-automations/icons/contract.svg', onClick: () => executeSimpleActivation(actor, { title: 'Squeeze', action: { name: 'Squeeze', activation: 'Free' }, detail: 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.' }), onRightClick: ap({ name: 'Squeeze', activation: 'Free', detail: 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.' }) }] : []),
+                ...(actor.type !== 'deployable' ? [this._simpleItem('Squeeze', 'modules/lancer-automations/icons/contract.svg', { name: 'Squeeze', activation: 'Free' }, 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.')] : []),
                 ...this._getActionsByActivation(actor, 'Free', 'Actions'),
             ].map(it => /** @type {any} */ (it).hoverData || !it.onClick ? it : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }),
         };
@@ -1179,7 +1251,8 @@ export class LancerHUD {
                 getValue: () => game.modules.get('lancer-automations')?.api?.getMovementCap(token) ?? 0,
                 onValueChanged: (newVal) => {
                     const api = game.modules.get('lancer-automations')?.api;
-                    if (!api) return;
+                    if (!api)
+                        return;
                     api.increaseMovementCap(token, newVal - api.getMovementCap(token));
                 },
             },
@@ -1218,14 +1291,11 @@ export class LancerHUD {
                         icon: item.img ?? null,
                         hoverData: { actor, item, action: null, category: 'Systems' },
                         ...(this._systemHasChildren(item, actor) ? { childColLabel: item.name, getChildren: () => this._systemChildren(item, actor) } : {}),
-                        highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
-                        highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+                        ...this._statusColors(status),
                         onRightClick: (row) => {
-                            const effect   = sys.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
-                            const desc     = sys.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                            const bodyHtml = laRenderTags(sys.tags ?? []) + effect + desc;
+                            const bodyHtml = this._bodyHtml(sys);
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p, this._depthCallbacks()) });
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p) });
                         },
                     };
                 });
@@ -1235,7 +1305,6 @@ export class LancerHUD {
 
     _systemHasChildren(/** @type {any} */ item, /** @type {any} */ actor) {
         const sys = item.system;
-        const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
         const hasActivationTag = (sys.tags ?? []).some(t => ACTIVATION_TAGS.includes(t.lid));
         if (hasActivationTag || (sys.actions ?? []).length)
             return true;
@@ -1250,7 +1319,6 @@ export class LancerHUD {
         const sys = item.system;
         const ap = a => this._actionPopup(a);
         const children = [];
-        const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
         const activationTag = (sys.tags ?? []).find(t => ACTIVATION_TAGS.includes(t.lid));
         if (activationTag && !(sys.actions ?? []).length) {
             const activation = activationTag.lid.replace('tg_', '').replace('_action', ' action');
@@ -1277,8 +1345,7 @@ export class LancerHUD {
             children.push({
                 label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
                 icon: ICON_TECH_QUICK,
-                highlightBg:          opt.destroyed ? '#ffcccc' : opt.unavailable ? '#ffe5b4' : null,
-                highlightBorderColor: opt.destroyed ? '#cc3333' : opt.unavailable ? '#cc7700' : null,
+                ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (/** @type {any} */ row) => {
@@ -1517,7 +1584,6 @@ export class LancerHUD {
 
     _catNpcSystems() {
         const actor = this._actor;
-        const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
         const ACT_LABELS = /** @type {Record<string,string>} */ ({
             tg_quick_action: 'Quick Action',
             tg_full_action:  'Full Action',
@@ -1548,8 +1614,7 @@ export class LancerHUD {
                         badge: status.badge ?? null,
                         badgeColor: status.badgeColor ?? null,
                         icon: item.img ?? null,
-                        highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
-                        highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+                        ...this._statusColors(status),
                         onClick: activation ? () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation }, detail: sys.effect ?? '' }) : null,
                         onRightClick: (/** @type {any} */ row) => {
                             const trigger  = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
@@ -1664,10 +1729,8 @@ export class LancerHUD {
             label: cb.name,
             icon: cb.img ?? null,
             onRightClick: (/** @type {any} */ row) => {
-                const sys    = cb.system;
-                const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
-                const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: effect + desc, theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                const bodyHtml = this._bodyHtml(cb.system);
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml, theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
@@ -1685,10 +1748,7 @@ export class LancerHUD {
                 childColLabel: intItem.name,
                 getChildren: () => this._systemChildren(intItem, actor),
                 onRightClick: (/** @type {any} */ row) => {
-                    const sys = intItem.system;
-                    const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
-                    const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: laRenderTags(sys?.tags ?? []) + effect + desc, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p, this._depthCallbacks()) });
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: this._bodyHtml(intItem.system), theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p) });
                 },
             };
         });
@@ -1850,15 +1910,12 @@ export class LancerHUD {
         const sys    = weapon.system;
         const status = getItemStatus(weapon);
         const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${weapon.name}</s>` : weapon.name;
-        const highlightBg          = status.destroyed  ? '#ffcccc'               : status.unavailable ? '#ffe5b4'             : null;
-        const highlightBorderColor = status.destroyed  ? '#cc3333'               : status.unavailable ? '#cc7700'              : null;
         return {
             label: labelHtml,
             badge: status.badge ?? null,
             badgeColor: status.badgeColor ?? null,
             childColLabel: weapon.name,
-            highlightBg,
-            highlightBorderColor,
+            ...this._statusColors(status),
             hoverData: { actor: this._actor, item: weapon, action: null, category: 'Weapons' },
             // onClick: () => weapon.beginWeaponAttackFlow(), // moved to ATTACK row in _weaponChildren
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
@@ -1879,7 +1936,8 @@ export class LancerHUD {
                     modItem: modItem ?? null,
                     activeProfileIndex: sys.selected_profile_index ?? 0,
                 });
-                const subtitle = [sys.mount_type ?? sys.size, sys.weapon_type ?? sys.type].filter(Boolean).join(' · ');
+                const profileType = sys.profiles?.[sys.selected_profile_index ?? 0]?.type;
+                const subtitle = [sys.mount_type ?? sys.size, profileType ?? sys.weapon_type].filter(Boolean).join(' · ');
                 toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
             },
         };
@@ -1899,9 +1957,7 @@ export class LancerHUD {
             // Mod row may have no onClick — handle it first
             if (modItem && child.label === modItem.name) {
                 const modSys = modItem.system;
-                const effect = modSys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(modSys.effect)}</div>`      : '';
-                const desc   = modSys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(modSys.description)}</div>` : '';
-                const bodyHtml = laRenderTags(modSys?.tags ?? []) + effect + desc;
+                const bodyHtml = this._bodyHtml(modSys);
                 if (bodyHtml)
                     return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle: 'Weapon Mod', bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
             }
@@ -1924,14 +1980,19 @@ export class LancerHUD {
                         label: 'ATTACK',
                         icon: 'systems/lancer/assets/icons/mech_weapon.svg',
                         onClick: () => weapon.beginWeaponAttackFlow(),
-                        broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */ (w).beginWeaponAttackFlow(); },
+                        broadcastFn: (t, a) => {
+                            const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
+                                (w).beginWeaponAttackFlow();
+                        },
                         onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                     },
                     {
                         label: 'FIGHT',
                         icon: 'systems/lancer/assets/icons/white/melee.svg',
                         onClick: () => executeFight(actor, weapon),
-                        broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); executeFight(a, w); },
+                        broadcastFn: (t, a) => {
+                            const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); executeFight(a, w);
+                        },
                     },
                 ],
                 modItem,
@@ -1948,7 +2009,10 @@ export class LancerHUD {
                     label: 'ATTACK',
                     icon: 'systems/lancer/assets/icons/mech_weapon.svg',
                     onClick: () => weapon.beginWeaponAttackFlow(),
-                    broadcastFn: (t, a) => { const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */ (w).beginWeaponAttackFlow(); },
+                    broadcastFn: (t, a) => {
+                        const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
+                            (w).beginWeaponAttackFlow();
+                    },
                     onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                 },
                 {
@@ -2058,8 +2122,7 @@ export class LancerHUD {
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: getActivationIcon(action) ?? sourceItem?.img ?? null,
-                highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
-                highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+                ...this._statusColors(status),
                 onClick: () => {
                     const si = /** @type {any} */ (sourceItem);
                     if (si?.type === 'mech_system' || si?.type === 'npc_feature')
@@ -2073,10 +2136,12 @@ export class LancerHUD {
                     const si = /** @type {any} */ (sourceItem);
                     if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
                         const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
-                        if (equiv) equiv.beginSystemFlow();
+                        if (equiv)
+                            equiv.beginSystemFlow();
                     } else if (si?.type === 'talent') {
                         const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
-                        if (equiv) equiv.beginActivationFlow(rankIdx ?? 0);
+                        if (equiv)
+                            equiv.beginActivationFlow(rankIdx ?? 0);
                     } else {
                         executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' });
                     }

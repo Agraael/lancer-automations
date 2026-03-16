@@ -59,11 +59,11 @@
 <style>
     /* ===== Window Chrome ===== */
     #startup-script-editor {
-        background: #991e2a;
+        background: var(--primary-color);
     }
 
     #startup-script-editor .window-header {
-        background: #991e2a;
+        background: var(--primary-color);
         color: #fff;
         border-bottom: none;
     }
@@ -129,7 +129,7 @@
 
     .sse-bottom button[type="submit"] {
         width: 100%;
-        background: #991e2a;
+        background: var(--primary-color);
         color: #fff;
         border: none;
         border-radius: 6px;
@@ -155,13 +155,13 @@
     }
 
     #startup-script-editor input[type="text"]:focus {
-        border-color: #991e2a;
+        border-color: var(--primary-color);
         outline: none;
-        box-shadow: 0 0 6px rgba(153, 30, 42, 0.25);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--primary-color), transparent 75%);
     }
 
     #startup-script-editor input[type="checkbox"] {
-        accent-color: #991e2a;
+        accent-color: var(--primary-color);
     }
 
     /* ===== Labels & Notes ===== */
@@ -169,8 +169,8 @@
     #startup-script-editor .notes { color: #555; font-size: 11px; }
 
     #startup-script-editor code {
-        background: rgba(153, 30, 42, 0.08);
-        color: #991e2a;
+        background: color-mix(in srgb, var(--primary-color), transparent 92%);
+        color: var(--primary-color);
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 0.9em;

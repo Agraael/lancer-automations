@@ -41,6 +41,15 @@ Hooks.on('init', () => {
         type: Boolean,
         default: false,
     });
+    game.settings.register(MODULE, 'tah.hoverCloseDelay', {
+        name: 'TAH: Hover Close Delay (seconds)',
+        hint: 'How long the HUD stays open after the mouse leaves it. Higher values give more time to move between columns.',
+        scope: 'client',
+        config: true,
+        type: Number,
+        default: 0.5,
+        range: { min: 0, max: 3, step: 0.5 },
+    });
 });
 
 // ── Token selection ──────────────────────────────────────────────────────────

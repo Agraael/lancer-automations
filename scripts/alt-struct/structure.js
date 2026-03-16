@@ -814,7 +814,7 @@ async function handleTearOffChoice(state, isSystemTrauma) {
               padding: 20px;
             }
             .no-equipment-dialog h2 {
-              color: #991e2a;
+              color: var(--primary-color);
               margin-bottom: 15px;
             }
             .no-equipment-dialog p {
@@ -823,7 +823,7 @@ async function handleTearOffChoice(state, isSystemTrauma) {
             }
             .no-equipment-dialog .warning-icon {
               font-size: 48px;
-              color: #991e2a;
+              color: var(--primary-color);
               margin-bottom: 10px;
             }
           </style>
@@ -943,7 +943,7 @@ export async function tearOffDirectHitFlow(state) {
                   padding: 20px;
                 }
                 .no-equipment-dialog h2 {
-                  color: #991e2a;
+                  color: var(--primary-color);
                   margin-bottom: 15px;
                 }
                 .no-equipment-dialog p {
@@ -952,7 +952,7 @@ export async function tearOffDirectHitFlow(state) {
                 }
                 .no-equipment-dialog .warning-icon {
                   font-size: 48px;
-                  color: #991e2a;
+                  color: var(--primary-color);
                   margin-bottom: 10px;
                 }
               </style>
@@ -1024,7 +1024,7 @@ export async function tearOffCrushingHitFlow(state) {
                   padding: 20px;
                 }
                 .no-equipment-dialog h2 {
-                  color: #991e2a;
+                  color: var(--primary-color);
                   margin-bottom: 15px;
                 }
                 .no-equipment-dialog p {
@@ -1033,7 +1033,7 @@ export async function tearOffCrushingHitFlow(state) {
                 }
                 .no-equipment-dialog .warning-icon {
                   font-size: 48px;
-                  color: #991e2a;
+                  color: var(--primary-color);
                   margin-bottom: 10px;
                 }
               </style>

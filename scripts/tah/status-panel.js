@@ -23,7 +23,7 @@ const BG_DEFAULT = '#f5f5f5';
 const BG_HOVER   = '#ffe0e0';
 const S_COL_LABEL = [
     'padding:3px 12px 4px',
-    'background:#991e2a',
+    'background:var(--primary-color)',
     'color:#fff',
     'font-size:0.68em',
     'letter-spacing:1px',
@@ -57,8 +57,9 @@ export class StatusPanel {
             this._subtypePanel = null;
         }
         if (this._panel) {
-            this._panel.stop(true).remove();
+            const panel = this._panel;
             this._panel = null;
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function() { $(this).remove(); });
         }
     }
 
@@ -173,13 +174,13 @@ export class StatusPanel {
         };
 
         // ── Styles ─────────────────────────────────────────────────────────────
-        const S_PANEL      = 'display:flex;flex-direction:row;gap:4px;background:#f5f5f5;border:2px solid #991e2a;border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.8em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;';
+        const S_PANEL      = 'display:flex;flex-direction:row;gap:4px;background:#f5f5f5;border:2px solid var(--primary-color);border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.8em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;';
         const S_STATUS_GRID = `overflow-y:auto;overflow-x:hidden;max-height:420px;padding:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;min-width:500px;`;
         const S_STATUS_ROW  = `display:flex;align-items:center;gap:5px;padding:1px 5px;margin-bottom:0;cursor:pointer;border-radius:2px;border-left:3px solid transparent;`;
         const S_RIGHT_COL   = `display:flex;flex-direction:column;gap:4px;width:160px;flex-shrink:0;padding:4px;`;
-        const S_UTIL_BTN    = `padding:4px 6px;background:#991e2a;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;width:100%;text-align:left;`;
+        const S_UTIL_BTN    = `padding:4px 6px;background:var(--primary-color);color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;width:100%;text-align:left;`;
         const S_CUSTOM_LIST = `overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;`;
-        const S_PANEL_HEADER = `background:#991e2a;color:#fff;padding:3px 8px;font-size:0.75em;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;border-radius:1px;margin-bottom:4px;flex-shrink:0;`;
+        const S_PANEL_HEADER = `background:var(--primary-color);color:#fff;padding:3px 8px;font-size:0.75em;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;border-radius:1px;margin-bottom:4px;flex-shrink:0;`;
         const S_TOOLTIP     = 'position:fixed;z-index:9999;background:#1a1a1a;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:260px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);';
 
         // ── In-place helpers ───────────────────────────────────────────────────
@@ -459,7 +460,7 @@ export class StatusPanel {
                         <b>${b.name}</b>${kindBadge}<br>
                         <span style="color:#666;">${detail}</span>
                     </div>
-                    <i class="la-bonus-del fas fa-trash" style="cursor:pointer;color:#991e2a;opacity:0.45;flex-shrink:0;padding:2px;font-size:0.9em;" title="Delete bonus"></i>
+                    <i class="la-bonus-del fas fa-trash" style="cursor:pointer;color:var(--primary-color);opacity:0.45;flex-shrink:0;padding:2px;font-size:0.9em;" title="Delete bonus"></i>
                 </div>`);
                 row.find('.la-bonus-del').on('mouseenter', function() { $(this).css('opacity', '1'); })
                     .on('mouseleave', function() { $(this).css('opacity', '0.45'); })
@@ -491,7 +492,7 @@ export class StatusPanel {
 
         this._el.append(panel);
         panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
-        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 140);
+        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
         this._panel = panel;
     }
 
@@ -502,8 +503,8 @@ export class StatusPanel {
         const hasSC = !!game.modules.get('statuscounter')?.active;
         const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
-        const S_PANEL = 'background:#2a2a2a;border:1px solid #991e2a;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.6);font-family:inherit;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;min-width:180px;';
-        const S_HDR   = 'background:#991e2a;color:#fff;padding:2px 6px;display:flex;justify-content:space-between;align-items:center;border-radius:2px 2px 0 0;';
+        const S_PANEL = 'background:#2a2a2a;border:1px solid var(--primary-color);border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.6);font-family:inherit;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;min-width:180px;';
+        const S_HDR   = 'background:var(--primary-color);color:#fff;padding:2px 6px;display:flex;justify-content:space-between;align-items:center;border-radius:2px 2px 0 0;';
         const S_ROW   = 'display:flex;align-items:center;gap:4px;padding:2px 6px;border-bottom:1px solid #3a3a3a;';
         const S_BTN   = 'display:inline-block;border-radius:2px;cursor:pointer;width:18px;height:16px;line-height:16px;font-weight:bold;flex-shrink:0;text-align:center;user-select:none;';
 
@@ -578,6 +579,6 @@ export class StatusPanel {
         const startTop = goAbove ? rect.top           : rect.bottom - panelH;
         const left     = Math.min(rect.left, window.innerWidth - panelW - 8);
         panel.css({ position: 'fixed', top: startTop, left, zIndex: 9999, opacity: 0, width: 'fit-content' });
-        panel.animate({ top: finalTop, opacity: 1 }, 140);
+        panel.animate({ top: finalTop, opacity: 1 }, 250);
     }
 }

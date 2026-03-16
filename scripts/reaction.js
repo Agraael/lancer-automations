@@ -182,7 +182,7 @@ export function displayOverwatch(reactors, target) {
     for (const reactor of reactors) {
         reactorItems += `
         <div class="lancer-list-item" data-token-id="${reactor.id}">
-             <img src="${reactor.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid #991e2a; border-radius: 4px; background: #000; cursor: pointer;">
+             <img src="${reactor.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid var(--primary-color); border-radius: 4px; background: #000; cursor: pointer;">
              <div class="lancer-item-content">
                  <div class="lancer-item-name">${reactor.name}</div>
                  <div class="lancer-item-details">Started in Threat Range</div>

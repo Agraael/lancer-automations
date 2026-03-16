@@ -63,8 +63,9 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
     const colTop = firstRow.length ? firstRow.offset().top - el.offset().top : 0;
     col.css('top', colTop);
 
+    const scrollWrap = $(`<div style="max-height:420px;overflow-y:auto;overflow-x:hidden;"></div>`);
     if (!results.length) {
-        col.append($(`<div style="${S_MUTED}">No results</div>`));
+        scrollWrap.append($(`<div style="${S_MUTED}">No results</div>`));
     } else {
         for (const item of results) {
             const row = makeRow(item.label, false, item.icon ?? null, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
@@ -78,12 +79,13 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
                 row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
             }
-            row.css('flex-wrap', 'wrap').prepend($(`<span style="width:100%;font-size:0.58em;color:#991e2a;text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;">${item._catLabel}</span>`));
+            row.css({ flexWrap: 'wrap', height: 'auto', minHeight: '44px' }).prepend($(`<span style="width:100%;font-size:0.58em;color:var(--primary-color);text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;">${item._catLabel}</span>`));
             row.on('click', () => item.onClick(row));
             if (item.onRightClick)
                 row.on('contextmenu', ev => { ev.preventDefault(); item.onRightClick(row); });
-            col.append(row);
+            scrollWrap.append(row);
         }
     }
-    col.stop(true).css({ opacity: 0, marginLeft: -10 }).show().animate({ opacity: 1, marginLeft: 0 }, 140);
+    col.append(scrollWrap);
+    col.stop(true).css({ opacity: 0, marginLeft: -10 }).show().animate({ opacity: 1, marginLeft: 0 }, 250);
 }

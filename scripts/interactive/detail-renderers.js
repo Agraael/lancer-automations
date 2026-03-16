@@ -242,7 +242,7 @@ export function laRenderWeaponBody(profiles, opts = {}) {
             const isActive = idx === activeProfileIndex;
             const blockStyle = isActive
                 ? 'margin-bottom:6px;padding:5px 7px;background:rgba(50,50,50,0.85);border:1px solid rgba(160,160,160,0.35);border-radius:3px;cursor:pointer;'
-                : 'margin-bottom:6px;padding:5px 7px;background:rgba(153,30,42,0.12);border:1px solid rgba(153,30,42,0.45);border-radius:3px;cursor:pointer;';
+                : 'margin-bottom:6px;padding:5px 7px;background:color-mix(in srgb, var(--primary-color), transparent 88%);border:1px solid color-mix(in srgb, var(--primary-color), transparent 55%);border-radius:3px;cursor:pointer;';
             const nameStyle = isActive
                 ? 'font-size:0.75em;font-weight:bold;color:#bbb;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;'
                 : 'font-size:0.75em;font-weight:bold;color:#e06060;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;';
@@ -256,7 +256,7 @@ export function laRenderWeaponBody(profiles, opts = {}) {
                 <div class="la-mod-body" style="display:${bodyDisplay};margin-top:4px;">${inner}</div>
             </div>`;
         }).join('');
-        profilesHtml = `<div style="margin-bottom:4px;">${laPopupSectionLabel('PROFILES', '#991e2a')}${blocks}</div>`;
+        profilesHtml = `<div style="margin-bottom:4px;">${laPopupSectionLabel('PROFILES', 'var(--primary-color)')}${blocks}</div>`;
     }
 
     const modHtml = modName ? laRenderWeaponMod(modName, modItem) : '';

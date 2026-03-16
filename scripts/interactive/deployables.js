@@ -1136,7 +1136,7 @@ export async function openDeployableMenu(actor) {
             .lancer-item-generate {
                 margin-top: 3px;
                 padding: 2px 6px;
-                background: #991e2a;
+                background: var(--primary-color);
                 color: white;
                 border: none;
                 border-radius: 2px;

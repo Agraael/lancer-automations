@@ -860,6 +860,7 @@ Places a smoke zone (soft cover) that persists until the start of the Strider's 
 ## Planned Features
 
 - More built-in item activations for the personal activation set
+- Theme from Lancer Systen, but with the way I did my messy work, it's gonna be painful to do.
 
 ---
 

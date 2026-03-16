@@ -329,7 +329,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     <div id="reaction-detail-panel" style="
         position: fixed;
         background: #23272a;
-        border: 1px solid #991e2a;
+        border: 1px solid var(--primary-color);
         border-radius: 5px;
         padding: 15px;
         width: 280px;
@@ -346,10 +346,10 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 
         ${triggerText ? `
         <div style="margin-bottom: 12px;">
-            <div style="background: #991e2a; color: white; padding: 2px 8px; border-radius: 2px; display: inline-block; font-size: 0.8em; font-weight: bold; margin-bottom: 4px;">
+            <div style="background: var(--primary-color); color: white; padding: 2px 8px; border-radius: 2px; display: inline-block; font-size: 0.8em; font-weight: bold; margin-bottom: 4px;">
                 TRIGGER
             </div>
-            <div style="padding: 6px 8px; background: rgba(0,0,0,0.4); border-left: 2px solid #991e2a; color: #ccc;">
+            <div style="padding: 6px 8px; background: rgba(0,0,0,0.4); border-left: 2px solid var(--primary-color); color: #ccc;">
                 ${triggerText}
             </div>
         </div>
@@ -371,7 +371,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 <i class="fas fa-sync"></i> ${frequency}
             </span>
              ${actionType === "Reaction" ?
-        `<span style="background: rgba(153, 30, 42, 0.3); padding: 2px 8px; border-radius: 10px;">
+        `<span style="background: color-mix(in srgb, var(--primary-color), transparent 70%); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-bolt"></i> Reaction
                 </span>` :
         actionType === "Free Action" ?
@@ -385,7 +385,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         </div>
 
         <button class="activate-btn" style="
-            background: #991e2a;
+            background: var(--primary-color);
             color: white;
             border: none;
             padding: 8px 16px;
@@ -513,7 +513,7 @@ function renderReactionDialog(popupData) {
 
         tokenItems += `
         <div class="lancer-list-item" data-token-id="${tokenId}">
-            <img src="${token.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid #991e2a; border-radius: 4px; background: #000; cursor: pointer;">
+            <img src="${token.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid var(--primary-color); border-radius: 4px; background: #000; cursor: pointer;">
             <div class="lancer-item-content">
                 <div class="lancer-item-name">${token.name}</div>
                 <div class="lancer-item-details">${data.reactions.length} reaction(s) available</div>
@@ -531,14 +531,14 @@ function renderReactionDialog(popupData) {
         .lancer-reaction-item {
             padding: 4px 10px 4px 46px;
             margin: 2px 0;
-            background: rgba(153, 30, 42, 0.15);
-            border-left: 3px solid #991e2a;
+            background: color-mix(in srgb, var(--primary-color), transparent 85%);
+            border-left: 3px solid var(--primary-color);
             cursor: pointer;
             display: flex;
             align-items: center;
         }
         .lancer-reaction-item:hover, .lancer-reaction-item.selected {
-            background: rgba(153, 30, 42, 0.4);
+            background: color-mix(in srgb, var(--primary-color), transparent 60%);
         }
         .lancer-reaction-name {
             font-weight: bold;

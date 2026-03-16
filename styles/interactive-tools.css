@@ -98,7 +98,7 @@
 
 .la-selected-target:hover {
     background: #ffe0e0;
-    border-color: #991e2a;
+    border-color: var(--primary-color);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -123,7 +123,7 @@
 }
 
 .la-selected-target:hover .la-selected-target-remove {
-    color: #991e2a;
+    color: var(--primary-color);
 }
 
 /* --- Choice Card List --- */
@@ -200,12 +200,12 @@
 
 /* --- Lancer Automations Custom Dialog Styling (Compact) --- */
 .lancer-automations-dialog.window-app {
-    background: #991e2a !important;
+    background: var(--primary-color) !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
 .lancer-automations-dialog.window-app .window-header {
-    background: #991e2a !important;
+    background: var(--primary-color) !important;
     color: #fff !important;
     border-bottom: none !important;
     padding: 0 8px !important;
@@ -277,8 +277,8 @@
 .lancer-automations-dialog.window-app .dialog-buttons button {
     flex: 1;
     background: #fff !important;
-    color: #991e2a !important;
-    border: 1px solid #991e2a !important;
+    color: var(--primary-color) !important;
+    border: 1px solid var(--primary-color) !important;
     border-radius: 4px !important;
     padding: 4px 8px !important;
     font-weight: 700 !important;
@@ -296,7 +296,7 @@
 }
 
 .lancer-automations-dialog.window-app .dialog-buttons button:hover {
-    background: rgba(153, 30, 42, 0.05) !important;
+    background: color-mix(in srgb, var(--primary-color), transparent 95%) !important;
     border-width: 1px !important;
 }
 

@@ -73,7 +73,7 @@ export function buildStatsHtml(actor, token = null) {
         movHtml = `${SEP}${movIcon}<span title="Movement" style="color:#aaa;">∞</span>`;
     }
 
-    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid #991e2a;padding:2px 8px 2px;font-size:0.97em;color:#888;width:max-content;">` +
+    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 8px 2px;font-size:0.97em;color:#888;width:max-content;">` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
         `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>${movHtml}` +
         `</div>` +
