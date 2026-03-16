@@ -6,7 +6,7 @@
  */
 
 import { getItemActions } from '../interactive/deployables.js';
-import { laDetailPopup, laRenderActionDetail } from '../interactive/detail-renderers.js';
+import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
 const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
@@ -158,13 +158,21 @@ export function laHudItemChildren(item, opts = {}) {
         items.push({ label: 'PROFILES', isSectionLabel: true });
         profiles.forEach((p, idx) => {
             const isActive = idx === activeIdx;
+            const profileName = p.name || `Profile ${idx + 1}`;
             items.push({
-                label: (isActive ? '● ' : '○ ') + (p.name || `Profile ${idx + 1}`),
+                label: (isActive ? '● ' : '○ ') + profileName,
                 icon: ICON_PROFILE,
                 highlightBg: isActive ? '#cce0f5' : null,
                 keepOpen: true,
+                _profile: p,
                 onClick: isActive ? null : async () => item.update({ 'system.selected_profile_index': idx }),
                 refreshCol4: () => laHudItemChildren(item, opts),
+                onRightClick: showPopup ? (row) => {
+                    const bodyHtml = laRenderWeaponProfile(p, false);
+                    const subtitle = [p.type, isActive ? 'Active' : null].filter(Boolean).join(' · ');
+                    const popup = laDetailPopup('la-hud-popup la-hud-profile-popup', profileName, subtitle, bodyHtml, 'weapon');
+                    showPopup(popup, row);
+                } : null,
             });
         });
     }

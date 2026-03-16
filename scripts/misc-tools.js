@@ -1243,7 +1243,7 @@ function _getItemBaseData(item) {
         const profileIdx = item.system?.selected_profile_index ?? 0;
         const profile = item.system?.profiles?.[profileIdx];
         tags = profile?.all_tags ?? item.system?.tags ?? [];
-        range = profile?.range ?? item.system?.range ?? [];
+        range = profile?.all_range ?? profile?.range ?? item.system?.range ?? [];
     } else {
         tags = item.system?.tags ?? [];
         range = item.system?.range ?? [];
@@ -1317,6 +1317,57 @@ function _applyItemBonuses(item, actor, tags, range) {
             applyRangeBonus(state, bonus);
         }
     }
+}
+
+/**
+ * Returns the weapon's profiles with fully merged range:
+ * native Lancer bonuses (all_range) + LA actor range bonuses.
+ * Each returned profile is a shallow copy with `range` replaced by the merged array.
+ * Falls back gracefully for pilot weapons and items without profiles.
+ * @param {Item} weapon
+ * @param {Actor} [actor] - Defaults to weapon.parent
+ * @returns {Array}
+ */
+export function getWeaponProfiles_WithBonus(weapon, actor) {
+    if (!weapon?.system)
+        return [];
+    const a = actor ?? weapon.parent ?? null;
+    const rawProfiles = weapon.system.profiles;
+
+    if (rawProfiles?.length > 0) {
+        return rawProfiles.map(p => {
+            const base = (p.all_range ?? p.range ?? []).map(r => ({ ...r }));
+            const base_range = (p.range ?? []).map(r => ({ ...r })); // true original, no bonuses
+            const tags = (p.all_tags ?? p.tags ?? []).map(t => ({ ...t }));
+            const mockState = { actor: a, item: weapon, data: { tags, range: base } };
+            const bonuses = flattenBonuses([
+                ...(a?.getFlag("lancer-automations", "global_bonuses") || []),
+                ...(a?.getFlag("lancer-automations", "constant_bonuses") || [])
+            ]);
+            const flowTags = new Set(["all", "attack"]);
+            for (const bonus of bonuses) {
+                if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
+                    applyRangeBonus(mockState, bonus);
+            }
+            return { ...p, range: base, all_range: base, base_range };
+        });
+    }
+
+    // Pilot weapon / simple item: single synthetic profile
+    const base = (weapon.system.range ?? []).map(r => ({ ...r }));
+    const base_range = base.map(r => ({ ...r })); // snapshot before LA bonuses
+    const tags = (weapon.system.tags ?? []).map(t => ({ ...t }));
+    const mockState = { actor: a, item: weapon, data: { tags, range: base } };
+    const bonuses = flattenBonuses([
+        ...(a?.getFlag("lancer-automations", "global_bonuses") || []),
+        ...(a?.getFlag("lancer-automations", "constant_bonuses") || [])
+    ]);
+    const flowTags = new Set(["all", "attack"]);
+    for (const bonus of bonuses) {
+        if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
+            applyRangeBonus(mockState, bonus);
+    }
+    return [{ ...weapon.system, range: base, base_range }];
 }
 
 /**
@@ -1528,6 +1579,7 @@ export const MiscAPI = {
     getMaxWeaponRanges_WithBonus,
     getMaxWeaponReach_WithBonus,
     getMaxItemRanges_WithBonus,
+    getWeaponProfiles_WithBonus,
     getWeaponType,
     getItemType,
     executeSkirmish,

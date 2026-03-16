@@ -147,6 +147,13 @@ export function applyRangeBonus(state, bonus) {
             state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
         }
     }
+
+    // Track for chat card injection (injectRangeBonusesToCard step)
+    if (!state.la_extraData)
+        state.la_extraData = {};
+    if (!state.la_extraData.la_range_bonuses)
+        state.la_extraData.la_range_bonuses = [];
+    state.la_extraData.la_range_bonuses.push({ type: rangeType, val, override: isOverride });
 }
 
 /**
@@ -169,6 +176,7 @@ function createGenericBonusStep(flowType) {
                            (actor.getFlag("world", "generic_accuracy") || 0) -
                            (actor.getFlag("world", "generic_difficulty") || 0),
                 activeBonuses: [],
+                rangeBonuses: [],
                 damageBonuses: [],
                 allTargetedBonuses: [],
                 targetedDamageBonuses: [],
@@ -182,8 +190,8 @@ function createGenericBonusStep(flowType) {
             const attackerId = actor.token?.id ?? canvas.tokens.placeables.find(t => t.actor?.id === actor.id)?.id;
             await collectTargeterBonuses(attackerId, flowType, tags, state, r);
 
-            const hasAny = r.netBonus !== 0 || r.activeBonuses.length > 0 || r.damageBonuses.length > 0 ||
-                           r.allTargetedBonuses.length > 0 || r.targetedDamageBonuses.length > 0;
+            const hasAny = r.netBonus !== 0 || r.activeBonuses.length > 0 || r.rangeBonuses.length > 0 ||
+                           r.damageBonuses.length > 0 || r.allTargetedBonuses.length > 0 || r.targetedDamageBonuses.length > 0;
             if (!hasAny) {
                 return true;
             }
@@ -323,7 +331,7 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
             results.activeBonuses.push(bonus);
         } else if (bonus.type === 'range') {
             applyRangeBonus(state, bonus);
-            results.activeBonuses.push(bonus);
+            results.rangeBonuses.push(bonus);
         } else if (bonus.type === 'damage' && flowType === 'damage') {
             const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
             if (hasTarget) {
@@ -363,17 +371,18 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results) {
 
     for (const b of bonuses) {
         if (await isBonusApplicable(b, tags, state)) {
-            const res = { netBonus: 0, activeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [] };
+            const res = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [] };
             await processBonusBatch([b], flowType, tags, state, res);
 
             // If it was actually applicable and used in the current context, consume it
-            const consumed = (res.activeBonuses.length > 0) || (res.damageBonuses.length > 0) ||
-                             (res.allTargetedBonuses.length > 0) || (res.targetedDamageBonuses.length > 0) ||
-                             (res.netBonus !== 0);
+            const consumed = (res.activeBonuses.length > 0) || (res.rangeBonuses.length > 0) ||
+                             (res.damageBonuses.length > 0) || (res.allTargetedBonuses.length > 0) ||
+                             (res.targetedDamageBonuses.length > 0) || (res.netBonus !== 0);
 
             if (consumed) {
                 results.netBonus += res.netBonus;
                 results.activeBonuses.push(...res.activeBonuses);
+                results.rangeBonuses.push(...res.rangeBonuses);
                 results.damageBonuses.push(...res.damageBonuses);
                 results.allTargetedBonuses.push(...res.allTargetedBonuses);
                 results.targetedDamageBonuses.push(...res.targetedDamageBonuses);
@@ -416,7 +425,7 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
                 results.activeBonuses.push(injected);
             } else if (b.type === 'range') {
                 applyRangeBonus(state, b);
-                results.activeBonuses.push(injected);
+                results.rangeBonuses.push(injected);
             } else {
                 results.allTargetedBonuses.push(injected);
             }
@@ -612,6 +621,8 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     };
 
     const updateFlowAccuracy = (bonus, wasEnabled) => {
+        if (bonus.type !== 'accuracy' && bonus.type !== 'difficulty')
+            return;
         let val = Number.parseInt(bonus.val) || 0;
         if (bonus.type === 'difficulty')
             val = -val;

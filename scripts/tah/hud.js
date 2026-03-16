@@ -1,7 +1,7 @@
 /* global $, window, game, CONFIG */
 
-import { laRenderWeaponBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, getActorActionItems, hasReactionAvailable } from '../misc-tools.js';
+import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
@@ -206,18 +206,6 @@ export class LancerHUD {
         if ($('.la-hud-popup').length) {
             this.updateStatsInPlace();
             this._refreshColumnsInPlace();
-            return;
-        }
-        const pending4 = this._pendingCol4Refresh;
-        this._pendingCol4Refresh = null;
-        if (pending4?.anchor && this._c4) {
-            this._openCol(this._c4, pending4.fn(), pending4.anchor);
-            return;
-        }
-        const pending3 = this._pendingCol3Refresh;
-        this._pendingCol3Refresh = null;
-        if (pending3?.anchor && this._c3) {
-            this._openCol(this._c3, pending3.fn(), pending3.anchor);
             return;
         }
         const openPath = this._saveOpenPath();
@@ -644,13 +632,19 @@ export class LancerHUD {
                         closeCol(this._c4);
                         this._clearC1Active();
                     }
-                    if (item.keepOpen && item.refreshCol4) {
-                        if (col === this._c3)
-                            this._pendingCol3Refresh = { fn: item.refreshCol4, anchor: anchorRow };
-                        else
-                            this._pendingCol4Refresh = { fn: item.refreshCol4, anchor: this._c4AnchorRow };
+                    if (item.keepOpen && item.refreshCol4)
+                        this._suppressRefreshDepth++;
+                    try {
+                        await item.onClick();
+                    } finally {
+                        if (item.keepOpen && item.refreshCol4) {
+                            this._suppressRefreshDepth--;
+                            if (col === this._c3)
+                                this._openCol(this._c3, item.refreshCol4(), anchorRow, { reposition: false });
+                            else if (this._c4AnchorRow)
+                                this._openCol(this._c4, item.refreshCol4(), this._c4AnchorRow, { reposition: false });
+                        }
                     }
-                    await item.onClick();
                     if (this._tokens.length > 1 && item.broadcastFn) {
                         for (const t of this._tokens.slice(1)) {
                             try {
@@ -1729,8 +1723,7 @@ export class LancerHUD {
             label: cb.name,
             icon: cb.img ?? null,
             onRightClick: (/** @type {any} */ row) => {
-                const bodyHtml = this._bodyHtml(cb.system);
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml, theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: laRenderCoreBonusBody(cb), theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
@@ -1920,7 +1913,7 @@ export class LancerHUD {
             // onClick: () => weapon.beginWeaponAttackFlow(), // moved to ATTACK row in _weaponChildren
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
             onRightClick: (row) => {
-                let profiles = sys.profiles ?? [];
+                let profiles = getWeaponProfiles_WithBonus(weapon, this._actor);
                 if (!profiles.length && weapon.type === 'npc_feature') {
                     const tierOverride = sys.tier_override ?? 0;
                     const tier = tierOverride > 0 ? tierOverride : (this._actor?.system?.tier ?? 1);
@@ -1947,19 +1940,18 @@ export class LancerHUD {
         const sys = weapon.system;
         const actor = this._actor;
         const addHover = children => children.map(child => {
-            if (child.isSectionLabel || !child.onClick)
+            if (child.isSectionLabel || (!child.onClick && !child._profile))
                 return child;
-            return { ...child, hoverData: { actor, item: weapon, action: child.action ?? { name: child.label, activation: child.activation ?? null }, category: 'Weapons' } };
+            return { ...child, hoverData: { actor, item: weapon, action: child.action ?? { name: child.label, activation: child.activation ?? null }, category: 'Weapons', profile: child._profile ?? null } };
         });
         const addRightClicks = (children, attackLabel, bypassMountArg) => children.map(child => {
             if (child.isSectionLabel || child.onRightClick)
                 return child;
             // Mod row may have no onClick — handle it first
             if (modItem && child.label === modItem.name) {
-                const modSys = modItem.system;
-                const bodyHtml = this._bodyHtml(modSys);
-                if (bodyHtml)
-                    return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle: 'Weapon Mod', bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
+                const ms = modItem.system;
+                const subtitle = [ms?.type, ms?.license ? `${ms.manufacturer} ${ms.license_level}` : null].filter(Boolean).join(' · ') || 'Weapon Mod';
+                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-mod-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle, bodyHtml: laRenderModBody(modItem), theme: 'mod', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
             }
             if (!child.onClick)
                 return child;

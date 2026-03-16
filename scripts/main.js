@@ -54,7 +54,7 @@ import {
 import { EffectManagerAPI } from "./effectManager.js";
 import { TerrainAPI } from "./terrain-utils.js";
 
-import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable } from "./misc-tools.js";
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
     bindChatMessageStateInterceptor,
@@ -2434,7 +2434,9 @@ async function throwChoiceStep(state) {
         return true;
 
     const throwRange = thrownTag.val || thrownTag.num_val || "?";
-    const weaponRanges = (profile?.range || item.system?.range || [])
+    const activeProfileIdx = item.system?.selected_profile_index ?? 0;
+    const activeProfileWithBonus = getWeaponProfiles_WithBonus(item, state.actor)?.[activeProfileIdx];
+    const weaponRanges = (activeProfileWithBonus?.range ?? profile?.all_range ?? profile?.range ?? item.system?.range ?? [])
         .filter(r => r.type !== "Thrown")
         .map(r => `${r.type} ${r.val}`)
         .join(", ") || "—";
@@ -2550,6 +2552,64 @@ async function knockbackDamageStep(state) {
         title: `${itemName} Knockback`,
         triggeringToken: attackerToken
     });
+
+    return true;
+}
+
+/**
+ * Flow step: injects merged range (base + native Lancer bonuses + LA range bonuses) into
+ * the attack chat card. currentProfile() creates a new object each call, so we monkey-patch
+ * the instance method to intercept the single call made by printAttackCard. The patch
+ * removes itself after the first call so the item is not permanently affected.
+ */
+async function injectRangeBonusesToCard(state) {
+    const item = state.item;
+    if (!item || typeof item.currentProfile !== 'function')
+        return true;
+
+    const laBonuses = state.la_extraData?.la_range_bonuses ?? [];
+
+    // all_range is set on the raw profile by prepareFinalAttributes (base + native Lancer bonuses).
+    // currentProfile() does NOT copy all_range onto its returned object, so we read it directly.
+    let rawRangeData = null;
+    if (typeof item.is_mech_weapon === 'function' && item.is_mech_weapon()) {
+        const p = item.system.selected_profile_index ?? 0;
+        rawRangeData = item.system.profiles?.[p];
+    } else if (typeof item.is_pilot_weapon === 'function' && item.is_pilot_weapon()) {
+        rawRangeData = item.system;
+    }
+    const base = rawRangeData?.all_range ?? rawRangeData?.range ?? item.currentProfile()?.range ?? [];
+
+    if (!base.length && !laBonuses.length)
+        return true;
+
+    // Clone entries (preserve Range prototype instances)
+    const merged = base.map(r => Object.assign(Object.create(Object.getPrototypeOf(r)), r));
+    const RangeClass = merged[0]?.constructor ?? null;
+
+    for (const bonus of laBonuses) {
+        const existingIdx = merged.findIndex(r => r.type === bonus.type);
+        if (existingIdx !== -1) {
+            if (bonus.override) {
+                merged[existingIdx].val = bonus.val;
+            } else {
+                merged[existingIdx].val = (Number.parseInt(merged[existingIdx].val) || 0) + bonus.val;
+            }
+        } else if (RangeClass && RangeClass !== Object) {
+            merged.push(new RangeClass({ type: bonus.type, val: bonus.val }));
+        } else {
+            merged.push({ type: bonus.type, val: bonus.val, icon: `cci-${bonus.type.toLowerCase()}` });
+        }
+    }
+
+    // Monkey-patch currentProfile on this instance for the single call made by printAttackCard.
+    // The patch removes itself after one use so the item is not permanently affected.
+    item.currentProfile = function patchedCurrentProfile() {
+        delete item.currentProfile; // restore prototype method for all future calls
+        const profile = item.currentProfile(); // now calls the real method
+        profile.range = merged;
+        return profile;
+    };
 
     return true;
 }
@@ -2688,6 +2748,10 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Register Knockback steps
     flowSteps.set('lancer-automations:knockbackInject', knockbackInjectStep);
     flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
+    // Register range injection steps (two IDs, same function — one fires before showAttackHUD,
+    // one fires before printAttackCard; each self-destructs after its single use)
+    flowSteps.set('lancer-automations:injectRangeBonusesToCard', injectRangeBonusesToCard);
+    flowSteps.set('lancer-automations:injectRangeBonusesToHUD', injectRangeBonusesToCard);
     // Register No Bonus Dmg steps
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
     // Register Throw steps
@@ -2710,6 +2774,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:forceTechHUD');
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:genericAccuracyStepWeaponAttack', 'lancer-automations:injectRangeBonusesToHUD');
+    flows.get('WeaponAttackFlow')?.insertStepBefore('printAttackCard', 'lancer-automations:injectRangeBonusesToCard');
 
     // Insert onInitAttack/TechAttack steps
     flows.get('BasicAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:onInitAttack');
@@ -2876,7 +2942,7 @@ Hooks.on('canvasReady', () => {
     canvas.tokens?.placeables.forEach(t => t.renderFlags?.set({ refreshEffects: true }));
 
     // Set up deployable connection lines graphic
-    if (deployableConnectionsGraphic) {
+    if (deployableConnectionsGraphic && !deployableConnectionsGraphic.destroyed) {
         deployableConnectionsGraphic.destroy();
     }
     deployableConnectionsGraphic = new PIXI.Graphics();
@@ -2887,7 +2953,7 @@ Hooks.on('canvasReady', () => {
 });
 
 Hooks.on('hoverToken', (token, hovered) => {
-    if (!deployableConnectionsGraphic) {
+    if (!deployableConnectionsGraphic || deployableConnectionsGraphic.destroyed) {
         return;
     }
     deployableConnectionsGraphic.clear();

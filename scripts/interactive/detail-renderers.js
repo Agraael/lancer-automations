@@ -175,9 +175,21 @@ export function laRenderWeaponProfile(p, showName) {
     const damageHtml = p.damage?.length
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
         : '';
-    const rangeHtml = p.range?.length
-        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ')}</div></div>`
-        : '';
+    const rangeHtml = (() => {
+        if (!p.range?.length) return '';
+        const rangeStr = p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ');
+        let baseStr = '';
+        if (p.base_range?.length) {
+            const changed = p.range.some(r => {
+                const base = p.base_range.find(b => b.type === r.type);
+                return !base || String(base.val) !== String(r.val);
+            }) || p.base_range.some(b => !p.range.find(r => r.type === b.type));
+            if (changed) {
+                baseStr = ` <span style="color:#777;font-size:0.85em;">(base: ${p.base_range.map(r => `${r.val} ${r.type}`).join(' · ')})</span>`;
+            }
+        }
+        return `<div style="margin-bottom:6px;">${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${rangeStr}${baseStr}</div></div>`;
+    })();
     const tagsHtml = laRenderTags(p.tags);
     const onHitHtml = p.on_hit
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(p.on_hit)}</div></div>`
@@ -217,6 +229,83 @@ export function laRenderWeaponMod(modName, modItem) {
 }
 
 /**
+ * Renders a bonus array (LA bonus structs) as a compact list section.
+ * @param {any[]} bonuses
+ * @returns {string}
+ */
+function laRenderBonusList(bonuses) {
+    if (!bonuses?.length) return '';
+    const activeKeys = (map) => Object.entries(map ?? {}).filter(([, v]) => v).map(([k]) => k);
+    const lines = bonuses.map(b => {
+        // Lancer system bonuses use `lid`; LA custom bonuses use `type`
+        const kind = b.lid ?? b.type ?? '';
+        if (kind === 'accuracy')   return `Accuracy +${b.val}`;
+        if (kind === 'difficulty') return `Difficulty +${b.val}`;
+        if (kind === 'stat')       return `${(b.stat ?? b.id ?? '').split('.').pop() || kind} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
+        if (kind === 'damage')     return (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
+        if (kind === 'tag')        return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${b.tagName}${b.val ? ` ${b.val}` : ''}`;
+        if (kind === 'range') {
+            // Lancer system format: range_types map + optional weapon_types/weapon_sizes filters
+            const rangeTypes = activeKeys(b.range_types);
+            const weaponTypes = activeKeys(b.weapon_types);
+            const sign = Number.parseInt(b.val) >= 0 ? '+' : '';
+            const rangeStr = rangeTypes.length ? rangeTypes.join('/') : (b.rangeType ?? 'Range');
+            const filterStr = weaponTypes.length < 6 && weaponTypes.length > 0 ? ` (${weaponTypes.join('/')})` : '';
+            return `${sign}${b.val} ${rangeStr}${filterStr}`;
+        }
+        if (kind === 'immunity') {
+            if (b.subtype === 'effect' && b.effects)   return `Immunity: ${b.effects.join(', ')}`;
+            if (b.subtype === 'damage' || b.subtype === 'resistance') return `${b.subtype}: ${(b.damageTypes || []).join(', ')}`;
+            return `Immunity: ${b.subtype}`;
+        }
+        if (kind === 'multi' && Array.isArray(b.bonuses)) return b.bonuses.map(bb => laRenderBonusList([bb])).join('');
+        return kind || '?';
+    });
+    return `<div style="margin-bottom:4px;">${laPopupSectionLabel('BONUSES', '#1565c0')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${lines.map(l => `<div>· ${l}</div>`).join('')}</div></div>`;
+}
+
+/**
+ * Renders the full body HTML for a weapon mod detail popup.
+ * Shows: actions, tags, added weapon bonuses (tags/damage/range), effect.
+ * Does NOT show the flavor description.
+ * @param {any} modItem  Foundry Item document (type weapon_mod)
+ * @returns {string}
+ */
+export function laRenderModBody(modItem) {
+    const ms = modItem?.system;
+    const actionsHtml = laRenderActions(ms?.actions ?? []);
+    const tagsHtml    = laRenderTags(ms?.tags ?? []);
+    const bonusesHtml = laRenderBonusList(ms?.bonuses ?? []);
+    const addedParts  = [];
+    if (ms?.added_tags?.length)   addedParts.push(`Tags: ${ms.added_tags.map(t => String(t.name ?? t.lid ?? '').replaceAll('{VAL}', t.val ?? '')).join(', ')}`);
+    if (ms?.added_damage?.length) addedParts.push(`+Damage: ${ms.added_damage.map(d => `${d.val} ${d.type}`).join(' + ')}`);
+    if (ms?.added_range?.length)  addedParts.push(`+Range: ${ms.added_range.map(r => `${r.val} ${r.type}`).join(', ')}`);
+    const addedHtml = addedParts.length
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ADDS', '#ff8c00')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${addedParts.map(p => `<div>· ${p}</div>`).join('')}</div></div>`
+        : '';
+    const effectHtml = ms?.effect
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#ff6400')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(ms.effect)}</div></div>`
+        : '';
+    return actionsHtml + tagsHtml + addedHtml + bonusesHtml + effectHtml;
+}
+
+/**
+ * Renders the full body HTML for a core bonus detail popup.
+ * Shows: tags, bonuses, effect. Does NOT show the flavor description.
+ * @param {any} cbItem  Foundry Item document (type core_bonus)
+ * @returns {string}
+ */
+export function laRenderCoreBonusBody(cbItem) {
+    const ms = cbItem?.system;
+    const tagsHtml    = laRenderTags(ms?.tags ?? []);
+    const bonusesHtml = laRenderBonusList(ms?.bonuses ?? []);
+    const effectHtml  = ms?.effect
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#c084fc')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(ms.effect)}</div></div>`
+        : '';
+    return tagsHtml + bonusesHtml + effectHtml;
+}
+
+/**
  * Renders the full body HTML for a single weapon: actions, profiles (collapsible
  * when more than one), then an optional mod block.
  *
@@ -241,8 +330,8 @@ export function laRenderWeaponBody(profiles, opts = {}) {
             const name    = (p.name || 'Profile').toUpperCase();
             const isActive = idx === activeProfileIndex;
             const blockStyle = isActive
-                ? 'margin-bottom:6px;padding:5px 7px;background:rgba(50,50,50,0.85);border:1px solid rgba(160,160,160,0.35);border-radius:3px;cursor:pointer;'
-                : 'margin-bottom:6px;padding:5px 7px;background:color-mix(in srgb, var(--primary-color), transparent 88%);border:1px solid color-mix(in srgb, var(--primary-color), transparent 55%);border-radius:3px;cursor:pointer;';
+                ? 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-left:3px solid #4caf50;border-radius:3px;cursor:pointer;'
+                : 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-radius:3px;cursor:pointer;';
             const nameStyle = isActive
                 ? 'font-size:0.75em;font-weight:bold;color:#bbb;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;'
                 : 'font-size:0.75em;font-weight:bold;color:#e06060;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;';
@@ -313,6 +402,7 @@ const THEMES = {
     invade:      { border: '#1a1a5c', gradFrom: '#0d0d30', gradTo: '#08081c', headerBorder: '#2020a0' },
     tech:        { border: '#105a5a', gradFrom: '#052d2d', gradTo: '#021a1a', headerBorder: '#107a7a' },
     action:      { border: '#4a2800', gradFrom: '#251400', gradTo: '#160c00', headerBorder: '#5a3200' },
+    mod:         { border: '#5a3010', gradFrom: '#2d1808', gradTo: '#1a0e04', headerBorder: '#7a4015' },
 };
 
 /**

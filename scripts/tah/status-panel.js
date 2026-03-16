@@ -107,7 +107,10 @@ export class StatusPanel {
         const tcsApi = hasTCS ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
         const savedStatuses = hasTCS ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
         const activeCustomEffects = hasTCS
-            ? /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.getFlag?.('temporary-custom-statuses', 'isCustom'))
+            ? /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e =>
+                e.getFlag?.('temporary-custom-statuses', 'isCustom') &&
+                !e.getFlag?.('lancer-automations', 'linkedBonusId')
+            )
             : [];
         const customMap = new Map();
         savedStatuses.forEach(/** @type {any} */ s => customMap.set(s.name, { name: s.name, icon: s.icon }));
@@ -384,10 +387,10 @@ export class StatusPanel {
                         } else if (effs.length === 0) {
                             for (const t of this._tokens) await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
                         } else {
-                            await tcsApi.removeStatus(actor, effs[0].id);
+                            await actor.deleteEmbeddedDocuments('ActiveEffect', [effs[0].id]);
                             for (const t of this._tokens.slice(1)) {
                                 const eff = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
-                                if (eff) await tcsApi.removeStatus(t.actor, eff.id);
+                                if (eff) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             }
                         }
                         updateCRow();
@@ -421,10 +424,10 @@ export class StatusPanel {
                         if (hasSC && stack > 1) {
                             await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                         } else {
-                            await tcsApi.removeStatus(actor, eff.id);
+                            await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             for (const t of this._tokens.slice(1)) {
                                 const oe = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
-                                if (oe) await tcsApi.removeStatus(t.actor, oe.id);
+                                if (oe) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [oe.id]);
                             }
                         }
                         updateCRow();

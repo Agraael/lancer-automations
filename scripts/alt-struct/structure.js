@@ -3,6 +3,7 @@
 import { applyEffectsToTokens } from "../flagged-effects.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
+import { getWeaponProfiles_WithBonus } from "../misc-tools.js";
 
 const structTableTitles = [
     "Crushing Hit",
@@ -475,14 +476,9 @@ async function showSystemTraumaDialog(actor, traumaType) {
                 const sys = w.system;
                 if (!sys)
                     return null;
-                const profiles = sys.profiles?.length > 0 ? sys.profiles : [{
-                    name: null,
-                    damage: sys.damage ?? [],
-                    range: sys.range ?? [],
-                    tags: sys.tags ?? [],
-                    effect: sys.effect || '',
-                    on_hit: sys.on_hit || ''
-                }];
+                const profiles = getWeaponProfiles_WithBonus(w, actor);
+                if (!profiles.length)
+                    return null;
                 const size = sys.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys.size || "");
                 const type = sys.active_profile?.type || sys.type || "";
                 return { name: w.name, img: w.img, size, type, profiles };

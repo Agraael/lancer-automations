@@ -176,20 +176,28 @@ async function getItemMaxReach(item, actor) {
 
 /**
  * Dispatch preview range based on category and hoverData fields.
- * If item is present, always uses getMaxItemRanges_WithBonus.
+ * If profile is present, uses profile.range directly.
+ * If item is present (no profile), uses getMaxItemRanges_WithBonus.
  * Category rules apply only when item is null.
  * Returns null if no preview should be shown for this row.
  * @param {string|undefined} category
  * @param {string|undefined} actionName
  * @param {any} actor
  * @param {any|null} item
+ * @param {any|null} [profile]
  * @returns {Promise<number|null>}
  */
-async function computePreviewRange(category, actionName, actor, item) {
+async function computePreviewRange(category, actionName, actor, item, profile) {
     // Deployables: placement range from deployRange flag, default 1 (ignore item range tags)
     if (category === 'Deployables') {
         const deployRange = item?.getFlag?.('lancer-automations', 'deployRange') ?? 1;
         return Math.max(1, deployRange);
+    }
+
+    // Specific profile → use profile's own range array
+    if (profile?.range?.length) {
+        const max = Math.max(0, ...profile.range.map(r => Number(r.val) || 0));
+        return max > 0 ? Math.max(1, max) : null;
     }
 
     // Item present → always show its range (covers Weapons, Systems, weapon children, etc.)
@@ -232,14 +240,14 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
 
 /**
  * Called by _openCol for every row that carries hoverData.
- * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, token?: any, isEntering: boolean, isLeaving: boolean }} data
+ * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, profile?: any, token?: any, isEntering: boolean, isLeaving: boolean }} data
  */
-export async function onHudRowHover({ actor, item, action, category, token, isEntering }) {
+export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering }) {
     if (!token)
         return;
 
     if (isEntering) {
-        const range = await computePreviewRange(category, action?.name, actor, item ?? null);
+        const range = await computePreviewRange(category, action?.name, actor, item ?? null, profile ?? null);
         if (range != null)
             activateRangePreview(token, range);
     } else {

@@ -3,6 +3,7 @@
 import { startChoiceCard, startVoteCard } from "./network.js";
 import { resolveDeployable, getItemDeployables, getItemActions } from "./deployables.js";
 import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
+import { getWeaponProfiles_WithBonus } from "../misc-tools.js";
 
 /**
  * Opens a dialog to select and throw a weapon.
@@ -836,7 +837,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     });
                     allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
                 } else {
-                    allProfiles = sys.profiles ?? [];
+                    allProfiles = getWeaponProfiles_WithBonus(wItem, actor);
                 }
                 if (allProfiles.length === 0)
                     return null;
