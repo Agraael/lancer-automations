@@ -200,13 +200,13 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
         return max > 0 ? Math.max(1, max) : null;
     }
 
-    // Item present → always show its range (covers Weapons, Systems, weapon children, etc.)
+    // Item present → use its range if it has one, otherwise fall through to category rules
     if (item) {
         const reach = await getItemMaxReach(item, actor);
-        return reach > 0 ? Math.max(1, reach) : null;
+        if (reach > 0) return Math.max(1, reach);
     }
 
-    // No item — category/action-specific rules
+    // No item range (or no item) — category/action-specific rules
     if (category === 'Tech')
         return getSensorRange(actor);
 

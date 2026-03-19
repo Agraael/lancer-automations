@@ -1400,6 +1400,7 @@ export async function recallDeployable(ownerToken) {
  * @param {string} [options.description="Select an item:"] - Description text.
  * @param {string} [options.icon="fas fa-box"] - Icon class for the choice card.
  * @param {function} [options.formatText] - Optional function to format the button text. Defaults to `(item) => item.name`.
+ * @param {Token} [options.relatedToken=null] - Optional token to show in the card header.
  * @returns {Promise<Item|null>} The selected item or null if cancelled (or ignored).
  */
 export function pickItem(items, options = {}) {
@@ -1423,7 +1424,8 @@ export function pickItem(items, options = {}) {
             title: options.title || "PICK ITEM",
             description: options.description || "Select an item:",
             choices: choices,
-            icon: options.icon || "fas fa-box"
+            icon: options.icon || "fas fa-box",
+            relatedToken: options.relatedToken ?? null
         });
     });
 }

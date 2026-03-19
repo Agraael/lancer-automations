@@ -7,6 +7,8 @@
 
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
+import { getActivationIcon } from '../misc-tools.js';
+export { getActivationIcon } from '../misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
 const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
@@ -101,35 +103,6 @@ export function laHudRenderIcon(icon) {
     return `<i class="${icon}" style="font-size:1.15em;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
 }
 
-/**
- * Returns the icon for a Lancer activation. Accepts an action object or a plain activation string.
- * When the action has tech_attack:true, uses tech_quick/tech_full SVGs instead of hex icons.
- * @param {Object|string} actionOrActivation
- * @returns {string|null}
- */
-export function getActivationIcon(actionOrActivation) {
-    const isTech = actionOrActivation?.tech_attack === true;
-    const activation = typeof actionOrActivation === 'string' ? actionOrActivation : (actionOrActivation?.activation || '');
-    const a = activation.toLowerCase();
-    if (isTech) {
-        if (a.includes('full'))
-            return 'systems/lancer/assets/icons/tech_full.svg';
-        return 'systems/lancer/assets/icons/tech_quick.svg';
-    }
-    if (a.includes('full'))
-        return 'mdi mdi-hexagon-slice-6';
-    if (a.includes('protocol'))
-        return 'systems/lancer/assets/icons/protocol.svg';
-    if (a.includes('free'))
-        return 'systems/lancer/assets/icons/free_action.svg';
-    if (a.includes('reaction'))
-        return 'systems/lancer/assets/icons/reaction.svg';
-    if (a.includes('quick'))
-        return 'mdi mdi-hexagon-slice-3';
-    if (a.includes('invade'))
-        return 'systems/lancer/assets/icons/tech_quick.svg';
-    return null;
-}
 
 /**
  * Builds a col4 item list for any Lancer item.
@@ -184,7 +157,7 @@ export function laHudItemChildren(item, opts = {}) {
             const entry = {
                 label: a.name,
                 icon: getActivationIcon(a),
-                onClick: onActivate ? () => onActivate(a) : null,
+                onClick: onActivate ? () => onActivate(a, source) : null,
             };
             entry.onRightClick = (row) => {
                 const bodyHtml = laRenderActionDetail(a, { sourceName: source?.name });
@@ -212,8 +185,9 @@ export function laHudItemChildren(item, opts = {}) {
  * Does nothing if the item has none of those tags.
  * @param {any} item   Foundry Item document
  * @param {any} popup  jQuery popup element (from laDetailPopup)
+ * @param {{ incDepth?: () => void, decDepth?: () => void }} [depthCallbacks]  optional HUD refresh-suppression hooks
  */
-export function appendItemPips(item, popup) {
+export function appendItemPips(item, popup, depthCallbacks) {
     const sys = item.system;
     const allTags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
     const hasLoading  = allTags.some(t => t.lid === 'tg_loading');

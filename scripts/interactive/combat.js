@@ -1375,7 +1375,9 @@ export async function executeInvade(actorOrToken, bypassChoice = null) {
         });
         await flow.begin();
     } else {
-        const uuid = selected.item?.uuid ?? actor.uuid;
+        // TechAttackFlow only accepts actors and system/npc_feature items — weapons are invalid
+        const isWeapon = /** @type {any} */ (selected.item)?.type?.includes('weapon');
+        const uuid = (!isWeapon && selected.item?.uuid) ? selected.item.uuid : actor.uuid;
         const flow = new TechAttackFlow(uuid, {
             title: selected.name,
             invade: true,

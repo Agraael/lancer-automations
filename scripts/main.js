@@ -45,6 +45,8 @@ import {
     hasMissImmunity,
     executeGenericBonusMenu,
 
+    flattenBonuses,
+    isBonusApplicable,
     genericAccuracyStepAttack,
     genericAccuracyStepTechAttack,
     genericAccuracyStepWeaponAttack,
@@ -54,7 +56,7 @@ import {
 import { EffectManagerAPI } from "./effectManager.js";
 import { TerrainAPI } from "./terrain-utils.js";
 
-import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus } from "./misc-tools.js";
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
     bindChatMessageStateInterceptor,
@@ -74,6 +76,8 @@ const REACTION_DEBOUNCE_MS = 100;
 let cachedFlatGeneralReactions = null;
 /** @type {Map<string, Array>} triggerType → filtered non-action reactions; cleared with cachedFlatGeneralReactions */
 const cachedNonActionReactionsByTrigger = new Map();
+/** @type {Map<string, (value?: unknown) => void>} requestId → resolve — for awaiting remote startRelatedFlow completion */
+const _pendingFlowWaits = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd']);
 let deployableConnectionsGraphic = null;
 
@@ -244,6 +248,66 @@ async function checkOnInitReactions(token, filterItem = null) {
 }
 
 
+async function checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data) {
+    const api = game.modules.get('lancer-automations').api;
+    if (itemLid) {
+        // Item-based: find the item on the token, then the reaction by reactionPath
+        const items = getReactionItems(token);
+        for (const item of items) {
+            if (getItemLID(item) !== itemLid)
+                continue;
+            const registryEntry = ReactionManager.getReactions(itemLid);
+            if (!registryEntry)
+                continue;
+            for (const reaction of registryEntry.reactions) {
+                if (reaction.enabled === false)
+                    continue;
+                if ((reaction.reactionPath || "") !== (reactionPath || ""))
+                    continue;
+                if (!reaction.onMessage)
+                    continue;
+                try {
+                    if (typeof reaction.onMessage === 'function') {
+                        await reaction.onMessage(triggerType, data, token, item, activationName, api);
+                    } else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim()) {
+                        const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"]);
+                        await fn(triggerType, data, token, item, activationName, api);
+                    }
+                } catch (e) {
+                    console.error(`lancer-automations | Error in onMessage for ${item.name}:`, e);
+                }
+            }
+            break; // found the item, no need to keep searching
+        }
+    } else {
+        // General reaction: find by activationName key
+        const generalReactions = ReactionManager.getGeneralReactions();
+        for (const [name, reaction] of Object.entries(generalReactions)) {
+            if (reaction.enabled === false)
+                continue;
+            if (name !== activationName)
+                continue;
+            if (!reaction.onMessage)
+                continue;
+            try {
+                if (typeof reaction.onMessage === 'function') {
+                    await reaction.onMessage(triggerType, data, token, null, activationName, api);
+                } else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim()) {
+                    const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"]);
+                    await fn(triggerType, data, token, null, activationName, api);
+                }
+            } catch (e) {
+                console.error(`lancer-automations | Error in onMessage for general reaction ${name}:`, e);
+            }
+        }
+    }
+}
+
+Hooks.on('lancer-automations.runOnMessage', ({ token, itemLid, reactionPath, activationName, triggerType, data }) => {
+    checkOnMessageReactions(token, itemLid ?? null, reactionPath ?? null, activationName ?? null, triggerType, data)
+        .catch(e => console.error('lancer-automations | onMessage error:', e));
+});
+
 function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
     const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
     if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
@@ -255,7 +319,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         return null;
     if (!isSelf && reaction.triggerOther === false)
         return null;
-    if (reaction.consumesReaction && !hasReactionAvailable(token))
+    if (reaction.checkReaction && !hasReactionAvailable(token))
         return null;
     if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
         return null;
@@ -294,6 +358,132 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         console.error(`lancer-automations | Error evaluating general reaction ${reactionName}:`, error);
         return null;
     }
+}
+
+/**
+ * Generic flow launcher that injects extraData into flow.state.la_extraData before begin().
+ * Falls back to null (with warning) if the flow class is not registered.
+ * @param {string} flowName
+ * @param {any} target
+ * @param {object} [options]
+ * @param {object} [extraData]
+ */
+async function _beginFlow(flowName, target, options = {}, extraData = {}) {
+    const FlowClass = game.lancer.flows.get(flowName);
+    if (!FlowClass) {
+        ui.notifications.warn(`lancer-automations | Flow "${flowName}" not found.`);
+        return null;
+    }
+    const flow = new FlowClass(target, options);
+    if (extraData && typeof extraData === 'object' && Object.keys(extraData).length > 0)
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
+    return flow.begin();
+}
+
+/**
+ * Builds a no-arg `startRelatedFlow` function for a specific reaction context.
+ * Closes over token, item, reaction config, and activationName — no arguments needed at call time.
+ * @param {object} [extraData] - Extra data to inject into the triggered flow's la_extraData / triggerData.extraData.
+ */
+/**
+ * Builds a `sendMessageToReactor(data)` function for a specific reaction context.
+ * Sends a message to the reactor token's owner client; calls onMessage there.
+ */
+function _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType) {
+    const itemLid = item ? getItemLID(item) : null;
+    return async (data, userId = null, { wait = false } = {}) => {
+        let targetUserId = userId;
+        if (!targetUserId) {
+            const ownerIds = getTokenOwnerUserId(token);
+            if (ownerIds.includes(game.user.id)) {
+                await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
+                return;
+            }
+            targetUserId = ownerIds.at(0) ?? null;
+            console.warn(`lancer-automations | sendMessageToReactor: no userId provided, falling back to token owner "${targetUserId}" for ${token.name}.`);
+        }
+        if (!targetUserId || targetUserId === game.user.id) {
+            await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
+            return;
+        }
+        const requestId = wait ? `omsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+        game.socket.emit('module.lancer-automations', {
+            action: 'onMessage',
+            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, triggerType, data, requestId }
+        });
+        if (wait && requestId) {
+            await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+        }
+    };
+}
+
+function _buildStartRelatedFlow(token, item, reaction, activationName, extraData = {}) {
+    return async () => {
+        if (item) {
+            const reactionPath = reaction?.reactionPath;
+            if (reactionPath) {
+                const activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
+                return _beginFlow("ActivationFlow", item, { action_path: activationPath }, extraData);
+            }
+            if (item.is_weapon?.()) {
+                return _beginFlow("WeaponAttackFlow", item, {}, extraData);
+            }
+            if (item.system?.actions?.length > 0) {
+                const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
+                const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
+                return _beginFlow("ActivationFlow", item, { action_path: path }, extraData);
+            }
+            if (item.beginSystemFlow) {
+                return _beginFlow("SystemFlow", item, {}, extraData);
+            }
+            return executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item, ...extraData });
+        }
+
+        // General reaction — no item
+        const actor = token?.actor;
+        if (!actor) {
+            ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
+            return;
+        }
+        const actionType = reaction?.actionType || 'Reaction';
+        if (['Automatic', 'Other'].includes(actionType)) {
+            ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" will be launched but may not behave as expected.`);
+        }
+        const name = activationName || 'Unknown';
+        return executeSimpleActivation(actor, {
+            title: name,
+            action: { name, activation: actionType },
+            detail: reaction?.effectDescription || ''
+        }, extraData);
+    };
+}
+
+function _buildStartRelatedFlowToReactor(token, item, reaction, activationName) {
+    const itemLid = item ? getItemLID(item) : null;
+    const reactionPath = reaction?.reactionPath || "";
+    const actionType = reaction?.actionType || 'Reaction';
+    const effectDescription = reaction?.effectDescription || '';
+    return async (userId = null, extraData = {}, { wait = false } = {}) => {
+        let targetUserId = userId;
+        if (!targetUserId) {
+            const ownerIds = getTokenOwnerUserId(token);
+            if (ownerIds.includes(game.user.id)) {
+                return _buildStartRelatedFlow(token, item, reaction, activationName, extraData)();
+            }
+            targetUserId = ownerIds.at(0) ?? null;
+        }
+        if (!targetUserId || targetUserId === game.user.id) {
+            return _buildStartRelatedFlow(token, item, reaction, activationName, extraData)();
+        }
+        const requestId = wait ? `srf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+        game.socket.emit('module.lancer-automations', {
+            action: 'startRelatedFlow',
+            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, actionType, effectDescription, extraData: extraData ?? {}, requestId }
+        });
+        if (wait && requestId) {
+            await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+        }
+    };
 }
 
 async function checkReactions(triggerType, data) {
@@ -393,12 +583,22 @@ async function checkReactions(triggerType, data) {
                         continue;
                 }
 
-                if (reaction.consumesReaction && !hasReactionAvailable(token))
+                if (reaction.checkReaction && !hasReactionAvailable(token))
                     continue;
 
                 const reactionPath = reaction.reactionPath || "";
                 if (!isItemAvailable(item, reactionPath))
                     continue;
+
+                if (reaction.checkUsage) {
+                    const sys = item.system;
+                    if (sys?.loaded === false)
+                        continue;
+                    if (sys?.uses?.max > 0 && sys.uses.value <= 0)
+                        continue;
+                    if (sys?.charged !== undefined && sys.charged === false)
+                        continue;
+                }
 
                 if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
                     continue;
@@ -452,9 +652,10 @@ async function checkReactions(triggerType, data) {
                     }
 
                     if (shouldTrigger) {
+                        const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, item, reaction, activationName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, item, reaction, activationName), sendMessageToReactor: _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType) };
                         if (reaction.autoActivate) {
                             try {
-                                const p = activateReaction(triggerType, enrichedData, token, item, activationName, reaction, false);
+                                const p = activateReaction(triggerType, reactionTriggerData, token, item, activationName, reaction, false);
                                 if (p instanceof Promise) {
                                     p.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
                                     if (reaction.forceSynchronous !== false) {
@@ -472,7 +673,7 @@ async function checkReactions(triggerType, data) {
                                 reaction,
                                 itemName: item.name,
                                 reactionName: activationName,
-                                triggerData: enrichedData
+                                triggerData: reactionTriggerData
                             });
                         }
                     }
@@ -487,9 +688,10 @@ async function checkReactions(triggerType, data) {
             const reaction = actionBasedReaction.reaction;
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
+                const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
                 if (reaction.autoActivate) {
                     try {
-                        const p = activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
                         if (p instanceof Promise) {
                             p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
                             if (reaction.forceSynchronous !== false) {
@@ -508,7 +710,7 @@ async function checkReactions(triggerType, data) {
                         itemName: reactionName,
                         reactionName,
                         isGeneral: true,
-                        triggerData: enrichedData
+                        triggerData: reactionTriggerData
                     });
                 }
             }
@@ -517,9 +719,10 @@ async function checkReactions(triggerType, data) {
         for (const [reactionName, reaction] of nonActionBasedReactions) {
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
+                const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
                 if (reaction.autoActivate) {
                     try {
-                        const p = activateReaction(triggerType, enrichedData, token, null, reactionName, reaction, true);
+                        const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
                         if (p instanceof Promise) {
                             p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
                             if (reaction.forceSynchronous !== false) {
@@ -538,7 +741,7 @@ async function checkReactions(triggerType, data) {
                         itemName: reactionName,
                         reactionName,
                         isGeneral: true,
-                        triggerData: enrichedData
+                        triggerData: reactionTriggerData
                     });
                 }
             }
@@ -758,6 +961,37 @@ async function processEffectConsumption(triggerType, data) {
 }
 
 async function handleTrigger(triggerType, data) {
+    data.startRelatedFlow = async () => {
+        const item = data.item ?? data.weapon ?? data.techItem;
+        const actor = data.triggeringToken?.actor;
+        const actionData = data.actionData;
+
+        if (item) {
+            const actionPath = actionData?.flowState?.data?.action_path ?? null;
+            return item.beginActivationFlow(actionPath);
+        }
+
+        if (actionData) {
+            const actionType = actionData.action?.activation ?? actionData.type;
+            if (!actionType || ['Automatic', 'Other'].includes(actionType)) {
+                ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" cannot be re-launched as a flow.`);
+                return;
+            }
+            if (!actor) {
+                ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
+                return;
+            }
+            return executeSimpleActivation(actor, {
+                title: actionData.title,
+                action: actionData.action,
+                detail: actionData.detail,
+                tags: actionData.tags
+            });
+        }
+
+        ui.notifications.warn('lancer-automations | startRelatedFlow: no item or action data available for this trigger.');
+    };
+
     const reactionsPromise = checkReactions(triggerType, data);
     const consumptionPromise = processEffectConsumption(triggerType, data);
     await reactionsPromise;
@@ -782,12 +1016,12 @@ function registerSettings() {
     });
 
     game.settings.register('lancer-automations', 'consumeReaction', {
-        name: 'Consume Activation on Activate',
-        hint: 'Automatically reduce reaction count by 1 when activating an activation.',
+        name: 'Consume Reaction on Activation',
+        hint: 'When a Reaction-type activation fires, automatically spend the token\'s reaction.',
         scope: 'world',
         config: true,
         type: Boolean,
-        default: true
+        default: false
     });
 
     game.settings.register('lancer-automations', 'showBonusHudButton', {
@@ -1245,6 +1479,52 @@ async function handleSocketEvent({ action, payload }) {
         if (!payload.allVoterUserIds?.includes(game.user.id))
             return;
         cancelVoteCardOnVoter(payload);
+    } else if (action === 'onMessage') {
+        if (payload.userId && payload.userId !== game.userId)
+            return;
+        const msgToken = canvas.tokens.get(payload.reactorTokenId);
+        if (!msgToken)
+            return;
+        checkOnMessageReactions(msgToken, payload.itemLid ?? null, payload.reactionPath ?? null, payload.activationName ?? null, payload.triggerType, payload.data ?? {})
+            .catch(e => console.error('lancer-automations | onMessage socket error:', e))
+            .finally(() => {
+                if (payload.requestId) {
+                    game.socket.emit('module.lancer-automations', {
+                        action: 'onMessageDone',
+                        payload: { requestId: payload.requestId }
+                    });
+                }
+            });
+    } else if (action === 'onMessageDone') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
+        }
+    } else if (action === 'startRelatedFlow') {
+        if (payload.userId && payload.userId !== game.user.id)
+            return;
+        const flowToken = canvas.tokens.get(payload.reactorTokenId);
+        if (!flowToken)
+            return;
+        const flowItem = payload.itemLid ? getReactionItems(flowToken).find(i => getItemLID(i) === payload.itemLid) ?? null : null;
+        const fakeReaction = { reactionPath: payload.reactionPath, actionType: payload.actionType, effectDescription: payload.effectDescription };
+        _buildStartRelatedFlow(flowToken, flowItem, fakeReaction, payload.activationName, payload.extraData ?? {})()
+            .catch(e => console.error('lancer-automations | startRelatedFlow socket error:', e))
+            .finally(() => {
+                if (payload.requestId) {
+                    game.socket.emit('module.lancer-automations', {
+                        action: 'startRelatedFlowDone',
+                        payload: { requestId: payload.requestId }
+                    });
+                }
+            });
+    } else if (action === 'startRelatedFlowDone') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
+        }
     } else if (action === 'syncPlaceholderVideos') {
         setTimeout(() => {
             for (let tokenId of payload.placeholderIds) {
@@ -1295,9 +1575,8 @@ function clearMoveData(tokenOrId) {
     if (!doc)
         return;
     foundry.utils.setProperty(doc.flags, 'lancer-automations.moveHistory', null);
-    if (doc.isOwner) {
-        doc.unsetFlag('lancer-automations', 'moveHistory');
-    }
+    if (doc.isOwner)
+        doc.update({ 'flags.lancer-automations.-=moveHistory': null });
     initMovementCap(doc);
 }
 
@@ -1882,6 +2161,89 @@ async function onCheckStep(state) {
     return true;
 }
 
+/**
+ * Builds a cancel handler with shared boilerplate: reason collection, preConfirm gating, choice card.
+ * @param {Object} opts
+ * @param {() => void} opts.setFlag
+ * @param {() => (() => Promise<void>)} opts.getIgnoreCallback - Returns the "ignore" action; called lazily.
+ * @param {string} opts.defaultReason
+ * @param {string} opts.defaultTitle
+ * @param {string} [opts.choice1Text]
+ * @param {string} [opts.choice2Text]
+ * @param {((uc: string|null) => Object)|null} [opts.getExtraCardOptions]
+ * @param {(() => Promise<void>)|null} [opts.onBefore] - Called before card, after preConfirms.
+ * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
+ * @returns {Function & { wait: () => Promise<any>|null }}
+ */
+function _buildCancelFn({ setFlag, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null }) {
+    const cancelledReasons = [];
+    const preConfirms = [];
+    let cardPending = false;
+    let _promise = null;
+
+    const fn = (reasonText = defaultReason, title = defaultTitle, showCard = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
+        setFlag();
+        if (!showCard)
+            return;
+        if (reasonText)
+            cancelledReasons.push(reasonText);
+        if (preConfirm)
+            preConfirms.push(preConfirm);
+        if (cardPending)
+            return;
+        cardPending = true;
+        _promise = (async () => {
+            await Promise.resolve();
+            const ignoreCallback = getIgnoreCallback();
+            if (preConfirms.length > 0) {
+                const results = await Promise.all(preConfirms.map(f => f()));
+                if (results.every(r => !r)) {
+                    await ignoreCallback();
+                    return;
+                }
+            }
+            const description = cancelledReasons.length > 1
+                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                : (cancelledReasons[0] ?? defaultReason);
+            if (onBefore)
+                await onBefore();
+            const extraCardOptions = getExtraCardOptions ? getExtraCardOptions(userIdControl) : {};
+            await startChoiceCard({
+                mode: "or",
+                title,
+                description,
+                item,
+                originToken,
+                relatedToken,
+                userIdControl: userIdControl ?? getActiveGMId(),
+                ...extraCardOptions,
+                choices: [
+                    {
+                        text: choice1Text,
+                        icon: "fas fa-check",
+                        callback: async () => {
+                            await postChoice?.(true);
+                        }
+                    },
+                    {
+                        text: choice2Text,
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            await postChoice?.(false);
+                            await ignoreCallback();
+                        }
+                    }
+                ]
+            });
+            if (onAfter)
+                await onAfter();
+        })();
+        return _promise;
+    };
+    fn.wait = () => _promise;
+    return fn;
+}
+
 async function onInitCheckStep(state) {
     state = injectExtraDataUtility(state);
     if (state.data?._ignoredCancel)
@@ -1893,61 +2255,29 @@ async function onInitCheckStep(state) {
     const targetVal = state.la_extraData?.targetVal ?? 10;
 
     let cancelCheckTriggered = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
-    const cancelCheck = (reasonText = "This check has been canceled.", title = "CHECK CANCELED", showCard = true, userIdControl = null) => {
-        cancelCheckTriggered = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This check has been canceled.");
-
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    {
-                        text: "Cancel",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            const flowClass = game.lancer?.flows?.get?.(state.name);
-                            if (flowClass) {
-                                let newFlow;
-                                if (state.name === "StatRollFlow") {
-                                    newFlow = new flowClass(state.actor, state.data);
-                                } else {
-                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                                    return;
-                                }
-                                if (newFlow.state) {
-                                    newFlow.state.data._ignoredCancel = true;
-                                    await newFlow.begin();
-                                }
-                            }
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelCheck = _buildCancelFn({
+        setFlag: () => {
+            cancelCheckTriggered = true;
+        },
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.(state.name);
+            if (flowClass) {
+                let newFlow;
+                if (state.name === "StatRollFlow") {
+                    newFlow = new flowClass(state.actor, state.data);
+                } else {
+                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                    return;
+                }
+                if (newFlow.state) {
+                    newFlow.state.data._ignoredCancel = true;
+                    await newFlow.begin();
+                }
+            }
+        },
+        defaultReason: "This check has been canceled.",
+        defaultTitle: "CHECK CANCELED",
+    });
 
     await handleTrigger('onInitCheck', {
         triggeringToken: token,
@@ -1959,8 +2289,7 @@ async function onInitCheckStep(state) {
     });
 
     if (cancelCheckTriggered) {
-        if (cancelCardPromise)
-            await cancelCardPromise;
+        await cancelCheck.wait();
         return false;
     }
 
@@ -1993,63 +2322,31 @@ async function onInitAttackStep(state) {
     };
 
     let cancelAttackTriggered = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
-    const cancelAttack = (reasonText = "This attack has been canceled.", title = "ATTACK CANCELED", showCard = true, userIdControl = null) => {
-        cancelAttackTriggered = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This attack has been canceled.");
-
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    {
-                        text: "Cancel",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            const flowClass = game.lancer?.flows?.get?.(state.name);
-                            if (flowClass) {
-                                let newFlow;
-                                if (state.name === "WeaponAttackFlow") {
-                                    newFlow = new flowClass(state.item, state.data);
-                                } else if (state.name === "BasicAttackFlow") {
-                                    newFlow = new flowClass(state.item || state.actor, state.data);
-                                } else {
-                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                                    return;
-                                }
-                                if (newFlow.state) {
-                                    newFlow.state.data._ignoredCancel = true;
-                                    await newFlow.begin();
-                                }
-                            }
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelAttack = _buildCancelFn({
+        setFlag: () => {
+            cancelAttackTriggered = true;
+        },
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.(state.name);
+            if (flowClass) {
+                let newFlow;
+                if (state.name === "WeaponAttackFlow") {
+                    newFlow = new flowClass(state.item, state.data);
+                } else if (state.name === "BasicAttackFlow") {
+                    newFlow = new flowClass(state.item || state.actor, state.data);
+                } else {
+                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                    return;
+                }
+                if (newFlow.state) {
+                    newFlow.state.data._ignoredCancel = true;
+                    await newFlow.begin();
+                }
+            }
+        },
+        defaultReason: "This attack has been canceled.",
+        defaultTitle: "ATTACK CANCELED",
+    });
 
     await handleTrigger('onInitAttack', {
         triggeringToken: token,
@@ -2063,8 +2360,7 @@ async function onInitAttackStep(state) {
     });
 
     if (cancelAttackTriggered) {
-        if (cancelCardPromise)
-            await cancelCardPromise;
+        await cancelAttack.wait();
         return false;
     }
 
@@ -2097,61 +2393,29 @@ async function onInitTechAttackStep(state) {
     };
 
     let cancelTechAttackTriggered = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
-    const cancelTechAttack = (reasonText = "This tech attack has been canceled.", title = "TECH ATTACK CANCELED", showCard = true, userIdControl = null) => {
-        cancelTechAttackTriggered = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This tech attack has been canceled.");
-
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    {
-                        text: "Cancel",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            const flowClass = game.lancer?.flows?.get?.(state.name);
-                            if (flowClass) {
-                                let newFlow;
-                                if (state.name === "TechAttackFlow") {
-                                    newFlow = new flowClass(state.item, state.data);
-                                } else {
-                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                                    return;
-                                }
-                                if (newFlow.state) {
-                                    newFlow.state.data._ignoredCancel = true;
-                                    await newFlow.begin();
-                                }
-                            }
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelTechAttack = _buildCancelFn({
+        setFlag: () => {
+            cancelTechAttackTriggered = true;
+        },
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.(state.name);
+            if (flowClass) {
+                let newFlow;
+                if (state.name === "TechAttackFlow") {
+                    newFlow = new flowClass(state.item, state.data);
+                } else {
+                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                    return;
+                }
+                if (newFlow.state) {
+                    newFlow.state.data._ignoredCancel = true;
+                    await newFlow.begin();
+                }
+            }
+        },
+        defaultReason: "This tech attack has been canceled.",
+        defaultTitle: "TECH ATTACK CANCELED",
+    });
 
     await handleTrigger('onInitTechAttack', {
         triggeringToken: token,
@@ -2166,8 +2430,7 @@ async function onInitTechAttackStep(state) {
     });
 
     if (cancelTechAttackTriggered) {
-        if (cancelCardPromise)
-            await cancelCardPromise;
+        await cancelTechAttack.wait();
         return false;
     }
 
@@ -2222,12 +2485,23 @@ async function onActivationStep(state) {
         item,
         actionData,
         endActivation: state.la_extraData?.endActivation || false,
+        extraData: state.la_extraData ?? {},
         flowState: state
     });
 
     if (token) {
         state.actor = token.actor;
     }
+
+    if (actionType === 'Reaction' && token && game.settings.get('lancer-automations', 'consumeReaction')) {
+        if (hasReactionAvailable(token)) {
+            const newVal = (token.actor.system.action_tracker.reaction ?? 1) - 1;
+            await token.actor.update({ 'system.action_tracker.reaction': newVal });
+        } else {
+            ui.notifications.warn(`${token.name} has no reaction available!`);
+        }
+    }
+
     return true;
 }
 
@@ -2269,65 +2543,32 @@ async function onInitActivationStep(state) {
     };
 
     let cancelActivation = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
     // Synchronous — sets the cancel flag immediately so it works when called from non-async evaluate functions.
-    const cancelAction = (reasonText = "This activation has been canceled.", title = "ACTIVATION CANCELED", showCard = true, userIdControl = null) => {
-        cancelActivation = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-
-        // Yield one microtask so concurrent cancelAction calls can collect reasons before rendering.
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This activation has been canceled.");
-
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    {
-                        text: "Cancel",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            const flowClass = game.lancer?.flows?.get?.(state.name);
-                            if (flowClass) {
-                                let newFlow;
-                                if (state.name === "SimpleActivationFlow") {
-                                    newFlow = new flowClass(state.actor.uuid, state.data);
-                                } else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name)) {
-                                    newFlow = new flowClass(state.item, state.data);
-                                } else {
-                                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                                    return;
-                                }
-                                if (newFlow.state) {
-                                    newFlow.state.data._ignoredCancel = true;
-                                    await newFlow.begin();
-                                }
-                            }
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelAction = _buildCancelFn({
+        setFlag: () => {
+            cancelActivation = true;
+        },
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.(state.name);
+            if (flowClass) {
+                let newFlow;
+                if (state.name === "SimpleActivationFlow") {
+                    newFlow = new flowClass(state.actor.uuid, state.data);
+                } else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name)) {
+                    newFlow = new flowClass(state.item, state.data);
+                } else {
+                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+                    return;
+                }
+                if (newFlow.state) {
+                    newFlow.state.data._ignoredCancel = true;
+                    await newFlow.begin();
+                }
+            }
+        },
+        defaultReason: "This activation has been canceled.",
+        defaultTitle: "ACTIVATION CANCELED",
+    });
 
     // Called WITHOUT await — only synchronous evaluate functions work correctly with cancelAction.
     handleTrigger('onInitActivation', {
@@ -2341,8 +2582,7 @@ async function onInitActivationStep(state) {
     });
 
     if (cancelActivation) {
-        if (cancelCardPromise)
-            await cancelCardPromise;
+        await cancelAction.wait();
         return false;
     }
 
@@ -2556,64 +2796,6 @@ async function knockbackDamageStep(state) {
     return true;
 }
 
-/**
- * Flow step: injects merged range (base + native Lancer bonuses + LA range bonuses) into
- * the attack chat card. currentProfile() creates a new object each call, so we monkey-patch
- * the instance method to intercept the single call made by printAttackCard. The patch
- * removes itself after the first call so the item is not permanently affected.
- */
-async function injectRangeBonusesToCard(state) {
-    const item = state.item;
-    if (!item || typeof item.currentProfile !== 'function')
-        return true;
-
-    const laBonuses = state.la_extraData?.la_range_bonuses ?? [];
-
-    // all_range is set on the raw profile by prepareFinalAttributes (base + native Lancer bonuses).
-    // currentProfile() does NOT copy all_range onto its returned object, so we read it directly.
-    let rawRangeData = null;
-    if (typeof item.is_mech_weapon === 'function' && item.is_mech_weapon()) {
-        const p = item.system.selected_profile_index ?? 0;
-        rawRangeData = item.system.profiles?.[p];
-    } else if (typeof item.is_pilot_weapon === 'function' && item.is_pilot_weapon()) {
-        rawRangeData = item.system;
-    }
-    const base = rawRangeData?.all_range ?? rawRangeData?.range ?? item.currentProfile()?.range ?? [];
-
-    if (!base.length && !laBonuses.length)
-        return true;
-
-    // Clone entries (preserve Range prototype instances)
-    const merged = base.map(r => Object.assign(Object.create(Object.getPrototypeOf(r)), r));
-    const RangeClass = merged[0]?.constructor ?? null;
-
-    for (const bonus of laBonuses) {
-        const existingIdx = merged.findIndex(r => r.type === bonus.type);
-        if (existingIdx !== -1) {
-            if (bonus.override) {
-                merged[existingIdx].val = bonus.val;
-            } else {
-                merged[existingIdx].val = (Number.parseInt(merged[existingIdx].val) || 0) + bonus.val;
-            }
-        } else if (RangeClass && RangeClass !== Object) {
-            merged.push(new RangeClass({ type: bonus.type, val: bonus.val }));
-        } else {
-            merged.push({ type: bonus.type, val: bonus.val, icon: `cci-${bonus.type.toLowerCase()}` });
-        }
-    }
-
-    // Monkey-patch currentProfile on this instance for the single call made by printAttackCard.
-    // The patch removes itself after one use so the item is not permanently affected.
-    item.currentProfile = function patchedCurrentProfile() {
-        delete item.currentProfile; // restore prototype method for all future calls
-        const profile = item.currentProfile(); // now calls the real method
-        profile.range = merged;
-        return profile;
-    };
-
-    return true;
-}
-
 /** Flow step: injects the No Bonus Dmg checkbox into the damage HUD. */
 async function noBonusDmgInjectStep(state) {
     if (ActiveFlowState.current?._csmNoBonusDmg) {
@@ -2750,8 +2932,6 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
     // Register range injection steps (two IDs, same function — one fires before showAttackHUD,
     // one fires before printAttackCard; each self-destructs after its single use)
-    flowSteps.set('lancer-automations:injectRangeBonusesToCard', injectRangeBonusesToCard);
-    flowSteps.set('lancer-automations:injectRangeBonusesToHUD', injectRangeBonusesToCard);
     // Register No Bonus Dmg steps
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
     // Register Throw steps
@@ -2774,8 +2954,6 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:forceTechHUD');
     flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepWeaponAttack');
-    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:genericAccuracyStepWeaponAttack', 'lancer-automations:injectRangeBonusesToHUD');
-    flows.get('WeaponAttackFlow')?.insertStepBefore('printAttackCard', 'lancer-automations:injectRangeBonusesToCard');
 
     // Insert onInitAttack/TechAttack steps
     flows.get('BasicAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:onInitAttack');
@@ -2921,6 +3099,79 @@ Hooks.once('ready', async () => {
 
     // Scale down token vision radius during drag if the multiplier is configured
     if (typeof libWrapper !== 'undefined') {
+        // Intercept currentProfile() and rangesFor() to apply persistent range bonuses from actor flags.
+        // Uses isBonusApplicable for proper rollType / condition / itemLid filtering.
+        const _ATTACK_TAGS = new Set(['all', 'attack']);
+
+        /** Returns applicable range bonuses for the given item, or null if none. */
+        function _getRangeBonuses(item) {
+            const actor = item.parent;
+            if (!actor)
+                return null;
+            const state = { actor, item, data: {} };
+            const bonuses = [
+                ...flattenBonuses(actor.getFlag('lancer-automations', 'global_bonuses')),
+                ...(actor.getFlag('lancer-automations', 'constant_bonuses') ?? [])
+            ].filter(b => b?.type === 'range' && isBonusApplicable(b, _ATTACK_TAGS, state));
+            return bonuses.length ? bonuses : null;
+        }
+
+        /** Applies a list of range bonuses to a cloned range array and returns it. */
+        function _applyRangeBonusesToArray(baseRange, bonuses) {
+            const range = baseRange.map(r => Object.assign(Object.create(Object.getPrototypeOf(r)), r));
+            for (const bonus of bonuses) {
+                const rangeType = bonus.rangeType;
+                const rangeMode = bonus.rangeMode || 'add';
+                const isOverride = rangeMode === 'override';
+                const isChange = rangeMode === 'change';
+                const val = Number.parseInt(bonus.val) || 0;
+                if (isChange) {
+                    const RangeClass = range[0]?.constructor;
+                    range.length = 0;
+                    if (RangeClass && RangeClass !== Object) {
+                        range.push(new RangeClass({ type: rangeType, val }));
+                    } else {
+                        range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
+                    }
+                } else {
+                    const existingIdx = range.findIndex(r => r.type === rangeType);
+                    if (existingIdx !== -1) {
+                        const entry = range[existingIdx];
+                        entry.val = isOverride ? val : (Number.parseInt(entry.val) || 0) + val;
+                    } else {
+                        const RangeClass = range[0]?.constructor;
+                        if (RangeClass && RangeClass !== Object) {
+                            range.push(new RangeClass({ type: rangeType, val }));
+                        } else {
+                            range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
+                        }
+                    }
+                }
+            }
+            return range;
+        }
+
+        libWrapper.register('lancer-automations', 'CONFIG.Item.documentClass.prototype.currentProfile',
+            function(wrapped) {
+                const result = wrapped.call(this);
+                const bonuses = _getRangeBonuses(this);
+                if (!bonuses)
+                    return result;
+                result.range = _applyRangeBonusesToArray(result.range, bonuses);
+                return result;
+            }, 'WRAPPER');
+
+        // rangesFor() is used by the attack HUD to find Blast/Burst/Cone/Line template buttons.
+        // Delegates to currentProfile() (already wrapped) so bonuses are reflected there too.
+        // Uses MIXED because we conditionally bypass the original when bonuses are present.
+        libWrapper.register('lancer-automations', 'CONFIG.Item.documentClass.prototype.rangesFor',
+            function(wrapped, types) {
+                if (!_getRangeBonuses(this))
+                    return wrapped.call(this, types);
+                const filter = new Set(types);
+                return this.currentProfile().range.filter(r => filter.has(r.type));
+            }, 'MIXED');
+
         libWrapper.register('lancer-automations', 'Token.prototype._getVisionSourceData',
             function (wrapped, ...args) {
                 const data = wrapped(...args);
@@ -3512,51 +3763,23 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
     }
 
     let cancelChange = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
-    const cancelChangeFn = (reasonText = "This status change has been blocked.", title = "STATUS BLOCKED", showCard = true, userIdControl = null) => {
-        cancelChange = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This status change has been blocked.");
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    { text: "Confirm",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore (Allow Effect)",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { skipPreStatusHooks: true });
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelChangeFn = _buildCancelFn({
+        setFlag: () => {
+            cancelChange = true;
+        },
+        getIgnoreCallback: () => async () => {
+            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { skipPreStatusHooks: true });
+        },
+        defaultReason: "This status change has been blocked.",
+        defaultTitle: "STATUS BLOCKED",
+        choice1Text: "Confirm",
+        choice2Text: "Ignore (Allow Effect)",
+    });
 
     handleTrigger('onPreStatusApplied', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
 
     if (cancelChange) {
-        if (cancelCardPromise)
-            cancelCardPromise.catch(() => {});
+        cancelChangeFn.wait()?.catch(() => {});
         return false;
     }
 });
@@ -3575,51 +3798,23 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
         return;
 
     let cancelChange = false;
-    let cancelCardPending = false;
-    let cancelCardPromise = /** @type {Promise<any> | null} */ (null);
-    const cancelledReasons = [];
-
-    const cancelChangeFn = (reasonText = "This status removal has been blocked.", title = "REMOVAL BLOCKED", showCard = true, userIdControl = null) => {
-        cancelChange = true;
-        if (!showCard)
-            return;
-        if (reasonText)
-            cancelledReasons.push(reasonText);
-        if (cancelCardPending)
-            return;
-        cancelCardPending = true;
-        cancelCardPromise = (async () => {
-            await Promise.resolve();
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This status removal has been blocked.");
-            await startChoiceCard({
-                mode: "or",
-                title,
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                choices: [
-                    { text: "Confirm",
-                        icon: "fas fa-check",
-                        callback: async () => {}
-                    },
-                    {
-                        text: "Ignore (Delete Effect)",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            effect.delete({ skipPreStatusHooks: true });
-                        }
-                    }
-                ]
-            });
-        })();
-    };
+    const cancelChangeFn = _buildCancelFn({
+        setFlag: () => {
+            cancelChange = true;
+        },
+        getIgnoreCallback: () => async () => {
+            effect.delete({ skipPreStatusHooks: true });
+        },
+        defaultReason: "This status removal has been blocked.",
+        defaultTitle: "REMOVAL BLOCKED",
+        choice1Text: "Confirm",
+        choice2Text: "Ignore (Delete Effect)",
+    });
 
     handleTrigger('onPreStatusRemoved', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
 
     if (cancelChange) {
-        if (cancelCardPromise)
-            cancelCardPromise.catch(() => {});
+        cancelChangeFn.wait()?.catch(() => {});
         return false;
     }
 });
@@ -3839,63 +4034,43 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
-        // Shared state for deduplicating simultaneous cancel cards.
-        let cancelCardPending = false;
-        const cancelledReasons = [];
-
-        triggerData.cancelTriggeredMove = async (reasonText = "This movement has been canceled.", showCard = true, userIdControl = null) => {
-            // Always cancel the movement immediately (idempotent).
-            triggerData.cancel();
-            cancelRulerDrag(token, moveInfo);
-
-            if (!showCard)
-                return;
-
-            if (reasonText)
-                cancelledReasons.push(reasonText);
-
-            // If a card is already being prepared by a concurrent cancelTriggeredMove call, bail out.
-            // Our reason has been collected above and will appear in that card.
-            if (cancelCardPending)
-                return;
-            cancelCardPending = true;
-
-            // Yield one microtask so any other simultaneous cancelTriggeredMove calls can
-            // push their reasons into cancelledReasons before we render the card.
-            await Promise.resolve();
-
-            const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
-                : (cancelledReasons[0] ?? "This movement has been canceled.");
-
-            const trace = drawMovementTrace(token, endPos);
-
-            await startChoiceCard({
-                mode: "or",
-                title: "MOVEMENT CANCELED",
-                description,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: null } : null,
-                choices: [
-                    { text: "Stop movement", icon: "fas fa-check", callback: async () => {} },
-                    { text: "Continue movement",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                        // Re-submit the original movement with a flag to bypass preUpdateToken
-                            const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
-                            if (change.elevation !== undefined)
-                                originalUpdate.elevation = change.elevation;
-                            token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
-                        }}
-                ]
-            });
-
-            if (trace.parent)
-                trace.parent.removeChild(trace);
-            trace.destroy();
+        const continueCallback = async () => {
+            // Re-submit the original movement with a flag to bypass preUpdateToken
+            const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
+            if (change.elevation !== undefined)
+                originalUpdate.elevation = change.elevation;
+            token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+        };
+        let _moveTrace = null;
+        const _cancelMoveCard = _buildCancelFn({
+            setFlag: () => {
+                triggerData.cancel();
+                cancelRulerDrag(token, moveInfo);
+            },
+            getIgnoreCallback: () => continueCallback,
+            defaultReason: "This movement has been canceled.",
+            defaultTitle: "MOVEMENT CANCELED",
+            choice1Text: "Stop movement",
+            choice2Text: "Continue movement",
+            getExtraCardOptions: (uc) => ({
+                traceData: (uc ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: null } : null
+            }),
+            onBefore: async () => {
+                _moveTrace = drawMovementTrace(token, endPos);
+            },
+            onAfter: async () => {
+                if (_moveTrace?.parent)
+                    _moveTrace.parent.removeChild(_moveTrace);
+                _moveTrace.destroy();
+                _moveTrace = null;
+            },
+        });
+        // Adapter: preserves the original signature (no title param, showCard is 2nd).
+        triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+            return _cancelMoveCard(reasonText, undefined, showCard, userIdControl, preConfirm, postChoice, opts);
         };
 
-        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, userIdControl = null) => {
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
             const executeChange = () => {
                 setTimeout(() => {
                     const updateData = { x: position.x, y: position.y };
@@ -3912,12 +4087,23 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
 
+                if (preConfirm) {
+                    const confirmed = await preConfirm();
+                    if (!confirmed) {
+                        executeChange();
+                        return;
+                    }
+                }
+
                 const trace = drawMovementTrace(token, endPos, position);
 
                 await startChoiceCard({
                     mode: "or",
                     title: "MOVEMENT REROUTED",
                     description: reasonText,
+                    item,
+                    originToken,
+                    relatedToken,
                     userIdControl: userIdControl ?? getActiveGMId(),
                     traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
                     choices: [
@@ -3925,11 +4111,13 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                             icon: "fas fa-check",
                             callback: async () => {
                                 executeChange();
+                                await postChoice?.(true);
                             } },
                         { text: "Continue movement",
                             icon: "fas fa-times",
                             callback: async () => {
-                            // Re-submit the original movement with a flag to bypass preUpdateToken
+                                await postChoice?.(false);
+                                // Re-submit the original movement with a flag to bypass preUpdateToken
                                 const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
                                 if (change.elevation !== undefined)
                                     originalUpdate.elevation = change.elevation;

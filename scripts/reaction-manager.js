@@ -437,6 +437,17 @@ export class ReactionConfig extends FormApplication {
             const savedKeys = Object.keys(saved);
             if (savedKeys.length === 1 && savedKeys[0] === 'enabled')
                 return true;
+            // Pure enable-state-only override: saved only has 'enabled' and/or 'reactions'
+            // where each reactions entry only has an 'enabled' key (sub-reaction toggles)
+            if (savedKeys.every(k => k === 'enabled' || k === 'reactions')) {
+                const reacts = saved.reactions;
+                if (!reacts || (Array.isArray(reacts) && reacts.every(r => {
+                    if (!r) return true;
+                    const rk = Object.keys(r);
+                    return rk.length === 0 || (rk.length === 1 && rk[0] === 'enabled');
+                })))
+                    return true;
+            }
             const s = foundry.utils.deepClone(saved);
             const d = foundry.utils.deepClone(def);
             delete s.enabled;
@@ -1126,7 +1137,6 @@ export class ReactionConfig extends FormApplication {
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
             }
         }
-        this._needsReload = true;
         clearScriptCache();
         this.render();
     }
@@ -1191,9 +1201,11 @@ export class ReactionConfig extends FormApplication {
             const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
 
             if (userItemSettings[lid]) {
-                if (userItemSettings[lid].reactions?.[index]) {
-                    userItemSettings[lid].reactions[index].enabled = checked;
-                }
+                if (!userItemSettings[lid].reactions)
+                    userItemSettings[lid].reactions = [];
+                if (!userItemSettings[lid].reactions[index])
+                    userItemSettings[lid].reactions[index] = {};
+                userItemSettings[lid].reactions[index].enabled = checked;
             } else {
                 const defaults = getDefaultItemReactionRegistry();
                 if (defaults[lid]) {
@@ -1207,9 +1219,7 @@ export class ReactionConfig extends FormApplication {
             }
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userItemSettings);
         }
-        this._needsReload = true;
         clearScriptCache();
-        this.render();
     }
 
     _onAddScript(event) {
@@ -1524,8 +1534,10 @@ export class ReactionEditor extends FormApplication {
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
             onInit: typeof reaction.onInit === 'function' ? reaction.onInit.toString() : (reaction.onInit || ""),
+            onMessage: typeof reaction.onMessage === 'function' ? reaction.onMessage.toString() : (reaction.onMessage || ""),
             actionType: reaction.actionType || "Automation",
-            consumesReaction: reaction.consumesReaction !== false,
+            checkReaction: reaction.checkReaction !== false,
+            checkUsage: reaction.checkUsage === true,
             actionTypeOptions: {
                 "Automation": "Automation",
                 "Reaction": "Reaction",
@@ -1644,15 +1656,15 @@ export class ReactionEditor extends FormApplication {
 
         const actionTypeSelect = html.find('#actionType');
         const frequencySelect = html.find('#frequency');
-        const consumesReactionContainer = html.find('#consumesReactionContainer');
+        const checkReactionContainer = html.find('#checkReactionContainer');
 
         const toggleConsumesReaction = () => {
             const type = actionTypeSelect.val();
             if (type === 'Reaction') {
-                consumesReactionContainer.removeClass('hidden');
+                checkReactionContainer.removeClass('hidden');
             } else {
-                consumesReactionContainer.addClass('hidden');
-                consumesReactionContainer.find('input[type="checkbox"]').prop('checked', false);
+                checkReactionContainer.addClass('hidden');
+                checkReactionContainer.find('input[type="checkbox"]').prop('checked', false);
             }
         };
 
@@ -1663,11 +1675,6 @@ export class ReactionEditor extends FormApplication {
         const forceSyncOption = html.find('.force-sync-option');
         const syncAutoActivateLock = () => {
             const checked = autoActivateCheckbox.prop('checked');
-            if (checked) {
-                actionTypeSelect.val('Automation');
-                actionTypeSelect.trigger('change');
-            }
-            actionTypeSelect.prop('disabled', checked);
             forceSyncOption.toggle(checked);
         };
         autoActivateCheckbox.on('change', syncAutoActivateLock);
@@ -1884,6 +1891,21 @@ export class ReactionEditor extends FormApplication {
                 this.onInitEditor.on('change', (cm) => cm.save());
             }
 
+            const onMessageTextarea = html.find('textarea[name="onMessage"]')[0];
+            if (onMessageTextarea) {
+                this.onMessageEditor = CodeMirror.fromTextArea(onMessageTextarea, {
+                    mode: 'javascript',
+                    theme: 'monokai',
+                    lineNumbers: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true,
+                    lineWrapping: false,
+                    scrollbarStyle: "native"
+                });
+                this.onMessageEditor.on('change', (cm) => cm.save());
+            }
+
             const refreshEditors = () => {
                 if (this.evaluateEditor)
                     this.evaluateEditor.refresh();
@@ -1891,6 +1913,8 @@ export class ReactionEditor extends FormApplication {
                     this.codeEditor.refresh();
                 if (this.onInitEditor)
                     this.onInitEditor.refresh();
+                if (this.onMessageEditor)
+                    this.onMessageEditor.refresh();
             };
 
             activationTypeSelect.on('change', () => {
@@ -1936,6 +1960,9 @@ export class ReactionEditor extends FormApplication {
         } else if (targetName === 'onInit') {
             editorInstance = this.onInitEditor;
             title = "onInit Code";
+        } else if (targetName === 'onMessage') {
+            editorInstance = this.onMessageEditor;
+            title = "onMessage Code";
         }
 
         if (!editorInstance)
@@ -2252,13 +2279,14 @@ export class ReactionEditor extends FormApplication {
             const newReaction = {
                 triggers: triggers,
                 evaluate: formData.evaluate,
-                comments: formData.comments || "",
+                comments: formData.commentsGeneral || "",
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Automation",
                 frequency: formData.frequency || "1/Round",
-                consumesReaction: formData.consumesReaction === true,
+                checkReaction: formData.checkReaction === true,
+                checkUsage: formData.checkUsage === true,
                 autoActivate: formData.autoActivate === true,
                 forceSynchronous: formData.forceSynchronous === true,
                 onlyOnSourceMatch: isSourceMatch,
@@ -2267,6 +2295,7 @@ export class ReactionEditor extends FormApplication {
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 onInit: formData.onInit || "",
+                onMessage: formData.onMessage || "",
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 outOfCombat: formData.outOfCombat === true,
@@ -2283,13 +2312,14 @@ export class ReactionEditor extends FormApplication {
                 reactionPath: formData.reactionPath || "",
                 triggers: triggers,
                 evaluate: formData.evaluate,
-                comments: formData.comments || "",
+                comments: formData.commentsItem || "",
                 triggerDescription: formData.triggerDescription || "",
                 effectDescription: formData.effectDescription || "",
                 isReaction: formData.actionType === "Reaction",
                 actionType: formData.actionType || "Automation",
                 frequency: formData.frequency || "1/Round",
-                consumesReaction: formData.consumesReaction === true,
+                checkReaction: formData.checkReaction === true,
+                checkUsage: formData.checkUsage === true,
                 autoActivate: formData.autoActivate === true,
                 forceSynchronous: formData.forceSynchronous === true,
                 onlyOnSourceMatch: isSourceMatch,
@@ -2298,6 +2328,7 @@ export class ReactionEditor extends FormApplication {
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 onInit: formData.onInit || "",
+                onMessage: formData.onMessage || "",
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 outOfCombat: formData.outOfCombat === true,
@@ -2328,7 +2359,6 @@ export class ReactionEditor extends FormApplication {
 
         Object.values(ui.windows).forEach(w => {
             if (w.id === "reaction-manager-config") {
-                w._needsReload = true;
                 w.render();
             }
         });

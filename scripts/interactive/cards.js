@@ -42,7 +42,7 @@ export function _updatePendingBadge() {
         if (badge.length) {
             badge.text(text).attr('title', tooltip);
         } else {
-            $('.la-info-card .lancer-header').append(
+            $('.la-info-card').last().append(
                 `<span class="la-queue-badge" title="${tooltip}">${text}</span>`
             );
         }
@@ -88,7 +88,9 @@ export function _createInfoCard(type, opts) {
         zoneType = "",
         zoneSize = 1,
         onConfirm = () => {},
-        onCancel = () => {}
+        onCancel = () => {},
+        relatedToken = null,
+        originToken = null
     } = opts;
 
     // Remove orphaned info cards (not on the visual stack)
@@ -181,11 +183,17 @@ export function _createInfoCard(type, opts) {
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
         <div class="lancer lancer-hud window-content">
             <div class="lancer-header ${headerClass} medium">
-                <i class="${icon} i--m" style="color:#000;"></i>
-                <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+                ${/[./]/.test(icon) ? `<img src="${icon}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border:none;transform:scale(1.5);transform-origin:center;">` : `<i class="${icon} i--m" style="color:#000;"></i>`}
+                <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden; flex:1;">
                     <span>${title}</span>
                     ${origin ? `<span style="font-size:0.7em; font-weight:normal; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${origin}</span>` : ''}
                 </div>
+                ${(originToken || relatedToken) ? `
+                    <div style="display:flex;align-items:center;gap:3px;margin-left:auto;flex-shrink:0;">
+                        ${originToken ? `<img data-role="origin-token" src="${originToken.document?.texture?.src ?? originToken.texture?.src ?? ''}" title="Origin Token" style="width:38px;height:38px;object-fit:contain;border:2px solid #ff6400;cursor:pointer;border-radius:3px;flex-shrink:0;">` : ''}
+                        ${(originToken && relatedToken) ? `<span style="color:#aaa;font-size:0.8em;">→</span>` : ''}
+                        ${relatedToken ? `<img data-role="related-token" src="${relatedToken.document?.texture?.src ?? relatedToken.texture?.src ?? ''}" title="Related Token" style="width:38px;height:38px;object-fit:contain;border:2px solid #4488ff;cursor:pointer;border-radius:3px;flex-shrink:0;">` : ''}
+                    </div>` : ''}
             </div>
             <div class="la-info-card-body">
                 ${infoRowHtml}
@@ -207,6 +215,16 @@ export function _createInfoCard(type, opts) {
     cardEl.find('[data-action="confirm"]').on('click', () => onConfirm());
     cardEl.find('[data-action="confirm-vote"]').on('click', () => opts.onConfirmVote?.());
     cardEl.find('[data-action="cancel"]').on('click', () => onCancel());
+    if (originToken) {
+        cardEl.find('[data-role="origin-token"]').on('click', () => {
+            canvas.animatePan(originToken.center);
+        });
+    }
+    if (relatedToken) {
+        cardEl.find('[data-role="related-token"]').on('click', () => {
+            canvas.animatePan(relatedToken.center);
+        });
+    }
 
     // Slide up from bottom + fade in
     cardEl.css({ transform: 'translateY(30px)', opacity: 0 });
@@ -373,7 +391,9 @@ export function _updateInfoCard(cardEl, type, data) {
             const doneClass = isDone ? "la-choice-done" : "";
             const disabledClass = data.disabled ? "la-choice-disabled" : "";
             const iconHtml = choice.icon
-                ? `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`
+                ? (/[./]/.test(choice.icon)
+                    ? `<img src="${choice.icon}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;">`
+                    : `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`)
                 : '';
             const statusHtml = isDone
                 ? '<span class="la-choice-status"><i class="fas fa-check"></i></span>'

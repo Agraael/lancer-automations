@@ -1,7 +1,7 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
 import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive/index.js";
-import { flattenBonuses, isBonusApplicable, applyTagBonus, applyRangeBonus } from "./genericBonuses.js";
+import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "./genericBonuses.js";
 import { getItemActions } from "./interactive/deployables.js";
 
 /** Maps activation type strings to the NPC feature tag LID that signals that activation. */
@@ -37,7 +37,11 @@ export function getActorActionItems(actor, activationType) {
             if (item.type !== 'npc_feature')
                 continue;
             const itemTags = item.system?.tags ?? [];
-            if (tagLid && itemTags.some(t => t.lid === tagLid)) {
+            const tagMatched = tagLid ? itemTags.some(t => t.lid === tagLid) : false;
+            const extraActions = getItemActions(item).filter(a => a.activation === activationType);
+            // Fallback: match by system.type when no tag and no explicit actions found
+            const typeMatched = !tagMatched && !extraActions.length && item.system?.type === activationType;
+            if (tagMatched || typeMatched) {
                 results.push({
                     action: {
                         name: item.name,
@@ -48,9 +52,8 @@ export function getActorActionItems(actor, activationType) {
                     sourceItem: item,
                 });
             }
-            for (const action of getItemActions(item)) {
-                if (action.activation === activationType)
-                    results.push({ action, sourceItem: item });
+            for (const action of extraActions) {
+                results.push({ action, sourceItem: item });
             }
         }
     } else {
@@ -83,11 +86,19 @@ export function getActorActionItems(actor, activationType) {
         }
         const frame = actor?.system?.loadout?.frame?.value;
         if (frame) {
-            for (const action of (frame.system?.core_system?.active_actions ?? [])) {
+            const cs = frame.system?.core_system;
+            if (cs?.activation === activationType) {
+                results.push({
+                    action: { name: cs.active_name ?? 'Core Power', activation: cs.activation, detail: cs.active_effect ?? '' },
+                    sourceItem: frame,
+                    _coreActive: true,
+                });
+            }
+            for (const action of (cs?.active_actions ?? [])) {
                 if (action.activation === activationType)
                     results.push({ action, sourceItem: frame });
             }
-            for (const action of (frame.system?.core_system?.passive_actions ?? [])) {
+            for (const action of (cs?.passive_actions ?? [])) {
                 if (action.activation === activationType)
                     results.push({ action, sourceItem: frame });
             }
@@ -119,6 +130,13 @@ export function getActorActionItems(actor, activationType) {
                 }
             }
         }
+    }
+
+    // Actor-level extra actions (stored on actor flag via addExtraActions(actor, ...))
+    const actorExtraActions = actor?.getFlag?.('lancer-automations', 'extraActions') || [];
+    for (const action of actorExtraActions) {
+        if (action.activation === activationType)
+            results.push({ action, sourceItem: null });
     }
 
     return results;
@@ -1022,9 +1040,11 @@ export async function updateTokenSystem(token, data) {
 /**
  * Executes a Skirmish action: target validation, weapon selection, and attack/damage flow.
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
+ * @param {any} [bypassMount=null] - Direct mount to use, skipping selection.
+ * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
  * @returns {Promise<void>}
  */
-export async function executeSkirmish(actorOrToken, bypassMount = null) {
+export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
     if (!actor) {
@@ -1045,7 +1065,11 @@ export async function executeSkirmish(actorOrToken, bypassMount = null) {
         // Display non-fitting weapons as unselectable.
         const filterPredicate = (w) => {
             const size = w.system?.size || w.system?.type || "";
-            return size.toLowerCase() !== 'superheavy';
+            if (size.toLowerCase() === 'superheavy')
+                return false;
+            if (weaponFilter)
+                return weaponFilter(w);
+            return true;
         };
 
         const choices = await choseMount(actor, 1, filterPredicate, null, "SKIRMISH");
@@ -1063,6 +1087,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null) {
     }
 
     if (weapons.length === 1) {
+        if (preTarget) game.user.updateTokenTargets([preTarget.id]);
         await beginWeaponAttackFlow(weapons[0]);
     } else {
         let primaryChosen = false;
@@ -1075,6 +1100,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null) {
                     extraData._csmNoBonusDmg = { enabled: true };
                 }
                 primaryChosen = true;
+                if (preTarget) game.user.updateTokenTargets([preTarget.id]);
                 await beginWeaponAttackFlow(weapon, {}, extraData);
             }
         }));
@@ -1115,9 +1141,11 @@ export async function executeFight(actorOrToken, bypassWeapon = null) {
 /**
  * Executes a Barrage action: attacks with either two different mounts or one superheavy mount.
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
+ * @param {any} [bypassMount=null] - Direct mount(s) to use, skipping selection.
+ * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
  * @returns {Promise<void>}
  */
-export async function executeBarrage(actorOrToken, bypassMount = null) {
+export async function executeBarrage(actorOrToken, bypassMount = null, preTarget = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
     if (!actor) {
@@ -1186,12 +1214,14 @@ export async function executeBarrage(actorOrToken, bypassMount = null) {
         const extraData = { _csmNoBonusDmg: { enabled: true } };
 
         if (weapons.length === 1) {
+            if (preTarget) game.user.updateTokenTargets([preTarget.id]);
             await beginWeaponAttackFlow(weapons[0], options, extraData);
         } else if (weapons.length > 1) {
             const choices = weapons.map(weapon => ({
                 text: weapon.name,
                 icon: weapon.img,
                 callback: async () => {
+                    if (preTarget) game.user.updateTokenTargets([preTarget.id]);
                     await beginWeaponAttackFlow(weapon, options, extraData);
                 }
             }));
@@ -1314,7 +1344,7 @@ function _applyItemBonuses(item, actor, tags, range) {
             applyTagBonus(state, bonus);
         }
         if (bonus.type === "range") {
-            applyRangeBonus(state, bonus);
+            mutateRangeWithBonus(state, bonus);
         }
     }
 }
@@ -1347,7 +1377,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor) {
             const flowTags = new Set(["all", "attack"]);
             for (const bonus of bonuses) {
                 if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
-                    applyRangeBonus(mockState, bonus);
+                    mutateRangeWithBonus(mockState, bonus);
             }
             return { ...p, range: base, all_range: base, base_range };
         });
@@ -1365,9 +1395,17 @@ export function getWeaponProfiles_WithBonus(weapon, actor) {
     const flowTags = new Set(["all", "attack"]);
     for (const bonus of bonuses) {
         if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
-            applyRangeBonus(mockState, bonus);
+            mutateRangeWithBonus(mockState, bonus);
     }
-    return [{ ...weapon.system, range: base, base_range }];
+    // NPC features store damage as a tier array [[d0],[d1],[d2]] — resolve to current tier
+    let damage = weapon.system.damage;
+    if (weapon.type === 'npc_feature' && Array.isArray(damage?.[0])) {
+        const tierOverride = weapon.system.tier_override ?? 0;
+        const tier = tierOverride > 0 ? tierOverride : (a?.system?.tier ?? 1);
+        const tierIdx = Math.max(0, Math.min(2, tier - 1));
+        damage = damage[tierIdx] ?? [];
+    }
+    return [{ ...weapon.system, damage, range: base, base_range }];
 }
 
 /**
@@ -1560,6 +1598,36 @@ export async function executeInvade(actorOrToken) {
     }
 }
 
+/**
+ * Returns the icon for a Lancer activation. Accepts an action object or a plain activation string.
+ * When the action has tech_attack:true, uses tech_quick/tech_full SVGs instead of hex icons.
+ * @param {Object|string} actionOrActivation
+ * @returns {string|null}
+ */
+export function getActivationIcon(actionOrActivation) {
+    const isTech = actionOrActivation?.tech_attack === true;
+    const activation = typeof actionOrActivation === 'string' ? actionOrActivation : (actionOrActivation?.activation || '');
+    const a = activation.toLowerCase();
+    if (isTech) {
+        if (a.includes('full'))
+            return 'systems/lancer/assets/icons/tech_full.svg';
+        return 'systems/lancer/assets/icons/tech_quick.svg';
+    }
+    if (a.includes('full'))
+        return 'mdi mdi-hexagon-slice-6';
+    if (a.includes('protocol'))
+        return 'systems/lancer/assets/icons/protocol.svg';
+    if (a.includes('free'))
+        return 'systems/lancer/assets/icons/free_action.svg';
+    if (a.includes('reaction'))
+        return 'systems/lancer/assets/icons/reaction.svg';
+    if (a.includes('quick'))
+        return 'mdi mdi-hexagon-slice-3';
+    if (a.includes('invade'))
+        return 'systems/lancer/assets/icons/tech_quick.svg';
+    return null;
+}
+
 export const MiscAPI = {
     executeStatRoll,
     executeDamageRoll,
@@ -1586,5 +1654,6 @@ export const MiscAPI = {
     executeBarrage,
     executeInvade,
     beginWeaponThrowFlow,
-    beginWeaponAttackFlow
+    beginWeaponAttackFlow,
+    getActivationIcon,
 };

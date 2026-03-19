@@ -896,7 +896,7 @@ export async function executeEffectManager(options = {}) {
             </div>
             <div id="bonus-type-roll" style="display:none;">
                 <div class="form-group">
-                    <label>Roll Type:</label>
+                    <label>Bonus Roll Type:</label>
                     <select id="bonus-rollType">
                         <option value="accuracy">Accuracy</option>
                         <option value="difficulty">Difficulty</option>
@@ -957,6 +957,7 @@ export async function executeEffectManager(options = {}) {
                     <select id="bonus-rangeMode" style="flex:0.6;">
                         <option value="add">Add Value</option>
                         <option value="override">Override Value</option>
+                        <option value="change">Change All Ranges</option>
                     </select>
                     <label style="margin-left: 10px;">Value:</label>
                     <input type="number" id="bonus-rangeVal" value="1" style="width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
@@ -990,34 +991,40 @@ export async function executeEffectManager(options = {}) {
             <div id="bonus-items-row" style="display:none;">
                 <div class="form-group" id="row-bonus-rollTypes-roll" style="display:none;">
                     <label>Roll Type:</label>
-                    <select id="bonus-rollTypes-roll">
-                        <option value="all">All Flows</option>
-                        <option value="attack">Weapon Attacks (All)</option>
-                        <option value="tech_attack">Tech Attacks</option>
-                        <option value="melee">Melee Attacks</option>
-                        <option value="ranged">Ranged Attacks</option>
-                        <option value="nexus">Nexus Attacks</option>
-                        <option value="tech">Tech (Item Type)</option>
-                        <option value="check">Checks (All)</option>
-                        <option value="hull">Hull Check</option>
-                        <option value="agility">Agility Check</option>
-                        <option value="systems">Systems Check</option>
-                        <option value="engineering">Engineering Check</option>
-                        <option value="grit">Grit Check</option>
-                        <option value="tier">Tier Check (NPC)</option>
-                        <option value="structure">Structure Roll</option>
-                        <option value="overheat">Overheat Roll</option>
-                    </select>
+                    <div class="la-multi-select" id="bonus-rollTypes-roll">
+                        <button type="button" class="la-multi-select-trigger">— Select —</button>
+                        <div class="la-multi-select-panel">
+                            <label><input type="checkbox" value="all"> All Flows</label>
+                            <label><input type="checkbox" value="attack"> Weapon Attacks</label>
+                            <label><input type="checkbox" value="tech_attack"> Tech Attacks</label>
+                            <label><input type="checkbox" value="melee"> Melee Attacks</label>
+                            <label><input type="checkbox" value="ranged"> Ranged Attacks</label>
+                            <label><input type="checkbox" value="nexus"> Nexus Attacks</label>
+                            <label><input type="checkbox" value="tech"> Tech (Item Type)</label>
+                            <label><input type="checkbox" value="check"> Checks (All)</label>
+                            <label><input type="checkbox" value="hull"> Hull Check</label>
+                            <label><input type="checkbox" value="agility"> Agility Check</label>
+                            <label><input type="checkbox" value="systems"> Systems Check</label>
+                            <label><input type="checkbox" value="engineering"> Engineering Check</label>
+                            <label><input type="checkbox" value="grit"> Grit Check</label>
+                            <label><input type="checkbox" value="tier"> Tier Check (NPC)</label>
+                            <label><input type="checkbox" value="structure"> Structure Roll</label>
+                            <label><input type="checkbox" value="overheat"> Overheat Roll</label>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group" id="row-bonus-rollTypes-damage" style="display:none;">
-                    <label>Roll Type:</label>
-                    <select id="bonus-rollTypes-damage">
-                        <option value="all">All Damage</option>
-                        <option value="melee">Melee Damage</option>
-                        <option value="ranged">Ranged Damage</option>
-                        <option value="nexus">Nexus Damage</option>
-                        <option value="tech">Tech Damage</option>
-                    </select>
+                    <label>Damage Roll Type:</label>
+                    <div class="la-multi-select" id="bonus-rollTypes-damage">
+                        <button type="button" class="la-multi-select-trigger">— Select —</button>
+                        <div class="la-multi-select-panel">
+                            <label><input type="checkbox" value="all"> All Damage</label>
+                            <label><input type="checkbox" value="melee"> Melee Damage</label>
+                            <label><input type="checkbox" value="ranged"> Ranged Damage</label>
+                            <label><input type="checkbox" value="nexus"> Nexus Damage</label>
+                            <label><input type="checkbox" value="tech"> Tech Damage</label>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label data-tooltip="Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.">Apply to items:</label>
@@ -1282,8 +1289,10 @@ export async function executeEffectManager(options = {}) {
                     const action = subB.tagMode === 'override' ? 'Set' : 'Add';
                     return `${action} ${subB.tagName} ${subB.val}`;
                 }
-                if (subB.type === 'range')
-                    return `${subB.rangeMode === 'override' ? 'Set' : 'Add'} ${subB.rangeType} ${subB.val}`;
+                if (subB.type === 'range') {
+                    const rangeLabel = subB.rangeMode === 'override' ? 'Set' : subB.rangeMode === 'change' ? 'Change All →' : 'Add';
+                    return `${rangeLabel} ${subB.rangeType} ${subB.val}`;
+                }
                 if (subB.type === 'immunity') {
                     if (subB.subtype === 'effect' && subB.effects)
                         return `Immunity: ${subB.effects.join(', ')}`;
@@ -1667,9 +1676,9 @@ export async function executeEffectManager(options = {}) {
 
                 let rollTypes = [];
                 if (type === 'accuracy' || type === 'difficulty') {
-                    rollTypes = [html.find('#bonus-rollTypes-roll').val()];
+                    rollTypes = html.find('#bonus-rollTypes-roll input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
                 } else if (type === 'damage') {
-                    rollTypes = [html.find('#bonus-rollTypes-damage').val()];
+                    rollTypes = html.find('#bonus-rollTypes-damage input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
                 }
 
                 const applyToStr = String(html.find('#bonus-applyTo').val());
@@ -1797,6 +1806,14 @@ export async function executeEffectManager(options = {}) {
                     html.find('#row-bonus-rollTypes-damage').toggle(type === 'damage');
                 }
 
+                // Range bonuses are applied via libWrapper on currentProfile() — applyToTargetter makes no sense for them
+                const targetter = html.find('#bonus-applyToTargetter');
+                if (type === 'range') {
+                    targetter.prop('checked', false).closest('.form-group').hide();
+                } else {
+                    targetter.closest('.form-group').show();
+                }
+
                 if (dialog.position) {
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
                 }
@@ -1814,6 +1831,33 @@ export async function executeEffectManager(options = {}) {
             html.find('.bonus-immunity-effect-option, .bonus-immunity-damage-option').on('click', function() {
                 $(this).toggleClass('selected');
             });
+
+            // Multi-select dropdowns for roll types
+            const initMultiSelect = (containerId) => {
+                const container = html.find(`#${containerId}`);
+                const trigger = container.find('.la-multi-select-trigger');
+                const panel = container.find('.la-multi-select-panel');
+                const updateTriggerLabel = () => {
+                    const checked = panel.find('input:checked');
+                    if (checked.length === 0) {
+                        trigger.text('— Select —');
+                    } else {
+                        trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
+                    }
+                };
+                trigger.on('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = panel.hasClass('open');
+                    html.find('.la-multi-select-panel.open').removeClass('open');
+                    if (!isOpen) {
+                        panel.addClass('open');
+                    }
+                });
+                panel.find('input[type=checkbox]').on('change', updateTriggerLabel);
+                $(document).on('click.la-multiselect', () => panel.removeClass('open'));
+            };
+            initMultiSelect('bonus-rollTypes-roll');
+            initMultiSelect('bonus-rollTypes-damage');
 
             html.find('#bonus-add').click(() => {
                 const type = html.find('#bonus-type').val();

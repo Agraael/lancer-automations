@@ -21,7 +21,7 @@
             </div>
             <div style="flex: 3;">
                 <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
-                <input type="text" name="comments" value="{{comments}}" placeholder="Brief notes for the list...">
+                <input type="text" name="commentsGeneral" value="{{comments}}" placeholder="Brief notes for the list...">
                 <p class="notes">Shown in the manager list.</p>
             </div>
         </div>
@@ -50,7 +50,7 @@
             </div>
             <div style="flex: 3;">
                 <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
-                <input type="text" name="comments" value="{{comments}}" placeholder="Brief notes for the list...">
+                <input type="text" name="commentsItem" value="{{comments}}" placeholder="Brief notes for the list...">
                 <p class="notes">Shown in the manager list.</p>
             </div>
         </div>
@@ -139,7 +139,7 @@
                     <!-- Action Type -->
                     <div>
                         <label>Action Type <a
-                                title="For UI display only. Exception: 'Reaction' enables the 'Consumes' checkbox, which will spend the token's reaction on activation."
+                                title="For UI display only. Exception: 'Reaction' enables the 'Check Reaction' checkbox, which blocks activation if the token has no reaction available."
                                 style="color: #888; cursor: help;"><i class="fas fa-question-circle"></i></a></label>
                         <select name="actionType" id="actionType">
                             {{#each actionTypeOptions}}
@@ -162,12 +162,20 @@
                 </div>
 
                 <div class="options-grid">
-                    <!-- Consumes Reaction -->
+                    <!-- Check Reaction -->
                     <label class="checkbox {{#unless (eq actionType 'Reaction')}}hidden{{/unless}}"
-                        id="consumesReactionContainer">
-                        <input type="checkbox" name="consumesReaction" id="consumesReaction" {{#if
-                            consumesReaction}}checked{{/if}}>
-                        <span>Consumes</span>
+                        id="checkReactionContainer"
+                        title="Block activation if the token has no reaction available.">
+                        <input type="checkbox" name="checkReaction" id="checkReaction" {{#if
+                            checkReaction}}checked{{/if}}>
+                        <span>Check Reaction</span>
+                    </label>
+
+                    <!-- Check Usage (item-based only) -->
+                    <label class="checkbox item-only" title="Block activation if the item is unloaded, out of uses, or uncharged."
+                        style="{{#if isGeneral}}display:none{{/if}}">
+                        <input type="checkbox" name="checkUsage" id="checkUsage" {{#if checkUsage}}checked{{/if}}>
+                        <span>Check Usage</span>
                     </label>
 
                     <!-- Auto Activate -->
@@ -337,6 +345,24 @@
         </p>
         <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
             <strong>Available variables:</strong> <code>token</code>, <code>item</code> (null for general),
+            <code>api</code>
+        </p>
+    </div>
+
+    <!-- onMessage Code -->
+    <div class="form-group stacked">
+        <label>onMessage Code <span class="optional">(optional)</span> <a class="expand-editor" data-target="onMessage"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></label>
+        <div class="form-fields">
+            <textarea name="onMessage" rows="6" style="font-family: monospace; white-space: pre;">{{onMessage}}</textarea>
+        </div>
+        <p class="notes">
+            JavaScript code executed when a message is sent to this reactor via <code>triggerData.sendMessageToReactor(data, userId)</code>.<br>
+            Useful for cross-client communication between reactions.
+        </p>
+        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
+            <strong>Available variables:</strong> <code>triggerType</code>, <code>data</code>,
+            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
             <code>api</code>
         </p>
     </div>

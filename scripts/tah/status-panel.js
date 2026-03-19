@@ -1,5 +1,7 @@
 /* global $, game, CONFIG */
 
+import { removeGlobalBonus, removeConstantBonus } from '../genericBonuses.js';
+
 function getBonusDetailStr(/** @type {any} */ b) {
     if (b.type === 'accuracy')   return `Accuracy +${b.val}`;
     if (b.type === 'difficulty') return `Difficulty +${b.val}`;
@@ -455,7 +457,7 @@ export class StatusPanel {
         if (!allBonuses.length) {
             bonusListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No bonuses</div>`));
         } else {
-            for (const { b, kind, idx } of allBonuses) {
+            for (const { b, kind } of allBonuses) {
                 const detail = getBonusDetailStr(b);
                 const kindBadge = kind === 'constant' ? ' <span style="opacity:0.6;font-size:0.85em;">(const)</span>' : '';
                 const row = $(`<div style="font-size:0.75em;padding:2px 4px;line-height:1.4;display:flex;align-items:flex-start;gap:3px;" title="${b.name}: ${detail}">
@@ -469,10 +471,10 @@ export class StatusPanel {
                     .on('mouseleave', function() { $(this).css('opacity', '0.45'); })
                     .on('click', async (ev) => {
                         ev.stopPropagation();
-                        const key = kind === 'global' ? 'global_bonuses' : 'constant_bonuses';
-                        const current = /** @type {any[]} */ ([...(actor.getFlag('lancer-automations', key) || [])]);
-                        current.splice(idx, 1);
-                        await actor.setFlag('lancer-automations', key, current);
+                        if (kind === 'global')
+                            await removeGlobalBonus(actor, b.id);
+                        else
+                            await removeConstantBonus(actor, b.id);
                         row.remove();
                         if (!bonusListEl.children().length)
                             bonusListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No bonuses</div>`));

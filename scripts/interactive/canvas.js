@@ -617,6 +617,7 @@ export function placeZone(casterToken, options = {}) {
             count,
             zoneType: type,
             zoneSize: size,
+            relatedToken: casterToken,
             onConfirm: () => {
                 confirmed = true;
             },
@@ -1597,6 +1598,7 @@ export function placeToken(options = {}) {
             range,
             count,
             isMultiActor,
+            relatedToken: originToken,
             onConfirm: doConfirm,
             onCancel: () => {
                 doCleanup();

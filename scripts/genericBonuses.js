@@ -116,44 +116,52 @@ export function applyTagBonus(state, bonus) {
 
 /**
  * Mutates state.data.range based on a range bonus payload.
- * Preserves _Range prototype instances by mutating in-place.
+ * Only used by getWeaponProfiles_WithBonus in misc-tools.js for offline range computation.
+ * Range display in flows is handled by the libWrapper on currentProfile() / rangesFor().
  */
-export function applyRangeBonus(state, bonus) {
+export function mutateRangeWithBonus(state, bonus) {
     if (!state.data)
         state.data = {};
     if (!state.data.range)
         state.data.range = [];
 
     const rangeType = bonus.rangeType;
-    const isOverride = bonus.rangeMode === 'override';
+    const rangeMode = bonus.rangeMode || 'add';
+    const isOverride = rangeMode === 'override';
+    const isChange = rangeMode === 'change';
     const val = Number.parseInt(bonus.val) || 0;
 
-    const existingIdx = state.data.range.findIndex(r => r.type === rangeType);
-    if (existingIdx !== -1) {
-        // Mutate in-place to preserve _Range prototype methods (icon getter, etc.)
-        const entry = state.data.range[existingIdx];
-        if (isOverride) {
-            entry.val = val;
-        } else {
-            entry.val = (Number.parseInt(entry.val) || 0) + val;
-        }
-    } else {
-        // Try to reuse the constructor from an existing range to preserve prototype methods
+    if (isChange) {
+        // Replace all ranges with a single entry of the specified type and value
         const RangeClass = state.data.range[0]?.constructor;
+        state.data.range.length = 0;
         if (RangeClass && RangeClass !== Object) {
             state.data.range.push(new RangeClass({ type: rangeType, val }));
         } else {
-            // Fallback: plain object with computed icon
             state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
+        }
+    } else {
+        const existingIdx = state.data.range.findIndex(r => r.type === rangeType);
+        if (existingIdx !== -1) {
+            // Mutate in-place to preserve _Range prototype methods (icon getter, etc.)
+            const entry = state.data.range[existingIdx];
+            if (isOverride) {
+                entry.val = val;
+            } else {
+                entry.val = (Number.parseInt(entry.val) || 0) + val;
+            }
+        } else {
+            // Try to reuse the constructor from an existing range to preserve prototype methods
+            const RangeClass = state.data.range[0]?.constructor;
+            if (RangeClass && RangeClass !== Object) {
+                state.data.range.push(new RangeClass({ type: rangeType, val }));
+            } else {
+                // Fallback: plain object with computed icon
+                state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
+            }
         }
     }
 
-    // Track for chat card injection (injectRangeBonusesToCard step)
-    if (!state.la_extraData)
-        state.la_extraData = {};
-    if (!state.la_extraData.la_range_bonuses)
-        state.la_extraData.la_range_bonuses = [];
-    state.la_extraData.la_range_bonuses.push({ type: rangeType, val, override: isOverride });
 }
 
 /**
@@ -329,9 +337,6 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
         if (bonus.type === 'tag') {
             applyTagBonus(state, bonus);
             results.activeBonuses.push(bonus);
-        } else if (bonus.type === 'range') {
-            applyRangeBonus(state, bonus);
-            results.rangeBonuses.push(bonus);
         } else if (bonus.type === 'damage' && flowType === 'damage') {
             const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
             if (hasTarget) {
@@ -423,9 +428,6 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
             } else if (b.type === 'tag') {
                 applyTagBonus(state, b);
                 results.activeBonuses.push(injected);
-            } else if (b.type === 'range') {
-                applyRangeBonus(state, b);
-                results.rangeBonuses.push(injected);
             } else {
                 results.allTargetedBonuses.push(injected);
             }
@@ -1577,6 +1579,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
 
     await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
 
+    options.duration = options.duration || { label: 'indefinite', turns: null, rounds: null };
     if (options.duration) {
         const token = actor.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
 
@@ -1597,7 +1600,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 }
             }
 
-            const icon = getBonusIcon(bonusData);
+            const icon = options.icon || getBonusIcon(bonusData);
 
             const extraOptions = { linkedBonusId: bonusData.id };
 

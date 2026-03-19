@@ -143,6 +143,7 @@ const movingTargetSniperReaction = {
         frequency: "1/Round",
         autoActivate: true,
         forceSynchronous: true,
+        checkReaction: true,
         activationType: "code",
         activationMode: "instead",
         evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -157,53 +158,75 @@ const movingTargetSniperReaction = {
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const mover = triggerData.triggeringToken;
+            let preConfirmResponderIds = [];
+            const preConfirm = async () => {
+                const result = await api.startChoiceCard({
+                    title: "INTERRUPT MOVEMENT?",
+                    description: `<b>${mover.name}</b> is moving into <b>${reactorToken.name}</b> sights. It movement can be interrupted`,
+                    item,
+                    originToken: mover,
+                    relatedToken: reactorToken,
+                    userIdControl: api.getTokenOwnerUserId(reactorToken),
+                    choices: [
+                        { text: "Interrupt",
+                            icon: "fas fa-crosshairs",
+                            callback: async () => {} },
+                        { text: "Let pass", icon: "fas fa-times", callback: async () => {} }
+                    ]
+                });
+                preConfirmResponderIds = result?.responderIds ?? [];
+                if (result?.choiceIdx === 0) {
+                    triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0]);
+                }
+                return result?.choiceIdx === 0;
+            };
+            const postChoice = async (chose) => {
+                if (!chose && preConfirmResponderIds.length > 0){
+                    await triggerData.sendMessageToReactor({ moverTokenId: mover.id }, preConfirmResponderIds[0]);
+                }
+            };
             triggerData.cancelTriggeredMove?.(
-                `Moving Target: ${mover.name} is in the Sniper's sights. Give up this movement or proceed and face an attack with the Anti-materiel Rifle.`,
+                `<b>${reactorToken.name}</b> is interrupting <b>${mover.name}</b>'s movement.`,
                 true,
-                api.getTokenOwnerUserId(mover)
+                api.getTokenOwnerUserId(mover),
+                preConfirm,
+                postChoice,
+                { item, originToken: reactorToken, relatedToken: mover }
             );
-        }
-    }, {
-        triggers: ["onMove"],
-        triggerSelf: false,
-        triggerOther: true,
-        outOfCombat: false,
-        actionType: "Reaction",
-        frequency: "1/Round",
-        autoActivate: false,
-        activationType: "code",
-        activationMode: "after",
-        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const mover = triggerData.triggeringToken;
-            if (triggerData.moveInfo?.isInvoluntary)
-                return false;
-            if (triggerData.distanceToTrigger > 20)
-                return false;
-            if (api.isFriendly(reactorToken, mover))
-                return false;
-            return true;
         },
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const mover = triggerData.triggeringToken;
-
+        onMessage: async function (triggerType, data, reactorToken, item, activationName, api) {
+            const mover = canvas.tokens.get(data.moverTokenId) ?? null;
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle) {
                 ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
                 return;
             }
-
-            const isLoaded = rifle.system?.loaded !== false;
-            if (!isLoaded) {
-                await api.reloadOneWeapon(reactorToken);
-                ChatMessage.create({
-                    content: `<div class="lancer-chat-message"><b>${reactorToken.name} — Moving Target</b><br>The Anti-materiel Rifle wasn't loaded. ${reactorToken.name} reloads.</div>`,
-                    speaker: ChatMessage.getSpeaker({ token: reactorToken })
-                });
-                return;
-            }
-
-            game.user.updateTokenTargets([mover.id]);
-            await api.beginWeaponAttackFlow(rifle, {});
+            await api.startChoiceCard({
+                title: "MOVING TARGET",
+                description: `<b>${mover?.name ?? 'Target'}</b> is pushing through your sights. Fire!`,
+                item,
+                originToken: reactorToken,
+                relatedToken: mover,
+                userIdControl: api.getTokenOwnerUserId(reactorToken),
+                choices: [{
+                    text: "Fire",
+                    icon: "fas fa-crosshairs",
+                    callback: async () => {
+                        const isLoaded = rifle.system?.loaded !== false;
+                        if (!isLoaded) {
+                            await api.reloadOneWeapon(reactorToken);
+                            ChatMessage.create({
+                                content: `<div class="lancer-chat-message"><b>${reactorToken.name} — Moving Target</b><br>The Anti-materiel Rifle wasn't loaded. ${reactorToken.name} reloads.</div>`,
+                                speaker: ChatMessage.getSpeaker({ token: reactorToken })
+                            });
+                            return;
+                        }
+                        if (mover)
+                            game.user.updateTokenTargets([mover.id]);
+                        await api.beginWeaponAttackFlow(rifle, {});
+                    }
+                }]
+            });
         }
     }]
 };
@@ -213,37 +236,83 @@ const movingTargetArcherReaction = {
     category: "NPC",
     itemType: "npc_feature",
     reactions: [{
-        name: "Moving Target",
         triggers: ["onPreMove"],
         triggerSelf: false,
         triggerOther: true,
         outOfCombat: false,
         actionType: "Reaction",
         frequency: "1/Round",
-        autoActivate: false,
+        autoActivate: true,
+        forceSynchronous: true,
+        checkReaction: true,
         activationType: "code",
-        activationMode: "after",
+        activationMode: "instead",
         evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const mover = triggerData.triggeringToken;
             if (!mover)
                 return false;
-            const isSuppressed = !!api?.findEffectOnToken(mover, e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id);
-            if (isSuppressed)
-                triggerData.cancelTriggeredMove?.(`Moving Target: ${mover.name}'s movement could be cancelled by ${reactorToken.name}.`, true, api.getTokenOwnerUserId(reactorToken));
-            return isSuppressed;
+            return !!api?.findEffectOnToken(mover, e => e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id);
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const mover = triggerData.triggeringToken;
             if (!mover)
                 return;
-
-            if (api?.removeEffectsByNameFromTokens) {
+            let preConfirmResponderIds = [];
+            const preConfirm = async () => {
+                const result = await api.startChoiceCard({
+                    title: "INTERRUPT MOVEMENT?",
+                    icon: api.getActivationIcon("reaction"),
+                    description: `<b>${mover.name}</b> is suppressed by <b>${reactorToken.name}</b>. Its movement can be interrupted.`,
+                    item,
+                    originToken: mover,
+                    relatedToken: reactorToken,
+                    userIdControl: api.getTokenOwnerUserId(reactorToken),
+                    choices: [
+                        { text: "Interrupt", icon: "fas fa-crosshairs", callback: async () => {} },
+                        { text: "Let pass", icon: "fas fa-times", callback: async () => {} }
+                    ]
+                });
+                preConfirmResponderIds = result?.responderIds ?? [];
+                if (result?.choiceIdx === 0)
+                    await reactorToken.actor.setFlag('lancer-automations', 'movingTargetArcherMoverId', mover.id);
+                return result?.choiceIdx === 0;
+            };
+            const postChoice = async (chose) => {
+                if (chose && preConfirmResponderIds.length > 0)
+                    await triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0]);
+            };
+            triggerData.cancelTriggeredMove?.(
+                `<b>${reactorToken.name}</b> is interrupting <b>${mover.name}</b>'s movement.`,
+                true,
+                api.getTokenOwnerUserId(mover),
+                preConfirm,
+                postChoice,
+                { item, originToken: reactorToken, relatedToken: mover }
+            );
+        }
+    }, {
+        triggers: ["onActivation"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: false,
+        actionType: "Reaction",
+        frequency: "1/Round",
+        autoActivate: true,
+        onlyOnSourceMatch: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const moverId = reactorToken.actor.getFlag('lancer-automations', 'movingTargetArcherMoverId');
+            await reactorToken.actor.unsetFlag('lancer-automations', 'movingTargetArcherMoverId');
+            const mover = moverId ? canvas.tokens.get(moverId) ?? null : null;
+            if (api?.removeEffectsByNameFromTokens && mover) {
                 await api.removeEffectsByNameFromTokens({
                     tokens: [mover],
                     effectNames: ["Suppress", "impaired"],
                     extraFlags: { suppressSourceId: reactorToken.id }
                 });
             }
+            await api.executeSkirmish(reactorToken.actor, null, mover);
         }
     }]
 };
@@ -716,6 +785,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
     const reactions = [
         {
             triggers: ["onActivation"],
+            actionType: "Full Action",
             onlyOnSourceMatch: true,
             triggerSelf: true,
             triggerOther: false,
@@ -824,6 +894,174 @@ function buildDefenseNetReaction(radius, isRebake = false) {
 
 const defenseNetReaction       = buildDefenseNetReaction(3);
 const defenseNetRebakeReaction = buildDefenseNetReaction(2, true);
+
+// ─── Sniper's Mark ────────────────────────────────────────────────────────────
+const SNIPER_MARK_NAME = "Sniper's Mark";
+
+/** @type {ReactionGroup} */
+const sniperMarkReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [
+        {
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Full Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: false,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const sourceFlags = { sniperSourceId: reactorToken.id };
+
+                const chosen = await api.chooseToken(reactorToken, {
+                    count: 1,
+                    range: 25,
+                    title: "SNIPER'S MARK",
+                    description: "Choose a target to mark. Same target removes the mark."
+                });
+                if (!chosen?.length)
+                    return;
+                const target = chosen[0];
+                const markOnTarget = api.findEffectOnToken(target,
+                    e => e.name === SNIPER_MARK_NAME &&
+                         e.flags?.['lancer-automations']?.sniperSourceId === reactorToken.id
+                );
+
+                const previouslyMarked = canvas.tokens.placeables.find(token =>
+                    !!api.findEffectOnToken(token,
+                        e => e.name === SNIPER_MARK_NAME &&
+                             e.flags?.['lancer-automations']?.sniperSourceId === reactorToken.id
+                    )
+                );
+                if (previouslyMarked) {
+                    await api.removeEffectsByNameFromTokens({
+                        tokens: [previouslyMarked],
+                        effectNames: [SNIPER_MARK_NAME],
+                        extraFlags: sourceFlags
+                    });
+                }
+
+                if (!markOnTarget) {
+                    await api.applyEffectsToTokens({
+                        tokens: [target],
+                        effectNames: [{ name: SNIPER_MARK_NAME, isCustom: true, icon: "icons/svg/target.svg" }],
+                        duration: { label: 'unlimited' }
+                    }, sourceFlags);
+                    ui.notifications.info(`Sniper's Mark: ${target.name} is now marked.`);
+                } else {
+                    ui.notifications.info(`Sniper's Mark: removed from ${target.name}.`);
+                }
+            }
+        },
+        {
+            triggers: ["onStatusApplied", "onStatusRemoved"],
+            triggerSelf: false,
+            triggerOther: true,
+            autoActivate: true,
+            outOfCombat: true,
+            actionType: "Full Action",
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData) {
+                return triggerData.statusId === SNIPER_MARK_NAME || triggerData.effect?.name === SNIPER_MARK_NAME;
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const markedToken = triggerData.triggeringToken;
+                if (!markedToken)
+                    return;
+                const ACTION_NAME = "Fall Prone (Sniper's Mark)";
+
+                if (triggerType === 'onStatusApplied') {
+
+                    const alreadyHas = /** @type {any[]} */(api.getActorActions(markedToken))
+                        .some(a => a.name === ACTION_NAME);
+                    if (!alreadyHas) {
+                        await api.addExtraActions(markedToken.actor, {
+                            name: ACTION_NAME,
+                            activation: "Free",
+                            detail: "Fall prone as required by Sniper's Mark."
+                        });
+                    }
+                } else {
+                    const stillMarked = !!api.findEffectOnToken(markedToken,
+                        e => e.name === SNIPER_MARK_NAME && e.id !== triggerData.effect?.id
+                    );
+                    if (!stillMarked) {
+                        await api.removeExtraActions(markedToken.actor, ACTION_NAME);
+                    }
+                }
+            }
+        }
+    ]
+};
+
+// ─── Anti-Materiel Rifle ──────────────────────────────────────────────────────
+/** @type {ReactionGroup} */
+const antiMaterielRifleReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onHit"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        actionType: "Automation",
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const targets = triggerData.targets ?? [];
+            const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
+
+            for (const { target } of targets) {
+                const actor = target?.actor;
+                if (!actor)
+                    continue;
+                const isMarked = !!api.findEffectOnToken(target, e => e.name === SNIPER_MARK_NAME);
+                if (!isMarked)
+                    continue;
+                const isProne = actor.effects.some(e => e.statuses?.has('prone'));
+                const hasHardCover = actor.effects.some(e => e.statuses?.has('cover_hard'));
+                const hasSoftCover = actor.effects.some(e => e.statuses?.has('cover_soft'));
+                if (isProne || hasHardCover || hasSoftCover)
+                    continue;
+
+                await triggerData.sendMessageToReactor(
+                    { targetId: target.id, sniperSourceId: reactorToken.id },
+                    gmUserId
+                );
+            }
+        },
+        onMessage: async function (triggerType, data, reactorToken, item, activationName, api) {
+            const target = canvas.tokens.get(data.targetId);
+            if (!target)
+                return;
+            const actor = target.actor;
+            const hpMax = actor?.system?.hp?.max;
+
+            await api.startChoiceCard({
+                title: "SNIPER'S MARK — EXPOSED",
+                description: `<b>${target.name}</b> is marked and exposed. Apply structural damage?`,
+                item,
+                originToken: reactorToken,
+                relatedToken: target,
+                userIdControl: null,
+                choices: [{
+                    text: "-1 Structure",
+                    icon: "fas fa-skull",
+                    callback: async () => {
+                        await (/** @type {any} */(actor)).update({ "system.hp.value": actor.system.hp.value - hpMax });
+                    }
+                }]
+            });
+        }
+    }]
+};
+
 api.registerDefaultItemReactions({
     "npc-rebake_npcf_insulated_pyro": npcInsulatedBonus,
     "npc_clademaster_insulated": npcInsulatedBonus,
@@ -1581,6 +1819,7 @@ api.registerDefaultItemReactions({
             {
                 triggers: ["onHit"],
                 triggerSelf: true,
+                onlyOnSourceMatch: true,
                 triggerOther: false,
                 outOfCombat: true,
                 autoActivate: true,
@@ -1607,7 +1846,7 @@ api.registerDefaultItemReactions({
                 outOfCombat: false,
                 autoActivate: true,
                 forceSynchronous: true,
-                consumesReaction: false,
+                checkReaction: false,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -1633,7 +1872,7 @@ api.registerDefaultItemReactions({
                 outOfCombat: false,
                 autoActivate: true,
                 forceSynchronous: true,
-                consumesReaction: false,
+                checkReaction: false,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken) {
@@ -1661,6 +1900,7 @@ api.registerDefaultItemReactions({
         reactions: [{
             triggers: ["onHit"],
             triggerSelf: true,
+            onlyOnSourceMatch: true,
             triggerOther: false,
             outOfCombat: true,
             autoActivate: true,
@@ -1680,5 +1920,78 @@ api.registerDefaultItemReactions({
                 });
             }
         }]
+    },
+    "nrfaw-npc_npcf_marksman_kit_duck_strider": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onHit"],
+            triggerSelf: false,
+            triggerOther: true,
+            outOfCombat: true,
+            autoActivate: true,
+            checkReaction: true,
+            checkUsage: true,
+            actionType: "Reaction",
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                return triggerData.distanceToTrigger > 8 && triggerData.targets.some(t => t.target?.id === reactorToken.id);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                await api.startChoiceCard({
+                    title: "DUCK STRIDER",
+                    description: `${triggerData.triggeringToken?.name ?? "An attacker"} hit you from long range! Duck to evade?`,
+                    userIdControl: api.getTokenOwnerUserId(reactorToken),
+                    item: item,
+                    icon: api.getActivationIcon("reaction"),
+                    relatedToken: reactorToken,
+                    originToken: triggerData.triggeringToken,
+                    choices: [
+                        { text: "Duck!",
+                            icon: api.getActivationIcon("reaction"),
+                            callback: () => {
+                                const hitResults = triggerData.actionData.flowState.data.hit_results;
+                                const entry = hitResults.find(r => r.target?.id === reactorToken.id);
+                                if (entry) {
+                                    entry.hit = false;
+                                    entry.crit = false;
+                                    api.applyEffectToTokens({
+                                        tokens: [reactorToken],
+                                        effectNames: ["Resist All"],
+                                        duration: { label: 'start', turns: 1, rounds: 0 }
+                                    });
+                                }
+                                triggerData.startRelatedFlow();
+                            } },
+                        { text: "Ignore", icon: "fas fa-times", value: "ignore" },
+                    ],
+                });
+            },
+        }]
+    },
+    "npcf_snipers_mark_sniper": sniperMarkReaction,
+    "npcf_anti_materiel_rifle_sniper": antiMaterielRifleReaction
+});
+
+// ─── Fall Prone (Sniper's Mark) general reaction ───────────────────────────────
+api.registerDefaultGeneralReactions({
+    "Fall Prone (Sniper's Mark)": {
+        category: "NPC",
+        triggers: ["onActivation"],
+        actionType: "Free Action",
+        onlyOnSourceMatch: true,
+        activationType: "code",
+        activationMode: "instead",
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            await api.applyEffectsToTokens({
+                tokens: [reactorToken],
+                effectNames: ['prone']
+            });
+        }
     }
 });

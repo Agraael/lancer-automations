@@ -152,11 +152,15 @@ export function laRenderDeployables(deployableActors) {
             ds?.heatcap != null && ds.heatcap > 0 ? `Heat ${ds.heatcap}` : null,
             ds?.save != null && ds.save > 0 ? `Save ${ds.save}` : null
         ].filter(Boolean);
-        const depEffect = laFormatDetailHtml(ds?.effect || '');
+        const depDetail = laFormatDetailHtml(ds?.detail || ds?.effect || '');
+        const depTags = laRenderTags(ds?.tags ?? []);
+        const actLabel = ds?.activation ? `<span style="font-size:0.78em;font-weight:normal;color:#888;margin-left:5px;">[${ds.activation}]</span>` : '';
+        const hasBody = !!(depDetail || depTags);
         return `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;">
-            <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${dep.name}</div>
-            ${statPairs.length ? `<div style="font-size:0.75em;color:#aaa;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${depEffect ? '4' : '0'}px;">${statPairs.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
-            ${depEffect ? `<div style="font-size:0.77em;color:#bbb;line-height:1.3;">${depEffect}</div>` : ''}
+            <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${dep.name}${actLabel}</div>
+            ${statPairs.length ? `<div style="font-size:0.75em;color:#aaa;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${hasBody ? '4' : '0'}px;">${statPairs.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
+            ${depTags}
+            ${depDetail ? `<div style="font-size:0.77em;color:#bbb;line-height:1.3;">${depDetail}</div>` : ''}
         </div>`;
     }).join('');
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('DEPLOYABLE', '#4a1070')}${items}</div>`;
@@ -290,6 +294,47 @@ export function laRenderModBody(modItem) {
 }
 
 /**
+ * Renders body HTML for a core system popup (passive section + counters/resources).
+ * @param {any} cs  frame.system.core_system object
+ * @returns {string}
+ */
+export function laRenderCoreSystemBody(cs) {
+    const activeName     = cs?.active_name ?? '';
+    const activeEffect   = cs?.active_effect ?? '';
+    const activeActions  = cs?.active_actions ?? [];
+    const passiveName    = cs?.passive_name ?? '';
+    const passiveEffect  = cs?.passive_effect ?? '';
+    const passiveActions = cs?.passive_actions ?? [];
+    const counters       = cs?.counters ?? [];
+
+    const activeEffectHtml = activeEffect
+        ? `<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${activeName ? `<b>${activeName}</b><br>` : ''}${laFormatDetailHtml(activeEffect)}</div>`
+        : '';
+    const activeActionsHtml = laRenderActions(activeActions);
+    const activeHtml = (activeEffectHtml || activeActionsHtml)
+        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('ACTIVE', '#b45309')}${activeEffectHtml}${activeActionsHtml}</div>`
+        : '';
+
+    const passiveEffectHtml = passiveEffect
+        ? `<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${passiveName ? `<b>${passiveName}</b><br>` : ''}${laFormatDetailHtml(passiveEffect)}</div>`
+        : '';
+    const passiveActionsHtml = laRenderActions(passiveActions);
+    const passiveHtml = (passiveEffectHtml || passiveActionsHtml)
+        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('PASSIVE', '#1565c0')}${passiveEffectHtml}${passiveActionsHtml}</div>`
+        : '';
+
+    const countersHtml = counters.length
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('RESOURCES', '#1a3a5c')}${counters.map(c =>
+            `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:0.78em;font-weight:bold;color:#ccc;">${c.name}</span>
+                <span style="font-size:0.78em;color:#aaa;">${c.value ?? c.default_value ?? 0} / ${c.max ?? 0}</span>
+            </div>`).join('')}</div>`
+        : '';
+
+    return activeHtml + passiveHtml + countersHtml;
+}
+
+/**
  * Renders the full body HTML for a core bonus detail popup.
  * Shows: tags, bonuses, effect. Does NOT show the flavor description.
  * @param {any} cbItem  Foundry Item document (type core_bonus)
@@ -416,11 +461,12 @@ const THEMES = {
  */
 export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weapon') {
     const t = THEMES[theme] ?? THEMES.default;
+    const displayTitle = title.toLowerCase().replaceAll(/\b\w/g, c => c.toUpperCase());
     return $(`
         <div class="${cssClass}" style="position:fixed;z-index:10000;background:#181818;border:1px solid ${t.border};border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
             <div style="background:linear-gradient(90deg,${t.gradFrom},${t.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${t.headerBorder};border-radius:4px 4px 0 0;">
                 <div>
-                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${title}</div>
+                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${displayTitle}</div>
                     <div style="font-size:0.72em;color:#aaa;">${subtitle}</div>
                 </div>
                 <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>

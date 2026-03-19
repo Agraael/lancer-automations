@@ -48,7 +48,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const reactionEntry = reaction || reactionConfig?.reactions?.[0];
 
         const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
-        const consumesReaction = reactionEntry?.consumesReaction !== false;
+        const checkReaction = reactionEntry?.checkReaction !== false;
 
         const activationType = reactionEntry?.activationType || "flow";
         const activationMode = reactionEntry?.activationMode || "after";
@@ -111,7 +111,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
 
         const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
-        const consumesReaction = generalReaction?.consumesReaction !== false;
+        const checkReaction = generalReaction?.checkReaction !== false;
 
         const activationType = generalReaction?.activationType || "flow";
         const activationMode = generalReaction?.activationMode || "after";
@@ -163,36 +163,6 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         }
     }
 
-    if (game.settings.get('lancer-automations', 'consumeReaction')) {
-        let shouldConsume = false;
-
-        if (item) {
-            const lid = item.system?.lid;
-            const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
-            const entry = reactionConfig?.reactions?.[0] || reaction;
-            const type = entry?.actionType || (entry?.isReaction !== false ? "Reaction" : "Free Action");
-            const consumes = entry?.consumesReaction !== false;
-
-            shouldConsume = (type === "Reaction" && consumes);
-        } else {
-            const registryEntryConsume = ReactionManager.getGeneralReaction(activationName);
-            const generalReactionConsume = (registryEntryConsume && !Array.isArray(registryEntryConsume.reactions))
-                ? registryEntryConsume : (reaction || registryEntryConsume);
-
-            const type = generalReactionConsume?.actionType || (generalReactionConsume?.isReaction !== false ? "Reaction" : "Free Action");
-            const consumes = generalReactionConsume?.consumesReaction !== false;
-
-            shouldConsume = (type === "Reaction" && consumes);
-        }
-
-        if (shouldConsume) {
-            const actor = token.actor;
-            if (hasReactionAvailable(token)) {
-                const newReaction = actor.system.action_tracker.reaction - 1;
-                return actor.update({ 'system.action_tracker.reaction': newReaction });
-            }
-        }
-    }
 }
 
 export function displayReactionPopup(triggerType, triggeredReactions) {

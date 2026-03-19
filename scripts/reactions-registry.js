@@ -18,32 +18,132 @@ export function getDefaultGeneralReactionRegistry() {
     const builtInDefaults = {
         "Overwatch": {
             category: "General",
-            comments: "Reaction Skirmish",
-            triggers: ["onMove"],
-            triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
-            effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
-            isReaction: true,
-            actionType: "Reaction",
-            outOfCombat: true,
-            frequency: "Other",
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const mover = triggerData.triggeringToken;
-                if (!mover)
-                    return false;
-                return api.checkOverwatchCondition(reactorToken, mover, triggerData.startPos);
-            },
-            activationType: "code",
-            activationMode: "instead",
-            activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                api.executeSimpleActivation(reactorToken.actor, {
-                    title: "Overwatch",
-                    action: {
-                        name: "Overwatch",
-                        activation: "Reaction",
-                    },
-                    detail: "Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move."
-                });
-            }
+            reactions: [{
+                comments: "Reaction Skirmish",
+                triggers: ["onMove"],
+                triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
+                effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
+                isReaction: true,
+                actionType: "Reaction",
+                outOfCombat: true,
+                frequency: "Other",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const mover = triggerData.triggeringToken;
+                    if (!mover)
+                        return false;
+                    return api.checkOverwatchCondition(reactorToken, mover, triggerData.startPos);
+                },
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    api.executeSimpleActivation(reactorToken.actor, {
+                        title: "Overwatch",
+                        action: {
+                            name: "Overwatch",
+                            activation: "Reaction",
+                        },
+                        detail: "Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move."
+                    });
+                }
+            }, {
+                comments: "Overwatch v2",
+                triggers: ["onPreMove"],
+                triggerSelf: false,
+                triggerOther: true,
+                outOfCombat: false,
+                enabled: false,
+                actionType: "Reaction",
+                frequency: "Other",
+                isReaction: true,
+                checkReaction: true,
+                autoActivate: true,
+                forceSynchronous: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const mover = triggerData.triggeringToken;
+                    if (!mover)
+                        return false;
+                    if (triggerData.moveInfo?.isInvoluntary)
+                        return false;
+                    if (api.isFriendly(reactorToken, mover))
+                        return false;
+                    const ranges = api.getMaxWeaponRanges_WithBonus(reactorToken);
+                    const maxThreat = ranges.Threat || 1;
+                    const distance = api.getTokenDistance(reactorToken, mover);
+                    return maxThreat > 1 && distance > 1 && maxThreat >= distance;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const mover = triggerData.triggeringToken;
+                    if (!mover)
+                        return;
+                    let preConfirmResponderIds = [];
+                    const preConfirm = async () => {
+                        const result = await api.startChoiceCard({
+                            title: "OVERWATCH",
+                            icon: api.getActivationIcon("reaction"),
+                            description: `<b>${mover.name}</b> is moving through <b>${reactorToken.name}</b>'s threat range. Fire?`,
+                            originToken: reactorToken,
+                            relatedToken: mover,
+                            userIdControl: api.getTokenOwnerUserId(reactorToken),
+                            choices: [
+                                { text: "Fire", icon: "fas fa-crosshairs", callback: async () => {} },
+                                { text: "Let pass", icon: "fas fa-times", callback: async () => {} }
+                            ]
+                        });
+                        preConfirmResponderIds = result?.responderIds ?? [];
+                        if (result?.choiceIdx === 0) {
+                            await triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0], { moverTokenId: mover.id });
+                            await api.startChoiceCard({
+                                title: `WAITING — ${reactorToken.name.toUpperCase()} OVERWATCH`,
+                                description: `Waiting for <b>${reactorToken.name}</b> to resolve Overwatch against <b>${mover.name}</b>.`,
+                                originToken: reactorToken,
+                                icon: api.getActivationIcon("reaction"),
+                                relatedToken: mover,
+                                userIdControl: null,
+                                choices: [
+                                    { text: "Confirm", icon: "fas fa-check", callback: async () => {} }
+                                ]
+                            });
+                        }
+                        return false;
+                    };
+                    const postChoice = async () => {};
+                    triggerData.cancelTriggeredMove?.(
+                        `<b>${reactorToken.name}</b> triggers Overwatch against <b>${mover.name}</b>.`,
+                        true,
+                        api.getTokenOwnerUserId(mover),
+                        preConfirm,
+                        postChoice,
+                        { originToken: reactorToken, relatedToken: mover }
+                    );
+                }
+            }, {
+                comments: "Overwatch v2",
+                triggers: ["onActivation"],
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: false,
+                enabled: false,
+                actionType: "Reaction",
+                frequency: "Other",
+                autoActivate: true,
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const moverId = triggerData.extraData?.moverTokenId ?? null;
+                    const mover = moverId ? canvas.tokens.get(moverId) ?? null : null;
+                    const distance = mover ? api.getTokenDistance(reactorToken, mover) : 0;
+                    const weaponFilter = distance > 0
+                        ? (w) => {
+                            const ranges = api.getMaxWeaponRanges_WithBonus(w);
+                            return (ranges.Threat || 1) >= distance;
+                        }
+                        : null;
+                    await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter);
+                }
+            }]
         },
         "Brace": {
             category: "General",
@@ -54,7 +154,7 @@ export function getDefaultGeneralReactionRegistry() {
                 actionType: "Reaction",
                 frequency: "Other",
                 isReaction: true,
-                consumesReaction: true,
+                checkReaction: true,
                 triggerOther: true,
                 triggerSelf: false,
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
@@ -95,7 +195,7 @@ export function getDefaultGeneralReactionRegistry() {
                 actionType: "Reaction",
                 frequency: "Other",
                 isReaction: true,
-                consumesReaction: true,
+                checkReaction: true,
                 triggerSelf: true,
                 triggerOther: false,
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -186,7 +286,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerDescription: "Protects flying characters from incompatible statuses and triggers saves on structure/stress.",
             effectDescription: "Flying grants immunity to Prone. Immobilized or Stunned removes Flying. Structure or Stress requires an AGILITY save or begin falling.",
             isReaction: false,
-            consumesReaction: false,
+            checkReaction: false,
             autoActivate: false,
             triggerSelf: true,
             triggerOther: false,
@@ -483,7 +583,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerDescription: "At the end of your turn, if you are airborne without Flying or have Flying but haven't moved at least 1 space, you begin falling.",
                 effectDescription: "You fall, taking AP kinetic damage based on the distance fallen (3 damage per 3 spaces, max 9).",
                 isReaction: false,
-                consumesReaction: false,
+                checkReaction: false,
                 autoActivate: false,
                 triggerSelf: true,
                 triggerOther: false,
@@ -541,7 +641,7 @@ export function getDefaultGeneralReactionRegistry() {
                 comments: "Ground Impact",
                 isReaction: false,
                 onlyOnSourceMatch: true,
-                consumesReaction: false,
+                checkReaction: false,
                 autoActivate: true,
                 triggerSelf: true,
                 triggerOther: false,
@@ -585,7 +685,7 @@ export function getDefaultGeneralReactionRegistry() {
             triggerDescription: "When a character moves",
             effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",
             isReaction: false,
-            consumesReaction: false,
+            checkReaction: false,
             autoActivate: true,
             forceSynchronous: true,
             triggerSelf: true,

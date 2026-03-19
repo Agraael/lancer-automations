@@ -1,6 +1,6 @@
 /* global $, window, game, CONFIG */
 
-import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
+import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
@@ -101,6 +101,7 @@ const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg
 
 export class LancerHUD {
     constructor() {
+        this._bindGen            = 0;
         this._el              = null;
         this._c2              = null;
         this._c3              = null;
@@ -132,6 +133,7 @@ export class LancerHUD {
             return;
         this._tokens = valid;
         this._token  = valid[0];
+        const gen = ++this._bindGen;
         // Pre-cache deployables for the primary token only
         const actor = this._token.actor;
         const lids = [];
@@ -140,10 +142,13 @@ export class LancerHUD {
                 lids.push(lid);
         if (lids.length)
             await Promise.all(lids.map(lid => getDeployableInfo(lid, actor)));
+        if (this._bindGen !== gen)
+            return;
         this._render();
     }
 
     unbind() {
+        this._bindGen++;
         const el = this._el;
         this._el = this._c2 = this._c3 = this._c4 = null;
         this._c4AnchorRow = null;
@@ -402,7 +407,7 @@ export class LancerHUD {
             $(document).on('mousedown.la-hud-cto', (ev) => {
                 if (!this._el)
                     return;
-                if (!$.contains(this._el[0], /** @type {Element} */ (ev.target)) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length) {
+                if (!$.contains(this._el[0], /** @type {Element} */ (/** @type {unknown} */ (ev.target))) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length) {
                     closeCol(c2); closeCol(c3); closeCol(c4);
                     this._statusPanelInstance?.close();
                     _clearC1Active();
@@ -443,7 +448,7 @@ export class LancerHUD {
             }
         });
         searchBar.on('input', () => {
-            const q = searchBar.val().trim().toLowerCase();
+            const q = String(searchBar.val()).trim().toLowerCase();
             if (!q) {
                 this._searchActive = false;
                 closeCol(c2); return;
@@ -490,9 +495,8 @@ export class LancerHUD {
 
     /** Builds the standard effect + description + tags HTML for a system/item detail popup body. */
     _bodyHtml(/** @type {any} */ sys) {
-        const effect = sys?.effect      ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>`      : '';
-        const desc   = sys?.description ? `<div style="font-size:0.82em;color:#888;line-height:1.4;">${laFormatDetailHtml(sys.description)}</div>`                   : '';
-        return laRenderTags(sys?.tags ?? []) + effect + desc;
+        const effect = sys?.effect ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>` : '';
+        return laRenderTags(sys?.tags ?? []) + effect;
     }
 
     /**
@@ -527,7 +531,7 @@ export class LancerHUD {
         }
 
         if (!filteredItems.length) {
-            col.append(`<div style="${S_MUTED}">Empty</div>`);
+            col.append(`<div style="${S_MUTED}height:30px;box-sizing:border-box;display:flex;align-items:center;">Empty</div>`);
             return;
         }
 
@@ -785,7 +789,7 @@ export class LancerHUD {
                 { label: 'Reaction',      childColLabel: 'Reaction', getChildren: () => this._catReactions().getItems() },
                 { label: 'Protocol',      childColLabel: 'Protocol', getChildren: () => this._catProtocols().getItems() },
                 { label: 'Free Actions',  childColLabel: 'Free Actions',     getChildren: () => this._catFreeActions().getItems() },
-                { label: 'Resources', childColLabel: 'Resources', getChildren: () => this._resourceItems() },
+                { label: 'Resources', childColLabel: 'Resources', getChildren: () => (items => items.length ? items : [])(this._resourceItems()) },
             ],
         };
     }
@@ -879,7 +883,7 @@ export class LancerHUD {
                         if (!dep)
                             return;
                         const srcType = item.system?.type ?? '';
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                     },
                 });
             }
@@ -955,7 +959,8 @@ export class LancerHUD {
                     }
                     // A Flex mount with a Main (or larger) weapon has no remaining capacity
                     const flexBlocked = mount.type === 'Flex' && (mount.slots ?? []).some(s => {
-                        if (!s.weapon?.id) return false;
+                        if (!s.weapon?.id)
+                            return false;
                         const w = actor.items.get(s.weapon.id);
                         return w && (w.system?.size ?? '').toLowerCase() !== 'aux';
                     });
@@ -963,7 +968,8 @@ export class LancerHUD {
                         if (slot.weapon?.id) {
                             const weapon = actor.items.get(slot.weapon.id);
                             const mod    = slot.mod?.id ? actor.items.get(slot.mod.id) : null;
-                            if (weapon) result.push(this._weaponItem(weapon, mod, mount));
+                            if (weapon)
+                                result.push(this._weaponItem(weapon, mod, mount));
                         } else if (!flexBlocked) {
                             result.push({ label: `<span style="${MUTED}">Empty</span>` });
                         }
@@ -1028,7 +1034,7 @@ export class LancerHUD {
                     const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
                     const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
                     const subtitle = (opt.isFragmentSignal ? 'Fragment Signal · Quick Tech' : 'Invade · Quick Tech') + sourceLabel;
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle, bodyHtml, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle, bodyHtml, item: opt.item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             })),
         };
@@ -1232,7 +1238,7 @@ export class LancerHUD {
         ];
 
         const movementItems = [
-            { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([...(/** @type {any} */ (game.user)?.targets ?? [])], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },
+            { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },
             { label: 'Fall', icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token) },
             { label: 'Reset History',  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false) },
             { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
@@ -1273,7 +1279,7 @@ export class LancerHUD {
                     .map(/** @type {any} */ s => s?.value)
                     .filter(/** @type {any} */ item => !!item);
                 if (!systems.length)
-                    return [{ isSectionLabel: true, label: 'No systems' }];
+                    return [];
                 return systems.map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
@@ -1284,12 +1290,20 @@ export class LancerHUD {
                         badgeColor: status.badgeColor ?? null,
                         icon: item.img ?? null,
                         hoverData: { actor, item, action: null, category: 'Systems' },
-                        ...(this._systemHasChildren(item, actor) ? { childColLabel: item.name, getChildren: () => this._systemChildren(item, actor) } : {}),
+                        childColLabel: item.name,
+                        getChildren: () => this._systemChildren(item, actor),
                         ...this._statusColors(status),
                         onRightClick: (row) => {
-                            const bodyHtml = this._bodyHtml(sys);
+                            const actionsHtml = (sys.actions ?? []).map(/** @type {any} */ a => {
+                                const det = a.detail ? `<div style="font-size:0.77em;color:#bbb;margin-top:2px;">${laFormatDetailHtml(a.detail)}</div>` : '';
+                                return `<div style="margin-top:6px;padding:4px;background:rgba(255,255,255,0.04);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#e8a020;">[${a.activation}] ${a.name}</div>${det}</div>`;
+                            }).join('');
+                            const depLids = getItemDeployables(item, actor);
+                            const depActors = depLids.map(lid => /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid) ?? getDeployableInfoSync(lid)).filter(Boolean);
+                            const deployablesHtml = depActors.length ? laRenderDeployables(depActors) : '';
+                            const bodyHtml = this._bodyHtml(sys) + actionsHtml + deployablesHtml;
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p) });
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p) });
                         },
                     };
                 });
@@ -1313,24 +1327,32 @@ export class LancerHUD {
         const sys = item.system;
         const ap = a => this._actionPopup(a);
         const children = [];
-        const activationTag = (sys.tags ?? []).find(t => ACTIVATION_TAGS.includes(t.lid));
-        if (activationTag && !(sys.actions ?? []).length) {
-            const activation = activationTag.lid.replace('tg_', '').replace('_action', ' action');
+        const activationTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
+        const sysActions = sys.actions ?? [];
+        if (sysActions.length <= 1) {
+            const single = sysActions[0] ?? null;
+            const actStr = single?.activation ?? (activationTag ? activationTag.lid.replace('tg_', '').replace('_action', ' action') : 'Activation');
             children.push({
-                label: 'Activate',
-                icon: getActivationIcon(activation),
-                onClick: () => /** @type {any} */ (item).beginSystemFlow(),
-                onRightClick: ap({ name: item.name, activation, detail: sys.effect ?? '' }),
-                hoverData: { actor, item, action: { name: item.name, activation }, category: 'Systems' },
+                label: item.name,
+                icon: (single || activationTag) ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg',
+                onClick: single ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0') : () => /** @type {any} */ (item).beginSystemFlow(),
+                onRightClick: single ? ap(single)
+                    : activationTag ? (/** @type {any} */ row) => {
+                        const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'sys-activate', dataValue: item.id, title: item.name, subtitle, bodyHtml: this._bodyHtml(sys), theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: /** @type {any} */ p => appendItemPips(item, p) });
+                    }
+                        : ap({ name: item.name, activation: 'Activation', detail: 'Default system activation.' }),
+                hoverData: { actor, item, action: { name: item.name, activation: actStr }, category: 'Systems' },
             });
-        }
-        for (const action of (sys.actions ?? [])) {
-            children.push({
-                label: action.name,
-                icon: getActivationIcon(action),
-                onClick: () => /** @type {any} */ (item).beginSystemFlow(),
-                onRightClick: ap(action),
-                hoverData: { actor, item, action, category: 'Systems' },
+        } else {
+            sysActions.forEach((action, idx) => {
+                children.push({
+                    label: action.name,
+                    icon: getActivationIcon(action),
+                    onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
+                    onRightClick: ap(action),
+                    hoverData: { actor, item, action, category: 'Systems' },
+                });
             });
         }
         const sysActionNames = new Set((sys.actions ?? []).map(/** @type {any} */ a => a.name));
@@ -1348,7 +1370,7 @@ export class LancerHUD {
                     const isWeapon = opt.item?.type?.includes('weapon');
                     const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
                     const sourceLabel = opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle: `Invade · Quick Tech${sourceLabel}`, bodyHtml, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle: `Invade · Quick Tech${sourceLabel}`, bodyHtml, item: opt.item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             });
         }
@@ -1371,7 +1393,7 @@ export class LancerHUD {
                         if (!dep)
                             return;
                         const srcType = item.system?.type ?? '';
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                     },
                 });
             }
@@ -1387,7 +1409,7 @@ export class LancerHUD {
             getItems: () => {
                 const frame = actor?.system?.loadout?.frame?.value;
                 if (!frame)
-                    return [{ isSectionLabel: true, label: 'No frame equipped' }];
+                    return [];
                 const sys = frame.system;
                 const as = actor.system;
                 const frameSubtitle = [sys.manufacturer, sys.license ? `LL${sys.license_level}` : null, ...(sys.mechtype ?? []), as.size != null ? `Size ${as.size}` : null].filter(Boolean).join(' · ');
@@ -1413,9 +1435,9 @@ export class LancerHUD {
                     {
                         label: frame.name,
                         icon: 'systems/lancer/assets/icons/frame.svg',
-                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                     },
-                    { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor) },
+                    { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
                     { label: 'Core Bonus',  childColLabel: 'Core Bonus',  getChildren: () => this._coreBonusItems(actor) },
                 ];
@@ -1444,7 +1466,7 @@ export class LancerHUD {
                 const tierClamped = Math.min(3, Math.max(1, tier));
                 const tierIcon = `systems/lancer/assets/icons/npc_tier_${tierClamped}.svg`;
                 if (!npcClass)
-                    return [{ isSectionLabel: true, label: 'No class' }];
+                    return [];
                 const as = /** @type {any} */ (actor.system) ?? {};
                 const tierIdx = Math.max(0, Math.min(2, tierClamped - 1));
                 const bs = npcClass.system?.base_stats?.[tierIdx] ?? {};
@@ -1508,6 +1530,7 @@ export class LancerHUD {
                             ].filter(Boolean).join(' · '),
                             bodyHtml,
                             theme: 'frame',
+                            item: npcClass,
                             row,
                             showPopupAt: (p, r) => this._showPopupAt(p, r),
                         }),
@@ -1537,6 +1560,7 @@ export class LancerHUD {
                     subtitle: 'Template',
                     bodyHtml: desc,
                     theme: 'frame',
+                    item: tmpl,
                     row,
                     showPopupAt: (p, r) => this._showPopupAt(p, r),
                 });
@@ -1547,7 +1571,7 @@ export class LancerHUD {
     _npcTraitItems(/** @type {any} */ actor) {
         const traits = actor.items.filter(/** @type {any} */ i => i.type === 'npc_feature' && i.system.type === 'Trait');
         if (!traits.length)
-            return [{ isSectionLabel: true, label: 'No traits' }];
+            return [];
         return traits.map(/** @type {any} */ feat => {
             const sys = feat.system;
             return {
@@ -1568,6 +1592,7 @@ export class LancerHUD {
                         subtitle: origin,
                         bodyHtml,
                         theme: 'trait',
+                        item: feat,
                         row,
                         showPopupAt: (p, r) => this._showPopupAt(p, r),
                     });
@@ -1594,22 +1619,55 @@ export class LancerHUD {
                     (i.system.type === 'System' || i.system.type === 'Reaction')
                 );
                 if (!features.length)
-                    return [{ isSectionLabel: true, label: 'No systems' }];
+                    return [];
                 return /** @type {any[]} */ (features).map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
                     const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${item.name}</s>` : item.name;
                     const actTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
-                    const actLabel = actTag ? (ACT_LABELS[actTag.lid] ?? actTag.lid) : null;
-                    const activation = actTag ? actTag.lid.replace('tg_', '').replace('_action', ' action') : null;
+                    const TYPE_TO_ACTIVATION = { Reaction: 'Reaction', System: null, Tech: 'Quick Tech', Trait: null, Weapon: null };
+                    const activation = actTag
+                        ? actTag.lid.replace('tg_', '').replace('_action', ' action')
+                        : (TYPE_TO_ACTIVATION[sys.type] ?? null);
+                    const actLabel = actTag ? (ACT_LABELS[actTag.lid] ?? actTag.lid) : (activation ?? null);
                     const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
+                    const npcSysChildren = () => {
+                        const npcActions = /** @type {any[]} */ (sys.actions ?? []);
+                        const npcRightClick = (/** @type {any} */ row) => {
+                            const trigger = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
+                            const effect  = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
+                            const bodyHtml = laRenderTags(sys.tags ?? []) + trigger + effect;
+                            if (!bodyHtml)
+                                return;
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: /** @type {any} */ p => appendItemPips(item, p) });
+                        };
+                        if (npcActions.length <= 1) {
+                            const single = npcActions[0] ?? null;
+                            const actStr = single?.activation ?? activation ?? 'Activation';
+                            return [{
+                                label: item.name,
+                                icon: (single || activation) ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg',
+                                onClick: () => /** @type {any} */ (item).beginSystemFlow(),
+                                onRightClick: npcRightClick,
+                                hoverData: { actor, item, action: { name: item.name, activation: actStr }, category: 'Systems' },
+                            }];
+                        }
+                        return npcActions.map(/** @type {any} */ (action, idx) => ({
+                            label: action.name,
+                            icon: getActivationIcon(action),
+                            onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
+                            onRightClick: npcRightClick,
+                            hoverData: { actor, item, action, category: 'Systems' },
+                        }));
+                    };
                     return {
                         label: labelHtml,
                         badge: status.badge ?? null,
                         badgeColor: status.badgeColor ?? null,
                         icon: item.img ?? null,
                         ...this._statusColors(status),
-                        onClick: activation ? () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation }, detail: sys.effect ?? '' }) : null,
+                        childColLabel: item.name,
+                        getChildren: npcSysChildren,
                         onRightClick: (/** @type {any} */ row) => {
                             const trigger  = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
                             const effect   = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
@@ -1625,6 +1683,7 @@ export class LancerHUD {
                                 subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '),
                                 bodyHtml,
                                 theme: activation ? activationTheme(activation) : 'system',
+                                item,
                                 row,
                                 showPopupAt: (p, r) => this._showPopupAt(p, r),
                                 postRender: p => appendItemPips(item, p),
@@ -1638,28 +1697,56 @@ export class LancerHUD {
     }
 
     _corePowerItems(/** @type {any} */ frame, /** @type {any} */ actor) {
-        const ap = a => this._actionPopup(a, null, 'frame');
         const cs = frame.system?.core_system;
         const coreName = cs?.active_name ?? 'Core Power';
         const coreUsed = actor.system?.core_energy === 0;
         const activeAction = cs?.active_actions?.[0];
-        return [{
+        const passiveName = cs?.passive_name ?? '';
+        const passiveActions = cs?.passive_actions ?? [];
+        const counters = cs?.counters ?? [];
+
+        const rows = /** @type {any[]} */ ([{
             label: coreName,
             icon: getActivationIcon(activeAction ?? 'Protocol'),
             highlightBg: coreUsed ? '#ffe5b4' : null,
             highlightBorderColor: coreUsed ? '#cc7700' : null,
             onClick: () => /** @type {any} */ (frame.beginCoreActiveFlow('system.core_system')),
-            onRightClick: ap({ name: coreName, activation: activeAction?.activation ?? 'Protocol', detail: `<b>${frame.name} — Core Active</b><br>${cs?.active_effect ?? cs?.description ?? ''}` }),
-        }];
+            onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `${frame.name} · Core Active`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+        }]);
+
+        if (passiveName || passiveActions.length) {
+            rows.push({ label: 'PASSIVE', isSectionLabel: true });
+            if (passiveName) {
+                rows.push({
+                    label: passiveName,
+                    icon: 'systems/lancer/assets/icons/core_bonus.svg',
+                    onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.passive_effect ?? '')}</div>${laRenderActions(cs?.passive_actions ?? [])}`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                });
+            }
+            for (const action of passiveActions) {
+                rows.push({ label: action.name, icon: getActivationIcon(action), onRightClick: this._actionPopup(action, null, 'frame') });
+            }
+        }
+
+        if (counters.length) {
+            rows.push({ label: 'RESOURCES', isSectionLabel: true });
+            counters.forEach((/** @type {any} */ counter, /** @type {number} */ cidx) => {
+                const path = `system.core_system.counters.${cidx}.value`;
+                rows.push(this._buildCounterRow(counter, path, frame));
+            });
+        }
+
+        return rows;
     }
 
     _frameTraitItems(/** @type {any} */ frame, /** @type {any} */ actor) {
         const ap = a => this._actionPopup(a);
         const traits = frame.system?.traits ?? [];
         if (!traits.length)
-            return [{ isSectionLabel: true, label: 'No traits' }];
+            return [];
         return traits.map(/** @type {any} */ trait => ({
             label: trait.name,
+            icon: 'systems/lancer/assets/icons/trait.svg',
             childColLabel: trait.name,
             getChildren: () => {
                 const children = [];
@@ -1686,7 +1773,7 @@ export class LancerHUD {
                             }
                             if (!dep)
                                 return;
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${trait.name} (Trait)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${trait.name} (Trait)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                         },
                     });
                 }
@@ -1711,7 +1798,7 @@ export class LancerHUD {
                 const bodyHtml = trait.description
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(trait.description)}</div>`
                     : '<div style="font-size:0.82em;color:#888;">No description.</div>';
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
@@ -1723,7 +1810,7 @@ export class LancerHUD {
             label: cb.name,
             icon: cb.img ?? null,
             onRightClick: (/** @type {any} */ row) => {
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: laRenderCoreBonusBody(cb), theme: 'core_bonus', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: laRenderCoreBonusBody(cb), theme: 'core_bonus', item: cb, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
             },
         }));
     }
@@ -1741,7 +1828,7 @@ export class LancerHUD {
                 childColLabel: intItem.name,
                 getChildren: () => this._systemChildren(intItem, actor),
                 onRightClick: (/** @type {any} */ row) => {
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: this._bodyHtml(intItem.system), theme: 'system', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p) });
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: this._bodyHtml(intItem.system), theme: 'system', item: intItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p) });
                 },
             };
         });
@@ -1762,7 +1849,7 @@ export class LancerHUD {
                         }
                         if (!dep)
                             return;
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${frame.name} (Core)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${frame.name} (Core)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                     },
                 }));
             }
@@ -1778,10 +1865,10 @@ export class LancerHUD {
             getItems: () => {
                 const pilot = actor?.system?.pilot?.value ?? actor;
                 if (!pilot)
-                    return [{ isSectionLabel: true, label: 'No pilot linked' }];
+                    return [];
                 const talents = [...pilot.items.values()].filter(i => i.type === 'talent');
                 if (!talents.length)
-                    return [{ isSectionLabel: true, label: 'No talents' }];
+                    return [];
                 return talents.map(talent => ({
                     label: talent.name,
                     icon: talent.img ?? null,
@@ -1821,7 +1908,7 @@ export class LancerHUD {
                             </div>`).join('')}</div>`
                         : '';
                     const bodyHtml = (descHtml + actionsHtml + countersHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, theme: 'talent', row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, theme: 'talent', item: talent, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
                 },
             };
         });
@@ -1874,6 +1961,12 @@ export class LancerHUD {
                 });
             });
         }
+        const frame = actor?.system?.loadout?.frame?.value;
+        const csCounters = frame?.system?.core_system?.counters ?? [];
+        csCounters.forEach((/** @type {any} */ counter, /** @type {number} */ cidx) => {
+            const path = `system.core_system.counters.${cidx}.value`;
+            items.push(this._buildCounterRow(counter, path, frame, 'modules/lancer-automations/icons/perspective-dice-two.svg'));
+        });
         return items;
     }
 
@@ -1931,7 +2024,7 @@ export class LancerHUD {
                 });
                 const profileType = sys.profiles?.[sys.selected_profile_index ?? 0]?.type;
                 const subtitle = [sys.mount_type ?? sys.size, profileType ?? sys.weapon_type].filter(Boolean).join(' · ');
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
+                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
             },
         };
     }
@@ -1951,7 +2044,7 @@ export class LancerHUD {
             if (modItem && child.label === modItem.name) {
                 const ms = modItem.system;
                 const subtitle = [ms?.type, ms?.license ? `${ms.manufacturer} ${ms.license_level}` : null].filter(Boolean).join(' · ') || 'Weapon Mod';
-                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-mod-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle, bodyHtml: laRenderModBody(modItem), theme: 'mod', row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
+                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-mod-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle, bodyHtml: laRenderModBody(modItem), theme: 'mod', item: modItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
             }
             if (!child.onClick)
                 return child;
@@ -1960,11 +2053,34 @@ export class LancerHUD {
                 const weaponList = mountWeapons.length ? mountWeapons.join(', ') : weapon.name;
                 const title = attackLabel === 'FIGHT' ? 'Fight' : attackLabel === 'BARRAGE' ? 'Barrage' : 'Skirmish';
                 const body = `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${title} with: <b>${weaponList}</b></div>`;
-                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: attackLabel, title, subtitle: attackLabel === 'FIGHT' ? 'Full' : attackLabel === 'BARRAGE' ? 'Full' : 'Quick', bodyHtml: body, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) };
+                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: attackLabel, title, subtitle: attackLabel === 'FIGHT' ? 'Full' : attackLabel === 'BARRAGE' ? 'Full' : 'Quick', bodyHtml: body, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) };
             }
             return child;
         });
-        const onActivate = (a) => executeSimpleActivation(actor, { title: a.name, action: a, detail: a.detail ?? '' });
+        const onActivate = (a, source) => {
+            const si = /** @type {any} */ (source ?? weapon);
+            // Invade on mech_weapon: TechAttackFlow rejects weapon items, use executeInvade instead
+            if (a.activation === 'Invade' && si.type === 'mech_weapon') {
+                const opt = this._getInvadeOptions(actor).find(o => o.name === a.name && o.item?.id === si.id)
+                    ?? { name: a.name, detail: a.detail ?? '', item: si, action: a, unavailable: false, destroyed: false };
+                executeInvade(actor, opt);
+                return;
+            }
+            const sysActions = si.system?.actions ?? [];
+            const sysIdx = sysActions.findIndex(sa => sa.name === a.name && sa.activation === a.activation);
+            if (sysIdx >= 0) {
+                si.beginActivationFlow(`system.actions.${sysIdx}`);
+                return;
+            }
+            const profIdx = si.system?.selected_profile_index ?? 0;
+            const profActions = si.system?.profiles?.[profIdx]?.actions ?? [];
+            const pIdx = profActions.findIndex(pa => pa.name === a.name && pa.activation === a.activation);
+            if (pIdx >= 0) {
+                si.beginActivationFlow(`system.profiles.${profIdx}.actions.${pIdx}`);
+                return;
+            }
+            executeSimpleActivation(actor, { title: a.name, action: a, detail: a.detail ?? '' });
+        };
         if (actor.type === 'pilot') {
             return addRightClicks(addHover(laHudItemChildren(weapon, {
                 defaultActions: [
@@ -1976,7 +2092,7 @@ export class LancerHUD {
                             const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
                                 (w).beginWeaponAttackFlow();
                         },
-                        onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                        onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                     },
                     {
                         label: 'FIGHT',
@@ -2005,7 +2121,7 @@ export class LancerHUD {
                         const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
                             (w).beginWeaponAttackFlow();
                     },
-                    onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                    onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                 },
                 {
                     label: attackLabel,
@@ -2102,22 +2218,24 @@ export class LancerHUD {
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
             const theme = themeOverride ?? activationTheme(action.activation);
             const sourceItem = typeof source === 'string' ? null : source;
-            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p) : null });
+            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, item: sourceItem ?? action.name, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p) : null });
         };
     }
 
     _getActionsByActivation(actor, activationType, category = null) {
-        return getActorActionItems(actor, activationType).map(({ action, sourceItem, rankIdx }) => {
+        return getActorActionItems(actor, activationType).map((/** @type {any} */ { action, sourceItem, rankIdx, _coreActive }) => {
             const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };
             return {
                 label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>` : action.name,
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
-                icon: getActivationIcon(action) ?? sourceItem?.img ?? null,
+                icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (getActivationIcon(action) ?? sourceItem?.img ?? null),
                 ...this._statusColors(status),
                 onClick: () => {
                     const si = /** @type {any} */ (sourceItem);
-                    if (si?.type === 'mech_system' || si?.type === 'npc_feature')
+                    if (_coreActive)
+                        si.beginCoreActiveFlow('system.core_system');
+                    else if (si?.type === 'mech_system' || si?.type === 'npc_feature')
                         si.beginSystemFlow();
                     else if (si?.type === 'talent')
                         si.beginActivationFlow(rankIdx ?? 0);
@@ -2126,7 +2244,11 @@ export class LancerHUD {
                 },
                 broadcastFn: (t, a) => {
                     const si = /** @type {any} */ (sourceItem);
-                    if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
+                    if (_coreActive) {
+                        const equiv = /** @type {any} */ (a).system?.loadout?.frame?.value;
+                        if (equiv)
+                            equiv.beginCoreActiveFlow('system.core_system');
+                    } else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
                         const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
                         if (equiv)
                             equiv.beginSystemFlow();

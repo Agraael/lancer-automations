@@ -1,6 +1,13 @@
 /* global $ */
 
 import { laDetailPopup, laBindPopupBehavior } from '../interactive/detail-renderers.js';
+import { ReactionManager } from '../reaction-manager.js';
+
+function hasAutomation(itemOrName) {
+    const lid = itemOrName?.system?.lid;
+    const group = lid ? ReactionManager.getReactions(lid) : ReactionManager.getGeneralReaction(itemOrName);
+    return !!(group?.reactions?.length);
+}
 
 /**
  * Position and animate a popup into view next to `anchorEl`.
@@ -46,7 +53,9 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
             bridge.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
             $('body').append(bridge);
             const mo = new MutationObserver(() => {
-                if (!document.contains(popup[0])) { bridge.remove(); mo.disconnect(); }
+                if (!document.contains(popup[0])) {
+                    bridge.remove(); mo.disconnect();
+                }
             });
             mo.observe(document.body, { childList: true });
         }
@@ -64,13 +73,14 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
  *   title:         string,
  *   subtitle:      string,
  *   bodyHtml:      string,
- *   theme?:      string,
+ *   theme?:        string,
+ *   item?:         any,
  *   row:           any,
  *   showPopupAt:   (popup: any, row: any) => void,
  *   postRender?:   (popup: any) => void
  * }} opts
  */
-export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', row, showPopupAt: show, postRender = null }) {
+export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: show, postRender = null }) {
     const selector = '.' + cssClass.trim().split(/\s+/).pop(); // last class is the specific one
     const existing = $(selector);
     if (existing.length && existing.data(dataKey) === dataValue) {
@@ -81,7 +91,13 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
     if (!bodyHtml)
         return;
     const popup = laDetailPopup(cssClass, title, subtitle, bodyHtml, theme);
+    if (item && hasAutomation(item)) {
+        const closeBtn = popup.find('.la-detail-close');
+        closeBtn.wrap('<div style="display:flex;align-items:center;gap:4px;"></div>');
+        closeBtn.before($(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`));
+    }
     popup.data(dataKey, dataValue);
-    if (postRender) postRender(popup);
+    if (postRender)
+        postRender(popup);
     show(popup, row);
 }
