@@ -284,16 +284,7 @@ export class ReactionManager {
         };
 
         const jsonStr = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([jsonStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `lancer-activations-${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        saveDataToFile(jsonStr, "application/json", `lancer-activations-${new Date().toISOString().slice(0, 10)}.json`);
 
         ui.notifications.info("Activations exported successfully.");
     }
@@ -1580,6 +1571,72 @@ export class ReactionEditor extends FormApplication {
 
         generalCheckbox.on('change', toggleFields);
         toggleFields();
+
+        // Clipboard copy — read live form + editor values
+        html.find('.clipboard-copy').on('click', async () => {
+            try {
+                const r = this.object?.reaction ?? {};
+                const triggers = [];
+                html.find('input[name^="trigger."]').each(function () {
+                    if ($(this).prop('checked'))
+                        triggers.push($(this).attr('name').replace('trigger.', ''));
+                });
+                const dispositionFilter = [];
+                ['friendly', 'neutral', 'hostile', 'secret'].forEach(d => {
+                    if (html.find(`input[name="dispositionFilter.${d}"]`).prop('checked'))
+                        dispositionFilter.push(d);
+                });
+                const reaction = {
+                    triggers,
+                    evaluate: this.evaluateEditor ? this.evaluateEditor.getValue() : (html.find('textarea[name="evaluate"]').val() || ""),
+                    triggerDescription: String(html.find('textarea[name="triggerDescription"]').val() || ""),
+                    effectDescription: String(html.find('textarea[name="effectDescription"]').val() || ""),
+                    actionType: String(html.find('select[name="actionType"]').val() || r.actionType || "Automation"),
+                    frequency: String(html.find('select[name="frequency"]').val() || r.frequency || "Unlimited"),
+                    checkReaction: html.find('input[name="checkReaction"]').prop('checked'),
+                    checkUsage: html.find('input[name="checkUsage"]').prop('checked'),
+                    autoActivate: html.find('input[name="autoActivate"]').prop('checked'),
+                    forceSynchronous: html.find('input[name="forceSynchronous"]').prop('checked'),
+                    triggerSelf: html.find('input[name="triggerSelf"]').prop('checked'),
+                    triggerOther: html.find('input[name="triggerOther"]').prop('checked'),
+                    outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
+                    onlyOnSourceMatch: html.find('input[name="onlyOnSourceMatch"]').filter(':checked').length > 0,
+                    activationType: String(html.find('select[name="activationType"]').val() || r.activationType || "flow"),
+                    activationMode: String(html.find('select[name="activationMode"]').val() || r.activationMode || "after"),
+                    activationMacro: String(html.find('input[name="activationMacro"]').val() || ""),
+                    activationCode: this.codeEditor ? this.codeEditor.getValue() : (html.find('textarea[name="activationCode"]').val() || ""),
+                    onInit: this.onInitEditor ? this.onInitEditor.getValue() : (html.find('textarea[name="onInit"]').val() || ""),
+                    onMessage: this.onMessageEditor ? this.onMessageEditor.getValue() : (html.find('textarea[name="onMessage"]').val() || ""),
+                    reactionPath: String(html.find('input[name="reactionPath"]').val() || ""),
+                    comments: String(html.find('input[name="commentsItem"], input[name="commentsGeneral"]').filter(':visible').val() || ""),
+                    dispositionFilter: dispositionFilter.length ? dispositionFilter : null,
+                };
+                const isGeneral = html.find('#isGeneral').prop('checked');
+                const name = isGeneral ? String(html.find('input[name="name"]').val() || "") : "";
+                const lid = isGeneral ? name : String(html.find('input[name="lid"]').val() || "");
+                const payload = { isGeneral, lid, name, reaction };
+                await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+                ui.notifications.info("Activation copied to clipboard.");
+            } catch (e) {
+                ui.notifications.error("Failed to copy to clipboard.");
+            }
+        });
+
+        // Clipboard paste
+        html.find('.clipboard-paste').on('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const payload = JSON.parse(text);
+                if (!payload?.reaction) {
+                    ui.notifications.error("Clipboard does not contain a valid activation.");
+                    return;
+                }
+                this.object = { ...this.object, ...payload, name: payload.name ?? (payload.isGeneral ? payload.lid : (this.object.name ?? "")) };
+                this.render();
+            } catch (e) {
+                ui.notifications.error("Failed to load from clipboard: invalid JSON.");
+            }
+        });
 
         const onlyOnSourceMatchCheckbox = html.find('input[name="onlyOnSourceMatch"]');
         const triggerCheckboxes = html.find('input[name^="trigger."]');

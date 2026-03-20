@@ -330,7 +330,7 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
     const targets = Array.from(game.user?.targets || []);
 
     for (const bonus of bonuses) {
-        if (bonus.applyToTargetter || !(await isBonusApplicable(bonus, tags, state)) || bonus.type === 'stat') {
+        if (bonus.applyToTargetter || !(await isBonusApplicable(bonus, tags, state)) || bonus.type === 'stat' || bonus.type === 'range') {
             continue;
         }
 
@@ -2055,5 +2055,6 @@ export const BonusesAPI = {
     applyDamageImmunities,
     hasCritImmunity,
     hasHitImmunity,
-    hasMissImmunity
+    hasMissImmunity,
+    injectBonusToFlowState
 };

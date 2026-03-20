@@ -88,6 +88,36 @@ export function getActiveGMId() {
 }
 
 /**
+ * Creates a non-interactive waiting card (same style as startChoiceCard's waiting state).
+ * Returns an object with a `remove()` method to dismiss the card.
+ * @param {Object} options
+ * @param {string} [options.title]
+ * @param {string} [options.description]
+ * @param {string} [options.waitMessage] - Text shown in the hourglass line
+ * @param {Token} [options.originToken]
+ * @param {Token} [options.relatedToken]
+ * @param {Item} [options.item]
+ * @returns {{ remove: () => void }}
+ */
+export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for response…', originToken = null, relatedToken = null, item = null } = {}) {
+    const waitDesc = (description ? description + '<br>' : '') +
+        `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> ${waitMessage}</em>`;
+    const cardEl = _createInfoCard("choiceCard", {
+        title,
+        description: waitDesc,
+        disabled: true,
+        relatedToken,
+        originToken,
+        onConfirm: () => {},
+        onCancel: () => {}
+    });
+    _updateInfoCard(cardEl, "choiceCard", { choices: [], chosenSet: new Set(), disabled: true, onChoose: () => {} });
+    _bindItemChip(cardEl, item);
+    _updatePendingBadge();
+    return { remove: () => _removeInfoCard(cardEl) };
+}
+
+/**
  * Returns all active OWNER-level non-GM userIds for a token.
  * Falls back to the active GM's userId if no player owners are found.
  * @param {Token} token

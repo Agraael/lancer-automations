@@ -500,7 +500,7 @@ interface LancerAutomationsAPI {
         tagMode?: "add" | "override";
         removeTag?: boolean;
         rangeType?: string;
-        rangeMode?: "add" | "override";
+        rangeMode?: "add" | "override" | "change";
         bonuses?: object[];
         uses?: number;
         stat?: string;

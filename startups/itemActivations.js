@@ -182,7 +182,14 @@ const movingTargetSniperReaction = {
             };
             const postChoice = async (chose) => {
                 if (!chose && preConfirmResponderIds.length > 0){
-                    await triggerData.sendMessageToReactor({ moverTokenId: mover.id }, preConfirmResponderIds[0]);
+                    await (/** @type {any} */(triggerData.sendMessageToReactor))({ moverTokenId: mover.id }, preConfirmResponderIds[0], {
+                        wait: true,
+                        waitTitle: "MOVING TARGET",
+                        waitDescription: `Waiting for <b>${reactorToken.name}</b>'s player to fire…`,
+                        waitItem: item,
+                        waitOriginToken: reactorToken,
+                        waitRelatedToken: mover
+                    });
                 }
             };
             triggerData.cancelTriggeredMove?.(
@@ -1030,9 +1037,17 @@ const antiMaterielRifleReaction = {
                 if (isProne || hasHardCover || hasSoftCover)
                     continue;
 
-                await triggerData.sendMessageToReactor(
+                await (/** @type {any} */(triggerData.sendMessageToReactor))(
                     { targetId: target.id, sniperSourceId: reactorToken.id },
-                    gmUserId
+                    gmUserId,
+                    {
+                        wait: true,
+                        waitTitle: "ANTI-MATERIEL RIFLE",
+                        waitDescription: `Waiting for GM to confirm Sniper's Mark damage on <b>${target.name}</b>…`,
+                        waitItem: item,
+                        waitOriginToken: reactorToken,
+                        waitRelatedToken: target
+                    }
                 );
             }
         },
@@ -1970,8 +1985,208 @@ api.registerDefaultItemReactions({
             },
         }]
     },
+    "npcf_deadmetal_rounds_sniper": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Quick Action",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                await api.addGlobalBonus(reactorToken.actor, {
+                    id: `deadmetal-rounds-${reactorToken.id}`,
+                    name: "Deadmetal Rounds",
+                    type: "range",
+                    rangeType: "Line",
+                    rangeMode: "change",
+                    val: 20,
+                    itemLids: ["npcf_anti_materiel_rifle_sniper"]
+                }, {
+                    duration: "indefinite",
+                    consumption: {
+                        trigger: "onAttack",
+                        itemLid: "npcf_anti_materiel_rifle_sniper"
+                    }
+                });
+            }
+        }]
+    },
+    ...Object.fromEntries([
+        "npcf_lightning_reflexes_veteran",
+        "npc-rebake_npcf_lightning_reflexes_veteran"
+    ].map(lid => [lid, {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onAttack"],
+            onlyOnSourceMatch: false,
+            triggerSelf: false,
+            triggerOther: true,
+            autoActivate: true,
+            outOfCombat: true,
+            actionType: "Automation",
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken) {
+                return triggerData.targets?.some(t => t.id === reactorToken.id);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const weaponSize = triggerData.flowState?.item?.system?.size ?? "";
+                const isHeavyOrSuperheavy = weaponSize === "Heavy" || weaponSize === "Superheavy";
+                if (!isHeavyOrSuperheavy)
+                    return;
+
+                const targetOwnerId = api.getTokenOwnerUserId(reactorToken)?.[0];
+                const result = /** @type {any} */(await (/** @type {any} */(triggerData.sendMessageToReactor))({}, targetOwnerId, {
+                    wait: true,
+                    waitTitle: "LIGHTNING REFLEXES",
+                    waitDescription: `Waiting for <b>${reactorToken.name}</b>'s player to roll…`,
+                    waitItem: item,
+                    waitOriginToken: reactorToken,
+                }));
+                if (result?.hitImmune) {
+                    api.injectBonusToFlowState(triggerData.flowState, {
+                        id: `lightning-reflexes-${reactorToken.id}`,
+                        name: "Lightning Reflexes",
+                        type: "immunity",
+                        subtype: "hit"
+                    });
+                }
+            },
+            onMessage: async function (_triggerType, _data, reactorToken, item, _activationName, api) {
+                return /** @type {Promise<any>} */(new Promise(async resolve => {
+                    await api.startChoiceCard({
+                        title: "LIGHTNING REFLEXES",
+                        description: `<b>${reactorToken.name}</b> is hit by a heavy weapon — roll 1d6, on 5+ avoid the hit!`,
+                        item,
+                        originToken: reactorToken,
+                        userIdControl: null,
+                        choices: [{
+                            text: "Roll 1d6",
+                            icon: "fas fa-dice",
+                            callback: async () => {
+                                const roll = await new Roll("1d6").evaluate();
+                                await roll.toMessage({
+                                    flavor: `Lightning Reflexes — ${roll.total >= 5 ? "Hit avoided!" : "Failed."}`,
+                                    speaker: ChatMessage.getSpeaker({ token: reactorToken.document })
+                                });
+                                resolve({ hitImmune: roll.total >= 5 });
+                            }
+                        }]
+                    });
+                }));
+            }
+        }]
+    }])),
+    ...Object.fromEntries([
+        "npcf_feign_death_veteran",
+        "npc-rebake_npcf_feign_death_veteran"
+    ].map(lid => [lid, {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onDestroyed"],
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            actionType: "Automation",
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken) {
+                return !reactorToken.document.getFlag("lancer-automations", "feign_death");
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
+                await api.startChoiceCard({
+                    title: "FEIGN DEATH",
+                    description: `Does <b>${reactorToken.name}</b> feign death?`,
+                    item,
+                    originToken: reactorToken,
+                    userIdControl: gmUserId,
+                    choices: [{
+                        text: "Feign Death",
+                        icon: "fas fa-skull",
+                        callback: async () => {
+                            const tokenData = reactorToken.document.toObject();
+                            tokenData.hidden = true;
+                            foundry.utils.setProperty(tokenData, "flags.lancer-automations.feign_death", true);
+                            const [newTokenDoc] = await canvas.scene.createEmbeddedDocuments("Token", [tokenData]);
+                            await (/** @type {any} */(newTokenDoc.actor)).update({
+                                "system.hp.value": 1,
+                                "system.structure.value": 1,
+                                "system.stress.value": 1
+                            });
+                        }
+                    }]
+                });
+            }
+        }]
+    }])),
     "npcf_snipers_mark_sniper": sniperMarkReaction,
-    "npcf_anti_materiel_rifle_sniper": antiMaterielRifleReaction
+    "npcf_anti_materiel_rifle_sniper": antiMaterielRifleReaction,
+    ...Object.fromEntries([
+        "npc-rebake_npcf_climber_sniper",
+        "moff_climber_infiltrator",
+        "npcf_climber_sniper",
+        "ubrg_npcf_climber_spider",
+        "ubrg_npcf_climber_ghul"
+    ].map(lid => [lid, {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.addConstantBonus(token.actor, {
+                    id: `climber-elevation-immunity-${item.id}`,
+                    name: "Climber",
+                    type: "immunity",
+                    subtype: "elevation"
+                });
+            }
+        }]
+    }]))
+});
+
+// ─── CQB Training (Strider) ───────────────────────────────────────────────────
+api.registerDefaultItemReactions({
+    "nrfaw-npc_npcf_cqb_training_strider": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.addConstantBonus(token.actor, {
+                    id: `cqb-training-slowed-immunity-${item.id}`,
+                    name: "CQB Training",
+                    type: "immunity",
+                    subtype: "effect",
+                    effects: ["slowed"]
+                });
+                await api.addConstantBonus(token.actor, {
+                    id: `cqb-training-grappled-immunity-${item.id}`,
+                    name: "CQB Training",
+                    type: "immunity",
+                    subtype: "effect",
+                    effects: ["grappled"]
+                });
+            }
+        }]
+    }
 });
 
 // ─── Fall Prone (Sniper's Mark) general reaction ───────────────────────────────

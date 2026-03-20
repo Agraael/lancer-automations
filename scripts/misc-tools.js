@@ -1608,7 +1608,7 @@ export function getActivationIcon(actionOrActivation) {
     const isTech = actionOrActivation?.tech_attack === true;
     const activation = typeof actionOrActivation === 'string' ? actionOrActivation : (actionOrActivation?.activation || '');
     const a = activation.toLowerCase();
-    if (isTech) {
+    if (isTech || a.includes('tech')) {
         if (a.includes('full'))
             return 'systems/lancer/assets/icons/tech_full.svg';
         return 'systems/lancer/assets/icons/tech_quick.svg';
@@ -1656,4 +1656,5 @@ export const MiscAPI = {
     beginWeaponThrowFlow,
     beginWeaponAttackFlow,
     getActivationIcon,
+    executeFall,
 };

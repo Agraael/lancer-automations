@@ -18,7 +18,7 @@ import { cancelRulerDrag ,
     getActiveGMId, getTokenOwnerUserId,
     showVoteCardOnVoter, receiveVoteSubmission,
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
-    handleManualDeployLink
+    handleManualDeployLink, startWaitCard
 } from './interactive/index.js';
 import {
     EffectsAPI,
@@ -267,12 +267,14 @@ async function checkOnMessageReactions(token, itemLid, reactionPath, activationN
                 if (!reaction.onMessage)
                     continue;
                 try {
+                    let result;
                     if (typeof reaction.onMessage === 'function') {
-                        await reaction.onMessage(triggerType, data, token, item, activationName, api);
+                        result = await reaction.onMessage(triggerType, data, token, item, activationName, api);
                     } else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim()) {
                         const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"]);
-                        await fn(triggerType, data, token, item, activationName, api);
+                        result = await fn(triggerType, data, token, item, activationName, api);
                     }
+                    return result;
                 } catch (e) {
                     console.error(`lancer-automations | Error in onMessage for ${item.name}:`, e);
                 }
@@ -391,7 +393,7 @@ async function _beginFlow(flowName, target, options = {}, extraData = {}) {
  */
 function _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType) {
     const itemLid = item ? getItemLID(item) : null;
-    return async (data, userId = null, { wait = false } = {}) => {
+    return async (data, userId = null, { wait = false, waitTitle = null, waitDescription = null, waitItem = null, waitOriginToken = null, waitRelatedToken = null } = {}) => {
         let targetUserId = userId;
         if (!targetUserId) {
             const ownerIds = getTokenOwnerUserId(token);
@@ -403,8 +405,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
             console.warn(`lancer-automations | sendMessageToReactor: no userId provided, falling back to token owner "${targetUserId}" for ${token.name}.`);
         }
         if (!targetUserId || targetUserId === game.user.id) {
-            await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
-            return;
+            return await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
         }
         const requestId = wait ? `omsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
         game.socket.emit('module.lancer-automations', {
@@ -412,7 +413,21 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
             payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, triggerType, data, requestId }
         });
         if (wait && requestId) {
-            await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+            const waitCard = (waitTitle || waitDescription)
+                ? startWaitCard({
+                    title: waitTitle ?? 'WAITING',
+                    description: waitDescription ?? '',
+                    waitMessage: `Waiting for ${game.users.get(targetUserId)?.name ?? 'remote user'}…`,
+                    item: waitItem,
+                    originToken: waitOriginToken ?? token,
+                    relatedToken: waitRelatedToken
+                })
+                : null;
+            try {
+                return await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+            } finally {
+                waitCard?.remove();
+            }
         }
     };
 }
@@ -1486,20 +1501,20 @@ async function handleSocketEvent({ action, payload }) {
         if (!msgToken)
             return;
         checkOnMessageReactions(msgToken, payload.itemLid ?? null, payload.reactionPath ?? null, payload.activationName ?? null, payload.triggerType, payload.data ?? {})
-            .catch(e => console.error('lancer-automations | onMessage socket error:', e))
-            .finally(() => {
+            .then(returnData => {
                 if (payload.requestId) {
                     game.socket.emit('module.lancer-automations', {
                         action: 'onMessageDone',
-                        payload: { requestId: payload.requestId }
+                        payload: { requestId: payload.requestId, returnData: returnData ?? null }
                     });
                 }
-            });
+            })
+            .catch(e => console.error('lancer-automations | onMessage socket error:', e));
     } else if (action === 'onMessageDone') {
         const resolve = _pendingFlowWaits.get(payload.requestId);
         if (resolve) {
             _pendingFlowWaits.delete(payload.requestId);
-            resolve();
+            resolve(payload.returnData ?? null);
         }
     } else if (action === 'startRelatedFlow') {
         if (payload.userId && payload.userId !== game.user.id)
@@ -3055,6 +3070,33 @@ Hooks.on('init', () => {
     registerSettings();
     registerFlowStatePersistence();
 
+    if (game.modules.get("elevationruler")?.active) {
+        Hooks.once("ready", () => {
+            const MovePenalty = game.modules.get("elevationruler")?.api?.MovePenalty;
+            if (!MovePenalty)
+                return;
+            CONFIG.elevationruler.MovePenalty = MovePenalty;
+            libWrapper.register("lancer-automations",
+                "CONFIG.elevationruler.MovePenalty.prototype.movementCostForSegment",
+                function (wrapped, startCoords, endCoords, ...args) {
+                    const token = canvas.controls.ruler.token;
+                    const ignoreElevation = token?.actor?.statuses.has("flying")
+                        || token?.actor?.statuses.has("climber")
+                        || getImmunityBonuses(token?.actor, "elevation").length > 0;
+                    if (ignoreElevation) {
+                        const orig = this.getTerrainElevationAt;
+                        this.getTerrainElevationAt = () => null;
+                        const result = wrapped(startCoords, endCoords, ...args);
+                        this.getTerrainElevationAt = orig;
+                        return result;
+                    }
+                    return wrapped(startCoords, endCoords, ...args);
+                },
+                "WRAPPER"
+            );
+        });
+    }
+
     game.keybindings.register('lancer-automations', 'resetMovement', {
         name: 'Reset Movement',
         hint: 'Open the movement history reset dialog for the selected token.',
@@ -3353,6 +3395,17 @@ Hooks.on('lancer.statusesReady', () => {
         img: "modules/lancer-automations/icons/blinded.svg",
         description: "Light of sight reduced to 1"
     }, {
+        id: "climber",
+        name: "Climber",
+        img: "modules/lancer-automations/icons/mountain-climbing.svg",
+        description: "You ignore effect of climbing terrain"
+    }, {
+        id: "reactor_meltdown",
+        name: "Reactor Meltdown",
+        img: "modules/lancer-automations/icons/mushroom-cloud.svg",
+        description: "You are in a reactor meltdown"
+    },
+    {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
@@ -3888,6 +3941,21 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) => {
 let previousHeatValues = new Map();
 let previousHPValues = new Map();
 
+Hooks.on('preDeleteToken', async (tokenDocument, _options, userId) => {
+    if (userId !== game.userId)
+        return;
+    const actor = tokenDocument.actor;
+    if (!actor)
+        return;
+    const structure = actor.system?.structure?.value ?? 1;
+    const stress = actor.system?.stress?.value ?? 1;
+    if (structure > 0 && stress > 0)
+        return;
+    const token = canvas.tokens.get(tokenDocument.id)
+        ?? { document: tokenDocument, id: tokenDocument.id, name: tokenDocument.name, actor };
+    await handleTrigger('onDestroyed', { triggeringToken: token });
+});
+
 Hooks.on('createToken', (tokenDocument, options, userId) => {
     if (userId !== game.userId)
         return;
@@ -3933,10 +4001,6 @@ Hooks.on('updateActor', async (actor, change, options, userId) => {
         } else if (hpChange < 0) {
             const hpLost = Math.abs(hpChange);
             await handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
-
-            if (previousHP > 0 && currentHP <= 0) {
-                await handleTrigger('onDestroyed', { triggeringToken: token });
-            }
         }
 
         previousHPValues.set(actor.id, currentHP);

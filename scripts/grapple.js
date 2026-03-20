@@ -267,8 +267,16 @@ Hooks.on('lancer-automations.ready', (api) => {
                     outOfCombat: true,
                     activationCode: async function(triggerType, triggerData, reactorToken) {
                         const targets = triggerData.targets?.map(t => t.target) || [];
-                        if (targets.length > 0)
-                            await establishGrapples(api, reactorToken, targets);
+                        const validTargets = [];
+                        for (const target of targets) {
+                            if (api.checkEffectImmunities(target.actor, 'grappled').length > 0) {
+                                ui.notifications.warn(`${target.name} is immune to grapple — grapple has no effect.`);
+                            } else {
+                                validTargets.push(target);
+                            }
+                        }
+                        if (validTargets.length > 0)
+                            await establishGrapples(api, reactorToken, validTargets);
                     }
                 },
 

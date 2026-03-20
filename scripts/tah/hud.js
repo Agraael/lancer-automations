@@ -1265,6 +1265,10 @@ export class LancerHUD {
                 { label: 'Combat',    childColLabel: 'Combat',    getChildren: () => combatItems },
                 { label: 'Gameplay',  childColLabel: 'Gameplay',  getChildren: () => gameplayItems },
                 { label: 'Movement',  childColLabel: 'Movement',  getChildren: () => movementItems },
+                { label: 'Misc', childColLabel: 'Misc', getChildren: () => [
+                    { label: 'Vote',     icon: 'modules/lancer-automations/icons/vote.svg',              onClick: () => { const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; if (api?.openChoiceMenu) api.openChoiceMenu(); else /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.'); } },
+                    { label: 'Downtime', icon: 'systems/lancer/assets/icons/white/downtime.svg',         onClick: async () => { const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; await api?.executeDowntime?.(); } },
+                ] },
             ],
         };
     }
@@ -1333,7 +1337,7 @@ export class LancerHUD {
             const single = sysActions[0] ?? null;
             const actStr = single?.activation ?? (activationTag ? activationTag.lid.replace('tg_', '').replace('_action', ' action') : 'Activation');
             children.push({
-                label: item.name,
+                label: single?.name ?? item.name,
                 icon: (single || activationTag) ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg',
                 onClick: single ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0') : () => /** @type {any} */ (item).beginSystemFlow(),
                 onRightClick: single ? ap(single)
@@ -1714,7 +1718,7 @@ export class LancerHUD {
             onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `${frame.name} · Core Active`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
         }]);
 
-        if (passiveName || passiveActions.length) {
+        if ((passiveName && cs?.passive_effect) || passiveActions.length) {
             rows.push({ label: 'PASSIVE', isSectionLabel: true });
             if (passiveName) {
                 rows.push({
@@ -2235,9 +2239,10 @@ export class LancerHUD {
                     const si = /** @type {any} */ (sourceItem);
                     if (_coreActive)
                         si.beginCoreActiveFlow('system.core_system');
-                    else if (si?.type === 'mech_system' || si?.type === 'npc_feature')
-                        si.beginSystemFlow();
-                    else if (si?.type === 'talent')
+                    else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
+                        const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ a => a === action || a.name === action.name);
+                        actionIdx >= 0 ? si.beginActivationFlow(`system.actions.${actionIdx}`) : si.beginSystemFlow();
+                    } else if (si?.type === 'talent')
                         si.beginActivationFlow(rankIdx ?? 0);
                     else
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
@@ -2249,9 +2254,11 @@ export class LancerHUD {
                         if (equiv)
                             equiv.beginCoreActiveFlow('system.core_system');
                     } else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
-                        const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
-                        if (equiv)
-                            equiv.beginSystemFlow();
+                        const equiv = /** @type {any} */ (a).items.find(/** @type {any} */ i => i.system?.lid === si.system?.lid);
+                        if (equiv) {
+                            const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ ac => ac === action || ac.name === action.name);
+                            actionIdx >= 0 ? equiv.beginActivationFlow(`system.actions.${actionIdx}`) : equiv.beginSystemFlow();
+                        }
                     } else if (si?.type === 'talent') {
                         const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
                         if (equiv)

@@ -584,7 +584,7 @@ export function getDefaultGeneralReactionRegistry() {
                 effectDescription: "You fall, taking AP kinetic damage based on the distance fallen (3 damage per 3 spaces, max 9).",
                 isReaction: false,
                 checkReaction: false,
-                autoActivate: false,
+                autoActivate: true,
                 triggerSelf: true,
                 triggerOther: false,
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -606,35 +606,50 @@ export function getDefaultGeneralReactionRegistry() {
                 activationType: "code",
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    if (api.executeFall) {
-                        await api.executeFall(reactorToken);
-                    }
+                    const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
+                    await api.startChoiceCard({
+                        title: "FALLING?",
+                        description: `<b>${reactorToken.name}</b> is hanging in the air. Does it fall?`,
+                        item,
+                        originToken: reactorToken,
+                        userIdControl: gmUserId,
+                        choices: [
+                            {
+                                text: "Yes, it falls",
+                                icon: "fas fa-arrow-down",
+                                callback: async () => {
+                                    await api.executeFall(reactorToken);
 
-                    const weaponFx = game.modules.get("lancer-weapon-fx");
-                    if (!weaponFx?.active || typeof Sequencer === 'undefined')
-                        return;
+                                    const weaponFx = game.modules.get("lancer-weapon-fx");
+                                    if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                                        return;
 
-                    await Sequencer.Preloader.preloadForClients([
-                        "modules/lancer-automations/SFX/fall.mp3",
-                        "modules/lancer-automations/SFX/falling.svg"
-                    ]);
-                    new Sequence()
-                        .sound()
-                        .file("modules/lancer-automations/SFX/fall.mp3")
-                        .volume(weaponFx.api.getEffectVolume(0.7))
-                        .atLocation(reactorToken)
-                        .effect()
-                        .file("modules/lancer-automations/SFX/falling.svg")
-                        .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                        .scaleIn(0.01, 500)
-                        .scale(0.09)
-                        .scaleOut(0.01, 900)
-                        .filter("Glow", { distance: 2, color: 0x000000 })
-                        .aboveInterface()
-                        .duration(3000)
-                        .fadeIn(400)
-                        .fadeOut(800)
-                        .play();
+                                    await Sequencer.Preloader.preloadForClients([
+                                        "modules/lancer-automations/SFX/fall.mp3",
+                                        "modules/lancer-automations/SFX/falling.svg"
+                                    ]);
+                                    new Sequence()
+                                        .sound()
+                                        .file("modules/lancer-automations/SFX/fall.mp3")
+                                        .volume(weaponFx.api.getEffectVolume(0.7))
+                                        .atLocation(reactorToken)
+                                        .effect()
+                                        .file("modules/lancer-automations/SFX/falling.svg")
+                                        .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                                        .scaleIn(0.01, 500)
+                                        .scale(0.09)
+                                        .scaleOut(0.01, 900)
+                                        .filter("Glow", { distance: 2, color: 0x000000 })
+                                        .aboveInterface()
+                                        .duration(3000)
+                                        .fadeIn(400)
+                                        .fadeOut(800)
+                                        .play();
+                                }
+                            },
+                            { text: "No", icon: "fas fa-times" }
+                        ]
+                    });
                 }
             }, {
                 triggers: ["onDamage"],
@@ -802,7 +817,7 @@ export function getDefaultGeneralReactionRegistry() {
                 autoActivate: true,
                 outOfCombat: true,
                 evaluate: function (triggerType, triggerData) {
-                    if (!triggerData.actionData?.flowState?.selectedTurns) {
+                    if (!triggerData.actionData?.flowState?.la_extraData?.selectedTurns) {
                         ui.notifications.warn('Reactor Meltdown: no turn count provided.');
                         return false;
                     }

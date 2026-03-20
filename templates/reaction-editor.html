@@ -1,14 +1,17 @@
 <form autocomplete="off">
     <input type="hidden" name="reactionIndex" value="{{reactionIndex}}">
-    <!-- General Toggle -->
+    <!-- General Toggle + Clipboard buttons -->
     <div class="form-group"
-        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+        style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px; position: relative;">
         <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
             <span>General Activation</span>
-            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item
-                required)</span>
+            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item required)</span>
         </label>
+        <div style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; font-size: 0.85em;">
+            <a class="clipboard-copy" title="Copy activation to clipboard" style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-copy"></i> Copy</a>
+            <a class="clipboard-paste" title="Load activation from clipboard" style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-paste"></i> Paste</a>
+        </div>
     </div>
 
     <!-- Activation Name \u0026 Comments (General only) -->
