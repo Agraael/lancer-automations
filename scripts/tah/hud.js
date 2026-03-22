@@ -18,9 +18,9 @@ import { StatusPanel } from './status-panel.js';
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
 const HUD_TOP  = 115;   // below Foundry's top nav bar
 
-const S_COL  = 'display:flex;flex-direction:column;gap:2px;min-width:180px;';
-
 const ROW_MAX_WIDTH = 300;
+
+const S_COL  = `display:flex;flex-direction:column;gap:2px;width:max-content;min-width:180px;max-width:${ROW_MAX_WIDTH}px;`;
 
 const S_ITEM = [
     'box-sizing:border-box',
@@ -552,7 +552,7 @@ export class LancerHUD {
                 const valColor = (v) => hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
                 const restingBg = (v) => hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
                 const borderColor = (v) => hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
-                const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;`;
+                const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;min-width:220px;`;
                 let cell;
                 if (item.subtype === 'increment') {
                     let cur = item.getValue();
@@ -859,23 +859,39 @@ export class LancerHUD {
         const actor = this._actor;
         const token = this._token;
 
+        // Mechs: only show deployables from equipped items (avoids unequipped systems).
+        // Loadout entries can be raw ID strings or resolved {id,status,value} objects — handle both.
+        // Include systems + frame + weapons so frame-integrated deployables are also shown.
+        // NPCs and others: use all actor.items (no loadout concept).
+        let equippedItems;
+        if (actor.type === 'mech') {
+            const loadout = actor.system?.loadout ?? {};
+            const getId = (/** @type {any} */ s) => (typeof s === 'string' ? s : s?.id) ?? null;
+            const equippedIds = new Set([
+                ...(loadout.systems ?? []).map(getId),
+                getId(loadout.frame),
+                ...(loadout.weapon_mounts ?? []).flatMap((/** @type {any} */ m) =>
+                    (m.slots ?? []).map((/** @type {any} */ sl) => getId(sl.weapon))
+                ),
+            ].filter(Boolean));
+            equippedItems = [...actor.items].filter((/** @type {any} */ i) => equippedIds.has(i.id));
+        } else {
+            equippedItems = [...actor.items];
+        }
         const deployableRows = [];
-        for (const item of actor.items) {
+        for (const item of equippedItems) {
             const lids = getItemDeployables(item, actor);
             for (const lid of lids) {
-                const depActor = /** @type {any} */ (game.actors)?.find(
-                    (/** @type {any} */ a) => a.type === 'deployable' && a.system?.lid === lid
-                );
-                const depIndex = depActor ? null : getDeployableInfoSync(lid);
-                const label = depActor?.name ?? depIndex?.name ?? lid;
-                const icon  = depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg';
+                const depInfo = getDeployableInfoSync(lid, actor);
+                const label = depInfo?.name ?? lid;
+                const icon  = getActivationIcon({ activation: depInfo?.activation }) ?? 'systems/lancer/assets/icons/deployable.svg';
                 deployableRows.push({
                     label,
                     icon,
                     hoverData: { actor, item, action: null, category: 'Deployables' },
                     onClick: () => deployDeployable(actor, lid, item, true),
                     onRightClick: async (/** @type {any} */ row) => {
-                        let dep = depActor;
+                        let dep = null;
                         if (!dep) {
                             const resolved = await resolveDeployable(lid, actor);
                             dep = resolved.deployable;
@@ -1023,7 +1039,7 @@ export class LancerHUD {
             colLabel: 'Invades',
             getItems: () => this._getInvadeOptions(actor).map(opt => ({
                 label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
-                icon: ICON_TECH_QUICK,
+                icon: 'modules/lancer-automations/icons/cpu-shot.svg',
                 ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
@@ -1046,7 +1062,7 @@ export class LancerHUD {
         const basicChildren = () => {
             const items = [
                 this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
-                this._simpleItem('Aid',       'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid',       activation: 'Quick'          }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).'),
+                ...(actor.type !== 'npc' ? [this._simpleItem('Aid', 'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid', activation: 'Quick' }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).')] : []),
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
                 this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
                 this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
@@ -1075,7 +1091,7 @@ export class LancerHUD {
                 this._simpleItem('Disengage', 'modules/lancer-automations/icons/disengage.svg', { name: 'Disengage', activation: 'Full' }, 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.'),
                 this._simpleItem('Dismount',  'modules/lancer-automations/icons/dismount.svg',  { name: 'Dismount',  activation: 'Full' }, 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.'),
             ];
-            if (actor.type === 'mech')
+            if (actor.type === 'mech' || actor.type === 'npc')
                 items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose one: Cool your mech, clearing all heat and ending the EXPOSED status; or Spend 1 Repair to heal your mech for half its max HP (rounded up).' }) });
             return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
         };
@@ -1303,7 +1319,7 @@ export class LancerHUD {
                                 return `<div style="margin-top:6px;padding:4px;background:rgba(255,255,255,0.04);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#e8a020;">[${a.activation}] ${a.name}</div>${det}</div>`;
                             }).join('');
                             const depLids = getItemDeployables(item, actor);
-                            const depActors = depLids.map(lid => /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid) ?? getDeployableInfoSync(lid)).filter(Boolean);
+                            const depActors = depLids.map(lid => getDeployableInfoSync(lid, actor)).filter(Boolean);
                             const deployablesHtml = depActors.length ? laRenderDeployables(depActors) : '';
                             const bodyHtml = this._bodyHtml(sys) + actionsHtml + deployablesHtml;
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
@@ -1382,14 +1398,13 @@ export class LancerHUD {
         if (lids.length) {
             children.push({ isSectionLabel: true, label: 'Deployables' });
             for (const lid of lids) {
-                const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
-                const depIndex = depActor ? null : getDeployableInfoSync(lid);
+                const depInfo = getDeployableInfoSync(lid, actor);
                 children.push({
-                    label: depActor?.name ?? depIndex?.name ?? lid,
-                    icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                    label: depInfo?.name ?? lid,
+                    icon:  getActivationIcon({ activation: depInfo?.activation }) ?? 'systems/lancer/assets/icons/white/deployable.svg',
                     onClick: () => deployDeployable(actor, lid, item, true),
                     onRightClick: async (/** @type {any} */ row) => {
-                        let dep = depActor;
+                        let dep = null;
                         if (!dep) {
                             const resolved = await resolveDeployable(lid, actor);
                             dep = resolved.deployable;
@@ -1763,14 +1778,13 @@ export class LancerHUD {
                     });
                 }
                 for (const lid of (trait.deployables ?? [])) {
-                    const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
-                    const depIndex = depActor ? null : getDeployableInfoSync(lid);
+                    const depInfo = getDeployableInfoSync(lid, actor);
                     children.push({
-                        label: depActor?.name ?? depIndex?.name ?? lid,
-                        icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                        label: depInfo?.name ?? lid,
+                        icon:  getActivationIcon({ activation: depInfo?.activation }) ?? 'systems/lancer/assets/icons/white/deployable.svg',
                         onClick: () => deployDeployable(actor, lid, frame, true),
                         onRightClick: async (/** @type {any} */ row) => {
-                            let dep = depActor;
+                            let dep = null;
                             if (!dep) {
                                 const resolved = await resolveDeployable(lid, actor);
                                 dep = resolved.deployable;
@@ -1838,15 +1852,14 @@ export class LancerHUD {
         });
         if (depLids.length) {
             for (const lid of depLids) {
-                const depActor = /** @type {any} */ (game.actors)?.find(/** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid);
-                const depIndex = depActor ? null : getDeployableInfoSync(lid);
+                const depInfo = getDeployableInfoSync(lid, actor);
                 rows.push(/** @type {any} */({
-                    label: depActor?.name ?? depIndex?.name ?? lid,
-                    icon:  depActor?.img  ?? depIndex?.img  ?? 'systems/lancer/assets/icons/deployable.svg',
+                    label: depInfo?.name ?? lid,
+                    icon:  getActivationIcon({ activation: depInfo?.activation }) ?? 'systems/lancer/assets/icons/white/deployable.svg',
                     hoverData: { actor, item: frame, action: null, category: 'Deployables' },
                     onClick: () => deployDeployable(actor, lid, frame, true),
                     onRightClick: async (/** @type {any} */ row) => {
-                        let dep = depActor;
+                        let dep = null;
                         if (!dep) {
                             const resolved = await resolveDeployable(lid, actor);
                             dep = resolved.deployable;
@@ -1930,7 +1943,15 @@ export class LancerHUD {
             actions.forEach(action => items.push({
                 label: action.name,
                 icon: getActivationIcon(action),
-                onClick: () => /** @type {any} */ (talent).beginActivationFlow(rankIdx),
+                onClick: () => {
+                    if (action.activation === 'Invade') {
+                        const opt = this._getInvadeOptions(this._actor).find(o => o.item?.id === talent.id && o.name === action.name);
+                        if (opt)
+                            executeInvade(this._actor, opt);
+                    } else {
+                        /** @type {any} */ (talent).beginActivationFlow(`system.ranks.${rankIdx}`);
+                    }
+                },
                 onRightClick: this._actionPopup(action, talent.name),
             }));
         }
@@ -2201,6 +2222,21 @@ export class LancerHUD {
                         pushInvade(action.name, action.detail || '', frame, action, []);
                 }
             }
+            // Talent ranks may also contribute Invade options (e.g. Hacker).
+            // Talents live on the pilot actor, not the mech actor.
+            const pilot = actor.system?.pilot?.value ?? null;
+            const talentSource = pilot ?? actor;
+            for (const item of talentSource.items) {
+                if (/** @type {any} */ (item).type !== 'talent') continue;
+                const ranks = /** @type {any} */ (item).system?.ranks ?? [];
+                const maxRank = /** @type {any} */ (item).system?.curr_rank ?? ranks.length;
+                for (let ri = 0; ri < Math.min(maxRank, ranks.length); ri++) {
+                    for (const action of (ranks[ri]?.actions ?? [])) {
+                        if (action.activation === 'Invade')
+                            pushInvade(action.name, action.detail || '', item, action, []);
+                    }
+                }
+            }
         } else {
             for (const item of actor.items) {
                 for (const action of (item.system?.actions ?? [])) {
@@ -2233,7 +2269,7 @@ export class LancerHUD {
                 label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>` : action.name,
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
-                icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (getActivationIcon(action) ?? sourceItem?.img ?? null),
+                icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
                 ...this._statusColors(status),
                 onClick: () => {
                     const si = /** @type {any} */ (sourceItem);
@@ -2242,9 +2278,15 @@ export class LancerHUD {
                     else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
                         const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ a => a === action || a.name === action.name);
                         actionIdx >= 0 ? si.beginActivationFlow(`system.actions.${actionIdx}`) : si.beginSystemFlow();
-                    } else if (si?.type === 'talent')
-                        si.beginActivationFlow(rankIdx ?? 0);
-                    else
+                    } else if (si?.type === 'talent') {
+                        if (action.activation === 'Invade') {
+                            const opt = this._getInvadeOptions(actor).find(o => o.item?.id === si.id && o.name === action.name);
+                            if (opt)
+                                executeInvade(actor, opt);
+                        } else {
+                            si.beginActivationFlow(`system.ranks.${rankIdx ?? 0}`);
+                        }
+                    } else
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
                 },
                 broadcastFn: (t, a) => {
@@ -2260,9 +2302,15 @@ export class LancerHUD {
                             actionIdx >= 0 ? equiv.beginActivationFlow(`system.actions.${actionIdx}`) : equiv.beginSystemFlow();
                         }
                     } else if (si?.type === 'talent') {
-                        const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
-                        if (equiv)
-                            equiv.beginActivationFlow(rankIdx ?? 0);
+                        if (action.activation === 'Invade') {
+                            const opt = this._getInvadeOptions(a).find(o => o.item?.system?.lid === si.system?.lid && o.name === action.name);
+                            if (opt)
+                                executeInvade(a, opt);
+                        } else {
+                            const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
+                            if (equiv)
+                                equiv.beginActivationFlow(`system.ranks.${rankIdx ?? 0}`);
+                        }
                     } else {
                         executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' });
                     }

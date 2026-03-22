@@ -974,6 +974,7 @@ export async function executeEffectManager(options = {}) {
                         <option value="hit">Hit</option>
                         <option value="miss">Miss</option>
                         <option value="elevation">Elevation</option>
+                        <option value="terrain">Terrain</option>
                     </select>
                 </div>
                 <div id="bonus-immunity-effects-row">
@@ -1307,6 +1308,8 @@ export async function executeEffectManager(options = {}) {
                         return 'Immunity: Miss';
                     if (subB.subtype === 'elevation')
                         return 'Immunity: Elevation';
+                    if (subB.subtype === 'terrain')
+                        return 'Immunity: Terrain';
                     return subB.subtype;
                 }
                 return subB.type || 'Unknown';

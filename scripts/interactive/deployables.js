@@ -280,7 +280,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 /**
  * Module-level cache: lid → { name, img }.
  * Populated lazily by `getDeployableInfo`. Benefits the whole module.
- * @type {Map<string, { name: string, img: string } | null>}
+ * @type {Map<string, { name: string, img: string, activation: string | null } | null>}
  */
 const _deployableInfoCache = new Map();
 
@@ -291,22 +291,41 @@ const _deployableInfoCache = new Map();
  *
  * @param {string} lid
  * @param {any} [ownerActor] - Used by resolveDeployable for folder search
- * @returns {Promise<{ name: string, img: string } | null>}
+ * @returns {Promise<{ name: string, img: string, activation: string | null } | null>}
  */
 /**
  * Synchronous read from the deployable info cache (populated by `getDeployableInfo`).
  * Returns null if not yet cached — call `getDeployableInfo` first to warm the cache.
  * @param {string} lid
- * @returns {{ name: string, img: string } | null}
+ * @returns {{ name: string, img: string, activation: string | null } | null}
  */
-export function getDeployableInfoSync(lid) {
+/**
+ * @param {string} lid
+ * @param {any} ownerActor
+ * @returns {any|null}
+ */
+function _findWorldDeployable(lid, ownerActor) {
+    const all = /** @type {any[]} */ (game.actors?.contents ?? []).filter(
+        a => a.type === 'deployable' && a.system?.lid === lid
+    );
+    if (!all.length) return null;
+    if (ownerActor) {
+        const owned = all.find(a => {
+            const ownerVal = a.system?.owner;
+            return ownerVal === ownerActor.uuid || ownerVal === ownerActor.id ||
+                   ownerVal?.id === ownerActor.uuid || ownerVal?.id === ownerActor.id;
+        });
+        if (owned) return owned;
+    }
+    return all[0];
+}
+
+export function getDeployableInfoSync(lid, ownerActor = null) {
     if (!lid)
         return null;
-    const worldActor = /** @type {any} */ (game.actors)?.find(
-        /** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid
-    );
+    const worldActor = _findWorldDeployable(lid, ownerActor);
     if (worldActor)
-        return { name: worldActor.name, img: worldActor.img };
+        return { name: worldActor.name, img: worldActor.img, activation: worldActor.system?.activation ?? null };
     return _deployableInfoCache.get(lid) ?? null;
 }
 
@@ -314,18 +333,16 @@ export async function getDeployableInfo(lid, ownerActor = null) {
     if (!lid)
         return null;
     // World actor takes priority — most accurate, no cache needed
-    const worldActor = /** @type {any} */ (game.actors)?.find(
-        /** @type {any} */ a => a.type === 'deployable' && a.system?.lid === lid
-    );
+    const worldActor = _findWorldDeployable(lid, ownerActor);
     if (worldActor)
-        return { name: worldActor.name, img: worldActor.img };
+        return { name: worldActor.name, img: worldActor.img, activation: worldActor.system?.activation ?? null };
     // Cache hit
     if (_deployableInfoCache.has(lid))
         return _deployableInfoCache.get(lid);
     // Async resolve from compendium and populate cache
     const resolved = await resolveDeployable(lid, ownerActor);
     const info = resolved.deployable
-        ? { name: resolved.deployable.name, img: resolved.deployable.img }
+        ? { name: resolved.deployable.name, img: resolved.deployable.img, activation: resolved.deployable.system?.activation ?? null }
         : null;
     _deployableInfoCache.set(lid, info);
     return info;
@@ -706,11 +723,16 @@ export function getItemActions(item) {
 }
 
 /**
+ * Extra action object — LancerAction shape plus an optional TAH icon field.
+ * @typedef {LancerAction & { icon?: string }} ExtraAction
+ */
+
+/**
  * Add extra action objects to an item, token, or actor via flags.
  * - Item: stores in item's 'lancer-automations.extraActions' flag (system.actions is read-only)
  * - Token / Actor: stores in actor's 'lancer-automations.extraActions' flag
- * @param {Item|Token|Actor} target                         Item, Token, or Actor to attach actions to
- * @param {Object|Array<Object>} actions                    A single action object or array of action objects
+ * @param {Item|Token|Actor} target         Item, Token, or Actor to attach actions to
+ * @param {ExtraAction|ExtraAction[]} actions  A single action object or array of action objects
  * @returns {Promise<Item|Actor|null>} The updated document, or null on failure
  */
 export async function addExtraActions(target, actions) {

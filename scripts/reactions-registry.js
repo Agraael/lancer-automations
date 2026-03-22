@@ -491,6 +491,94 @@ export function getDefaultGeneralReactionRegistry() {
                 }
             }]
         },
+        "Aid": {
+            category: "General",
+            reactions: [{
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                activationType: "code",
+                activationMode: "instead",
+                actionType: "Quick Action",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const chosen = await api.chooseToken(reactorToken, {
+                        count: 1,
+                        range: 1,
+                        filter: (t) => !api.findEffectOnToken(t, "Aided")
+                    });
+                    if (!chosen || chosen.length === 0)
+                        return;
+
+                    const validTargets = await api.applyEffectsToTokens({
+                        tokens: chosen,
+                        effectNames: ["Aided"],
+                        note: "Aid",
+                        duration: { label: 'end', turns: 1, rounds: 0 }
+                    });
+
+                    if (!validTargets || validTargets.length === 0)
+                        return;
+
+                    const weaponFx = game.modules.get("lancer-weapon-fx");
+                    if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                        return;
+
+                    await Sequencer.Preloader.preloadForClients([
+                        "modules/lancer-automations/SFX/activation-sound-effect.wav",
+                        "jb2a.healing_generic.400px.blue",
+                    ]);
+
+                    validTargets.forEach(target => {
+                        let sequence = new Sequence()
+                            .sound()
+                            .file("modules/lancer-automations/SFX/activation-sound-effect.wav")
+                            .volume(weaponFx.api.getEffectVolume(0.7))
+                            .effect()
+                            .file("modules/lancer-automations/SFX/Aid.svg")
+                            .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                            .scaleIn(0.01, 500)
+                            .scale(0.09)
+                            .scaleOut(0.01, 900)
+                            .filter("Glow", { distance: 2, color: 0x000000 })
+                            .aboveInterface()
+                            .duration(3000)
+                            .fadeIn(400)
+                            .fadeOut(800)
+                            .effect()
+                            .file("jb2a.healing_generic.400px.blue")
+                            .scaleToObject(1.5)
+                            .playbackRate(1.3)
+                            .atLocation(target)
+                            .waitUntilFinished(-400);
+                        sequence.play();
+                    });
+                }
+            }]
+        },
+        "Stabilize": {
+            category: "General",
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            activationType: "code",
+            activationMode: "instead",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                return !!api.findEffectOnToken(reactorToken, "Aided");
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                await api.removeEffectsByNameFromTokens({
+                    tokens: [reactorToken],
+                    effectNames: ["Aided"]
+                });
+                ui.notifications.info(`${reactorToken.name} stabilizes as a Quick Action (Aided).`);
+            }
+        },
         "Fragment Signal": {
             category: "General",
             comments: "Impair/Slow on Tech Hit",
@@ -1304,6 +1392,105 @@ export function getDefaultGeneralReactionRegistry() {
                 .duration(3000)
                 .fadeIn(400)
                 .fadeOut(800)
+                .play();
+        }
+    };
+
+    builtInDefaults["Overcharge (NPC)"] = {
+        category: "General",
+        triggers: ["onActivation"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        actionType: "Protocol",
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const roll = await new Roll("1d6").evaluate();
+            await roll.toMessage({
+                flavor: `${reactorToken.name} — Overcharge Heat`,
+                speaker: ChatMessage.getSpeaker({ token: reactorToken.document })
+            });
+            const heatGained = roll.total;
+            const currentHeat = reactorToken.actor.system?.heat?.value ?? 0;
+            await reactorToken.actor.update({ "system.heat.value": currentHeat + heatGained });
+
+            const weaponFx = game.modules.get("lancer-weapon-fx");
+            if (!weaponFx?.active || typeof Sequencer === 'undefined')
+                return;
+
+            const pivotx = reactorToken.document.flags["hex-size-support"]?.pivotx || 0;
+            const pivoty = reactorToken.document.flags["hex-size-support"]?.pivoty || 0;
+
+            const svgFile = "modules/lancer-weapon-fx/advisories/OverchargeYellow.svg";
+
+            await Sequencer.Preloader.preloadForClients([
+                "modules/lancer-weapon-fx/soundfx/Overcharge.ogg",
+                "jb2a.static_electricity.02.blue",
+                "jb2a.template_circle.out_pulse.02.burst.bluewhite",
+                "jb2a.static_electricity.03",
+                "jb2a.smoke.plumes.01.grey",
+                svgFile
+            ]);
+
+            new Sequence()
+                .effect()
+                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
+                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
+                .file(svgFile)
+                .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
+                .scaleIn(0.01, 500)
+                .scale(0.09)
+                .scaleOut(0.01, 900)
+                .filter("Glow", { distance: 2, color: 0x000000 })
+                .aboveInterface()
+                .duration(4000)
+                .fadeIn(400)
+                .fadeOut(800)
+                .sound()
+                .file("modules/lancer-weapon-fx/soundfx/Overcharge.ogg")
+                .volume(weaponFx.api.getEffectVolume(0.5))
+                .waitUntilFinished(-2700)
+                .effect()
+                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
+                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
+                .file("jb2a.static_electricity.02.blue")
+                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
+                .scaleToObject(1.2)
+                .randomSpriteRotation()
+                .effect()
+                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
+                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
+                .file("jb2a.template_circle.out_pulse.02.burst.bluewhite")
+                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
+                .belowTokens()
+                .playbackRate(1.3)
+                .scaleToObject(2.0)
+                .effect()
+                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
+                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
+                .file("jb2a.static_electricity.03")
+                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
+                .scaleToObject(1)
+                .opacity(0.8)
+                .mask(reactorToken)
+                .delay(1500)
+                .effect()
+                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
+                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
+                .file("jb2a.smoke.plumes.01.grey")
+                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
+                .opacity(0.29)
+                .tint(0x33ddff)
+                .filter("Glow", { color: 0x00a1e6 })
+                .filter("Blur", { blur: 5 })
+                .scaleToObject(2)
+                .fadeIn(1500)
+                .fadeOut(4700, { delay: -800 })
+                .rotate(-35)
+                .belowTokens()
                 .play();
         }
     };

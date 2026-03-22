@@ -605,11 +605,12 @@ export async function executeTechAttack(target, options = {}, extraData = {}) {
     return { completed, flow };
 }
 
-export async function executeReactorMeltdown(token, turns = null) {
-    if (!token) {
-        ui.notifications.error('lancer-automations | executeReactorMeltdown requires a token.');
+export async function executeReactorMeltdown(tokenOrActor, turns = null) {
+    if (!tokenOrActor) {
+        ui.notifications.error('lancer-automations | executeReactorMeltdown requires a token or actor.');
         return;
     }
+    const actor = tokenOrActor.actor ?? tokenOrActor;
 
     let selectedTurns = turns;
 
@@ -686,7 +687,7 @@ export async function executeReactorMeltdown(token, turns = null) {
         return;
     }
 
-    await executeSimpleActivation(token.actor, {
+    await executeSimpleActivation(actor, {
         title: "Reactor Meltdown",
         action: { name: "Reactor Meltdown", activation: "Quick" },
         detail: `Reactor meltdown initiated. Explosion will occur at the end of turn ${selectedTurns}. Your mech will be annihilated, dealing 4d6 Explosive Damage in a Burst 2 radius.`
@@ -1624,7 +1625,7 @@ export function getActivationIcon(actionOrActivation) {
     if (a.includes('quick'))
         return 'mdi mdi-hexagon-slice-3';
     if (a.includes('invade'))
-        return 'systems/lancer/assets/icons/tech_quick.svg';
+        return 'modules/lancer-automations/icons/cpu-shot.svg';
     return null;
 }
 

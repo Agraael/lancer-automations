@@ -156,11 +156,21 @@ export function laRenderDeployables(deployableActors) {
         const depTags = laRenderTags(ds?.tags ?? []);
         const actLabel = ds?.activation ? `<span style="font-size:0.78em;font-weight:normal;color:#888;margin-left:5px;">[${ds.activation}]</span>` : '';
         const hasBody = !!(depDetail || depTags);
+        const actionsHtml = (ds?.actions ?? []).map(/** @type {any} */ a => {
+            const triggerHtml = a.trigger ? `<div style="font-size:0.73em;color:#aaa;margin-top:2px;"><span style="font-weight:bold;color:#c084fc;">TRIGGER</span> ${a.trigger}</div>` : '';
+            const detailHtml  = a.detail  ? `<div style="font-size:0.73em;color:#bbb;margin-top:2px;line-height:1.3;">${laFormatDetailHtml(a.detail)}</div>` : '';
+            const freqHtml    = a.frequency ? `<span style="font-size:0.7em;color:#888;margin-left:4px;">${a.frequency}</span>` : '';
+            return `<div style="margin-top:4px;padding:3px 5px;background:rgba(74,16,112,0.15);border-left:2px solid #7c3aed;border-radius:2px;">
+                <div style="font-size:0.75em;font-weight:bold;color:#c084fc;">${a.name}<span style="font-weight:normal;color:#888;margin-left:4px;">[${a.activation}]</span>${freqHtml}</div>
+                ${triggerHtml}${detailHtml}
+            </div>`;
+        }).join('');
         return `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;">
             <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${dep.name}${actLabel}</div>
             ${statPairs.length ? `<div style="font-size:0.75em;color:#aaa;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${hasBody ? '4' : '0'}px;">${statPairs.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
             ${depTags}
             ${depDetail ? `<div style="font-size:0.77em;color:#bbb;line-height:1.3;">${depDetail}</div>` : ''}
+            ${actionsHtml}
         </div>`;
     }).join('');
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('DEPLOYABLE', '#4a1070')}${items}</div>`;

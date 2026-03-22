@@ -21,6 +21,8 @@ export function activationTheme(/** @type {string|null|undefined} */ activation)
         return 'reaction';
     if (a === 'free_action' || a === 'free')
         return 'free_action';
+    if (a === 'invade')
+        return 'invade';
     if (a === 'quick_tech' || a === 'full_tech')
         return 'tech';
     if (a === 'quick' || a === 'quick_action' || a === 'full' || a === 'full_action')

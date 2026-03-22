@@ -66,7 +66,7 @@ interface LancerActorSystem {
     disabled?: boolean;
     class?: any;
     templates?: any[];
-    actions?: any[];
+    actions?: LancerAction[];
     activation?: string;
     deactivation?: string | null;
     recall?: string | null;
@@ -122,6 +122,29 @@ interface LancerMountSlot {
 }
 
 /**
+ * Lancer action object — mirrors the ACTION() factory in the Lancer system.
+ * Used in system.actions[] arrays on mech_system, mech_weapon, npc_feature, etc.
+ */
+interface LancerAction {
+    name:               string;   // required
+    activation:         string;   // required — "Quick" | "Full" | "Protocol" | "Reaction" | "Free" | "Quick Tech" | "Full Tech" | "Invade" | ...
+    detail?:            string;   // HTML effect text
+    lid?:               string;
+    cost?:              number;
+    heat_cost?:         number;
+    frequency?:         string | null;
+    init?:              string;
+    trigger?:           string;
+    terse?:             string;
+    tech_attack?:       boolean;
+    damage?:            { val: string; type: string }[];
+    range?:             { val: string; type: string }[];
+    mech?:              boolean;
+    pilot?:             boolean;
+    synergy_locations?: string[];
+}
+
+/**
  * Minimal Lancer item system type declarations.
  */
 interface LancerItemSystem {
@@ -140,7 +163,7 @@ interface LancerItemSystem {
     // ─── Tags / synergies / actions ──────────────────────────────────────────
     tags?: any[];
     synergies?: any[];
-    actions?: any[];
+    actions?: LancerAction[];
     counters?: any[];
     bonuses?: any[];
 

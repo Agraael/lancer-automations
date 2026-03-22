@@ -2461,7 +2461,17 @@ async function onActivationStep(state) {
     const item = state.item;
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
-    const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
+    let actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
+
+    // Normalize built-in flows that have no item and use actor-prefixed titles
+    const flowClass = state.name ?? '';
+    if (flowClass === 'OverchargeFlow') {
+        actionType = 'Protocol';
+        actionName = 'Overcharge';
+    } else if (flowClass === 'StabilizeFlow') {
+        actionType = 'Full';
+        actionName = 'Stabilize';
+    }
 
     const tags = state.data?.tags || item?.system?.tags || [];
     if (Array.isArray(tags)) {
@@ -3016,6 +3026,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('SystemFlow')?.insertStepAfter('printSystemCard', 'lancer-automations:onActivation');
     flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onActivation');
     flows.get('CoreActiveFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
+    flows.get('OverchargeFlow')?.insertStepAfter('printOverchargeCard', 'lancer-automations:onActivation');
+    flows.get('StabilizeFlow')?.insertStepAfter('printStabilizeResult', 'lancer-automations:onActivation');
 
     // Insert onInitActivation before resource consumption (applySelfHeat) in flows that consume resources.
     // For TalentFlow and SimpleActivationFlow there is no consumption step, so insert before the print step.
@@ -3083,17 +3095,67 @@ Hooks.on('init', () => {
                     const ignoreElevation = token?.actor?.statuses.has("flying")
                         || token?.actor?.statuses.has("climber")
                         || getImmunityBonuses(token?.actor, "elevation").length > 0;
+                    const ignoreDifficultTerrain = token?.actor?.statuses.has("terrain_immunity")
+                        || getImmunityBonuses(token?.actor, "terrain").length > 0;
                     if (ignoreElevation) {
                         const orig = this.getTerrainElevationAt;
                         this.getTerrainElevationAt = () => null;
                         const result = wrapped(startCoords, endCoords, ...args);
                         this.getTerrainElevationAt = orig;
+                        if (ignoreDifficultTerrain) return result - this.lastTerrainPenalty;
                         return result;
                     }
-                    return wrapped(startCoords, endCoords, ...args);
+                    const result = wrapped(startCoords, endCoords, ...args);
+                    if (ignoreDifficultTerrain) return result - this.lastTerrainPenalty;
+                    return result;
                 },
                 "WRAPPER"
             );
+        });
+    }
+
+    if (game.modules.get("templatemacro")?.active) {
+        Hooks.once("ready", () => {
+            const tmApi = game.modules.get("templatemacro")?.api;
+            if (!tmApi?.triggerDangerousZoneFlow) return;
+            const orig = tmApi.triggerDangerousZoneFlow;
+            tmApi.triggerDangerousZoneFlow = async function(token, ...args) {
+                const immunityBonuses = getImmunityBonuses(token?.actor, "terrain");
+                const hasStatusImmunity = token?.actor?.statuses.has("terrain_immunity");
+                if (!hasStatusImmunity && immunityBonuses.length === 0)
+                    return orig.call(this, token, ...args);
+
+                const sources = [
+                    ...immunityBonuses.map(b => b.name || b.id),
+                    ...(hasStatusImmunity ? ["Terrain Immunity"] : [])
+                ];
+                const tokenObj = token?.object ?? token;
+                const actorName = token?.actor?.name ?? "Token";
+                await startChoiceCard({
+                    title: "TERRAIN IMMUNITY",
+                    description: `<b>${actorName}</b> entered dangerous terrain.<hr>Immunity from: <i>${sources.join(", ")}</i>`,
+                    icon: "mdi mdi-boot",
+                    mode: "or",
+                    relatedToken: tokenObj,
+                    userIdControl: getActiveGMId(),
+                    choices: [
+                        {
+                            text: "Activate (Ignore Terrain)",
+                            icon: "fas fa-shield-alt",
+                            callback: async () => {
+                                ui.notifications.info(`${actorName} ignored dangerous terrain.`);
+                            }
+                        },
+                        {
+                            text: "No (Apply Effect)",
+                            icon: "fas fa-times",
+                            callback: async () => {
+                                await orig.call(this, token, ...args);
+                            }
+                        }
+                    ]
+                });
+            };
         });
     }
 
@@ -3400,10 +3462,21 @@ Hooks.on('lancer.statusesReady', () => {
         img: "modules/lancer-automations/icons/mountain-climbing.svg",
         description: "You ignore effect of climbing terrain"
     }, {
+        id: "terrain_immunity",
+        name: "Terrain Immunity",
+        img: "modules/lancer-automations/icons/metal-boot.svg",
+        description: "You ignore difficult and dangerous terrain"
+    }, {
         id: "reactor_meltdown",
         name: "Reactor Meltdown",
         img: "modules/lancer-automations/icons/mushroom-cloud.svg",
         description: "You are in a reactor meltdown"
+    },
+    {
+        id: "aided",
+        name: "Aided",
+        img: "modules/lancer-automations/icons/health-capsule.svg",
+        description: "You can Stabilize as a quick action"
     },
     {
         id: "brace",

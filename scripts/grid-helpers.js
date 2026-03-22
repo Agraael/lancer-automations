@@ -363,7 +363,7 @@ export function getMovementPathHexes(token, change) {
 
         const alignOffset = { x: 0, y: 0 };
         if (canvas.grid.isHexagonal && token.document.width % 2 === 0) {
-            if (/** @type {any} */ (canvas.grid.grid).columnar) {
+            if (/** @type {any} */ (canvas.grid).columns) {
                 alignOffset.x = canvas.grid.sizeX / 2;
             } else {
                 alignOffset.y = canvas.grid.sizeY / 2;

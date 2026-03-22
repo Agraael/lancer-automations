@@ -2189,6 +2189,35 @@ api.registerDefaultItemReactions({
     }
 });
 
+// ─── Limitless (Ultra / Veteran) — Overcharge (NPC) extra action ─────────────
+/** @type {ReactionGroup} */
+const limitlessOverchargeReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api) {
+            await api.addExtraActions(item, {
+                name: "Overcharge (NPC)",
+                activation: "Protocol",
+                icon: "systems/lancer/assets/icons/overcharge.svg",
+                detail: item.system.effect
+            });
+        }
+    }]
+};
+
+api.registerDefaultItemReactions({
+    "npc-rebake_npcf_limitless_ultra": limitlessOverchargeReaction,
+    "npc-rebake_npcf_limitless_veteran": limitlessOverchargeReaction,
+    "npcf_limitless_ultra": limitlessOverchargeReaction,
+    "npcf_limitless_veteran": limitlessOverchargeReaction
+});
+
 // ─── Fall Prone (Sniper's Mark) general reaction ───────────────────────────────
 api.registerDefaultGeneralReactions({
     "Fall Prone (Sniper's Mark)": {
