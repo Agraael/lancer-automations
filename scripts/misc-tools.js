@@ -1,6 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "./flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
-import { chooseToken, choseMount, chooseInvade, InteractiveAPI } from "./interactive/index.js";
+import { chooseToken, choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId } from "./interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "./genericBonuses.js";
 import { getItemActions } from "./interactive/deployables.js";
 
@@ -38,7 +38,9 @@ export function getActorActionItems(actor, activationType) {
                 continue;
             const itemTags = item.system?.tags ?? [];
             const tagMatched = tagLid ? itemTags.some(t => t.lid === tagLid) : false;
-            const extraActions = getItemActions(item).filter(a => a.activation === activationType);
+            const extraActions = getItemActions(item).filter(a =>
+                a.activation === activationType || a.activation === activationType + ' Action'
+            );
             // Fallback: match by system.type when no tag and no explicit actions found
             const typeMatched = !tagMatched && !extraActions.length && item.system?.type === activationType;
             if (tagMatched || typeMatched) {
@@ -156,6 +158,26 @@ const STAT_PATHS = {
  * For every 3 spaces fallen, applies 3 AP kinetic damage
  * @param {Token} paramToken - Token to check
  */
+/**
+ * Stand up from prone: removes the Prone status and adds +speed to the movement cap.
+ * Costs the standard move (not a quick/full action).
+ * @param {Token} token
+ */
+export async function executeStandingUp(token) {
+    if (!token?.actor) return;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api) return;
+    const hasProne = !!findEffectOnToken(token, e => e.statuses?.has('prone'));
+    if (!hasProne) {
+        ui.notifications.info(`${token.name} is not Prone.`);
+        return;
+    }
+    await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
+    const speed = token.actor.system?.speed ?? 0;
+    api.increaseMovementCap(token, speed);
+    ui.notifications.info(`${token.name} stands up. +${speed} movement.`);
+}
+
 export async function executeFall(paramToken) {
     if (!paramToken) {
         ui.notifications.error('lancer-automations | executeFall requires a target token.');
@@ -405,7 +427,43 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
         return { completed: false };
     }
 
-    const { targetStat, ...restExtraData } = (extraData && typeof extraData === 'object') ? extraData : {};
+    const { targetStat, sendToOwner, cardTitle, cardDescription, ...restExtraData } = (extraData && typeof extraData === 'object') ? extraData : {};
+
+    // Send the roll to the token owner's client via socket so they roll it themselves.
+    if (sendToOwner) {
+        const ownerToken = actor.token?.object ?? actor.getActiveTokens()?.[0];
+        if (ownerToken) {
+            const ownerIds = getTokenOwnerUserId(ownerToken);
+            const firstOwner = Array.isArray(ownerIds) ? ownerIds[0] : ownerIds;
+            const isLocal = firstOwner === game.user.id;
+
+            if (!isLocal && firstOwner) {
+                const requestId = foundry.utils.randomID();
+                const targetVal = typeof target === 'object'
+                    ? (target.actor?.system?.save ?? 10)
+                    : (typeof target === 'number' ? target : 10);
+
+                game.socket.emit('module.lancer-automations', {
+                    action: 'statRollRequest',
+                    payload: {
+                        requestId,
+                        actorUuid: actor.uuid,
+                        stat,
+                        title,
+                        targetVal,
+                        cardTitle: cardTitle || null,
+                        cardDescription: cardDescription || null,
+                        targetUserId: firstOwner
+                    }
+                });
+
+                // Wait for the remote client to complete the roll and send back the result.
+                const _pendingFlowWaits = /** @type {any} */ (game.modules.get('lancer-automations'))._pendingFlowWaits;
+                return await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+            }
+            // If local owner, fall through to normal roll below.
+        }
+    }
 
     let targetVal = target;
     let targetToken = null;
@@ -1658,4 +1716,5 @@ export const MiscAPI = {
     beginWeaponAttackFlow,
     getActivationIcon,
     executeFall,
+    executeStandingUp,
 };

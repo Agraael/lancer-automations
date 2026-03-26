@@ -187,15 +187,16 @@ export function laHudItemChildren(item, opts = {}) {
  * Does nothing if the item has none of those tags.
  * @param {any} item   Foundry Item document
  * @param {any} popup  jQuery popup element (from laDetailPopup)
- * @param {{ incDepth?: () => void, decDepth?: () => void }} [depthCallbacks]  optional HUD refresh-suppression hooks
+ * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge
  */
 export function appendItemPips(item, popup, depthCallbacks) {
-    const sys = item.system;
-    const allTags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
+    const sys = item?.system;
+    const allTags = sys ? [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])] : [];
     const hasLoading  = allTags.some(t => t.lid === 'tg_loading');
     const hasRecharge = allTags.some(t => t.lid === 'tg_recharge');
     const hasLimited  = allTags.some(t => t.lid === 'tg_limited');
-    if (!hasLoading && !hasRecharge && !hasLimited)
+    const hasExtraRecharge = !!depthCallbacks?.action?.recharge;
+    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge)
         return;
 
     const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
@@ -245,4 +246,33 @@ export function appendItemPips(item, popup, depthCallbacks) {
         }
     };
     rebuild();
+
+    // Extra-action recharge pip (action-level, not item-level).
+    // Uses the same "Charged" label + ▣/□ pip style as native tg_recharge items.
+    const extraAction = depthCallbacks?.action;
+    if (extraAction?.recharge && item) {
+        const eaWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+        if (!pipsWrap.length) popup.children().last().prepend(eaWrap);
+        const rebuildEa = () => {
+            const ea = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(a => a.name === extraAction.name);
+            const charged = ea ? ea.charged !== false : extraAction.charged !== false;
+            eaWrap.find('.la-ea-recharge-row').remove();
+            const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
+            row.append($(`<span style="${S_LBL}">Charged</span>`));
+            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
+            pip.on('click', async () => {
+                const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                const match = actions.find(a => a.name === extraAction.name);
+                if (match) {
+                    match.charged = !match.charged;
+                    await item.setFlag('lancer-automations', 'extraActions', actions);
+                    extraAction.charged = match.charged;
+                }
+                rebuildEa();
+            });
+            row.append(pip);
+            eaWrap.append(row);
+        };
+        rebuildEa();
+    }
 }

@@ -124,6 +124,105 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
 }
 
 /**
+ * Spawn one or more Hard Cover tokens on the canvas.
+ * @param {Token|null} originToken - Origin token for range measurement
+ * @param {Object} [options]
+ * @param {number|null} [options.range=null] - Max placement range in grid units (null = unlimited)
+ * @param {number} [options.count=1] - Number of cover pieces to place
+ * @param {number} [options.size=1] - Token size (1 or 2). HP scales with size (10 × size).
+ * @param {string} [options.name="Hard Cover"] - Name for the placed token(s)
+ * @param {string} [options.title="PLACE HARD COVER"] - Card title
+ * @param {string} [options.description=""] - Card description
+ * @returns {Promise<Array<TokenDocument>|null>}
+ */
+export async function spawnHardCover(originToken, options = {}) {
+    const {
+        range = null,
+        count = 1,
+        size = 1,
+        name = "Hard Cover",
+        title = "PLACE HARD COVER",
+        description = ""
+    } = options;
+
+    const templateName = "Template Hard Cover";
+    const iconPath = "modules/lancer-automations/icons/stone-pile.svg";
+
+    let templateActor = game.actors.contents.find((/** @type {any} */ a) =>
+        a.name === templateName && a.type === 'deployable'
+    );
+
+    if (!templateActor) {
+        const LancerActor = /** @type {any} */ (game.lancer?.LancerActor || Actor);
+        templateActor = await LancerActor.create({
+            name: templateName,
+            type: 'deployable',
+            img: iconPath,
+            system: {
+                hp: { value: 10, max: 10, min: 0 },
+                stats: { hp: 10, evasion: 5, edef: 5, armor: 0, size: 1, speed: 0, save: 10, heatcap: 0 },
+                activations: 0
+            },
+            folder: null,
+            ownership: { default: 0 },
+            prototypeToken: {
+                name: templateName,
+                img: iconPath,
+                width: 1,
+                height: 1,
+                displayName: CONST.TOKEN_DISPLAY_MODES.HOVER,
+                displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
+                disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
+                bar1: { attribute: 'hp' }
+            }
+        });
+
+        if (!templateActor) {
+            ui.notifications.error("Failed to create Template Hard Cover actor.");
+            return null;
+        }
+    }
+
+    // Ensure stats.hp is correct — Lancer derives hp.max from stats.hp, not hp.max directly
+    const _templateActor = /** @type {any} */ (templateActor);
+    if (_templateActor.system?.stats?.hp !== 10) {
+        await _templateActor.update({ "system.stats.hp": 10, "system.hp.value": 10, "system.hp.max": 10 });
+    }
+
+    const hp = 10 * size;
+    const extraData = /** @type {any} */ ({
+        name,
+        width: size,
+        height: size,
+        flags: {
+            'lancer-automations': {
+                hardCover: true
+            }
+        }
+    });
+    // Override size and HP on the token's synthetic actor via delta (Foundry v12)
+    if (size !== 1) {
+        extraData.delta = {
+            system: {
+                stats: { hp, size },
+                hp: { value: hp, max: hp, min: 0 }
+            }
+        };
+    }
+
+    return placeToken({
+        actor: /** @type {Actor} */ (templateActor),
+        range,
+        count,
+        origin: originToken,
+        title,
+        description,
+        icon: "fas fa-cube",
+        extraData
+    });
+}
+
+/**
  * Pick up a thrown weapon token from the scene. Shows a chooseToken card restricted
  * to the owner's thrown weapons. Re-enables the weapon and deletes the deployed token.
  * @param {Token} ownerToken - The token whose actor owns the thrown weapons
@@ -744,9 +843,20 @@ export async function addExtraActions(target, actions) {
     if (newActions.length === 0)
         return null;
 
-    // Resolve to a Foundry document that supports getFlag/setFlag
+    // Resolve to a Foundry document that supports getFlag/setFlag.
+    // Items store actions on themselves; tokens/actors store on the actor.
     const t = /** @type {any} */ (target);
-    const doc = t.actor ?? t.document ?? t;
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+
+    // When adding to an Item, stamp _sourceItemId so the activation flow
+    // can resolve the source item later (needed for onlyOnSourceMatch).
+    const isItem = doc.documentName === 'Item';
+    if (isItem) {
+        for (const action of newActions) {
+            const a = /** @type {any} */ (action);
+            if (!a._sourceItemId) a._sourceItemId = doc.id;
+        }
+    }
 
     const existing = doc.getFlag('lancer-automations', 'extraActions') || [];
     const merged = [...existing, ...newActions];

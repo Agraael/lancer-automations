@@ -2218,6 +2218,520 @@ api.registerDefaultItemReactions({
     "npcf_limitless_veteran": limitlessOverchargeReaction
 });
 
+// ─── Architect Slurry Cannon ────────────────────────────────────────────────────
+api.registerDefaultItemReactions({
+    "cap_npc_architect_slurry_cannon": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onAttack"],
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            onlyOnSourceMatch: true,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const hardCovers = await api.spawnHardCover(reactorToken, {
+                    range: 5,
+                    count: 1,
+                    name: "Slurry Hard Cover",
+                    title: "SLURRY CANNON",
+                    description: "Place Hard Cover within the attack Range."
+                });
+
+                if (hardCovers?.length) {
+                    const hcToken = hardCovers[0];
+
+                    const hcW = (hcToken.width ?? 1) * canvas.grid.sizeX;
+                    const hcH = (hcToken.height ?? 1) * canvas.grid.sizeY;
+                    const result = await api.placeZone(reactorToken, {
+                        x: hcToken.x + hcW / 2,
+                        y: hcToken.y + hcH / 2,
+                        size: 1,
+                        type: "Burst",
+                        difficultTerrain: { movementPenalty: 1, isFlatPenalty: true },
+                        title: "SLURRY CANNON",
+                        centerLabel: "Slurry"
+                    });
+
+                    if (result?.[0]?.template) {
+                        const existing = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+                        existing.push(result[0].template.id);
+                        await reactorToken.actor.setFlag("lancer-automations", "slurryTerrainTemplates", existing);
+                    }
+                }
+            }
+        }, {
+            triggers: ["onTurnStart"],
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const templates = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+                return templates.length > 0;
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const templates = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+
+                for (const id of templates) {
+                    const template = canvas.scene.templates.get(id);
+                    if (template)
+                        await template.delete();
+                }
+
+                await reactorToken.actor.unsetFlag("lancer-automations", "slurryTerrainTemplates");
+            }
+        }]
+    }
+});
+
+// ─── Architect Citadel Combat Terraformer ───────────────────────────────────────
+api.registerDefaultItemReactions({
+    "cap_npc_architect_citadel_combat_terraformer": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+        // ── R0: onInit — inject four sub-actions ────────────────────────────
+            {
+                triggers: [],
+                triggerSelf: false,
+                triggerOther: false,
+                autoActivate: false,
+                activationType: "none",
+                onInit: async function (token, item, api) {
+                    await api.addExtraActions(item, [
+                        { name: "Print",
+                            activation: "Quick Action",
+                            recharge: 4,
+                            charged: true,
+                            detail: "Recharge 4+: Place up to 3 blocks of size 1 hard cover within Range 3, or one block of Size 2 cover." },
+                        { name: "Rift",
+                            activation: "Quick Action",
+                            detail: "Choose a Line 5 area in Range 5. At the start of its next turn the area collapses." },
+                        { name: "Sharpen",
+                            activation: "Quick Action",
+                            detail: "A Blast 1 area in Sensors becomes difficult terrain until end of scene or next use." },
+                        { name: "Tremor",
+                            activation: "Quick Action",
+                            detail: "All characters in a Blast 1 area in Sensors must pass a Hull save or be knocked Prone." }
+                    ]);
+                }
+            },
+            // ── R0b: onActivation of base system — choice card for sub-actions ──
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const extraActions = item.getFlag('lancer-automations', 'extraActions') || [];
+                    const choices = extraActions.map(a => ({
+                        text: a.recharge ? `${a.name} ${a.charged !== false ? '▣' : '□'}` : a.name,
+                        callback: async () => {
+                            await api.executeSimpleActivation(reactorToken.actor, { title: a.name, action: a, detail: a.detail ?? '' }, { item });
+                        }
+                    }));
+                    await api.startChoiceCard({
+                        title: "CITADEL COMBAT TERRAFORMER",
+                        description: "Choose an action:",
+                        originToken: reactorToken,
+                        choices
+                    });
+                }
+            },
+            // ── R1: onActivation "Print" — place hard covers ────────────────────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                reactionPath: "extraActions.Print",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    await api.startChoiceCard({
+                        title: "PRINT",
+                        description: "Choose cover configuration:",
+                        originToken: reactorToken,
+                        choices: [
+                            {
+                                text: "3\u00d7 Size 1 Hard Cover",
+                                callback: async () => {
+                                    await api.spawnHardCover(reactorToken, {
+                                        range: 3,
+                                        count: 3,
+                                        name: "Printed Cover",
+                                        title: "PRINT",
+                                        description: "Place Size 1 hard cover within Range 3."
+                                    });
+                                }
+                            },
+                            {
+                                text: "1\u00d7 Size 2 Hard Cover",
+                                callback: async () => {
+                                    await api.spawnHardCover(reactorToken, {
+                                        range: 3,
+                                        count: 1,
+                                        size: 2,
+                                        name: "Printed Cover (Size 2)",
+                                        title: "PRINT",
+                                        description: "Place Size 2 hard cover within Range 3."
+                                    });
+                                }
+                            }
+                        ]
+                    });
+                }
+            },
+            // ── R2: onActivation "Rift" — place Line 5 zone ────────────────────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                reactionPath: "extraActions.Rift",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const result = await api.placeZone(reactorToken, {
+                        range: 5,
+                        size: 5,
+                        type: "Line",
+                        fillColor: "#8B4513",
+                        borderColor: "#654321",
+                        title: "RIFT",
+                        centerLabel: "Rift"
+                    });
+                    if (result?.[0]?.template) {
+                        const existing = reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || [];
+                        existing.push(result[0].template.id);
+                        await reactorToken.actor.setFlag("lancer-automations", "riftTemplates", existing);
+                    }
+                }
+            },
+            // ── R3: onActivation "Sharpen" — Blast 1 difficult terrain ──────────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                reactionPath: "extraActions.Sharpen",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const previousId = reactorToken.actor.getFlag("lancer-automations", "sharpenTemplate");
+                    if (previousId) {
+                        const prev = canvas.scene.templates.get(previousId);
+                        if (prev)
+                            await prev.delete();
+                        await reactorToken.actor.unsetFlag("lancer-automations", "sharpenTemplate");
+                    }
+                    const sensors = reactorToken.actor.system.sensor_range;
+                    const tier = reactorToken.actor.system.tier || 1;
+                    const damage = [3, 5, 7][tier - 1] || 3;
+                    const result = await api.placeZone(reactorToken, {
+                        range: sensors,
+                        size: 1,
+                        type: "Blast",
+                        fillColor: "#A0522D",
+                        borderColor: "#8B4513",
+                        difficultTerrain: { movementPenalty: 1, isFlatPenalty: true },
+                        title: "SHARPEN",
+                        description: `Blast 1 difficult terrain. Prone characters take ${damage} Kinetic.`,
+                        centerLabel: "Sharp"
+                    });
+                    if (result?.[0]?.template) {
+                        await reactorToken.actor.setFlag("lancer-automations", "sharpenTemplate", result[0].template.id);
+                    }
+                }
+            },
+            // ── R3b: onStatusApplied — Sharpen prone damage ─────────────────────
+            {
+                triggers: ["onStatusApplied"],
+                triggerSelf: false,
+                triggerOther: true,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                    if (triggerData.statusId !== 'prone')
+                        return false;
+                    const templateId = reactorToken.actor.getFlag("lancer-automations", "sharpenTemplate");
+                    if (!templateId)
+                        return false;
+                    const templateDoc = canvas.scene.templates.get(templateId);
+                    if (!templateDoc)
+                        return false;
+                    const tmApi = game.modules.get('templatemacro')?.api;
+                    return tmApi?.findContained?.(templateDoc)?.includes(triggerData.triggeringToken?.document?.id) ?? false;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const tier = reactorToken.actor.system.tier || 1;
+                    const damage = [3, 5, 7][tier - 1] || 3;
+                    await api.executeDamageRoll(reactorToken, [triggerData.triggeringToken], damage, "Kinetic", "Sharpen \u2014 Prone Damage");
+                }
+            },
+            // ── R4: onActivation "Tremor" — Blast 1, Hull saves, Prone + AP ─────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                reactionPath: "extraActions.Tremor",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const sensors = reactorToken.actor.system.sensor_range;
+                    const result = await api.placeZone(reactorToken, {
+                        range: sensors,
+                        size: 1,
+                        type: "Blast",
+                        fillColor: "#CD853F",
+                        borderColor: "#8B7355",
+                        title: "TREMOR",
+                        centerLabel: "Tremor"
+                    });
+                    if (!result?.[0]?.template)
+                        return;
+                    const templateDoc = result[0].template;
+
+                    const tmApi = game.modules.get('templatemacro')?.api;
+                    const containedIds = tmApi?.findContained?.(templateDoc) ?? [];
+                    const contained = containedIds.map(id => canvas.tokens.get(id)).filter(t => t?.actor);
+                    const characters = contained.filter(t => t.actor.type !== 'deployable');
+                    const deployables = contained.filter(t => t.actor.type === 'deployable');
+
+                    // Hull saves for characters — sent to their owners
+                    const savePromises = characters.map(async (target) => {
+                        const saveResult = await api.executeStatRoll(
+                            target.actor, "HULL", "Tremor \u2014 Hull Save", reactorToken,
+                            { sendToOwner: true, cardTitle: "TREMOR \u2014 HULL SAVE" }
+                        );
+                        if (saveResult.completed && !saveResult.passed) {
+                            await api.applyEffectsToTokens({ tokens: [target], effectNames: ['prone'] });
+                        }
+                    });
+                    await Promise.all(savePromises);
+
+                    // 10 AP Kinetic to all deployables in one roll
+                    if (deployables.length > 0) {
+                        await api.executeDamageRoll(
+                            reactorToken, deployables, 10, "Kinetic",
+                            "Tremor \u2014 Objects & Terrain", { ap: true }
+                        );
+                    }
+
+                    await templateDoc.delete();
+                }
+            },
+            // ── R5: onTurnStart — Rift collapse ─────────────────────────────────
+            {
+                triggers: ["onTurnStart"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken) {
+                    return (reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || []).length > 0;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const riftIds = reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || [];
+                    const tmApi = game.modules.get('templatemacro')?.api;
+
+                    for (const templateId of riftIds) {
+                        const templateDoc = canvas.scene.templates.get(templateId);
+                        if (!templateDoc)
+                            continue;
+
+                        const containedIds = tmApi?.findContained?.(templateDoc) ?? [];
+                        const contained = containedIds.map(id => canvas.tokens.get(id)).filter(t => t?.actor);
+                        const characters = contained.filter(t => t.actor.type !== 'deployable');
+                        const deployables = contained.filter(t => t.actor.type === 'deployable');
+
+                        // Destroy deployables (HP to 0)
+                        for (const dep of deployables) {
+                            await dep.actor.update({ "system.hp.value": 0 });
+                        }
+
+                        // Agility saves for characters — sent to their owners
+                        const savePromises = characters.map(async (target) => {
+                            const saveResult = await api.executeStatRoll(
+                                target.actor, "AGI", "Rift Collapse \u2014 Agility Save", reactorToken,
+                                { sendToOwner: true,
+                                    cardTitle: "RIFT COLLAPSE \u2014 AGILITY SAVE",
+                                    cardDescription: `<b>${target.name}</b> must pass an Agility save or become Immobilized with soft cover until they pass a Hull save (Quick Action).` }
+                            );
+                            if (saveResult.completed && !saveResult.passed) {
+                                await api.applyEffectsToTokens({
+                                    tokens: [target],
+                                    effectNames: ['immobilized', 'cover_soft'],
+                                    duration: { label: 'unlimited' }
+                                }, { riftSourceId: reactorToken.id });
+                            }
+                        });
+                        await Promise.all(savePromises);
+
+                        ChatMessage.create({
+                            content: `<b>${reactorToken.name} \u2014 RIFT COLLAPSE</b><br>Objects and terrain in the Rift area are destroyed.`,
+                            speaker: ChatMessage.getSpeaker({ token: reactorToken })
+                        });
+                        await templateDoc.delete();
+                    }
+                    await reactorToken.actor.unsetFlag("lancer-automations", "riftTemplates");
+                }
+            }]
+    }
+});
+
+// ─── Architect Insertion Catapult ────────────────────────────────────────────────
+api.registerDefaultItemReactions({
+    "cap_npc_architect_insertion_catapult": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+        // ── R0: onInit — remove tg_quick_action tag (system is Protocol, not Quick)
+        {
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                const tags = item.system.tags ?? [];
+                const filtered = tags.filter(t => t.lid !== 'tg_quick_action');
+                if (filtered.length !== tags.length) {
+                    await item.update({ 'system.tags': filtered.map(t => ({ lid: t.lid, val: t.val })) });
+                }
+            }
+        },
+        // ── R1: Protocol — Immobilized + inject Throw Ally ──────────────────
+        {
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                await api.applyEffectsToTokens({
+                    tokens: [reactorToken],
+                    effectNames: ['immobilized'],
+                    duration: { label: 'start', turns: 1, rounds: 0 }
+                });
+                await api.addExtraActions(item, [{
+                    name: "Throw Ally",
+                    activation: "Quick Action",
+                    detail: "Throw an adjacent ally (same size or smaller) to any space within Range 10."
+                }]);
+            }
+        },
+        // ── R2: Throw Ally — pick ally, throw, collision ────────────────────
+        {
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            reactionPath: "extraActions.Throw Ally",
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const architectSize = reactorToken.actor.system.size ?? 2;
+                const allies = await api.chooseToken(reactorToken, {
+                    range: 1,
+                    count: 1,
+                    filter: t => t.id !== reactorToken.id
+                        && (t.actor?.system?.size ?? 1) <= architectSize
+                        && api.isFriendly(reactorToken, t),
+                    title: "THROW ALLY",
+                    description: `Choose an adjacent ally (size ${architectSize} or smaller) to throw.`
+                });
+                if (!allies?.length) return;
+                const ally = allies[0];
+
+                await api.knockBackToken(ally, 10, {
+                    title: "INSERTION CATAPULT",
+                    description: "Choose destination within Range 10.",
+                    triggeringToken: reactorToken,
+                    item
+                });
+
+                const adjacent = canvas.tokens.placeables.filter(t =>
+                    t.id !== ally.id
+                    && t.id !== reactorToken.id
+                    && t.actor
+                    && api.isHostile(reactorToken, t)
+                    && api.getTokenDistance(ally, t) <= 1
+                );
+                if (adjacent.length > 0) {
+                    const choices = [
+                        ...adjacent.map(t => ({
+                            text: t.name,
+                            callback: async () => {
+                                const saveResult = await api.executeStatRoll(
+                                    t.actor, "HULL", "Insertion Catapult \u2014 Hull Save", reactorToken,
+                                    { sendToOwner: true, cardTitle: "INSERTION CATAPULT \u2014 HULL SAVE" }
+                                );
+                                if (saveResult.completed && !saveResult.passed) {
+                                    await api.applyEffectsToTokens({ tokens: [t], effectNames: ['prone'] });
+                                }
+                            }
+                        })),
+                        { text: "No collision", callback: async () => {} }
+                    ];
+                    await api.startChoiceCard({
+                        title: "INSERTION CATAPULT \u2014 COLLISION",
+                        description: `Did ${ally.name} hit a character?`,
+                        originToken: reactorToken,
+                        choices
+                    });
+                }
+            }
+        },
+        // ── R3: onStatusRemoved — clean up Throw Ally ───────────────────────
+        {
+            triggers: ["onStatusRemoved"],
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item) {
+                if (triggerData.statusId !== 'immobilized') return false;
+                const ea = item.getFlag('lancer-automations', 'extraActions') || [];
+                return ea.some(a => a.name === 'Throw Ally');
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                await api.removeExtraActions(item, 'Throw Ally');
+            }
+        }]
+    }
+});
+
 // ─── Fall Prone (Sniper's Mark) general reaction ───────────────────────────────
 api.registerDefaultGeneralReactions({
     "Fall Prone (Sniper's Mark)": {

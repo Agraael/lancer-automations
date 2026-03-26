@@ -568,9 +568,42 @@ export function chooseToken(casterToken, options = {}) {
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
+ * @param {TokenDocument|string} [options.attachToToken] - Token document or token ID to attach the zone(s) to (requires templatemacro module). Attached zones follow the token when it moves.
  * @returns {Promise<Array<{x: number, y: number, template: MeasuredTemplate}>|null>} Zone positions and templates, or null if cancelled
  */
-export function placeZone(casterToken, options = {}) {
+export async function placeZone(casterToken, options = {}) {
+    const _opts = /** @type {any} */ (options);
+
+    // Direct placement — bypass interactive card when coordinates are provided
+    if (_opts.x !== undefined && _opts.y !== undefined) {
+        const templateMacroApi = game.modules.get('templatemacro')?.api;
+        if (templateMacroApi?.placeZone) {
+            const result = await templateMacroApi.placeZone(options, _opts.hooks ?? {});
+            if (result && _opts.attachToToken) {
+                const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
+                if (tokenDoc && templateMacroApi.attachTemplateToToken) await templateMacroApi.attachTemplateToToken(result, tokenDoc);
+            }
+            return result ? [result] : null;
+        }
+        // Fallback: no templatemacro
+        const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type: _opts.type ?? "Blast", val: _opts.size ?? 1 });
+        const baseData = templatePreview.document?.toObject() ?? {};
+        const [created] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{
+            ...baseData,
+            x: _opts.x,
+            y: _opts.y,
+            user: game.user.id
+        }]);
+        if (created && _opts.attachToToken) {
+            const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
+            if (tokenDoc) {
+                const tmApi = game.modules.get('templatemacro')?.api;
+                if (tmApi?.attachTemplateToToken) await tmApi.attachTemplateToToken({ template: created }, tokenDoc);
+            }
+        }
+        return created ? [{ x: created.x, y: created.y, template: created }] : null;
+    }
+
     const _title = options.title || 'PLACE ZONE';
     return _queueCard(() => new Promise(async (resolve) => {
         const {
@@ -711,6 +744,14 @@ export function placeZone(casterToken, options = {}) {
                         }
                     }
                     placedZones.push(result);
+
+                    if (_opts.attachToToken && result.template) {
+                        const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
+                        if (tokenDoc) {
+                            const tmApi = game.modules.get('templatemacro')?.api;
+                            if (tmApi?.attachTemplateToToken) await tmApi.attachTemplateToToken(result, tokenDoc);
+                        }
+                    }
 
                     const refreshZoneCard = () => {
                         _updateInfoCard(cardEl, "placeZone", {

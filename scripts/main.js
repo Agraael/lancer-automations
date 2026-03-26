@@ -56,7 +56,7 @@ import {
 import { EffectManagerAPI } from "./effectManager.js";
 import { TerrainAPI } from "./terrain-utils.js";
 
-import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation } from "./misc-tools.js";
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, executeStatRoll } from "./misc-tools.js";
 import { checkModuleUpdate } from "./version-check.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
     bindChatMessageStateInterceptor,
@@ -623,19 +623,36 @@ async function checkReactions(triggerType, data) {
                     const reactionPath = reaction.reactionPath || "";
 
                     if (reactionPath && reactionPath !== "" && reactionPath !== "system" && reactionPath !== "system.trigger") {
-                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
-                        let actionData = item.system;
-                        for (const part of pathParts) {
-                            if (actionData && (typeof actionData === 'object' || Array.isArray(actionData))) {
-                                actionData = actionData[part];
-                            } else {
-                                actionData = null;
-                                break;
+                        let actionData = null;
+
+                        // Extra-action path: "extraActions.ActionName"
+                        if (reactionPath.startsWith("extraActions.")) {
+                            const actionName = reactionPath.slice("extraActions.".length);
+                            const extraActions = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                            actionData = extraActions.find(a => a.name === actionName) ?? null;
+                        } else {
+                            // Standard path navigation into item.system
+                            const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
+                            actionData = item.system;
+                            for (const part of pathParts) {
+                                if (actionData && (typeof actionData === 'object' || Array.isArray(actionData))) {
+                                    actionData = actionData[part];
+                                } else {
+                                    actionData = null;
+                                    break;
+                                }
                             }
                         }
+
                         if (actionData?.name) {
                             activationName = actionData.name;
+                            // Skip if the triggering action name doesn't match this reaction's path
+                            if (data.actionName && data.actionName !== activationName)
+                                continue;
                         }
+                    } else if (reaction.onlyOnSourceMatch && data.actionName && data.actionName !== item.name) {
+                        // No reactionPath: skip when a specific sub-action was triggered (not the base item)
+                        continue;
                     }
 
                     let shouldTrigger = false;
@@ -1540,6 +1557,39 @@ async function handleSocketEvent({ action, payload }) {
             _pendingFlowWaits.delete(payload.requestId);
             resolve();
         }
+    } else if (action === 'statRollRequest') {
+        // Remote client: player rolls on their side, sends result back.
+        if (payload.targetUserId !== game.user.id) return;
+        (async () => {
+            const rollActor = await fromUuid(payload.actorUuid);
+            if (!rollActor) {
+                game.socket.emit('module.lancer-automations', {
+                    action: 'statRollResponse', payload: { requestId: payload.requestId, result: { completed: false } }
+                });
+                return;
+            }
+            const rollToken = rollActor.token?.object ?? rollActor.getActiveTokens()?.[0];
+            const upperStat = payload.stat.toUpperCase();
+            const cardResult = await startChoiceCard({
+                title: payload.cardTitle || payload.title,
+                description: payload.cardDescription || `<b>${rollToken?.name ?? rollActor.name}</b> must roll a ${upperStat} save.`,
+                relatedToken: rollToken,
+                choices: [{ text: `Roll ${upperStat} Save`, icon: "fas fa-dice" }]
+            });
+            let result = { completed: false };
+            if (cardResult?.choiceIdx === 0) {
+                result = await executeStatRoll(rollActor, payload.stat, payload.title, payload.targetVal ?? 10);
+            }
+            game.socket.emit('module.lancer-automations', {
+                action: 'statRollResponse', payload: { requestId: payload.requestId, result }
+            });
+        })().catch(e => console.error('lancer-automations | statRollRequest error:', e));
+    } else if (action === 'statRollResponse') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve(payload.result ?? { completed: false });
+        }
     } else if (action === 'syncPlaceholderVideos') {
         setTimeout(() => {
             for (let tokenId of payload.placeholderIds) {
@@ -1686,6 +1736,10 @@ function getMovementHistory(tokenOrId) {
 function initMovementCap(token) {
     const doc = _getMoveHistoryDoc(token);
     if (!doc)
+        return;
+    const tokenId = doc.id ?? doc._id;
+    const isInCombat = !!game.combat?.combatants.find(c => c.token?.id === tokenId);
+    if (!isInCombat)
         return;
     const isImmobilized = !!findEffectOnToken(token, 'immobilized');
     const speed = isImmobilized ? 0 : (token.actor?.system?.speed ?? 0);
@@ -2458,7 +2512,14 @@ async function onInitTechAttackStep(state) {
 async function onActivationStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const item = state.item;
+    let item = state.item;
+
+    // Resolve source item for extra actions (SimpleActivationFlow has no item by default).
+    // _sourceItemId is stamped by addExtraActions; the item ref is also passed from TAH.
+    if (!item && state.data?.action?._sourceItemId && actor) {
+        item = actor.items.get(state.data.action._sourceItemId) ?? null;
+        if (item) state.item = item;
+    }
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     let actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
@@ -2516,6 +2577,26 @@ async function onActivationStep(state) {
 
     if (token) {
         state.actor = token.actor;
+    }
+
+    // Auto-discharge extra actions that carry a `recharge` field after activation
+    const activatedAction = state.data?.action;
+    if (activatedAction?.recharge && activatedAction?.charged !== false) {
+        for (const itm of (state.actor?.items ?? [])) {
+            const ea = itm.getFlag('lancer-automations', 'extraActions') || [];
+            const match = ea.find(a => a.name === activatedAction.name && a.recharge);
+            if (match) {
+                match.charged = false;
+                await itm.setFlag('lancer-automations', 'extraActions', ea);
+                break;
+            }
+        }
+        const actorEa = state.actor?.getFlag('lancer-automations', 'extraActions') || [];
+        const actorMatch = actorEa.find(a => a.name === activatedAction.name && a.recharge);
+        if (actorMatch) {
+            actorMatch.charged = false;
+            await state.actor.setFlag('lancer-automations', 'extraActions', actorEa);
+        }
     }
 
     if (actionType === 'Reaction' && token && game.settings.get('lancer-automations', 'consumeReaction')) {
@@ -2938,6 +3019,82 @@ function wrapApplySelfHeat(flowSteps) {
     });
 }
 
+// ─── Extra-action recharge ──────────────────────────────────────────────────
+// Extra actions (from addExtraActions) that carry `recharge: N, charged: bool`
+// are processed by Lancer's NPCRechargeFlow using the same d6 roll.
+function wrapExtraActionRecharge(flowSteps, flows) {
+    // (a) Wrap findRechargeableSystems so the flow doesn't abort when only
+    //     extra actions need recharging (no native tg_recharge items).
+    const origFind = flowSteps.get('findRechargeableSystems');
+    if (origFind) {
+        flowSteps.set('findRechargeableSystems', async function wrappedFindRechargeableSystems(state) {
+            const result = await origFind.call(this, state);
+
+            let hasExtraRechargeables = false;
+            for (const item of state.actor.items) {
+                const ea = item.getFlag('lancer-automations', 'extraActions') || [];
+                if (ea.some(a => a.recharge && a.charged === false)) { hasExtraRechargeables = true; break; }
+            }
+            if (!hasExtraRechargeables) {
+                const actorEa = state.actor.getFlag('lancer-automations', 'extraActions') || [];
+                if (actorEa.some(a => a.recharge && a.charged === false))
+                    hasExtraRechargeables = true;
+            }
+            if (hasExtraRechargeables) {
+                state.data.la_hasExtraRechargeables = true;
+                return true;
+            }
+            return result;
+        });
+    }
+
+    // (b) After Lancer applies native recharges, apply the same roll to extra actions.
+    flowSteps.set('lancer-automations:rechargeExtraActions', async function rechargeExtraActions(state) {
+        if (!state.data?.la_hasExtraRechargeables) return true;
+        if (!state.data?.result?.roll) return true;
+        const rollTotal = state.data.result.roll.total;
+
+        for (const item of state.actor.items) {
+            const extraActions = item.getFlag('lancer-automations', 'extraActions') || [];
+            let changed = false;
+            for (const action of extraActions) {
+                if (action.recharge && action.charged === false) {
+                    const recharged = rollTotal >= action.recharge;
+                    action.charged = recharged;
+                    state.data.charged.push({ name: action.name, target: action.recharge, charged: recharged });
+                    changed = true;
+                }
+            }
+            if (changed) await item.setFlag('lancer-automations', 'extraActions', extraActions);
+        }
+        const actorActions = state.actor.getFlag('lancer-automations', 'extraActions') || [];
+        let actorChanged = false;
+        for (const action of actorActions) {
+            if (action.recharge && action.charged === false) {
+                const recharged = rollTotal >= action.recharge;
+                action.charged = recharged;
+                state.data.charged.push({ name: action.name, target: action.recharge, charged: recharged });
+                actorChanged = true;
+            }
+        }
+        if (actorChanged) await state.actor.setFlag('lancer-automations', 'extraActions', actorActions);
+        return true;
+    });
+    flows.get('NPCRechargeFlow')?.insertStepAfter('applyRecharge', 'lancer-automations:rechargeExtraActions');
+
+    // (c) Block activation of uncharged extra actions (mirrors Lancer's own
+    //     recharge check but for extra actions on SimpleActivationFlow).
+    flowSteps.set('lancer-automations:checkExtraActionRecharge', async function checkExtraActionRecharge(state) {
+        const action = state.data?.action;
+        if (action?.recharge && action?.charged === false) {
+            ui.notifications.warn(`${action.name} has not recharged! (Recharge ${action.recharge}+)`);
+            return false;
+        }
+        return true;
+    });
+    flows.get('SimpleActivationFlow')?.insertStepBefore('printActionUseCard', 'lancer-automations:checkExtraActionRecharge');
+}
+
 function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
@@ -3014,6 +3171,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
 
     // Wrap applySelfHeat to honour heat immunity and resistance
     wrapApplySelfHeat(flowSteps);
+
+    // Extra-action recharge system (piggybacks on NPC recharge flow)
+    wrapExtraActionRecharge(flowSteps, flows);
 
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
@@ -3092,20 +3252,14 @@ Hooks.on('init', () => {
                 "CONFIG.elevationruler.MovePenalty.prototype.movementCostForSegment",
                 function (wrapped, startCoords, endCoords, ...args) {
                     const token = canvas.controls.ruler.token;
-                    const ignoreElevation = token?.actor?.statuses.has("flying")
+                    const noClimbingMalus = token?.actor?.statuses.has("flying")
                         || token?.actor?.statuses.has("climber")
                         || getImmunityBonuses(token?.actor, "elevation").length > 0;
                     const ignoreDifficultTerrain = token?.actor?.statuses.has("terrain_immunity")
                         || getImmunityBonuses(token?.actor, "terrain").length > 0;
-                    if (ignoreElevation) {
-                        const orig = this.getTerrainElevationAt;
-                        this.getTerrainElevationAt = () => null;
-                        const result = wrapped(startCoords, endCoords, ...args);
-                        this.getTerrainElevationAt = orig;
-                        if (ignoreDifficultTerrain) return result - this.lastTerrainPenalty;
-                        return result;
-                    }
+                    this._noClimbingMalus = noClimbingMalus;
                     const result = wrapped(startCoords, endCoords, ...args);
+                    this._noClimbingMalus = false;
                     if (ignoreDifficultTerrain) return result - this.lastTerrainPenalty;
                     return result;
                 },
@@ -4274,8 +4428,9 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         };
 
         // Movement cap check: block the move if it would exceed the cap (combat only, non-free moves)
+        const isTokenInCombat = !!game.combat?.combatants.find(c => c.token?.id === token.id);
         if (game.settings.get('lancer-automations', 'enableMovementCapDetection')
-            && game.combat?.active && !moveIsFreeMovement && moveToMovementCost > 0) {
+            && isTokenInCombat && !moveIsFreeMovement && moveToMovementCost > 0) {
             const cap = getMovementCap(token);
             const history = getMovementHistory(token);
             const spent = history.exists ? history.intentional.regularCost : 0;

@@ -540,6 +540,8 @@ interface LancerAutomationsAPI {
         headerClass?: string;
     }): Promise<Token[] | null>;
     placeZone(casterToken: Token, options?: {
+        x?: number;
+        y?: number;
         range?: number;
         size?: number;
         type?: "Blast" | "Burst" | "Cone" | "Line";
@@ -555,6 +557,7 @@ interface LancerAutomationsAPI {
         title?: string;
         description?: string;
         icon?: string;
+        attachToToken?: TokenDocument | string;
     }): Promise<any>;
     placeToken(options?: {
         actor?: any | any[];
@@ -566,7 +569,7 @@ interface LancerAutomationsAPI {
         title?: string;
         noCard?: boolean;
     }): Promise<any>;
-    knockBackToken(token: Token, direction: object, distance: number): Promise<void>;
+    knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any }): Promise<any>;
     applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any): Promise<void>;
     startChoiceCard(options?: {
         mode?: "or" | "and" | "vote" | "vote-hidden";
@@ -694,7 +697,7 @@ interface LancerAutomationsAPI {
     getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;
     getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;
-    executeStatRoll(actor: any, stat: string, title: string, sourceToken?: Token): Promise<any>;
+    executeStatRoll(actor: any, stat: string, title: string, target?: number | Token | TokenDocument | "token", extraData?: { targetStat?: string; sendToOwner?: boolean; cardTitle?: string; cardDescription?: string; [key: string]: any }): Promise<{ completed: boolean; total?: number; roll?: any; passed?: boolean }>;
 
     [key: string]: any;
 }

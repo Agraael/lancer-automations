@@ -430,7 +430,12 @@ export function laRenderActionDetail(action, opts = {}) {
     const triggerHtml = action.trigger
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('TRIGGER', '#1a5c3a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.trigger)}</div></div>`
         : '';
-    const tagsHtml = laRenderTags(action.tags ?? []);
+    const actionTags = [...(action.tags ?? [])];
+    if (action.activation && !actionTags.some(t => t.lid?.includes('action') || t.lid?.includes('protocol') || t.lid?.includes('reaction')))
+        actionTags.unshift({ name: action.activation });
+    if (action.recharge && !actionTags.some(t => t.lid === 'tg_recharge'))
+        actionTags.push({ lid: 'tg_recharge', val: String(action.recharge), name: 'Recharge {VAL}+' });
+    const tagsHtml = laRenderTags(actionTags);
     const detail = laFormatDetailHtml(action.detail || action.effect || '');
     const detailHtml = detail
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${detail}</div></div>`

@@ -1,7 +1,7 @@
 /* global $, window, game, CONFIG */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
@@ -18,7 +18,7 @@ import { StatusPanel } from './status-panel.js';
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
 const HUD_TOP  = 115;   // below Foundry's top nav bar
 
-const ROW_MAX_WIDTH = 300;
+const ROW_MAX_WIDTH = 250;
 
 const S_COL  = `display:flex;flex-direction:column;gap:2px;width:max-content;min-width:180px;max-width:${ROW_MAX_WIDTH}px;`;
 
@@ -1070,6 +1070,7 @@ export class LancerHUD {
                 this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.'),
+                { label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) },
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
@@ -1165,6 +1166,7 @@ export class LancerHUD {
             { key: 'sys',  label: 'Systems' },
             { key: 'eng',  label: 'Engineering' },
             { key: 'grit', label: 'Grit' },
+            { key: 'tier', label: 'Tier' },
         ];
         const statsItems = statDefs
             .filter(s => actor.system[s.key] !== undefined)
@@ -1173,7 +1175,7 @@ export class LancerHUD {
                 badge: (actor.system[s.key] >= 0 ? '+' : '') + actor.system[s.key],
                 badgeColor: '#777',
                 hoverData: { actor, item: null, action: { name: s.label }, category: 'Skills' },
-                onClick: () => /** @type {any} */ (actor).beginStatFlow(s.key),
+                onClick: () => /** @type {any} */ (actor).beginStatFlow(`system.${s.key}`),
             }));
 
         const skillItems = [];
@@ -1228,7 +1230,6 @@ export class LancerHUD {
         ];
 
         const gameplayItems = [
-            { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
             { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginFullRepairFlow() },
             ...(isMechOrNpc ? [
                 {
@@ -1250,6 +1251,10 @@ export class LancerHUD {
                 },
                 { label: 'Suicide',          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }) },
                 { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token) },
+            ] : []),
+            ...(actor?.type === 'npc' ? [
+                { label: 'Recharge', icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginRechargeFlow() },
+                { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
             ] : []),
         ];
 
@@ -1651,7 +1656,8 @@ export class LancerHUD {
                     const actLabel = actTag ? (ACT_LABELS[actTag.lid] ?? actTag.lid) : (activation ?? null);
                     const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
                     const npcSysChildren = () => {
-                        const npcActions = /** @type {any[]} */ (sys.actions ?? []);
+                        const sysActions = /** @type {any[]} */ (sys.actions ?? []);
+                        const extraActions = /** @type {any[]} */ (item.getFlag?.('lancer-automations', 'extraActions') || []);
                         const npcRightClick = (/** @type {any} */ row) => {
                             const trigger = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
                             const effect  = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
@@ -1660,24 +1666,43 @@ export class LancerHUD {
                                 return;
                             toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: /** @type {any} */ p => appendItemPips(item, p) });
                         };
-                        if (npcActions.length <= 1) {
-                            const single = npcActions[0] ?? null;
+                        // Base system activation (always present)
+                        const baseRows = [];
+                        if (sysActions.length <= 1) {
+                            const single = sysActions[0] ?? null;
                             const actStr = single?.activation ?? activation ?? 'Activation';
-                            return [{
+                            baseRows.push({
                                 label: item.name,
                                 icon: (single || activation) ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg',
                                 onClick: () => /** @type {any} */ (item).beginSystemFlow(),
                                 onRightClick: npcRightClick,
                                 hoverData: { actor, item, action: { name: item.name, activation: actStr }, category: 'Systems' },
-                            }];
+                            });
+                        } else {
+                            sysActions.forEach((action, idx) => baseRows.push({
+                                label: action.name,
+                                icon: getActivationIcon(action),
+                                onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
+                                onRightClick: npcRightClick,
+                                hoverData: { actor, item, action, category: 'Systems' },
+                            }));
                         }
-                        return npcActions.map(/** @type {any} */ (action, idx) => ({
-                            label: action.name,
-                            icon: getActivationIcon(action),
-                            onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
-                            onRightClick: npcRightClick,
-                            hoverData: { actor, item, action, category: 'Systems' },
-                        }));
+                        // Extra actions (from addExtraActions)
+                        for (const action of extraActions) {
+                            const charged = !action.recharge || action.charged !== false;
+                            const eaBadge = action.recharge ? (charged ? '▣' : '□') : null;
+                            const eaBadgeColor = action.recharge ? (charged ? '#3a9e6e' : '#c33') : null;
+                            baseRows.push({
+                                label: `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}`,
+                                badge: eaBadge,
+                                badgeColor: eaBadgeColor,
+                                icon: getActivationIcon(action),
+                                onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }, { item }),
+                                onRightClick: this._actionPopup(action, item),
+                                hoverData: { actor, item, action, category: 'Systems' },
+                            });
+                        }
+                        return baseRows;
                     };
                     return {
                         label: labelHtml,
@@ -2104,7 +2129,7 @@ export class LancerHUD {
                 si.beginActivationFlow(`system.profiles.${profIdx}.actions.${pIdx}`);
                 return;
             }
-            executeSimpleActivation(actor, { title: a.name, action: a, detail: a.detail ?? '' });
+            executeSimpleActivation(actor, { title: a.name, action: a, detail: a.detail ?? '' }, { item: si });
         };
         if (actor.type === 'pilot') {
             return addRightClicks(addHover(laHudItemChildren(weapon, {
@@ -2258,15 +2283,23 @@ export class LancerHUD {
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
             const theme = themeOverride ?? activationTheme(action.activation);
             const sourceItem = typeof source === 'string' ? null : source;
-            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, item: sourceItem ?? action.name, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p) : null });
+            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, item: sourceItem ?? action.name, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p, { action }) : (action.recharge ? p => appendItemPips(null, p, { action }) : null) });
         };
     }
 
     _getActionsByActivation(actor, activationType, category = null) {
         return getActorActionItems(actor, activationType).map((/** @type {any} */ { action, sourceItem, rankIdx, _coreActive }) => {
             const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };
+            // Extra-action recharge: overlay action-level charged state onto item status
+            if (action.recharge && !status.destroyed) {
+                const charged = action.charged !== false;
+                status.badge = (status.badge ? status.badge + ' ' : '') + (charged ? '▣' : '□');
+                status.badgeColor = charged ? (status.badgeColor ?? '#3a9e6e') : '#c33';
+                if (!charged) status.unavailable = true;
+            }
             return {
-                label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>` : action.name,
+                label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>`
+                    : (action._sourceItemId ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
@@ -2277,7 +2310,9 @@ export class LancerHUD {
                         si.beginCoreActiveFlow('system.core_system');
                     else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
                         const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ a => a === action || a.name === action.name);
-                        actionIdx >= 0 ? si.beginActivationFlow(`system.actions.${actionIdx}`) : si.beginSystemFlow();
+                        if (actionIdx >= 0) si.beginActivationFlow(`system.actions.${actionIdx}`);
+                        else if (action._sourceItemId || action.recharge !== undefined) executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' }, { item: si });
+                        else si.beginSystemFlow();
                     } else if (si?.type === 'talent') {
                         if (action.activation === 'Invade') {
                             const opt = this._getInvadeOptions(actor).find(o => o.item?.id === si.id && o.name === action.name);
@@ -2299,7 +2334,9 @@ export class LancerHUD {
                         const equiv = /** @type {any} */ (a).items.find(/** @type {any} */ i => i.system?.lid === si.system?.lid);
                         if (equiv) {
                             const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ ac => ac === action || ac.name === action.name);
-                            actionIdx >= 0 ? equiv.beginActivationFlow(`system.actions.${actionIdx}`) : equiv.beginSystemFlow();
+                            if (actionIdx >= 0) equiv.beginActivationFlow(`system.actions.${actionIdx}`);
+                            else if (action._sourceItemId || action.recharge !== undefined) executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' }, { item: equiv });
+                            else equiv.beginSystemFlow();
                         }
                     } else if (si?.type === 'talent') {
                         if (action.activation === 'Invade') {
