@@ -12,7 +12,7 @@ export function getTokenCells(token) {
 
 // Cache for terrain types to avoid redundant API calls and array searches
 const _terrainCache = {
-    blockingMap: new Map(),
+    solidMap: new Map(),
     timestamp: 0,
     ttl: 2000 // 2 second TTL is safe for terrain config changes
 };
@@ -30,10 +30,10 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     const now = Date.now();
     if (now - _terrainCache.timestamp > _terrainCache.ttl) {
         const types = terrainAPI.getTerrainTypes?.() || [];
-        _terrainCache.blockingMap.clear();
+        _terrainCache.solidMap.clear();
         for (const t of types) {
-            if (t.blockMovement) {
-                _terrainCache.blockingMap.set(t.id, t);
+            if (t.usesHeight && t.isSolid) {
+                _terrainCache.solidMap.set(t.id, t);
             }
         }
         _terrainCache.timestamp = now;
@@ -42,13 +42,12 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     let maxGroundHeight = 0;
 
     for (const [x, y] of cells) {
-        // Get existing terrain data at this cell
-        const existingTerrain = terrainAPI.getCell(y, x) || [];
+        // Get existing terrain data at this cell — getCell(row, col) in THT v0.6+
+        const existingTerrain = terrainAPI.getCell(x, y) || [];
 
-        // Find the highest terrain height at this position (only consider terrain that blocks movement)
+        // Find the highest terrain height at this position (only consider solid height-using terrain)
         for (const terrain of existingTerrain) {
-            // Check if this terrain type blocks movement using the cached Map
-            if (_terrainCache.blockingMap.has(terrain.terrainTypeId)) {
+            if (_terrainCache.solidMap.has(terrain.terrainTypeId)) {
                 const totalHeight = (terrain.elevation || 0) + (terrain.height || 0);
                 if (totalHeight > maxGroundHeight) {
                     maxGroundHeight = totalHeight;
