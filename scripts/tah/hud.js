@@ -1256,6 +1256,19 @@ export class LancerHUD {
                 { label: 'Recharge', icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginRechargeFlow() },
                 { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
             ] : []),
+            ...(actor?.system?.overcharge_sequence ? (() => {
+                const ocSeq = actor.system.overcharge_sequence.split(',').map(s => s.trim());
+                return [{
+                    inputCell: true,
+                    subtype: 'increment',
+                    name: 'Overcharge',
+                    icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
+                    min: 0,
+                    max: ocSeq.length - 1,
+                    getValue: () => actor?.system?.overcharge ?? 0,
+                    onValueChanged: (newVal) => actor?.update({ 'system.overcharge': newVal }),
+                }];
+            })() : []),
         ];
 
         const movementItems = [
@@ -1459,6 +1472,7 @@ export class LancerHUD {
                     {
                         label: frame.name,
                         icon: 'systems/lancer/assets/icons/frame.svg',
+                        onClick: () => /** @type {any} */ (frame).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
                     },
                     { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) },
@@ -1542,6 +1556,7 @@ export class LancerHUD {
                     {
                         label: npcClass.name,
                         icon: tierIcon,
+                        onClick: () => /** @type {any} */ (npcClass).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => toggleDetailPopup({
                             cssClass: 'la-hud-popup la-hud-npcclass-popup',
                             dataKey: 'npcclass-id',
@@ -1571,6 +1586,7 @@ export class LancerHUD {
         return templates.map(/** @type {any} */ tmpl => ({
             label: tmpl.name,
             icon: tmpl.img ?? null,
+            onClick: () => /** @type {any} */ (tmpl).sheet.render(true),
             onRightClick: (/** @type {any} */ row) => {
                 const desc = tmpl.system?.description
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(tmpl.system.description)}</div>` : '';
@@ -1601,6 +1617,8 @@ export class LancerHUD {
             return {
                 label: feat.name,
                 icon: feat.img ?? null,
+                onClick: () => /** @type {any} */ (feat).beginSystemFlow(),
+                broadcastFn: (_t, a) => { const f = a.items.find(i => i.type === 'npc_feature' && i.system?.lid === sys.lid); if (f) /** @type {any} */ (f).beginSystemFlow(); },
                 onRightClick: (/** @type {any} */ row) => {
                     const tagsHtml = laRenderTags(sys.tags ?? []);
                     const effect   = sys.effect ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
@@ -1788,9 +1806,10 @@ export class LancerHUD {
         const traits = frame.system?.traits ?? [];
         if (!traits.length)
             return [];
-        return traits.map(/** @type {any} */ trait => ({
+        return traits.map(/** @type {any} */ (trait) => ({
             label: trait.name,
             icon: 'systems/lancer/assets/icons/trait.svg',
+            onClick: () => { const F = /** @type {any} */ (game).lancer?.flows?.get('SimpleTextFlow'); if (F) new F(frame, { title: trait.name, description: trait.description }).begin(); },
             childColLabel: trait.name,
             getChildren: () => {
                 const children = [];
@@ -1914,6 +1933,7 @@ export class LancerHUD {
                 return talents.map(talent => ({
                     label: talent.name,
                     icon: talent.img ?? null,
+                    onClick: () => /** @type {any} */ (talent).sheet.render(true),
                     childColLabel: talent.name,
                     hoverData: { actor, item: talent, action: null, category: 'Talents' },
                     getChildren: () => this._talentRankItems(talent),
@@ -1934,6 +1954,7 @@ export class LancerHUD {
             return {
                 label: rankLabel,
                 icon: talent.img ?? null,
+                onClick: () => { const F = /** @type {any} */ (game).lancer?.flows?.get('TalentFlow'); if (F) new F(talent, { title: talent.name, rank, lvl: i }).begin(); },
                 childColLabel: rankLabel,
                 getChildren: (actions.length || counters.length) ? () => this._talentRankActionItems(talent.system.ranks[i], talent, i) : undefined,
                 onRightClick: (row) => {

@@ -39,10 +39,12 @@ export function buildStatsHtml(actor, token = null) {
     const heatColor  = lerpColor(136, 136, 136, 244, 67, 54, heatRatio); // grey→red
 
     const strPips    = Array.from({ length: strMax },    (_, i) => `<span style="color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};">◆</span>`).join('');
-    const stressPips = Array.from({ length: stressMax }, (_, i) => `<span style="color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};">●</span>`).join('');
+    const stressPips = Array.from({ length: stressMax }, (_, i) => `<span style="color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};">◆</span>`).join('');
 
-    const ocLabels = ['—', '1d3', '1d6', '1d6+4'];
-    const ocColor    = oc > 0 ? '#f88040' : '#555';
+    const hasOvercharge = !!sys.overcharge_sequence;
+    const ocSeq    = hasOvercharge ? sys.overcharge_sequence.split(',').map(/** @type {(s:string)=>string} */ s => s.trim()) : [];
+    const ocLabel  = hasOvercharge ? (ocSeq[Math.min(oc, ocSeq.length - 1)] ?? '—') : null;
+    const ocColor  = oc > 0 ? '#f88040' : '#555';
     const SEP = `<span style="color:#444;">│</span>`;
     const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${repairs > 0 ? 1 : 0.3};">`;
     const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
@@ -78,7 +80,7 @@ export function buildStatsHtml(actor, token = null) {
         `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabels[Math.min(oc, 3)]}</span>${SEP}${reactionImg}${reactionNum}` +
+        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
         `</div>`;
 }

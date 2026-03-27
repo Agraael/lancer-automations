@@ -2732,6 +2732,122 @@ api.registerDefaultItemReactions({
     }
 });
 
+// ─── Architect Civil-Class Terrain Printer ───────────────────────────────────────
+// Hook for terrain printer waypoints — triggered on enter/turnStart by templateMacro.
+// Params named template/scene/token to match both runtime callback (templateDoc, scene, token)
+// and stringified flag-command context (where template, scene, token are local vars).
+async function _terrainPrinterHookFn(template, scene, token) {
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api || !token) return;
+    const data = template.getFlag('lancer-automations', 'terrainPrinterData');
+    if (!data) return;
+    const architect = canvas.tokens.get(data.architectTokenId);
+    if (!architect || !api.isFriendly(architect, token)) return;
+    const cap = api.getMovementCap(token);
+    if (cap < 1) return;
+    const otherTemplate = canvas.scene.templates.get(data.otherTemplateId);
+    if (!otherTemplate) return;
+    const result = await api.startChoiceCard({
+        title: "TERRAIN PRINTER",
+        description: '<b>' + token.name + '</b> can spend 1 movement to travel to the other waypoint.',
+        originToken: architect,
+        relatedToken: token,
+        userIdControl: api.getTokenOwnerUserId(token),
+        choices: [
+            { text: "Teleport", icon: "fas fa-route" },
+            { text: "Stay", icon: "fas fa-times" }
+        ]
+    });
+    if (result?.choiceIdx !== 0) return;
+    const dest = canvas.grid.getCenterPoint({ x: otherTemplate.x, y: otherTemplate.y });
+    const tokenCenter = canvas.grid.getCenterPoint({ x: token.x, y: token.y });
+    await token.document.update(
+        { x: token.x + (dest.x - tokenCenter.x), y: token.y + (dest.y - tokenCenter.y) },
+        { teleport: true, rulerSegment: false, firstRulerSegment: true, lastRulerSegment: true, lancerSegmentCost: 1, lancerSegmentDistance: 1, lancerTerrainPenalty: 0 }
+    );
+}
+
+api.registerDefaultItemReactions({
+    "cap_npc_architect_civil_class_terrain_printer": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                // Delete previous waypoints
+                const prev = reactorToken.actor.getFlag('lancer-automations', 'terrainPrinterWaypoints') || [];
+                for (const wp of prev) {
+                    const t = canvas.scene.templates.get(wp.templateId);
+                    if (t) await t.delete();
+                }
+                await reactorToken.actor.unsetFlag('lancer-automations', 'terrainPrinterWaypoints');
+
+                const hookObj = {
+                    entered: { function: _terrainPrinterHookFn, asGM: true },
+                    turnStart: { function: _terrainPrinterHookFn, asGM: true }
+                };
+
+                // Waypoint 1: within Range 3 of Architect
+                const wp1Result = await api.placeZone(reactorToken, {
+                    range: 3, size: 0.33, type: "Burst", count: 1,
+                    fillColor: "#00cc66", borderColor: "#009944",
+                    title: "TERRAIN PRINTER \u2014 WAYPOINT 1",
+                    description: "Place first waypoint within Range 3.",
+                    centerLabel: "TP",
+                    hooks: hookObj
+                });
+                if (!wp1Result?.[0]?.template) return;
+                const wp1 = wp1Result[0];
+
+                // Waypoint 2: soft-validate within Range 5 of waypoint 1
+                const wp2Result = await api.placeZone(reactorToken, {
+                    size: 0.33, type: "Burst", count: 1,
+                    fillColor: "#00cc66", borderColor: "#009944",
+                    title: "TERRAIN PRINTER \u2014 WAYPOINT 2",
+                    description: "Place second waypoint. Must be within Range 5 of the first.",
+                    centerLabel: "TP",
+                    hooks: hookObj
+                });
+                if (!wp2Result?.[0]?.template) {
+                    await wp1.template.delete();
+                    return;
+                }
+                const wp2 = wp2Result[0];
+
+                // Soft range validation
+                const dist = canvas.grid.measurePath([
+                    { x: wp1.template.x, y: wp1.template.y },
+                    { x: wp2.template.x, y: wp2.template.y }
+                ]).distance / canvas.dimensions.distance;
+                if (dist > 5) {
+                    ui.notifications.warn(`Waypoint 2 is ${Math.round(dist)} spaces from Waypoint 1 (should be \u2264 5).`);
+                }
+
+                // Cross-reference each waypoint with the other
+                await wp1.template.setFlag('lancer-automations', 'terrainPrinterData', {
+                    otherTemplateId: wp2.template.id,
+                    architectTokenId: reactorToken.id
+                });
+                await wp2.template.setFlag('lancer-automations', 'terrainPrinterData', {
+                    otherTemplateId: wp1.template.id,
+                    architectTokenId: reactorToken.id
+                });
+                await reactorToken.actor.setFlag('lancer-automations', 'terrainPrinterWaypoints', [
+                    { templateId: wp1.template.id },
+                    { templateId: wp2.template.id }
+                ]);
+            }
+        }]
+    }
+});
+
 // ─── Fall Prone (Sniper's Mark) general reaction ───────────────────────────────
 api.registerDefaultGeneralReactions({
     "Fall Prone (Sniper's Mark)": {
