@@ -3,82 +3,115 @@
 ## Table of Contents
 
 - [Accessing the API](#accessing-the-api)
-- [Fundamentals](#fundamentals)
-  - [Trigger Types & Data](#trigger-types--data)
-    - [Attack Triggers](#attack-triggers)
-    - [Tech Triggers](#tech-triggers)
-    - [Movement Triggers](#movement-triggers)
-    - [Turn Events](#turn-events)
-    - [Status Effect Triggers](#status-effect-triggers)
-    - [Damage & Structure Triggers](#damage--structure-triggers)
-    - [Stat & Activation Triggers](#stat--activation-triggers)
-  - [Evaluate & Activate Signatures](#evaluate--activate-signatures)
-  - [Activation Object Structure](#activation-object-structure)
-  - [Consumption Object Structure](#consumption-object-structure)
-- [Combat & Execution Flows](#combat--execution-flows)
-  - [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata)
-  - [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata)
-  - [`executeBasicAttack`](#executebasicattackactor-options-extradata)
-  - [`executeTechAttack`](#executetechattackactor-options-extradata)
-  - [`executeSimpleActivation`](#executesimpleactivationactor-options-extradata)
-- [Status Effect Management](#status-effect-management)
-  - [`applyEffectsToTokens`](#applyeffectstotokensoptions-extraoptions)
-  - [`removeEffectsByNameFromTokens`](#removeeffectsfromtokensoptions)
-  - [`removeEffectsByName`](#removeeffectsbynameactor-effectnames-originid)
-  - [`deleteEffect`](#deleteeffecttoken-effect)
-  - [`findEffectOnToken`](#findeffectontokentoken-identifier)
-  - [`consumeEffectCharge`](#consumeeffectchargeeffect)
-  - [`triggerEffectImmunity`](#triggereffectimmunitytoken-effectnames-source-notify)
-  - [`deleteAllEffects`](#deletealleffects)
-  - [`executeEffectManager`](#executeeffectmanageroptions)
-- [Global & Constant Bonuses](#global--constant-bonuses)
-  - [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options)
-  - [`removeGlobalBonus`](#removeglobalbonusactor-bonusid-skipeffectremoval)
-  - [`getGlobalBonuses`](#getglobalbonusesactor)
-  - [`addConstantBonus`](#addconstantbonusactor-bonusdata)
-  - [`getConstantBonuses`](#getconstantbonusesactor)
-  - [`removeConstantBonus`](#removeconstantbonusactor-bonusid)
-  - [Flow State Data Injection](#flow-state-data-injection)
-- [Spatial & Distance Tools](#spatial--distance-tools)
-  - [Distance Calculations](#distance-calculations)
-  - [Faction & Disposition](#faction--disposition)
-  - [Grid & Cell Data](#grid--cell-data)
-  - [Debug Visualizations](#debug-visualizations)
-- [Weapon & Item Details](#weapon--item-details)
-  - [`getItemTags_WithBonus`](#getitemtags_withbonusitem-actor)
-  - [`getActorMaxThreat`](#getactormaxthreatactor)
-  - [`getMaxWeaponRanges_WithBonus`](#getmaxweaponranges_withbonusinput)
-  - [`getMaxWeaponReach_WithBonus`](#getmaxweaponreach_withbonusinput)
-  - [`getWeaponType`](#getweapontypeitem)
-  - [`getItemType`](#getitemtypeitem)
-- [Resource Management](#resource-management)
-  - [`setReaction`](#setreactionactorotoken-value)
-  - [`setItemResource`](#setitemresourceitem-nb-counterindex)
-- [Interactive Player Tools](#interactive-player-tools)
-  - [`chooseToken`](#choosetokencastertoken-options)
-  - [`placeZone`](#placezonecastertoken-options)
-  - [`placeToken`](#placetokenoptions)
-  - [`knockBackToken`](#knockbacktokentokens-distance-options)
-  - [`revertMovement`](#revertmovementtoken-destination)
-  - [`startChoiceCard`](#startchoicecardoptions)
-  - [`openChoiceMenu`](#openchoicemenu)
-- [Deployment & Thrown Weapons](#deployment--thrown-weapons)
-  - [`addItemFlags`](#additemflagsitem-flags)
-  - [`getItemFlags`](#getitemflagsitem-flagname)
-  - [`placeDeployable`](#placedeployableoptions)
-  - [`beginDeploymentCard`](#begindeploymentcardoptions)
-  - [`openDeployableMenu`](#opendeployablemenuactor)
-  - [`recallDeployable`](#recalldeployableownertoken)
-  - [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options)
-  - [`pickupWeaponToken`](#pickupweapontokenownertoken)
-  - [`openThrowMenu`](#openthrowmenuactor)
-  - [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon)
-- [Movement Tracking](#movement-tracking)
-- [Registration & Logic](#registration--logic)
-  - [User Helpers](#user-helpers)
-  - [Registration Functions](#registration-functions)
-  - [How-To: Register Activations](#how-to-register-activations)
-  - [How-To: Advanced Consumption](#how-to-advanced-consumption)
+
+<details><summary><b>Fundamentals</b> — Triggers, Evaluate/Activate, Activation & Consumption structures</summary>
+
+- [Trigger Types & Data](#trigger-types--data) — Attack, Tech, Movement, Turn, Status, Damage, Stat & Activation
+- [Evaluate & Activate Signatures](#evaluate--activate-signatures)
+- [Activation Object Structure](#activation-object-structure)
+- [Consumption Object Structure](#consumption-object-structure)
+
+</details>
+
+<details><summary><b>Combat & Execution Flows</b> — Roll attacks, damage, stat checks, skirmish</summary>
+
+- [`executeStatRoll`](#executestatrollactor-stat-title-target-extradata)
+- [`executeDamageRoll`](#executedamagerollattacker-targets-damagevalue-damagetype-title-options-extradata)
+- [`executeBasicAttack`](#executebasicattackactor-options-extradata)
+- [`executeTechAttack`](#executetechattacktarget-options-extradata)
+- [`executeSimpleActivation`](#executesimpleactivationactor-options-extradata)
+- [`executeSkirmish`](#executeskirmishactorortoken-bypassmount-pretarget-weaponfilter)
+- [`beginWeaponAttackFlow`](#beginweaponattackflowweapon-options-extradata)
+
+</details>
+
+<details><summary><b>Status Effect Management</b> — Apply, remove, find, consume effects</summary>
+
+- [`applyEffectsToTokens`](#applyeffectstotokensoptions-extraoptions)
+- [`removeEffectsByNameFromTokens`](#removeeffectsfromtokensoptions)
+- [`removeEffectsByName`](#removeeffectsbynametargetid-effectname-originid-extraflags)
+- [`deleteEffect`](#deleteeffecttoken-effect)
+- [`findEffectOnToken`](#findeffectontokentoken-identifier)
+- [`consumeEffectCharge`](#consumeeffectchargeeffect)
+- [`triggerEffectImmunity`](#triggereffectimmunitytoken-effectnames-source-notify)
+- [`deleteAllEffects`](#deletealleffects)
+- [`executeEffectManager`](#executeeffectmanageroptions)
+
+</details>
+
+<details><summary><b>Global & Constant Bonuses</b> — Temporary/permanent bonuses, immunities, flow injection</summary>
+
+- [`addGlobalBonus`](#addglobalbonusactor-bonusdata-options) / [`removeGlobalBonus`](#removeglobalbonusactor-bonusid-skipeffectremoval) / [`getGlobalBonuses`](#getglobalbonusesactor) / [`getGlobalBonus`](#getglobalbonusactor-bonusid)
+- [`addConstantBonus`](#addconstantbonusactor-bonusdata) / [`getConstantBonuses`](#getconstantbonusesactor) / [`removeConstantBonus`](#removeconstantbonusactor-bonusid)
+- [Flow State Data Injection](#flow-state-data-injection)
+- Immunity: [`getImmunityBonuses`](#getimmunitybonusesactor-subtype-state), [`checkEffectImmunities`](#checkeffectimmunitiesactor-effectidorname-effect-state), [`checkDamageResistances`](#checkdamageresistancesactor-damagetype), [`applyDamageImmunities`](#applydamageimmunitiesactor-damages-state), [`hasCritImmunity`](#hascritimmunityactor-attackeractor-state), [`hasHitImmunity`](#hashitimmunityactor-attackeractor-state), [`hasMissImmunity`](#hasmissimmunityactor-attackeractor-state)
+
+</details>
+
+<details><summary><b>Spatial & Distance Tools</b> — Distance, faction checks, grid data, debug visuals</summary>
+
+- Distance: [`getTokenDistance`](#gettokendistancetoken1-token2), [`getMinGridDistance`](#getmingriddistancetoken1-token2-overridepos1), [`getGridDistance`](#getgriddistancepos1-pos2)
+- Faction: [`isHostile`](#ishostilereactor-mover), [`isFriendly`](#isfriendlytoken1-token2)
+- Grid: [`getTokenCells`](#gettokencellstoken), [`getMaxGroundHeightUnderToken`](#getmaxgroundheightundertokentoken-terrainapi)
+- Debug: [`drawThreatDebug`](#drawthreatdebugtoken), [`drawDistanceDebug`](#drawdistancedebug), [`drawRangeHighlight`](#drawrangehighlightcastertoken-range-color-alpha-includeself)
+
+</details>
+
+<details><summary><b>Weapon & Item Details</b> — Tags, ranges, threat, weapon/item types, icons</summary>
+
+- [`getItemTags_WithBonus`](#getitemtags_withbonusitem-actor)
+- [`getActorMaxThreat`](#getactormaxthreatactor)
+- [`getMaxWeaponRanges_WithBonus`](#getmaxweaponranges_withbonusinput)
+- [`getMaxWeaponReach_WithBonus`](#getmaxweaponreach_withbonusinput)
+- [`getWeaponType`](#getweapontypeitem) / [`getItemType`](#getitemtypeitem)
+- [`getActivationIcon`](#getactivationiconactionoractivation)
+
+</details>
+
+<details><summary><b>Resource Management</b> — Reactions, item resources, token system data</summary>
+
+- [`setReaction`](#setreactionactorotoken-value)
+- [`setItemResource`](#setitemresourceitem-nb-counterindex)
+- [`updateTokenSystem`](#updatetokensystemtoken-data)
+
+</details>
+
+<details><summary><b>Interactive Player Tools</b> — Token picker, zones, knockback, movement, choice cards</summary>
+
+- [`chooseToken`](#choosetokencastertoken-options)
+- [`placeZone`](#placezonecastertoken-options)
+- [`placeToken`](#placetokenoptions)
+- [`knockBackToken`](#knockbacktokentokens-distance-options)
+- [`revertMovement`](#revertmovementtoken-destination)
+- [`startChoiceCard`](#startchoicecardoptions) / [`openChoiceMenu`](#openchoicemenu)
+- [`moveToken`](#movetokentoken-options)
+- [`getTokenOwnerUserId`](#gettokenowneruseridtoken)
+
+</details>
+
+<details><summary><b>Deployment & Thrown Weapons</b> — Deployables, flags, actions, weapons, hard cover</summary>
+
+- Flags: [`addItemFlags`](#additemflagsitem-flags) / [`getItemFlags`](#getitemflagsitem-flagname)
+- Deploy: [`placeDeployable`](#placedeployableoptions) / [`beginDeploymentCard`](#begindeploymentcardoptions) / [`openDeployableMenu`](#opendeployablemenuactor) / [`recallDeployable`](#recalldeployableownertoken)
+- Weapons: [`deployWeaponToken`](#deployweapontokenweapon-owneractor-origintoken-options) / [`pickupWeaponToken`](#pickupweapontokenownertoken) / [`openThrowMenu`](#openthrowmenuactor) / [`beginThrowWeaponFlow`](#beginthrowweaponflowweapon)
+- Items: [`getActivatedItems`](#getactivateditemstoken) / [`spawnHardCover`](#spawnhardcoverorigintoken-options)
+
+</details>
+
+<details><summary><b>Movement Tracking</b> — Move data, history, movement cap</summary>
+
+- [`clearMoveData`](#movement-tracking) / [`getCumulativeMoveData`](#movement-tracking) / [`getIntentionalMoveData`](#movement-tracking) / [`getMovementHistory`](#movement-tracking) / [`clearMovementHistory`](#movement-tracking) / [`increaseMovementCap`](#movement-tracking)
+
+</details>
+
+<details><summary><b>Registration & Logic</b> — User helpers, reaction registration, how-tos</summary>
+
+- [User Helpers](#user-helpers)
+- [Registration Functions](#registration-functions)
+- [How-To: Register Activations](#how-to-register-activations)
+- [How-To: Advanced Consumption](#how-to-advanced-consumption)
+
+</details>
 
 ---
 
@@ -308,8 +341,8 @@ Code to run when a token is created on the scene.
 |-----------|------|---------|-------------|
 | `attacker` | `Token\|Actor`| *required* | The attacker |
 | `targets` | `Array<Token>` | *required* | Damage targets |
-| `damageValue` | `number` | *required* | Base damage |
-| `damageType` | `string` | *required* | kinetic, energy, explosive, burn, heat, variable |
+| `damageValue` | `number` | `null` | Base damage |
+| `damageType` | `string` | `null` | kinetic, energy, explosive, burn, heat, variable |
 | `title` | `string` | `"Damage Roll"`| Roll title |
 | `options`   | `Object` | `{}` | Flow options (see below) |
 | `extraData`   | `Object` | `{}` | Injected state data |
@@ -322,7 +355,27 @@ Code to run when a token is created on the scene.
 ---
 
 #### `executeBasicAttack(actor, options, extraData)`
-#### `executeTechAttack(actor, options, extraData)`
+
+Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow constructor.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor making the attack |
+| `options` | `Object` | `{}` | Flow constructor options |
+| `extraData` | `Object` | `{}` | Injected into `state.la_extraData` |
+
+**Returns:** `Promise<{ completed: boolean, flow: Flow }>`
+
+---
+
+#### `executeTechAttack(target, options, extraData)`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `target` | `Actor\|Item` | *required* | The actor or item initiating the tech attack |
+| `options` | `Object` | `{}` | Flow options |
+| `extraData` | `Object` | `{}` | Injected state data |
+
 - **Returns**: `Promise<{ completed: boolean, flow: Flow }>`
 
 ---
@@ -337,6 +390,35 @@ Code to run when a token is created on the scene.
 | `tags` | `Array` | `[]` | Lancer tags |
 
 **Returns:** `Promise<{ completed: boolean, flow: Flow }>`
+
+---
+
+#### `executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter)`
+
+Executes a Skirmish action. Optionally bypasses mount selection or pre-targets a token.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actorOrToken` | `Token\|Actor` | *required* | The actor or token performing the skirmish |
+| `bypassMount` | `Object` | `null` | Mount object to skip mount selection |
+| `preTarget` | `Token` | `null` | Pre-selected target token |
+| `weaponFilter` | `Function` | `null` | `(weapon) => boolean` filter for available weapons |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `beginWeaponAttackFlow(weapon, options, extraData)`
+
+Starts a weapon attack flow for a specific weapon item. This is an internal function exposed on the API — use it when you need to trigger an attack with a known weapon directly (e.g. an NPC's specific rifle).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `weapon` | `Item` | *required* | The weapon item to attack with |
+| `options` | `Object` | `{}` | Flow options |
+| `extraData` | `Object` | `{}` | Injected state data |
+
+**Returns:** `Promise<{ completed: boolean, flow?: Flow }>`
 
 ---
 
@@ -388,6 +470,21 @@ await api.removeEffectsByNameFromTokens({
 });
 ```
 
+#### `removeEffectsByName(targetID, effectName, originID, extraFlags)`
+
+Removes effects from a single token by name. Lower-level than `removeEffectsByNameFromTokens` (which operates on arrays of tokens).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `targetID` | `string` | *required* | The token ID to remove effects from |
+| `effectName` | `string` | *required* | Effect name to match and remove |
+| `originID` | `string` | `null` | Only remove effects whose stored `originID` flag matches |
+| `extraFlags` | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
+
+**Returns:** `Promise<void>`
+
+---
+
 #### `deleteEffect(token, effect)`
 
 Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFromTokens`, this targets one exact effect — no name matching, no side effects. Routes through the GM socket automatically for non-GM users.
@@ -404,24 +501,85 @@ api.deleteEffect(target, effects[0]);
 ```
 
 #### `findEffectOnToken(token, identifier)`
-- **Returns**: `ActiveEffect | undefined` (Search by string name or predicate function)
+
+Searches for an effect on a token by name or predicate function.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token\|TokenDocument` | The token to search |
+| `identifier` | `string\|Function` | Effect name (string) or predicate `(effect) => boolean` |
+
+**Returns:** `ActiveEffect | undefined`
+
+**Example — predicate search:**
+```js
+// Find a Suppress effect applied by a specific source
+const effect = api.findEffectOnToken(target, e =>
+    e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id
+);
+```
+
+---
 
 #### `getAllEffects(target)`
-- **Returns**: `Array<ActiveEffect>` — all active effects on the target, including unflagged player-added ones.
+
+Returns all active effects on the target, including unflagged player-added ones.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `target` | `Token\|TokenDocument\|Actor` | The target to inspect |
+
+**Returns:** `Array<ActiveEffect>`
+
+---
 
 #### `consumeEffectCharge(effect)`
-- **Returns**: `Promise<boolean>`
+
+Decrements the effect's stack counter by 1. If the counter reaches 0, the effect is deleted. Grouped effects (via `consumption.groupId`) share a counter and are all deleted together.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `effect` | `ActiveEffect` | The effect to consume a charge from |
+
+**Returns:** `Promise<boolean>` — `true` if consumed, `false` if the effect has no consumption data.
+
+---
 
 #### `triggerEffectImmunity(token, effectNames, source, notify)`
-- **Returns**: `Promise<void>` (Removes effects and announces immunity in chat)
 
-#### `checkEffectImmunities(actor, effectName)`
+Removes the named effects from the token and announces immunity in chat.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token` | `Token\|TokenDocument` | *required* | The immune token |
+| `effectNames` | `string\|Array<string>` | *required* | Effect name(s) to remove |
+| `source` | `Item\|string` | `""` | Source of immunity (item or text) |
+| `notify` | `boolean` | `true` | Post chat notification |
+
+**Returns:** `Promise<void>`
+
+---
+
+#### `checkEffectImmunities(actor, effectIdOrName, effect, state)`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor to check |
+| `effectIdOrName` | `string` | *required* | Effect ID or name to check immunity for |
+| `effect` | `ActiveEffect` | `null` | Optional effect object for additional context |
+| `state` | `Object` | `null` | Optional flow state |
+
 - **Returns**: `Array<string>` — returns an array of source names (e.g. ["Immunity Bonus", "Armor Plating"]) if the actor is immune to the named effect.
 
 #### `deleteAllEffects(tokens)`
+
 Removes **all** active effects from the provided tokens.
-- **tokens**: `Array<Token|TokenDocument>` (Required)
-- **Returns**: `Promise<void>`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tokens` | `Array<Token\|TokenDocument>` | Tokens to clear |
+
+**Returns:** `Promise<void>`
 
 #### `executeEffectManager(options)`
 - Opens the Effect Manager UI.
@@ -463,11 +621,91 @@ Removes **all** active effects from the provided tokens.
 
 ---
 
-#### `removeGlobalBonus(actor, bonusId, skipEffectRemoval)`
+#### `removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval)`
+
+Removes one or more global bonuses from an actor. Also deletes linked active effects unless `skipEffectRemoval` is true.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `actor` | `Actor` | *required* | The actor to modify |
+| `bonusIdOrPredicate` | `string\|Function` | *required* | Bonus ID string, or predicate `(bonus) => boolean` to match multiple |
+| `skipEffectRemoval` | `boolean` | `false` | If true, keeps the linked active effects |
+
+**Returns:** `Promise<void>`
+
+**Example:**
+```js
+// Remove by ID
+await api.removeGlobalBonus(actor, "defense-net-abc123");
+
+// Remove by predicate
+await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reactorToken.id);
+```
+
+---
+
 #### `getGlobalBonuses(actor)`
+
+Returns all global (temporary, effect-linked) bonuses on an actor.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to inspect |
+
+**Returns:** `Array<BonusData>` — empty array if actor is falsy.
+
+---
+
+#### `getGlobalBonus(actor, bonusId)`
+
+Returns a single global bonus by ID.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to inspect |
+| `bonusId` | `string` | The bonus ID |
+
+**Returns:** `BonusData | null`
+
+---
+
 #### `addConstantBonus(actor, bonusData)`
+
+Adds a permanent bonus to an actor (stored in flags, not linked to an active effect). Uses the same `bonusData` shape as `addGlobalBonus`. Auto-generates an `id` if not provided.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to modify |
+| `bonusData` | `Object` | Bonus data (same shape as `addGlobalBonus`) |
+
+**Returns:** `Promise<void>`
+
+---
+
 #### `getConstantBonuses(actor)`
-#### `removeConstantBonus(actor, bonusId)`
+
+Returns all constant (permanent) bonuses on an actor.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to inspect |
+
+**Returns:** `Array<BonusData>` — empty array if actor is falsy.
+
+---
+
+#### `removeConstantBonus(actor, bonusIdOrPredicate)`
+
+Removes one or more constant bonuses from an actor.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actor` | `Actor` | The actor to modify |
+| `bonusIdOrPredicate` | `string\|Function` | Bonus ID string, or predicate `(bonus) => boolean` |
+
+**Returns:** `Promise<void>`
+
+---
 
 ### Flow State Data Injection
 
@@ -482,42 +720,164 @@ Merges the properties of `extraData` into `state.la_extraData`. Useful for passi
 #### `triggerData.flowState.getFlowExtraData()`
 Returns the `la_extraData` object attached to the current flow state.
 
-#### `getImmunityBonuses(actor, subtype)`
+#### `getImmunityBonuses(actor, subtype, state)`
+- `state` (`Object`, default `null`) — optional flow state for conditional immunity evaluation.
 - **Returns**: `Array<object>` — returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`) for the actor.
 
-#### `applyDamageImmunities(actor, damages)`
+#### `checkDamageResistances(actor, damageType)`
+- **Returns**: `Array<object>` — returns all "resistance" subtype immunity bonuses matching the given damage type for the actor.
+
+> **Note:** This function is exported from `genericBonuses.js` but is not currently included in the `BonusesAPI` object. Access it via direct import or the module's named exports.
+
+#### `applyDamageImmunities(actor, damages, state)`
+- `state` (`Object`, default `null`) — optional flow state for conditional immunity evaluation.
 - **Returns**: `Array<object>` — takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out.
 
-#### `hasCritImmunity(actor)`
-- **Returns**: `boolean` — returns true if the actor has any "crit" subtype immunity bonuses.
+#### `hasCritImmunity(actor, attackerActor, state)`
+- `attackerActor` (`Actor`, default `null`) — optional attacker for conditional immunity checks.
+- `state` (`Object`, default `null`) — optional flow state.
+- **Returns**: `Promise<boolean>` — returns true if the actor has any "crit" subtype immunity bonuses.
 
-#### `hasHitImmunity(actor)`
-- **Returns**: `boolean` — returns true if the actor has any "Hit" subtype immunity bonuses.
+#### `hasHitImmunity(actor, attackerActor, state)`
+- `attackerActor` (`Actor`, default `null`) — optional attacker for conditional immunity checks.
+- `state` (`Object`, default `null`) — optional flow state.
+- **Returns**: `Promise<boolean>` — returns true if the actor has any "hit" subtype immunity bonuses.
 
-#### `hasMissImmunity(actor)`
-- **Returns**: `boolean` — returns true if the actor has any "Miss" subtype immunity bonuses.
+#### `hasMissImmunity(actor, attackerActor, state)`
+- `attackerActor` (`Actor`, default `null`) — optional attacker for conditional immunity checks.
+- `state` (`Object`, default `null`) — optional flow state.
+- **Returns**: `Promise<boolean>` — returns true if the actor has any "miss" subtype immunity bonuses.
 
 ---
 
 ## Spatial & Distance Tools
 
-#### Distance Calculations
-- **`getTokenDistance(t1, t2)`**: Grid distance in spaces.
-- **`getMinGridDistance(t1, t2, overridePos1)`**: Shortest grid path, natively accounting for size and shape.
-- **`getGridDistance(p1, p2)`**: Pixel-to-grid conversion.
+### Distance Calculations
 
-#### Faction & Disposition
-- **`isHostile(t1, t2)`**: Checks disposition (Faction compatible).
-- **`isFriendly(t1, t2)`**: Checks disposition.
+Three distance functions at different abstraction levels. All return distance in **grid spaces** (not pixels).
 
-#### Grid & Cell Data
-- **`getTokenCells(token)`**: Array of `[x,y]` coordinates occupied.
-- **`getMaxGroundHeightUnderToken(token, terrainAPI)`**: Highest height value under any cell.
+| Function | Input | Multi-size aware | Use case |
+|----------|-------|-----------------|----------|
+| `getTokenDistance` | Two tokens | Yes | General token-to-token distance. Wraps `getMinGridDistance`. |
+| `getMinGridDistance` | Two tokens + optional override pos | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. |
+| `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
 
-#### Debug Visualizations
-- **`drawThreatDebug(token)`**: Draw threat cells (Hex only).
-- **`drawDistanceDebug()`**: Select 2 tokens to display distance.
-- **`drawRangeHighlight(token, range, color, alpha)`**: Returns PIXI Graphics.
+#### `getTokenDistance(token1, token2)`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token1` | `Token` | First token |
+| `token2` | `Token` | Second token |
+
+**Returns:** `number` — delegates to `getMinGridDistance(token1, token2)`.
+
+---
+
+#### `getMinGridDistance(token1, token2, overridePos1)`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token1` | `Token` | *required* | First token |
+| `token2` | `Token` | *required* | Second token |
+| `overridePos1` | `{x, y}` | `null` | Evaluate as if token1 were at this world position |
+
+**Returns:** `number` — minimum cell-to-cell grid distance across all occupied cell pairs.
+
+---
+
+#### `getGridDistance(pos1, pos2)`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pos1` | `{x, y}` | World coordinates |
+| `pos2` | `{x, y}` | World coordinates |
+
+**Returns:** `number` — hex grids: cube distance; square grids: `measurePath` rounded to grid units.
+
+---
+
+### Faction & Disposition
+
+#### `isHostile(reactor, mover)`
+
+Checks if two tokens are hostile. Compatible with the Token Factions module.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `reactor` | `Token` | The reacting token |
+| `mover` | `Token` | The triggering token |
+
+**Returns:** `boolean`
+
+---
+
+#### `isFriendly(token1, token2)`
+
+Checks if two tokens are friendly. Compatible with the Token Factions module.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token1` | `Token` | First token |
+| `token2` | `Token` | Second token |
+
+**Returns:** `boolean`
+
+---
+
+### Grid & Cell Data
+
+#### `getTokenCells(token)`
+
+Returns the grid cells occupied by a token.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to inspect |
+
+**Returns:** `Array<[number, number]>` — `[row, col]` grid coordinates.
+
+---
+
+#### `getMaxGroundHeightUnderToken(token, terrainAPI)`
+
+Returns the highest terrain height value under any cell occupied by the token. Requires the Terrain Height Tools module API.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to check |
+| `terrainAPI` | `Object` | Terrain Height Tools API object |
+
+**Returns:** `number`
+
+---
+
+### Debug Visualizations
+
+#### `drawThreatDebug(token)`
+
+Draws threat range cells on the canvas debug layer. Hex grids only.
+
+**Returns:** `Promise<void>`
+
+#### `drawDistanceDebug()`
+
+Select 2 tokens on canvas, then call this to draw the shortest distance line between them.
+
+**Returns:** `Promise<void>`
+
+#### `drawRangeHighlight(casterToken, range, color, alpha, includeSelf)`
+
+Draws a range highlight on the canvas.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `casterToken` | `Token\|{x, y}` | *required* | Origin token or point |
+| `range` | `number` | *required* | Radius in grid spaces |
+| `color` | `number` | `0x00ff00` | Hex color |
+| `alpha` | `number` | `0.2` | Opacity (0-1) |
+| `includeSelf` | `boolean` | `false` | Include origin cells |
+
+**Returns:** `PIXI.Graphics`
 
 ---
 
@@ -598,6 +958,18 @@ Returns the Lancer item type string (e.g. `"Weapon"`, `"System"`, `"mech_weapon"
 
 ---
 
+#### `getActivationIcon(actionOrActivation)`
+
+Returns the icon path or CSS class for an activation type. Accepts either a string (`"reaction"`, `"quick"`, `"full"`, `"protocol"`, `"free"`) or an action object with `activation` and `tech_attack` properties.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actionOrActivation` | `string\|Object` | Activation type string or action object |
+
+**Returns:** `string` — icon path (e.g. `'systems/lancer/assets/icons/tech_quick.svg'`) or CSS class (e.g. `'mdi mdi-hexagon-slice-6'`)
+
+---
+
 ## Resource Management
 
 #### `setReaction(actorOrToken, value)`
@@ -630,6 +1002,24 @@ Detection order:
 | `counterIndex` | `number` | `0` | For talent items: which counter to update. |
 
 **Returns:** `Promise<void>`
+
+---
+
+#### `updateTokenSystem(token, data)`
+
+Updates system data on a token's actor. Automatically routes through the GM socket if the current user doesn't own the actor.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token whose actor to update |
+| `data` | `Object` | Update data object (e.g. `{ 'system.burn': 0, 'system.hp.value': 10 }`) |
+
+**Returns:** `Promise<void>`
+
+**Example:**
+```js
+await api.updateTokenSystem(target, { 'system.burn': 0 });
+```
 
 ---
 
@@ -754,10 +1144,42 @@ placeZone(token, { size: 2, difficultTerrain: { movementPenalty: 1, isFlatPenalt
 ---
 
 #### `knockBackToken(tokens, distance, options)`
-Interactive tool to apply knockback. Shows visual traces and requires confirmation.
+
+Interactive knockback tool. Shows visual movement traces and requires confirmation per token.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tokens` | `Array<Token>` | *required* | Tokens to knock back |
+| `distance` | `number` | *required* | Knockback distance in spaces |
+| `options` | `Object` | `{}` | See below |
+
+**`options` Object:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `title` | `string` | `"KNOCKBACK"` | Card header |
+| `description` | `string` | `"Select destination for each token."` | Card description |
+| `headerClass` | `string` | `""` | Extra CSS class |
+| `triggeringToken` | `Token` | `null` | The token causing the knockback (used for `onKnockback` trigger) |
+| `actionName` | `string` | `""` | Source action name (enables `onlyOnSourceMatch` on reactions) |
+| `item` | `Item` | `null` | Source item |
+
+**Returns:** `Promise<Array<{tokenId, updateData: {x, y}}>>`
+
+---
 
 #### `revertMovement(token, destination)`
-Reverts a token's movement history by one step.
+
+Reverts a token to its previous position from movement history. If `destination` is provided, moves to that position instead.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token` | `Token` | *required* | The token to revert |
+| `destination` | `{x, y}` | `null` | Override destination (world coordinates) |
+
+**Returns:** `Promise<boolean>`
+
+---
 
 #### `pickItem(items, options)`
 
@@ -890,6 +1312,41 @@ Run `openChoiceMenu()` from a macro, set the mode to **Vote**, select the player
 // Shortcut macro (add to hotbar)
 game.modules.get('lancer-automations').api.openChoiceMenu();
 ```
+
+---
+
+#### `moveToken(token, options)`
+
+Moves a token to a destination. Two modes: pass `destination` for a direct move, or omit it to show a range-highlight card where the user clicks.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `token` | `Token` | *required* | The token to move |
+| `options` | `Object` | `{}` | See below |
+
+**`options` Object:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `destination` | `{x, y}` | `null` | World coordinates. If omitted, interactive picker. |
+| `range` | `number` | `-1` | Max range highlight (interactive mode) |
+| `cost` | `number` | `null` | Movement cost in spaces |
+| `canBeBlocked` | `boolean` | `true` | Whether engagement/overwatch can intercept |
+| `title` | `string` | `"MOVE"` | Card header (interactive mode) |
+
+**Returns:** `Promise<object|null>`
+
+---
+
+#### `getTokenOwnerUserId(token)`
+
+Returns the user ID(s) that own a token. Checks active non-GM players first, falls back to the active GM. Useful for routing choice cards to the right player.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to check |
+
+**Returns:** `Array<string>` — user IDs
 
 ---
 
@@ -1082,6 +1539,44 @@ Deploys a weapon as a token on the map (for thrown weapons).
 #### `openDeployableMenu(actor)` / `recallDeployable(ownerToken)`
 #### `pickupWeaponToken(ownerToken)` / `openThrowMenu(actor)`
 #### `openItemBrowser(targetInput)`
+
+---
+
+#### `getActivatedItems(token)`
+
+Returns items currently marked as activated on a token (via `setItemAsActivated`). Checks `lancer-automations.activeStateData.active` on each item's flags.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `token` | `Token` | The token to inspect |
+
+**Returns:** `Array<Item>` — currently activated items, or empty array.
+
+---
+
+#### `spawnHardCover(originToken, options)`
+
+Spawns hard cover deployable tokens on the map. Uses a template `"Template Hard Cover"` deployable actor (creates one if missing).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `originToken` | `Token` | *required* | Measurement origin |
+| `options` | `Object` | `{}` | See below |
+
+**`options` Object:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `range` | `number` | `null` | Placement range |
+| `count` | `number` | `1` | Number of hard covers to place |
+| `size` | `number` | `1` | Size override |
+| `name` | `string` | `"Hard Cover"` | Display name |
+| `title` | `string` | `"PLACE HARD COVER"` | Card header |
+| `description` | `string` | `""` | Card description |
+
+**Returns:** `Promise<void>`
+
+---
 
 #### `addItemTag(item, tagData)`
 Adds a tag to an item. If a tag with the same `id` exists, it updates it.
