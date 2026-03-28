@@ -2610,143 +2610,144 @@ api.registerDefaultItemReactions({
         itemType: "npc_feature",
         reactions: [
         // ── R0: onInit — remove tg_quick_action tag (system is Protocol, not Quick)
-        {
-            triggers: [],
-            triggerSelf: false,
-            triggerOther: false,
-            autoActivate: false,
-            activationType: "none",
-            onInit: async function (token, item, api) {
-                const tags = item.system.tags ?? [];
-                const filtered = tags.filter(t => t.lid !== 'tg_quick_action');
-                if (filtered.length !== tags.length) {
-                    await item.update({ 'system.tags': filtered.map(t => ({ lid: t.lid, val: t.val })) });
+            {
+                triggers: [],
+                triggerSelf: false,
+                triggerOther: false,
+                autoActivate: false,
+                activationType: "none",
+                onInit: async function (token, item, api) {
+                    const tags = item.system.tags ?? [];
+                    const filtered = tags.filter(t => t.lid !== 'tg_quick_action');
+                    if (filtered.length !== tags.length) {
+                        await item.update({ 'system.tags': filtered.map(t => ({ lid: t.lid, val: t.val })) });
+                    }
                 }
-            }
-        },
-        // ── R1: Protocol — Immobilized + inject Throw Ally ──────────────────
-        {
-            triggers: ["onActivation"],
-            onlyOnSourceMatch: true,
-            triggerSelf: true,
-            triggerOther: false,
-            autoActivate: true,
-            outOfCombat: true,
-            activationType: "code",
-            activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                await api.applyEffectsToTokens({
-                    tokens: [reactorToken],
-                    effectNames: ['immobilized'],
-                    duration: { label: 'start', turns: 1, rounds: 0 }
-                });
-                await api.addExtraActions(item, [{
-                    name: "Throw Ally",
-                    activation: "Quick Action",
-                    detail: "Throw an adjacent ally (same size or smaller) to any space within Range 10."
-                }]);
-            }
-        },
-        // ── R2: Throw Ally — pick ally, throw, collision ────────────────────
-        {
-            triggers: ["onActivation"],
-            onlyOnSourceMatch: true,
-            reactionPath: "extraActions.Throw Ally",
-            triggerSelf: true,
-            triggerOther: false,
-            autoActivate: true,
-            outOfCombat: true,
-            activationType: "code",
-            activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const architectSize = reactorToken.actor.system.size ?? 2;
-                const allies = await api.chooseToken(reactorToken, {
-                    range: 1,
-                    count: 1,
-                    filter: t => t.id !== reactorToken.id
+            },
+            // ── R1: Protocol — Immobilized + inject Throw Ally ──────────────────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    await api.applyEffectsToTokens({
+                        tokens: [reactorToken],
+                        effectNames: ['immobilized'],
+                        duration: { label: 'start', turns: 1, rounds: 0 }
+                    });
+                    await api.addExtraActions(item, [{
+                        name: "Throw Ally",
+                        activation: "Quick Action",
+                        detail: "Throw an adjacent ally (same size or smaller) to any space within Range 10."
+                    }]);
+                }
+            },
+            // ── R2: Throw Ally — pick ally, throw, collision ────────────────────
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                reactionPath: "extraActions.Throw Ally",
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const architectSize = reactorToken.actor.system.size ?? 2;
+                    const allies = await api.chooseToken(reactorToken, {
+                        range: 1,
+                        count: 1,
+                        filter: t => t.id !== reactorToken.id
                         && (t.actor?.system?.size ?? 1) <= architectSize
                         && api.isFriendly(reactorToken, t),
-                    title: "THROW ALLY",
-                    description: `Choose an adjacent ally (size ${architectSize} or smaller) to throw.`
-                });
-                if (!allies?.length) return;
-                const ally = allies[0];
+                        title: "THROW ALLY",
+                        description: `Choose an adjacent ally (size ${architectSize} or smaller) to throw.`
+                    });
+                    if (!allies?.length)
+                        return;
+                    const ally = allies[0];
 
-                await api.knockBackToken(ally, 10, {
-                    title: "INSERTION CATAPULT",
-                    description: "Choose destination within Range 10.",
-                    triggeringToken: reactorToken,
-                    item
-                });
+                    await api.knockBackToken(ally, 10, {
+                        title: "INSERTION CATAPULT",
+                        description: "Choose destination within Range 10.",
+                        triggeringToken: reactorToken,
+                        item
+                    });
 
-                const adjacent = canvas.tokens.placeables.filter(t =>
-                    t.id !== ally.id
+                    const adjacent = canvas.tokens.placeables.filter(t =>
+                        t.id !== ally.id
                     && t.id !== reactorToken.id
                     && t.actor
                     && api.isHostile(reactorToken, t)
                     && api.getTokenDistance(ally, t) <= 1
-                );
-                if (adjacent.length > 0) {
-                    const choices = [
-                        ...adjacent.map(t => ({
-                            text: t.name,
-                            callback: async () => {
-                                const saveResult = await api.executeStatRoll(
-                                    t.actor, "HULL", "Insertion Catapult \u2014 Hull Save", reactorToken,
-                                    { sendToOwner: true, cardTitle: "INSERTION CATAPULT \u2014 HULL SAVE" }
-                                );
-                                if (saveResult.completed && !saveResult.passed) {
-                                    await api.applyEffectsToTokens({ tokens: [t], effectNames: ['prone'] });
+                    );
+                    if (adjacent.length > 0) {
+                        const choices = [
+                            ...adjacent.map(t => ({
+                                text: t.name,
+                                callback: async () => {
+                                    const saveResult = await api.executeStatRoll(
+                                        t.actor, "HULL", "Insertion Catapult \u2014 Hull Save", reactorToken,
+                                        { sendToOwner: true, cardTitle: "INSERTION CATAPULT \u2014 HULL SAVE" }
+                                    );
+                                    if (saveResult.completed && !saveResult.passed) {
+                                        await api.applyEffectsToTokens({ tokens: [t], effectNames: ['prone'] });
+                                    }
                                 }
-                            }
-                        })),
-                        { text: "No collision", callback: async () => {} }
-                    ];
-                    await api.startChoiceCard({
-                        title: "INSERTION CATAPULT \u2014 COLLISION",
-                        description: `Did ${ally.name} hit a character?`,
-                        originToken: reactorToken,
-                        choices
-                    });
+                            })),
+                            { text: "No collision", callback: async () => {} }
+                        ];
+                        await api.startChoiceCard({
+                            title: "INSERTION CATAPULT \u2014 COLLISION",
+                            description: `Did ${ally.name} hit a character?`,
+                            originToken: reactorToken,
+                            choices
+                        });
+                    }
                 }
-            }
-        },
-        // ── R3: onStatusRemoved — clean up Throw Ally ───────────────────────
-        {
-            triggers: ["onStatusRemoved"],
-            triggerSelf: true,
-            triggerOther: false,
-            autoActivate: true,
-            outOfCombat: true,
-            activationType: "code",
-            activationMode: "instead",
-            evaluate: function (triggerType, triggerData, reactorToken, item) {
-                if (triggerData.statusId !== 'immobilized') return false;
-                const ea = item.getFlag('lancer-automations', 'extraActions') || [];
-                return ea.some(a => a.name === 'Throw Ally');
             },
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                await api.removeExtraActions(item, 'Throw Ally');
-            }
-        }]
+            // ── R3: onStatusRemoved — clean up Throw Ally ───────────────────────
+            {
+                triggers: ["onStatusRemoved"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                    if (triggerData.statusId !== 'immobilized')
+                        return false;
+                    const ea = item.getFlag('lancer-automations', 'extraActions') || [];
+                    return ea.some(a => a.name === 'Throw Ally');
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    await api.removeExtraActions(item, 'Throw Ally');
+                }
+            }]
     }
 });
 
 // ─── Architect Civil-Class Terrain Printer ───────────────────────────────────────
-// Hook for terrain printer waypoints — triggered on enter/turnStart by templateMacro.
-// Params named template/scene/token to match both runtime callback (templateDoc, scene, token)
-// and stringified flag-command context (where template, scene, token are local vars).
 async function _terrainPrinterHookFn(template, scene, token) {
     const api = game.modules.get('lancer-automations')?.api;
-    if (!api || !token) return;
+    if (!api || !token)
+        return;
     const data = template.getFlag('lancer-automations', 'terrainPrinterData');
-    if (!data) return;
+    if (!data)
+        return;
     const architect = canvas.tokens.get(data.architectTokenId);
-    if (!architect || !api.isFriendly(architect, token)) return;
-    const cap = api.getMovementCap(token);
-    if (cap < 1) return;
+    if (!architect || !api.isFriendly(architect, token))
+        return;
     const otherTemplate = canvas.scene.templates.get(data.otherTemplateId);
-    if (!otherTemplate) return;
+    if (!otherTemplate)
+        return;
     const result = await api.startChoiceCard({
         title: "TERRAIN PRINTER",
         description: '<b>' + token.name + '</b> can spend 1 movement to travel to the other waypoint.',
@@ -2758,13 +2759,13 @@ async function _terrainPrinterHookFn(template, scene, token) {
             { text: "Stay", icon: "fas fa-times" }
         ]
     });
-    if (result?.choiceIdx !== 0) return;
-    const dest = canvas.grid.getCenterPoint({ x: otherTemplate.x, y: otherTemplate.y });
-    const tokenCenter = canvas.grid.getCenterPoint({ x: token.x, y: token.y });
-    await token.document.update(
-        { x: token.x + (dest.x - tokenCenter.x), y: token.y + (dest.y - tokenCenter.y) },
-        { teleport: true, rulerSegment: false, firstRulerSegment: true, lastRulerSegment: true, lancerSegmentCost: 1, lancerSegmentDistance: 1, lancerTerrainPenalty: 0 }
-    );
+    if (result?.choiceIdx !== 0)
+        return;
+    await api.moveToken(token, {
+        destination: { x: otherTemplate.x, y: otherTemplate.y },
+        cost: 1,
+        canBeBlocked: true
+    });
 }
 
 api.registerDefaultItemReactions({
@@ -2785,7 +2786,8 @@ api.registerDefaultItemReactions({
                 const prev = reactorToken.actor.getFlag('lancer-automations', 'terrainPrinterWaypoints') || [];
                 for (const wp of prev) {
                     const t = canvas.scene.templates.get(wp.templateId);
-                    if (t) await t.delete();
+                    if (t)
+                        await t.delete();
                 }
                 await reactorToken.actor.unsetFlag('lancer-automations', 'terrainPrinterWaypoints');
 
@@ -2796,22 +2798,33 @@ api.registerDefaultItemReactions({
 
                 // Waypoint 1: within Range 3 of Architect
                 const wp1Result = await api.placeZone(reactorToken, {
-                    range: 3, size: 0.33, type: "Burst", count: 1,
-                    fillColor: "#00cc66", borderColor: "#009944",
+                    range: 3,
+                    size: 0.33,
+                    type: "Blast",
+                    count: 1,
+                    fillColor: "#00cc66",
+                    borderColor: "#009944",
                     title: "TERRAIN PRINTER \u2014 WAYPOINT 1",
                     description: "Place first waypoint within Range 3.",
                     centerLabel: "TP",
                     hooks: hookObj
                 });
-                if (!wp1Result?.[0]?.template) return;
+                if (!wp1Result?.[0]?.template)
+                    return;
                 const wp1 = wp1Result[0];
 
-                // Waypoint 2: soft-validate within Range 5 of waypoint 1
+                // Waypoint 2: range 5 from waypoint 1's position
+                const wp1Center = canvas.grid.getCenterPoint({ x: wp1.template.x, y: wp1.template.y });
                 const wp2Result = await api.placeZone(reactorToken, {
-                    size: 0.33, type: "Burst", count: 1,
-                    fillColor: "#00cc66", borderColor: "#009944",
+                    range: 5,
+                    rangeOrigin: wp1Center,
+                    size: 0.33,
+                    type: "Blast",
+                    count: 1,
+                    fillColor: "#00cc66",
+                    borderColor: "#009944",
                     title: "TERRAIN PRINTER \u2014 WAYPOINT 2",
-                    description: "Place second waypoint. Must be within Range 5 of the first.",
+                    description: "Place second waypoint within Range 5 of the first.",
                     centerLabel: "TP",
                     hooks: hookObj
                 });
@@ -2820,15 +2833,6 @@ api.registerDefaultItemReactions({
                     return;
                 }
                 const wp2 = wp2Result[0];
-
-                // Soft range validation
-                const dist = canvas.grid.measurePath([
-                    { x: wp1.template.x, y: wp1.template.y },
-                    { x: wp2.template.x, y: wp2.template.y }
-                ]).distance / canvas.dimensions.distance;
-                if (dist > 5) {
-                    ui.notifications.warn(`Waypoint 2 is ${Math.round(dist)} spaces from Waypoint 1 (should be \u2264 5).`);
-                }
 
                 // Cross-reference each waypoint with the other
                 await wp1.template.setFlag('lancer-automations', 'terrainPrinterData', {
@@ -2845,6 +2849,126 @@ api.registerDefaultItemReactions({
                 ]);
             }
         }]
+    }
+});
+
+// ─── Architect Sandblast ─────────────────────────────────────────────────────────
+// Entered/onInside hook: add invisible target_modifier bonus + soft cover to tokens in the zone.
+async function _sandblastEnteredHookFn(template, scene, token) {
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api || !token?.actor)
+        return;
+    const existing = (token.actor.getFlag('lancer-automations', 'global_bonuses') || []);
+    if (existing.some(b => b.id === 'sandblast-invis-' + template.id))
+        return;
+    await api.addGlobalBonus(token.actor, {
+        id: 'sandblast-invis-' + template.id,
+        name: 'Sandblast',
+        type: 'target_modifier',
+        subtype: 'invisible'
+    }, { duration: 'indefinite' });
+    await api.applyEffectsToTokens({
+        tokens: [token],
+        effectNames: ['cover_soft'],
+        note: 'Sandblast'
+    }, { sandblastTemplateId: template.id });
+}
+// Left hook: remove invisible bonus and soft cover when token leaves the zone.
+async function _sandblastLeftHookFn(template, scene, token) {
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api || !token?.actor)
+        return;
+    await api.removeGlobalBonus(token.actor, 'sandblast-invis-' + template.id);
+    await api.removeEffectsByNameFromTokens({
+        tokens: [token],
+        effectNames: ['cover_soft'],
+        extraFlags: { sandblastTemplateId: template.id }
+    });
+}
+// TurnEnd hook: deal 3 AP Kinetic damage (no save, bypasses armor).
+async function _sandblastTurnEndHookFn(template, scene, token) {
+    if (!token?.actor)
+        return;
+    const current = token.actor.system.hp.value;
+    await token.actor.update({ 'system.hp.value': current - 3 });
+    ui.notifications.info(`${token.name} takes 3 AP Kinetic damage from Sandblast.`);
+}
+
+api.registerDefaultItemReactions({
+    "cap_npc_architect_sandblast": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const prev = reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || [];
+                    for (const id of prev) {
+                        const t = canvas.scene.templates.get(id);
+                        if (t)
+                            await t.delete();
+                    }
+                    await reactorToken.actor.unsetFlag('lancer-automations', 'sandblastTemplates');
+
+                    const result = await api.placeZone(reactorToken, {
+                        range: reactorToken.actor.system.sensor_range,
+                        size: 2,
+                        type: "Blast",
+                        count: 1,
+                        fillColor: "#c4a55a",
+                        borderColor: "#8b7355",
+                        title: "SANDBLAST",
+                        description: "Place a Blast 2 particulate zone within Sensors.",
+                        icon: "fas fa-wind",
+                        centerLabel: "Sand",
+                        hooks: {
+                            onInside: { function: _sandblastEnteredHookFn, asGM: true },
+                            onLeave: { function: _sandblastLeftHookFn, asGM: true },
+                            turnEnd: { function: _sandblastTurnEndHookFn, asGM: true }
+                        }
+                    });
+
+                    if (result?.[0]?.template) {
+                        await reactorToken.actor.setFlag('lancer-automations', 'sandblastTemplates', [result[0].template.id]);
+                    }
+                }
+            },
+            {
+                triggers: ["onTurnStart"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken) {
+                    return (reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || []).length > 0;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const templates = reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || [];
+                    for (const id of templates) {
+                        const tmApi = game.modules.get('templatemacro')?.api;
+                        const templateDoc = canvas.scene.templates.get(id);
+                        if (templateDoc && tmApi?.findContained) {
+                            const containedIds = tmApi.findContained(templateDoc);
+                            for (const tokenId of containedIds) {
+                                const tkn = canvas.scene.tokens.get(tokenId);
+                                if (tkn?.actor)
+                                    await api.removeGlobalBonus(tkn.actor, 'sandblast-invis-' + id);
+                            }
+                        }
+                        if (templateDoc)
+                            await templateDoc.delete();
+                    }
+                    await reactorToken.actor.unsetFlag('lancer-automations', 'sandblastTemplates');
+                }
+            }]
     }
 });
 

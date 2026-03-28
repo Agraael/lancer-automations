@@ -17,6 +17,14 @@ function getBonusDetailStr(/** @type {any} */ b) {
         if (b.subtype === 'miss')  return 'Miss immunity';
         return b.subtype;
     }
+    if (b.type === 'target_modifier') {
+        const labels = {
+            invisible: 'Invisible (50% miss)', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
+            ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
+            crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
+        };
+        return `Target: ${labels[b.subtype] || b.subtype}`;
+    }
     if (b.type === 'multi' && Array.isArray(b.bonuses)) return b.bonuses.map(getBonusDetailStr).join(' | ');
     return b.type || '?';
 }

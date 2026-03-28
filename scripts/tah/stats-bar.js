@@ -4,6 +4,12 @@
  * Generates the inline HTML for the HP / heat / structure / pips display.
  */
 
+/** Whether the secondary stats panel is expanded. Persists across in-place updates. */
+let _statsExpanded = false;
+
+/** Collapse the stats detail panel (call when the HUD closes). */
+export function resetStatsExpanded() { _statsExpanded = false; }
+
 /** Linear interpolation between two RGB colours. t=0→colour1, t=1→colour2. */
 function lerpColor(r1, g1, b1, r2, g2, b2, t) {
     const r = Math.round(r1 + (r2 - r1) * t);
@@ -28,6 +34,7 @@ export function buildStatsHtml(actor, token = null) {
     const hp          = sys.hp     ?? { value: 0, max: 0 };
     const heat        = sys.heat   ?? { value: 0, max: 0 };
     const overshield  = sys.overshield?.value ?? 0;
+    const hasRepairs  = sys.repairs != null;
     const repairs     = sys.repairs?.value ?? 0;
     const burn        = sys.burn ?? 0;
     const oc          = sys.overcharge ?? 0;
@@ -75,12 +82,84 @@ export function buildStatsHtml(actor, token = null) {
         movHtml = `${SEP}${movIcon}<span title="Movement" style="color:#aaa;">∞</span>`;
     }
 
-    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 8px 2px;font-size:0.97em;color:#888;width:max-content;">` +
+    // Secondary stats row
+    const armor       = sys.armor ?? 0;
+    const evasion     = sys.evasion ?? 0;
+    const edef        = sys.edef ?? 0;
+    const techAttack  = sys.tech_attack ?? 0;
+    const save        = sys.save ?? 0;
+    const sensorRange = sys.sensor_range ?? 0;
+    const coreEnergy  = sys.core_energy ?? 0;
+    const coreActive  = sys.core_active ?? false;
+    const hasCoreSystem = sys.core_energy != null;
+    const S_STAT = 'font-size:0.95em;';
+    const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
+    const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
+    const coreHtml = hasCoreSystem
+        ? `${SEP}<span title="Core Power" style="color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#555'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
+        : '';
+
+    const expanded = _statsExpanded ? 'display:flex;flex-direction:column' : 'display:none';
+    const arrow = _statsExpanded ? '◀' : '▶';
+
+    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;">` +
+        `<div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
-        `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>${movHtml}` +
+        `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
         `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
+        `</div>` +
+        `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +
+        `<span style="font-size:0.55em;color:#111;font-weight:bold;line-height:1;">${arrow}</span>` +
+        `</div>` +
+        `<div class="la-stats-detail" style="${expanded};padding:0 8px 0 6px;justify-content:center;">` +
+        `<div style="display:flex;align-items:center;gap:4px;white-space:nowrap;${S_STAT}">` +
+        `${statIcon('systems/lancer/assets/icons/white/shield_outline.svg', 'Armor')}<span title="Armor" style="color:#aaa;">${armor}</span>` +
+        `${SEP}${statIcon('systems/lancer/assets/icons/white/evasion.svg', 'Evasion')}<span title="Evasion" style="color:#aaa;">${evasion}</span>` +
+        `${SEP}${statIcon('systems/lancer/assets/icons/white/edef.svg', 'E-Defense')}<span title="E-Defense" style="color:#aaa;">${edef}</span>` +
+        `</div>` +
+        `<div style="display:flex;align-items:center;gap:4px;white-space:nowrap;margin-top:2px;${S_STAT}">` +
+        `${statIcon('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack')}<span title="Tech Attack" style="color:#aaa;">${techAttack >= 0 ? '+' : ''}${techAttack}</span>` +
+        `${SEP}${statIcon('systems/lancer/assets/icons/white/save.svg', 'Save')}<span title="Save" style="color:#aaa;">${save}</span>` +
+        `${SEP}${statIcon('systems/lancer/assets/icons/white/sensor.svg', 'Sensors')}<span title="Sensors" style="color:#aaa;">${sensorRange}</span>` +
+        `${coreHtml}` +
+        `</div>` +
+        `</div>` +
         `</div>`;
+}
+
+/**
+ * Build the stats bar as a jQuery element with toggle wired up.
+ * @param {any} actor
+ * @param {any} [token]
+ * @returns {JQuery}
+ */
+export function buildStatsEl(actor, token = null) {
+    const el = $(buildStatsHtml(actor, token));
+    const detail = el.find('.la-stats-detail');
+    const toggle = el.find('.la-stats-toggle');
+    // Set initial width for animation
+    if (_statsExpanded) {
+        detail.css({ display: 'flex', 'flex-direction': 'column', overflow: 'hidden' });
+    } else {
+        detail.css({ display: 'none', overflow: 'hidden' });
+    }
+    toggle.on('click', (ev) => {
+        ev.stopPropagation();
+        _statsExpanded = !_statsExpanded;
+        if (_statsExpanded) {
+            detail.css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
+                .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function () {
+                    $(this).css('width', '');
+                });
+        } else {
+            detail.animate({ width: 0, opacity: 0 }, 120, function () {
+                $(this).css({ display: 'none', width: '', opacity: '' });
+            });
+        }
+        toggle.find('span').text(_statsExpanded ? '◀' : '▶');
+    });
+    return el;
 }

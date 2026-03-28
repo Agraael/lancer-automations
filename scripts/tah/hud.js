@@ -1,17 +1,18 @@
 /* global $, window, game, CONFIG */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
 import { onHudRowHover } from './hover.js';
-import { buildStatsHtml } from './stats-bar.js';
+import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
+import { LogPanel } from './log-panel.js';
 
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
@@ -160,6 +161,7 @@ export class LancerHUD {
         this._refreshTimer = null;
         this._searchActive = false;
         this._categories   = null;
+        resetStatsExpanded();
         $(document).off('mousedown.la-hud-cto');
         $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
             $(this).remove();
@@ -195,7 +197,7 @@ export class LancerHUD {
     updateStatsInPlace() {
         if (!this._actor || !this._el)
             return;
-        this._el.find('#la-hud-stats').replaceWith($(buildStatsHtml(this._actor, this._token)));
+        this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
     }
 
     refresh() {
@@ -257,11 +259,11 @@ export class LancerHUD {
         ].join(';') + ';';
 
         const titleEl = $(`<div style="${S_TOKEN_TITLE}">${tokenName}</div>`);
-        titleEl.on('contextmenu', ev => {
-            ev.preventDefault(); actor.sheet?.render(true);
-        });
+        titleEl.on('mouseenter', () => { titleEl.css({ color: 'var(--primary-color)', cursor: 'pointer' }); });
+        titleEl.on('mouseleave', () => { titleEl.css({ color: '#fff' }); });
+        titleEl.on('click', () => { actor.sheet?.render(true); });
 
-        const statsEl = $(buildStatsHtml(actor, this._token));
+        const statsEl = buildStatsEl(actor, this._token);
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
@@ -310,6 +312,7 @@ export class LancerHUD {
                         }
                         return;
                     }
+                    if (this._logPanelInstance?.isVisible) this._logPanelInstance.close();
                     this._setActive(c1, row, true);
                     closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
                     this._statusPanelInstance.open(row);
@@ -323,6 +326,8 @@ export class LancerHUD {
                 }
                 if (this._statusPanelInstance?.isVisible)
                     this._statusPanelInstance.close();
+                if (this._logPanelInstance?.isVisible)
+                    this._logPanelInstance.close();
                 this._setActive(c1, row, true);
                 closeCol(c3, 80);
                 closeCol(c4, 80);
@@ -386,6 +391,13 @@ export class LancerHUD {
             scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
             incDepth: () => this._suppressRefreshDepth++,
             decDepth: () => this._suppressRefreshDepth--,
+        });
+        this._logPanelInstance = new LogPanel({
+            actor: this._actor,
+            token: this._token,
+            el:    hud,
+            cancelCollapse:  _cancelCollapse,
+            scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
         });
         hud.on('mouseleave', () => {
             if (!clickToOpen) {
@@ -546,17 +558,18 @@ export class LancerHUD {
                 const S_LBL  = 'flex:1;overflow:hidden;min-width:0;';
                 const S_PAN  = 'display:inline-block;white-space:nowrap;padding-right:8px;';
                 const hasMax  = item.max != null;
+                const noColor = !!item.noColor;
                 const min     = item.min ?? (hasMax ? 0 : -Infinity);
                 const max     = item.max ?? Infinity;
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
-                const valColor = (v) => hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
-                const restingBg = (v) => hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
-                const borderColor = (v) => hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
+                const valColor = (v) => noColor ? '#111' : hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
+                const restingBg = (v) => noColor ? BG_DEFAULT : hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
+                const borderColor = (v) => noColor ? 'var(--primary-color)' : hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
                 const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;min-width:220px;`;
                 let cell;
                 if (item.subtype === 'increment') {
                     let cur = item.getValue();
-                    const valText = () => hasMax ? `${cur}/${max}` : `${cur}`;
+                    const valText = item.formatValue ? () => item.formatValue(cur) : () => hasMax ? `${cur}/${max}` : `${cur}`;
                     const S_VAL  = `min-width:22px;text-align:center;font-weight:600;font-size:1em;color:${valColor(cur)};`;
                     cell = $(`<div style="${S_CELL}background:${restingBg(cur)};border-left-color:${borderColor(cur)};">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><div style="display:flex;align-items:center;gap:4px;"><span class="la-dec-btn" style="${S_BTN}">◄</span><span class="la-inc-val" style="${S_VAL}">${valText()}</span><span class="la-inc-btn" style="${S_BTN}">►</span></div></div>`);
                     const step = item.step ?? 1;
@@ -598,7 +611,7 @@ export class LancerHUD {
                 continue;
             }
             const rawChildren = item.getChildren ? item.getChildren() : null;
-            const hasChildren = rawChildren !== null;
+            const hasChildren = rawChildren !== null || !!item.isLogPanel;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
 
             if (item.highlightBg) {
@@ -612,6 +625,17 @@ export class LancerHUD {
             if (col !== this._c4 && !this._clickToOpen) {
                 row.on('mouseenter', () => {
                     $('.la-hud-popup').remove();
+                    if (item.isLogPanel) {
+                        if (this._statusPanelInstance?.isVisible) this._statusPanelInstance.close();
+                        col.find('.la-hud-active').each(function() {
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                        });
+                        closeCol(this._c3, 80);
+                        closeCol(this._c4, 80);
+                        this._logPanelInstance?.open(row);
+                        return;
+                    }
+                    if (this._logPanelInstance?.isVisible) this._logPanelInstance.close();
                     if (col === this._c2 && !hasChildren) {
                         col.find('.la-hud-active').each(function() {
                             const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
@@ -679,7 +703,7 @@ export class LancerHUD {
                 row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
             }
-            if (hasChildren) {
+            if (hasChildren && !item.isLogPanel) {
                 const openChild = () => {
                     if (col === this._c2 && row.hasClass('la-hud-active') && this._c3.is(':visible')) {
                         if (this._clickToOpen) {
@@ -1071,6 +1095,7 @@ export class LancerHUD {
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.'),
                 { label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) },
+                { label: 'Teleport', icon: 'modules/lancer-automations/icons/teleport.svg', onClick: () => executeTeleport(this._token), broadcastFn: (_t, a) => executeTeleport(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Teleport', activation: 'Movement', detail: 'Teleport to a destination within your speed range. Costs speed in movement.' }) },
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
@@ -1263,9 +1288,11 @@ export class LancerHUD {
                     subtype: 'increment',
                     name: 'Overcharge',
                     icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
+                    noColor: true,
                     min: 0,
                     max: ocSeq.length - 1,
                     getValue: () => actor?.system?.overcharge ?? 0,
+                    formatValue: (v) => ocSeq[v] ?? `${v}`,
                     onValueChanged: (newVal) => actor?.update({ 'system.overcharge': newVal }),
                 }];
             })() : []),
@@ -1299,6 +1326,7 @@ export class LancerHUD {
                 { label: 'Combat',    childColLabel: 'Combat',    getChildren: () => combatItems },
                 { label: 'Gameplay',  childColLabel: 'Gameplay',  getChildren: () => gameplayItems },
                 { label: 'Movement',  childColLabel: 'Movement',  getChildren: () => movementItems },
+                { label: 'Log', isLogPanel: true },
                 { label: 'Misc', childColLabel: 'Misc', getChildren: () => [
                     { label: 'Vote',     icon: 'modules/lancer-automations/icons/vote.svg',              onClick: () => { const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; if (api?.openChoiceMenu) api.openChoiceMenu(); else /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.'); } },
                     { label: 'Downtime', icon: 'systems/lancer/assets/icons/white/downtime.svg',         onClick: async () => { const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; await api?.executeDowntime?.(); } },

@@ -178,6 +178,21 @@ export async function executeStandingUp(token) {
     ui.notifications.info(`${token.name} stands up. +${speed} movement.`);
 }
 
+export async function executeTeleport(token, cost) {
+    if (!token?.actor) return;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api) return;
+    const speed = token.actor.system?.speed ?? 0;
+    const moveCost = cost ?? speed;
+    await api.moveToken(token, {
+        teleport: true,
+        range: speed,
+        cost: moveCost,
+        title: "TELEPORT",
+        description: `Select destination within Range ${speed}. Costs ${moveCost} movement.`
+    });
+}
+
 export async function executeFall(paramToken) {
     if (!paramToken) {
         ui.notifications.error('lancer-automations | executeFall requires a target token.');
@@ -1717,4 +1732,5 @@ export const MiscAPI = {
     getActivationIcon,
     executeFall,
     executeStandingUp,
+    executeTeleport,
 };

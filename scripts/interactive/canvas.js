@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, $ */
+/* global canvas, PIXI, game, ui, $, Ray */
 
 import {
     isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
@@ -26,8 +26,11 @@ export function pointerToWorld(event) {
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
     const highlight = new PIXI.Graphics();
 
+    // Support plain {x, y} point as origin (single cell) in addition to Token objects
+    const isPoint = casterToken && !casterToken.document && typeof casterToken.x === 'number' && typeof casterToken.y === 'number';
+
     if (isHexGrid()) {
-        const offsets = getOccupiedOffsets(casterToken);
+        const offsets = isPoint ? [pixelToOffset(casterToken.x, casterToken.y)] : getOccupiedOffsets(casterToken);
         const hexesInRange = new Set();
         const selfHexes = new Set();
 
@@ -61,7 +64,7 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
         highlight.endFill();
     } else {
         const gridSize = canvas.grid.size;
-        const offsets = getOccupiedOffsets(casterToken);
+        const offsets = isPoint ? [pixelToOffset(casterToken.x, casterToken.y)] : getOccupiedOffsets(casterToken);
         const squaresInRange = new Set();
         const selfSquares = new Set();
 
@@ -569,6 +572,7 @@ export function chooseToken(casterToken, options = {}) {
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
  * @param {TokenDocument|string} [options.attachToToken] - Token document or token ID to attach the zone(s) to (requires templatemacro module). Attached zones follow the token when it moves.
+ * @param {{x: number, y: number}} [options.rangeOrigin] - Override range highlight and validation origin point (default: casterToken). Used for measuring range from a point instead of a token.
  * @returns {Promise<Array<{x: number, y: number, template: MeasuredTemplate}>|null>} Zone positions and templates, or null if cancelled
  */
 export async function placeZone(casterToken, options = {}) {
@@ -581,7 +585,8 @@ export async function placeZone(casterToken, options = {}) {
             const result = await templateMacroApi.placeZone(options, _opts.hooks ?? {});
             if (result && _opts.attachToToken) {
                 const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
-                if (tokenDoc && templateMacroApi.attachTemplateToToken) await templateMacroApi.attachTemplateToToken(result, tokenDoc);
+                if (tokenDoc && templateMacroApi.attachTemplateToToken)
+                    await templateMacroApi.attachTemplateToToken(result, tokenDoc);
             }
             return result ? [result] : null;
         }
@@ -598,7 +603,8 @@ export async function placeZone(casterToken, options = {}) {
             const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
             if (tokenDoc) {
                 const tmApi = game.modules.get('templatemacro')?.api;
-                if (tmApi?.attachTemplateToToken) await tmApi.attachTemplateToToken({ template: created }, tokenDoc);
+                if (tmApi?.attachTemplateToToken)
+                    await tmApi.attachTemplateToToken({ template: created }, tokenDoc);
             }
         }
         return created ? [{ x: created.x, y: created.y, template: created }] : null;
@@ -618,7 +624,8 @@ export async function placeZone(casterToken, options = {}) {
             title,
             description = "",
             icon,
-            headerClass = ""
+            headerClass = "",
+            rangeOrigin = null
         } = /** @type {any} */ (options);
 
         let rangeHighlight = null;
@@ -627,8 +634,9 @@ export async function placeZone(casterToken, options = {}) {
         let confirmed = false;
 
         // Draw range highlight if range is specified (low grey, very transparent)
-        if (range !== null && casterToken) {
-            rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, false);
+        // rangeOrigin can be a {x, y} point to override the default casterToken origin
+        if (range !== null && (casterToken || rangeOrigin)) {
+            rangeHighlight = drawRangeHighlight(rangeOrigin || casterToken, range, 0x888888, 0.1, false);
         }
 
         const doCleanup = () => {
@@ -735,8 +743,23 @@ export async function placeZone(casterToken, options = {}) {
                 }
 
                 if (result?.template) {
-                    if (range !== null && casterToken) {
-                        const dist = getDistanceTokenToPoint({ x: result.x, y: result.y }, casterToken);
+                    if (range !== null && (casterToken || rangeOrigin)) {
+                        const origin = rangeOrigin || casterToken;
+                        let dist;
+                        if (origin.document) {
+                            // Token origin: measure from nearest occupied hex (matches highlight)
+                            const pointOffset = pixelToOffset(result.x, result.y);
+                            const offsets = getOccupiedOffsets(origin);
+                            if (isHexGrid()) {
+                                const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
+                                dist = Math.min(...offsets.map(o => cubeDistance(offsetToCube(o.col, o.row), pointCube)));
+                            } else {
+                                dist = Math.min(...offsets.map(o => Math.max(Math.abs(o.col - pointOffset.col), Math.abs(o.row - pointOffset.row))));
+                            }
+                        } else {
+                            // Point origin: simple grid distance
+                            dist = Math.round(canvas.grid.measurePath([origin, { x: result.x, y: result.y }]).distance / canvas.dimensions.distance);
+                        }
                         if (dist > range) {
                             await result.template.delete();
                             ui.notifications.warn("Target is out of range!");
@@ -749,7 +772,8 @@ export async function placeZone(casterToken, options = {}) {
                         const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
                         if (tokenDoc) {
                             const tmApi = game.modules.get('templatemacro')?.api;
-                            if (tmApi?.attachTemplateToToken) await tmApi.attachTemplateToToken(result, tokenDoc);
+                            if (tmApi?.attachTemplateToToken)
+                                await tmApi.attachTemplateToToken(result, tokenDoc);
                         }
                     }
 
@@ -934,6 +958,311 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
     await Promise.all(updates);
     await game.modules.get('lancer-automations').api.handleTrigger('onKnockback', { triggeringToken, range: distance, pushedActors, actionName, item });
 }
+
+/**
+ * Move a token to a destination, bypassing normal movement rules (like knockback).
+ * If no destination is provided, shows an interactive card with range highlight.
+ * Records movement in both lancer-automations history and ElevationRuler.
+ * @param {Token} token - The token to move
+ * @param {Object} [options={}]
+ * @param {{x: number, y: number}} [options.destination] - Destination center point. If omitted, interactive mode.
+ * @param {number} [options.cost] - Override movement cost (default: actual grid distance)
+ * @param {boolean} [options.teleport=false] - If true, plays teleport VFX and marks as teleport in history
+ * @param {number} [options.range=-1] - Max range in grid units (-1 = unlimited)
+ * @param {string} [options.title] - Card title (default: "TELEPORT" or "MOVE")
+ * @param {string} [options.description="Select destination."] - Card description
+ * @returns {Promise<TokenDocument|null>} Updated doc, or null if cancelled
+ */
+export async function moveToken(token, options = {}) {
+    if (!token?.document)
+        return null;
+
+    let destTopLeft;
+    if (options.destination) {
+        // Direct mode: snap destination center to top-left
+        const center = canvas.grid.getCenterPoint(options.destination);
+        destTopLeft = token.getSnappedPosition({ x: center.x - token.w / 2, y: center.y - token.h / 2 });
+    } else {
+        // Interactive mode: show card with range highlight, user clicks hex
+        const range = options.range ?? -1;
+        const picked = await _queueCard(() => new Promise((resolve) => {
+            const {
+                title = options.teleport ? "TELEPORT" : "MOVE",
+                description = "Select destination.",
+                icon,
+                headerClass = ""
+            } = options;
+
+            let rangeHighlight = null;
+            const cursorPreview = new PIXI.Graphics();
+            let trace = null;
+            let selectedPos = null;
+            canvas.stage.addChild(cursorPreview);
+
+            const doCleanup = () => {
+                canvas.stage.off('click', clickHandler);
+                canvas.stage.off('rightdown', abortHandler);
+                canvas.stage.off('pointermove', moveHandler);
+                document.removeEventListener('keydown', keyHandler);
+                if (rangeHighlight) {
+                    if (rangeHighlight.parent)
+                        rangeHighlight.parent.removeChild(rangeHighlight); rangeHighlight.destroy();
+                }
+                if (cursorPreview.parent)
+                    cursorPreview.parent.removeChild(cursorPreview);
+                cursorPreview.destroy();
+                if (trace) {
+                    if (trace.parent)
+                        trace.parent.removeChild(trace); trace.destroy();
+                }
+                _removeInfoCard(cardEl);
+            };
+
+            const cardEl = _createInfoCard("teleport", {
+                title,
+                icon,
+                headerClass,
+                description,
+                range: range >= 0 ? range : undefined,
+                onConfirm: () => {
+                    doCleanup(); resolve(selectedPos);
+                },
+                onCancel: () => {
+                    doCleanup(); resolve(null);
+                }
+            });
+
+            if (range >= 0) {
+                rangeHighlight = drawRangeHighlight(token, range, 0x888888, 0.1, true);
+            }
+
+            const drawTeleportTrace = (targetX, targetY) => {
+                if (trace) {
+                    if (trace.parent)
+                        trace.parent.removeChild(trace); trace.destroy();
+                }
+                trace = new PIXI.Graphics();
+                const gridSize = canvas.grid.size;
+                // Original position (yellow)
+                trace.lineStyle(2, 0xffff00, 0.8);
+                trace.beginFill(0xffff00, 0.3);
+                if (isHexGrid()) {
+                    for (const o of getOccupiedOffsets(token))
+                        drawHexAt(trace, o.col, o.row);
+                } else {
+                    trace.drawRect(token.document.x, token.document.y, token.document.width * gridSize, token.document.height * gridSize);
+                }
+                trace.endFill();
+                // Target position (green for teleport)
+                trace.lineStyle(2, 0x00cc66, 0.8);
+                trace.beginFill(0x00cc66, 0.3);
+                if (isHexGrid()) {
+                    for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY }))
+                        drawHexAt(trace, o.col, o.row);
+                } else {
+                    trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+                }
+                trace.endFill();
+                // Dashed line
+                trace.lineStyle(3, 0x00cc66, 0.8);
+                const cs = token.center;
+                trace.moveTo(cs.x, cs.y);
+                trace.lineTo(targetX + token.w / 2, targetY + token.h / 2);
+                if (canvas.tokens?.parent)
+                    canvas.tokens.parent.addChildAt(trace, canvas.tokens.parent.getChildIndex(canvas.tokens));
+                else
+                    canvas.stage.addChild(trace);
+            };
+
+            const moveHandler = (event) => {
+                const { x: tx, y: ty } = pointerToWorld(event);
+                const snapped = snapTokenCenter(token, { x: tx, y: ty });
+                const dist = getDistanceTokenToPoint({ x: snapped.x + token.w / 2, y: snapped.y + token.h / 2 }, token);
+                const inRange = range < 0 || dist <= range;
+                cursorPreview.clear();
+                const offsets = getOccupiedOffsets(token, { x: snapped.x, y: snapped.y });
+                const color = inRange ? 0x00cc66 : 0x555555;
+                const alpha = inRange ? 0.4 : 0.5;
+                cursorPreview.lineStyle(2, color, 0.8);
+                cursorPreview.beginFill(color, alpha);
+                for (const o of offsets) {
+                    if (isHexGrid())
+                        drawHexAt(cursorPreview, o.col, o.row);
+                    else {
+                        const c = getHexCenter(o.col, o.row); cursorPreview.drawRect(c.x - canvas.grid.size / 2, c.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
+                    }
+                }
+                cursorPreview.endFill();
+            };
+
+            const clickHandler = (event) => {
+                const { x: tx, y: ty } = pointerToWorld(event);
+                const snapped = snapTokenCenter(token, { x: tx, y: ty });
+                const dist = getDistanceTokenToPoint({ x: snapped.x + token.w / 2, y: snapped.y + token.h / 2 }, token);
+                if (range >= 0 && dist > range) {
+                    ui.notifications.warn("Destination is out of range!"); return;
+                }
+                selectedPos = { x: snapped.x, y: snapped.y };
+                drawTeleportTrace(snapped.x, snapped.y);
+                _updateInfoCard(cardEl, "teleport", { selectedPos, tokenName: token.name });
+            };
+
+            const abortHandler = () => {
+                doCleanup(); resolve(null);
+            };
+            const keyHandler = (e) => {
+                if (e.key === 'Escape') {
+                    doCleanup(); resolve(null);
+                }
+            };
+
+            canvas.stage.on('click', clickHandler);
+            canvas.stage.on('rightdown', abortHandler);
+            canvas.stage.on('pointermove', moveHandler);
+            document.addEventListener('keydown', keyHandler);
+        }), _title);
+        if (!picked)
+            return null;
+        destTopLeft = picked;
+    }
+
+    // Path collision check: stop before blocking tokens
+    if (options.canBeBlocked) {
+        const startCenterCheck = token.getCenterPoint({ x: token.document.x, y: token.document.y });
+        const endCenterCheck = token.getCenterPoint(destTopLeft);
+        const ray = new Ray(startCenterCheck, endCenterCheck);
+        if (ray.distance > 0) {
+            const movingIsIntangible = !!token.actor?.statuses?.has('intangible');
+            const selfOffsets = getOccupiedOffsets(token);
+            const selfKeys = new Set(selfOffsets.map(o => `${o.col},${o.row}`));
+
+            // Sample hexes along the straight line
+            const nSteps = Math.max(Math.ceil(ray.distance / Math.min(canvas.grid.sizeX, canvas.grid.sizeY)), 1);
+            const pathOffsets = [];
+            const seenKeys = new Set();
+            for (let i = 0; i <= nSteps; i++) {
+                const t = i / nSteps;
+                const pt = ray.project(t);
+                const off = pixelToOffset(pt.x, pt.y);
+                const key = `${off.col},${off.row}`;
+                if (!seenKeys.has(key) && !selfKeys.has(key)) {
+                    seenKeys.add(key);
+                    pathOffsets.push(off);
+                }
+            }
+
+            // Check each hex for blocking tokens
+            const allTokens = canvas.tokens.placeables.filter(t => t.id !== token.id && t.actor);
+            for (let i = 0; i < pathOffsets.length; i++) {
+                const off = pathOffsets[i];
+                const blocked = allTokens.find(other => {
+                    const otherIsIntangible = !!other.actor?.statuses?.has('intangible');
+                    if (movingIsIntangible !== otherIsIntangible) return false;
+                    const otherOffsets = getOccupiedOffsets(other);
+                    return otherOffsets.some(oo => oo.col === off.col && oo.row === off.row);
+                });
+                if (blocked) {
+                    ui.notifications.warn(`Movement blocked by ${blocked.name}.`);
+                    if (i === 0) return null; // Blocked immediately, can't move
+                    // Stop at last free hex
+                    const lastFree = pathOffsets[i - 1];
+                    const lastCenter = getHexCenter(lastFree.col, lastFree.row);
+                    destTopLeft = token.getSnappedPosition({
+                        x: lastCenter.x - token.w / 2,
+                        y: lastCenter.y - token.h / 2
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    // Execute move
+    const startCenter = token.getCenterPoint({ x: token.document.x, y: token.document.y });
+    const endCenter = token.getCenterPoint(destTopLeft);
+    const moveCost = options.cost ?? getDistanceTokenToPoint(endCenter, token);
+    const tokenSize = Math.max(token.document.width, token.document.height) * canvas.grid.size;
+    const weaponFx = game.modules.get("lancer-weapon-fx");
+    // Sequencer VFX (teleport only): impact at origin and destination
+    if (options.teleport && typeof Sequencer !== 'undefined') {
+        // @ts-ignore
+        new Sequence()
+            .sound("modules/lancer-automations/SFX/laser_shot_mark_02_10052025.wav")
+            .volume(weaponFx.api.getEffectVolume(0.7))
+            .effect("jb2a.impact.003.yellow")
+            .atLocation(startCenter)
+            .size(tokenSize * 3)
+            .mirrorX()
+            .playbackRate(2)
+            .effect("jb2a.impact.003.yellow")
+            .atLocation(endCenter)
+            .size(tokenSize * 3)
+            .play();
+    }
+
+    // Calculate ground elevation at destination
+    const updateData = { ...destTopLeft };
+    const terrainAPI = globalThis.terrainHeightTools;
+    if (terrainAPI) {
+        const destOffsets = getOccupiedOffsets(token, destTopLeft);
+        let maxHeight = 0;
+        const types = terrainAPI.getTerrainTypes?.() || [];
+        const solidTypes = new Set(types.filter(t => t.usesHeight && t.isSolid).map(t => t.id));
+        for (const o of destOffsets) {
+            const cellData = terrainAPI.getCell(o.row, o.col) || [];
+            for (const terrain of cellData) {
+                if (solidTypes.has(terrain.terrainTypeId)) {
+                    const h = (terrain.elevation || 0) + (terrain.height || 0);
+                    if (h > maxHeight)
+                        maxHeight = h;
+                }
+            }
+        }
+        updateData.elevation = maxHeight;
+    }
+
+    const moveFlags = {
+        isDrag: true,
+        rulerSegment: false,
+        firstRulerSegment: true,
+        lastRulerSegment: true,
+        lancerSegmentCost: moveCost,
+        lancerSegmentDistance: moveCost,
+        lancerTerrainPenalty: 0
+    };
+    if (options.teleport) moveFlags.teleport = true;
+    const doc = await token.document.update(updateData, moveFlags);
+
+    // Patch ElevationRuler history (same pattern as knockback)
+    if (game.modules.get("elevationruler")?.active && doc?.object) {
+        const tokenObj = doc.object;
+        if (!tokenObj.elevationruler)
+            tokenObj.elevationruler = {};
+        let history = tokenObj.elevationruler.measurementHistory;
+        if (!history)
+            history = tokenObj.elevationruler.measurementHistory = [];
+        const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
+        const zValue = gridUnitsToPixels(token.document.elevation ?? 0);
+        const last = history.at(-1);
+        let addedNative = false;
+        if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
+            addedNative = true;
+            last.x = endCenter.x; last.y = endCenter.y;
+            last.cost = moveCost; last.teleport = !!options.teleport;
+            if (last.z === undefined)
+                last.z = zValue;
+        }
+        if (!addedNative) {
+            history.push(
+                { ...startCenter, z: zValue, teleport: false, cost: 0 },
+                { ...endCenter, z: zValue, teleport: !!options.teleport, cost: moveCost }
+            );
+        }
+    }
+
+    return doc;
+}
+const _title = "TELEPORT"; // for _queueCard
 
 export function knockBackToken(tokens, distance, options = {}) {
     const _title = options.title || 'KNOCKBACK';

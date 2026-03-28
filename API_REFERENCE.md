@@ -437,8 +437,8 @@ Removes **all** active effects from the provided tokens.
 |----------|------|-------------|
 | `id` | `string` | Optional custom ID |
 | `name` | `string` | Display name |
-| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"` |
-| `subtype` | `string` | Only for `type: "immunity"`. `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
+| `type` | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"` |
+| `subtype` | `string` | For `type: "immunity"`: `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`. For `type: "target_modifier"`: attack subtypes (`"invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`) and damage subtypes (`"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"`) |
 | `effects` | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | `damageTypes` | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 | `tagName` | `string` | Only for `type: "tag"`. Name of the custom tag being added (e.g. `"Inaccurate"`) |

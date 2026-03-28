@@ -857,6 +857,7 @@ export async function executeEffectManager(options = {}) {
                     <option value="tag">Tag</option>
                     <option value="range">Range</option>
                     <option value="immunity">Immunity</option>
+                    <option value="target_modifier">Target Modifier</option>
                 </select>
             </div>
             <div id="bonus-type-stat">
@@ -988,6 +989,23 @@ export async function executeEffectManager(options = {}) {
                     <div class="te-icon-grid" id="bonus-immunity-damageTypes">
                         ${damageTypeIconsHtml}
                     </div>
+                </div>
+            </div>
+            <div id="bonus-type-target_modifier" style="display:none;">
+                <div class="form-group">
+                    <label>Target Modifier:</label>
+                    <select id="bonus-target-modifier-subtype">
+                        <option value="invisible">Invisible (50% miss)</option>
+                        <option value="no_cover">No Cover</option>
+                        <option value="soft_cover">Soft Cover</option>
+                        <option value="hard_cover">Hard Cover</option>
+                        <option value="ap">Armor Piercing (AP)</option>
+                        <option value="half_damage">Half Damage</option>
+                        <option value="paracausal">Cannot be Reduced</option>
+                        <option value="crit">Force Crit</option>
+                        <option value="hit">Force Hit</option>
+                        <option value="miss">Force Miss</option>
+                    </select>
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
@@ -1311,6 +1329,14 @@ export async function executeEffectManager(options = {}) {
                     if (subB.subtype === 'terrain')
                         return 'Immunity: Terrain';
                     return subB.subtype;
+                }
+                if (subB.type === 'target_modifier') {
+                    const labels = {
+                        invisible: 'Invisible (50% miss)', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
+                        ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
+                        crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
+                    };
+                    return `Target: ${labels[subB.subtype] || subB.subtype}`;
                 }
                 return subB.type || 'Unknown';
             };
@@ -1745,6 +1771,8 @@ export async function executeEffectManager(options = {}) {
                             bonusData.damageTypes.push($(this).data('type'));
                         });
                     }
+                } else if (type === 'target_modifier') {
+                    bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
                 } else {
                     bonusData.val = html.find('#bonus-accDiffVal').val() || "1";
                 }
@@ -1802,10 +1830,10 @@ export async function executeEffectManager(options = {}) {
             // Bonus type selector - show/hide relevant inputs
             html.find('#bonus-type').on('change', function () {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier').hide();
                 html.find(`#bonus-type-${type}`).show();
 
-                const showItems = type === 'roll' || type === 'damage' || type === 'tag' || type === 'range';
+                const showItems = type === 'roll' || type === 'damage' || type === 'tag' || type === 'range' || type === 'target_modifier';
                 html.find('#bonus-items-row').toggle(showItems);
                 if (showItems) {
                     html.find('#row-bonus-rollTypes-roll').toggle(type === 'roll');
