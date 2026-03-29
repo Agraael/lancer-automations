@@ -1,15 +1,15 @@
-<h1>API — Effects & Bonuses</h1>
+# API — Effects & Bonuses
 
 [Back to API Reference](API_REFERENCE.md)
 
+---
+
+## Effect Management
+
+<details>
+<summary><b><code>applyEffectsToTokens</code></b> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
+
 <br>
-
-<h2>Effect Management</h2>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>applyEffectsToTokens</code></h4> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
 
 ```js
 await api.applyEffectsToTokens(options, extraOptions)
@@ -19,12 +19,12 @@ await api.applyEffectsToTokens(options, extraOptions)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">tokens</b> | `Array<Token>` | *required* | Targets |
-| <b style="color:#e0a050">effectNames</b> | `string\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }` |
-| <b style="color:#e0a050">note</b> | `string` | `undefined` | Flavor note |
-| <b style="color:#e0a050">duration</b> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` — when `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
-| <b style="color:#e0a050">checkEffectCallback</b> | `fn` | `null` | Duplicate check predicate |
-| <b style="color:#e0a050">notify</b> | `bool\|obj` | `true` | Unified notification config |
+| <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
+| <kbd>effectNames</kbd> | `string\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }` |
+| <kbd>note</kbd> | `string` | `undefined` | Flavor note |
+| <kbd>duration</kbd> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` — when `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
+| <kbd>checkEffectCallback</kbd> | `fn` | `null` | Duplicate check predicate |
+| <kbd>notify</kbd> | `bool\|obj` | `true` | Unified notification config |
 
 **`extraOptions` Object:**
 `{ stack, linkedBonusId, consumption, statDirect, changes, ...customFlags }`
@@ -33,10 +33,12 @@ Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `supp
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>removeEffectsByNameFromTokens</code></h4> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
+<details>
+<summary><b><code>removeEffectsByNameFromTokens</code></b> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
+
+<br>
 
 ```js
 await api.removeEffectsByNameFromTokens(options)
@@ -46,14 +48,13 @@ Finds all effects matching the given name(s) and removes them. This is a **find-
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">tokens</b> | `Array<Token>` | *required* | Tokens to remove from |
-| <b style="color:#e0a050">effectNames</b> | `string\|Array` | *required* | Effect name(s) to match and remove |
-| <b style="color:#e0a050">originId</b> | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
-| <b style="color:#e0a050">extraFlags</b> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
-| <b style="color:#e0a050">notify</b> | `bool\|Object` | `true` | Notification config |
+| <kbd>tokens</kbd> | `Array<Token>` | *required* | Tokens to remove from |
+| <kbd>effectNames</kbd> | `string\|Array` | *required* | Effect name(s) to match and remove |
+| <kbd>originId</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
+| <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
+| <kbd>notify</kbd> | `bool\|Object` | `true` | Notification config |
 
-> [!NOTE]
-> `originId` and `extraFlags` are independent filters — both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
+> **Note:** `originId` and `extraFlags` are independent filters — both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
 
 **Example:**
 ```js
@@ -66,10 +67,12 @@ await api.removeEffectsByNameFromTokens({
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>removeEffectsByName</code></h4> <sup>async</sup> → <code>void</code></summary>
+<details>
+<summary><b><code>removeEffectsByName</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
 
 ```js
 await api.removeEffectsByName(targetID, effectName, originID, extraFlags)
@@ -79,17 +82,19 @@ Removes effects from a single token by name. Lower-level than `removeEffectsByNa
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">targetID</b> | `string` | *required* | The token ID to remove effects from |
-| <b style="color:#e0a050">effectName</b> | `string` | *required* | Effect name to match and remove |
-| <b style="color:#e0a050">originID</b> | `string` | `null` | Only remove effects whose stored `originID` flag matches |
-| <b style="color:#e0a050">extraFlags</b> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
+| <kbd>targetID</kbd> | `string` | *required* | The token ID to remove effects from |
+| <kbd>effectName</kbd> | `string` | *required* | Effect name to match and remove |
+| <kbd>originID</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches |
+| <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>deleteEffect</code></h4> → <code>void</code></summary>
+<details>
+<summary><b><code>deleteEffect</code></b> → <code>void</code></summary>
+
+<br>
 
 ```js
 api.deleteEffect(token, effect)
@@ -99,8 +104,8 @@ Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFro
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">token</b> | `Token\|TokenDocument\|string` | The token (or its ID) that owns the effect |
-| <b style="color:#e0a050">effect</b> | `ActiveEffect\|string` | The effect (or its ID) to delete |
+| <kbd>token</kbd> | `Token\|TokenDocument\|string` | The token (or its ID) that owns the effect |
+| <kbd>effect</kbd> | `ActiveEffect\|string` | The effect (or its ID) to delete |
 
 **Example:**
 ```js
@@ -110,10 +115,12 @@ api.deleteEffect(target, effects[0]);
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>findEffectOnToken</code></h4> → <code>ActiveEffect | undefined</code></summary>
+<details>
+<summary><b><code>findEffectOnToken</code></b> → <code>ActiveEffect | undefined</code></summary>
+
+<br>
 
 ```js
 api.findEffectOnToken(token, identifier)
@@ -123,8 +130,8 @@ Searches for an effect on a token by name or predicate function.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">token</b> | `Token\|TokenDocument` | The token to search |
-| <b style="color:#e0a050">identifier</b> | `string\|Function` | Effect name (string) or predicate `(effect) => boolean` |
+| <kbd>token</kbd> | `Token\|TokenDocument` | The token to search |
+| <kbd>identifier</kbd> | `string\|Function` | Effect name (string) or predicate `(effect) => boolean` |
 
 **Example — predicate search:**
 ```js
@@ -135,10 +142,12 @@ const effect = api.findEffectOnToken(target, e =>
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getAllEffects</code></h4> → <code>Array&lt;ActiveEffect&gt;</code></summary>
+<details>
+<summary><b><code>getAllEffects</code></b> → <code>Array&lt;ActiveEffect&gt;</code></summary>
+
+<br>
 
 ```js
 api.getAllEffects(target)
@@ -148,14 +157,16 @@ Returns all active effects on the target, including unflagged player-added ones.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">target</b> | `Token\|TokenDocument\|Actor` | The target to inspect |
+| <kbd>target</kbd> | `Token\|TokenDocument\|Actor` | The target to inspect |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>consumeEffectCharge</code></h4> <sup>async</sup> → <code>boolean</code></summary>
+<details>
+<summary><b><code>consumeEffectCharge</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
 
 ```js
 await api.consumeEffectCharge(effect)
@@ -165,16 +176,18 @@ Decrements the effect's stack counter by 1. If the counter reaches 0, the effect
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">effect</b> | `ActiveEffect` | The effect to consume a charge from |
+| <kbd>effect</kbd> | `ActiveEffect` | The effect to consume a charge from |
 
 Returns `true` if consumed, `false` if the effect has no consumption data.
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>triggerEffectImmunity</code></h4> <sup>async</sup> → <code>void</code></summary>
+<details>
+<summary><b><code>triggerEffectImmunity</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
 
 ```js
 await api.triggerEffectImmunity(token, effectNames, source, notify)
@@ -184,17 +197,19 @@ Removes the named effects from the token and announces immunity in chat.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">token</b> | `Token\|TokenDocument` | *required* | The immune token |
-| <b style="color:#e0a050">effectNames</b> | `string\|Array<string>` | *required* | Effect name(s) to remove |
-| <b style="color:#e0a050">source</b> | `Item\|string` | `""` | Source of immunity (item or text) |
-| <b style="color:#e0a050">notify</b> | `boolean` | `true` | Post chat notification |
+| <kbd>token</kbd> | `Token\|TokenDocument` | *required* | The immune token |
+| <kbd>effectNames</kbd> | `string\|Array<string>` | *required* | Effect name(s) to remove |
+| <kbd>source</kbd> | `Item\|string` | `""` | Source of immunity (item or text) |
+| <kbd>notify</kbd> | `boolean` | `true` | Post chat notification |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>checkEffectImmunities</code></h4> → <code>Array&lt;string&gt;</code></summary>
+<details>
+<summary><b><code>checkEffectImmunities</code></b> → <code>Array&lt;string&gt;</code></summary>
+
+<br>
 
 ```js
 api.checkEffectImmunities(actor, effectIdOrName, effect, state)
@@ -204,17 +219,19 @@ Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`) if
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor` | *required* | The actor to check |
-| <b style="color:#e0a050">effectIdOrName</b> | `string` | *required* | Effect ID or name to check immunity for |
-| <b style="color:#e0a050">effect</b> | `ActiveEffect` | `null` | Optional effect object for additional context |
-| <b style="color:#e0a050">state</b> | `Object` | `null` | Optional flow state |
+| <kbd>actor</kbd> | `Actor` | *required* | The actor to check |
+| <kbd>effectIdOrName</kbd> | `string` | *required* | Effect ID or name to check immunity for |
+| <kbd>effect</kbd> | `ActiveEffect` | `null` | Optional effect object for additional context |
+| <kbd>state</kbd> | `Object` | `null` | Optional flow state |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>deleteAllEffects</code></h4> <sup>async</sup> → <code>void</code> · <h4 style="display:inline"><code>executeEffectManager</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>deleteAllEffects</code></b> · <b><code>executeEffectManager</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.deleteAllEffects(tokens)     // Removes ALL active effects from the provided tokens
@@ -223,18 +240,18 @@ await api.executeEffectManager(options) // Opens the Effect Manager UI
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">tokens</b> | `Array<Token\|TokenDocument>` | Tokens to clear |
+| <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | Tokens to clear |
 
 </details>
 
+---
+
+## Global & Constant Bonuses
+
+<details>
+<summary><b><code>addGlobalBonus</code></b> <sup>async</sup> → <code>string</code> (Bonus ID)</summary>
+
 <br>
-
-<h2>Global & Constant Bonuses</h2>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addGlobalBonus</code></h4> <sup>async</sup> → <code>string</code> (Bonus ID)</summary>
 
 ```js
 const bonusId = await api.addGlobalBonus(actor, bonusData, options)
@@ -242,66 +259,72 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 
 **`bonusData` Object:**
 
-<details><summary>Core fields (all bonus types)</summary>
+<details>
+<summary>Core fields (all bonus types)</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">id</b> | `string` | Optional custom ID |
-| <b style="color:#e0a050">name</b> | `string` | Display name |
-| <b style="color:#e0a050">type</b> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"` |
-| <b style="color:#e0a050">val</b> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
-| <b style="color:#e0a050">uses</b> | `number` | Stack count |
-| <b style="color:#e0a050">rollTypes</b> | `Array` | `["attack"]`, `["check"]`, etc. |
-| <b style="color:#e0a050">condition</b> | `string\|fn` | `(state, actor, data, context) => boolean` |
-| <b style="color:#e0a050">itemLids</b> | `Array` | LID filters |
-| <b style="color:#e0a050">applyTo</b> | `Array` | Token ID filters |
+| <kbd>id</kbd> | `string` | Optional custom ID |
+| <kbd>name</kbd> | `string` | Display name |
+| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"` |
+| <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
+| <kbd>uses</kbd> | `number` | Stack count |
+| <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
+| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean` |
+| <kbd>itemLids</kbd> | `Array` | LID filters |
+| <kbd>applyTo</kbd> | `Array` | Token ID filters |
 
 </details>
 
-<details><summary>Immunity fields (type: "immunity")</summary>
+<details>
+<summary>Immunity fields (type: "immunity")</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">subtype</b> | `string` | `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
-| <b style="color:#e0a050">effects</b> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
-| <b style="color:#e0a050">damageTypes</b> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
+| <kbd>subtype</kbd> | `string` | `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
+| <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
+| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 
 </details>
 
-<details><summary>Target modifier fields (type: "target_modifier")</summary>
+<details>
+<summary>Target modifier fields (type: "target_modifier")</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">subtype</b> | `string` | Attack: `"invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
+| <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
 
 </details>
 
-<details><summary>Tag fields (type: "tag")</summary>
+<details>
+<summary>Tag fields (type: "tag")</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">tagName</b> | `string` | Name of the custom tag (e.g. `"Inaccurate"`) |
-| <b style="color:#e0a050">tagMode</b> | `string` | `"add"` or `"override"` |
-| <b style="color:#e0a050">removeTag</b> | `boolean` | If true, negates the tag instead of adding it |
+| <kbd>tagName</kbd> | `string` | Name of the custom tag (e.g. `"Inaccurate"`) |
+| <kbd>tagMode</kbd> | `string` | `"add"` or `"override"` |
+| <kbd>removeTag</kbd> | `boolean` | If true, negates the tag instead of adding it |
 
 </details>
 
-<details><summary>Range fields (type: "range")</summary>
+<details>
+<summary>Range fields (type: "range")</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">rangeType</b> | `string` | `"Range"`, `"Threat"`, `"Line"`, `"Blast"`, `"Burst"`, `"Cone"` |
-| <b style="color:#e0a050">rangeMode</b> | `string` | `"add"` (default) or `"override"` |
+| <kbd>rangeType</kbd> | `string` | `"Range"`, `"Threat"`, `"Line"`, `"Blast"`, `"Burst"`, `"Cone"` |
+| <kbd>rangeMode</kbd> | `string` | `"add"` (default) or `"override"` |
 
 </details>
 
-<details><summary>Multi / Damage fields</summary>
+<details>
+<summary>Multi / Damage fields</summary>
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <b style="color:#e0a050">bonuses</b> | `Array` | Only for `type: "multi"`. Array of sub-bonus objects. |
-| <b style="color:#e0a050">damage</b> | `Array` | Damage bonus: `[{ type, val }]` |
-| <b style="color:#e0a050">stat</b> | `string` | Property path (e.g. `system.hp.max`) |
+| <kbd>bonuses</kbd> | `Array` | Only for `type: "multi"`. Array of sub-bonus objects. |
+| <kbd>damage</kbd> | `Array` | Damage bonus: `[{ type, val }]` |
+| <kbd>stat</kbd> | `string` | Property path (e.g. `system.hp.max`) |
 
 </details>
 
@@ -312,10 +335,12 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>removeGlobalBonus</code></h4> <sup>async</sup> → <code>void</code></summary>
+<details>
+<summary><b><code>removeGlobalBonus</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
 
 ```js
 await api.removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval)
@@ -325,9 +350,9 @@ Removes one or more global bonuses from an actor. Also deletes linked active eff
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor` | *required* | The actor to modify |
-| <b style="color:#e0a050">bonusIdOrPredicate</b> | `string\|Function` | *required* | Bonus ID string, or predicate `(bonus) => boolean` to match multiple |
-| <b style="color:#e0a050">skipEffectRemoval</b> | `boolean` | `false` | If true, keeps the linked active effects |
+| <kbd>actor</kbd> | `Actor` | *required* | The actor to modify |
+| <kbd>bonusIdOrPredicate</kbd> | `string\|Function` | *required* | Bonus ID string, or predicate `(bonus) => boolean` to match multiple |
+| <kbd>skipEffectRemoval</kbd> | `boolean` | `false` | If true, keeps the linked active effects |
 
 **Example:**
 ```js
@@ -340,31 +365,35 @@ await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reacto
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getGlobalBonuses</code></h4> → <code>Array</code> · <h4 style="display:inline"><code>getGlobalBonus</code></h4> → <code>BonusData | null</code></summary>
+<details>
+<summary><b><code>getGlobalBonuses</code></b> · <b><code>getGlobalBonus</code></b></summary>
+
+<br>
 
 ```js
-const all    = api.getGlobalBonuses(actor)        // all global bonuses (empty array if falsy)
-const single = api.getGlobalBonus(actor, bonusId)  // single bonus by ID, or null
+const all    = api.getGlobalBonuses(actor)        // → Array<BonusData> (empty if falsy)
+const single = api.getGlobalBonus(actor, bonusId)  // → BonusData | null
 ```
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor` | The actor to inspect |
-| <b style="color:#e0a050">bonusId</b> | `string` | The bonus ID (for `getGlobalBonus` only) |
+| <kbd>actor</kbd> | `Actor` | The actor to inspect |
+| <kbd>bonusId</kbd> | `string` | The bonus ID (for `getGlobalBonus` only) |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addConstantBonus</code></h4> <sup>async</sup> · <h4 style="display:inline"><code>getConstantBonuses</code></h4> · <h4 style="display:inline"><code>removeConstantBonus</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>addConstantBonus</code></b> <sup>async</sup> · <b><code>getConstantBonuses</code></b> · <b><code>removeConstantBonus</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.addConstantBonus(actor, bonusData)              // same bonusData shape as addGlobalBonus
-const bonuses = api.getConstantBonuses(actor)              // all constant bonuses (empty array if falsy)
+const bonuses = api.getConstantBonuses(actor)              // → Array<BonusData> (empty if falsy)
 await api.removeConstantBonus(actor, bonusIdOrPredicate)   // string ID or predicate
 ```
 
@@ -372,22 +401,22 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor` | The actor to modify/inspect |
-| <b style="color:#e0a050">bonusData</b> | `Object` | Same shape as `addGlobalBonus` |
-| <b style="color:#e0a050">bonusIdOrPredicate</b> | `string\|Function` | Bonus ID or predicate `(bonus) => boolean` |
+| <kbd>actor</kbd> | `Actor` | The actor to modify/inspect |
+| <kbd>bonusData</kbd> | `Object` | Same shape as `addGlobalBonus` |
+| <kbd>bonusIdOrPredicate</kbd> | `string\|Function` | Bonus ID or predicate `(bonus) => boolean` |
 
 </details>
 
-<br>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<h3>Flow State Data Injection</h3>
+### Flow State Data Injection
 
 When within an active flow (like an attack, a check, etc.), the `triggerData` parameter contains a `flowState` object. You can use this state object to inject ephemeral bonuses or share arbitrary variables across triggers for the lifespan of that specific flow.
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>flowState.injectBonus</code></h4> · <h4 style="display:inline"><code>flowState.injectFlowExtraData</code></h4> · <h4 style="display:inline"><code>flowState.getFlowExtraData</code></h4></summary>
+<details>
+<summary><b><code>flowState.injectBonus</code></b> · <b><code>flowState.injectFlowExtraData</code></b> · <b><code>flowState.getFlowExtraData</code></b></summary>
+
+<br>
 
 ```js
 triggerData.flowState.injectBonus(bonus)            // add ephemeral bonus to current flow
@@ -401,14 +430,14 @@ triggerData.flowState.getFlowExtraData()             // read la_extraData
 
 </details>
 
+---
+
+### Immunity Queries
+
+<details>
+<summary><b><code>getImmunityBonuses</code></b> · <b><code>checkDamageResistances</code></b> · <b><code>applyDamageImmunities</code></b></summary>
+
 <br>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<h3>Immunity Queries</h3>
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getImmunityBonuses</code></h4> · <h4 style="display:inline"><code>checkDamageResistances</code></h4> · <h4 style="display:inline"><code>applyDamageImmunities</code></h4></summary>
 
 ```js
 api.getImmunityBonuses(actor, subtype, state)    // → Array<object>
@@ -422,17 +451,18 @@ api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 | `checkDamageResistances` | Returns all "resistance" subtype immunity bonuses matching the given damage type. |
 | `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out. |
 
-All accept an optional <b style="color:#e0a050">state</b> (`Object`, default `null`) for conditional immunity evaluation.
+All accept an optional <kbd>state</kbd> (`Object`, default `null`) for conditional immunity evaluation.
 
-> [!NOTE]
-> `checkDamageResistances` is exported from `genericBonuses.js` but is not currently included in the `BonusesAPI` object.
+> **Note:** `checkDamageResistances` is exported from `genericBonuses.js` but is not currently included in the `BonusesAPI` object.
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>hasCritImmunity</code></h4> · <h4 style="display:inline"><code>hasHitImmunity</code></h4> · <h4 style="display:inline"><code>hasMissImmunity</code></h4> <sup>async</sup> → <code>boolean</code></summary>
+<details>
+<summary><b><code>hasCritImmunity</code></b> · <b><code>hasHitImmunity</code></b> · <b><code>hasMissImmunity</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
 
 ```js
 await api.hasCritImmunity(actor, attackerActor, state)
@@ -444,8 +474,8 @@ Returns `true` if the actor has any immunity bonuses of the corresponding subtyp
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor` | *required* | The actor to check |
-| <b style="color:#e0a050">attackerActor</b> | `Actor` | `null` | Optional attacker for conditional immunity checks |
-| <b style="color:#e0a050">state</b> | `Object` | `null` | Optional flow state |
+| <kbd>actor</kbd> | `Actor` | *required* | The actor to check |
+| <kbd>attackerActor</kbd> | `Actor` | `null` | Optional attacker for conditional immunity checks |
+| <kbd>state</kbd> | `Object` | `null` | Optional flow state |
 
 </details>

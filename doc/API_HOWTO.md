@@ -1,17 +1,17 @@
-<h1>API — Registration, How-Tos & Auras</h1>
+# API — Registration, How-Tos & Auras
 
 [Back to API Reference](API_REFERENCE.md)
 
+---
+
+## Registration & Logic
+
+### User Helpers
+
+<details>
+<summary><b><code>registerUserHelper</code></b> · <b><code>getUserHelper</code></b> → <code>Function | null</code></summary>
+
 <br>
-
-<h2>Registration & Logic</h2>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<h3>User Helpers</h3>
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>registerUserHelper</code></h4> · <h4 style="display:inline"><code>getUserHelper</code></h4> → <code>Function | null</code></summary>
 
 ```js
 api.registerUserHelper(name, fn)   // register a shared utility function
@@ -22,17 +22,19 @@ Useful for sharing logic between separate activation scripts.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">name</b> | `string` | Unique name for the helper |
-| <b style="color:#e0a050">fn</b> | `Function` | The function to register |
+| <kbd>name</kbd> | `string` | Unique name for the helper |
+| <kbd>fn</kbd> | `Function` | The function to register |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<h3>Registration Functions</h3>
+### Registration Functions
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>registerDefaultItemReactions</code></h4> · <h4 style="display:inline"><code>registerDefaultGeneralReactions</code></h4></summary>
+<details>
+<summary><b><code>registerDefaultItemReactions</code></b> · <b><code>registerDefaultGeneralReactions</code></b></summary>
+
+<br>
 
 ```js
 api.registerDefaultItemReactions(reactions)     // object mapping LIDs to activation objects
@@ -44,11 +46,9 @@ api.registerDefaultGeneralReactions(reactions)   // object mapping names to acti
 
 </details>
 
-<br>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<h3>How-To: Register Activations</h3>
+### How-To: Register Activations
 
 ```javascript
 Hooks.on('lancer-automations.ready', (api) => {
@@ -64,11 +64,9 @@ Hooks.on('lancer-automations.ready', (api) => {
 });
 ```
 
-<br>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<h3>How-To: Advanced Consumption</h3>
+### How-To: Advanced Consumption
 
 **Shared Shield Charges:**
 ```javascript
@@ -85,16 +83,16 @@ await api.applyEffectsToTokens({
 });
 ```
 
-<br>
+---
 
-<h2>Grid-Aware Auras Wrapper</h2>
+## Grid-Aware Auras Wrapper
 
 Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) module (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)).
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+<details>
+<summary><b><code>createAura</code></b> <sup>async</sup></summary>
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>createAura</code></h4> <sup>async</sup></summary>
+<br>
 
 ```js
 await api.createAura(owner, auraConfig)
@@ -104,8 +102,8 @@ Creates an aura using the Grid-Aware Auras module. This wrapper supports passing
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">owner</b> | `Token\|Item` | The document that owns the aura |
-| <b style="color:#e0a050">auraConfig</b> | `Object` | Full Grid-Aware Auras configuration object |
+| <kbd>owner</kbd> | `Token\|Item` | The document that owns the aura |
+| <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
 
 **`macros` Function Example:**
 ```javascript
@@ -117,7 +115,8 @@ macros: [{
 }]
 ```
 
-<details><summary><b>Available Trigger Modes</b></summary>
+<details>
+<summary><b>Available Trigger Modes</b></summary>
 
 | Category | Modes |
 |:---------|:------|
@@ -128,10 +127,12 @@ macros: [{
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>deleteAuras</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>deleteAuras</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.deleteAuras(owner, filter, options)
@@ -141,8 +142,8 @@ Deletes auras from the specified owner. Safely cleans up any associated lambda c
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">owner</b> | `Token\|Item` | *required* | The document that owns the auras |
-| <b style="color:#e0a050">filter</b> | `string\|Object` | *required* | String ID, name, or Object filter |
-| <b style="color:#e0a050">options</b> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
+| <kbd>owner</kbd> | `Token\|Item` | *required* | The document that owns the auras |
+| <kbd>filter</kbd> | `string\|Object` | *required* | String ID, name, or Object filter |
+| <kbd>options</kbd> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
 
 </details>

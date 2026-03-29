@@ -1,15 +1,15 @@
-<h1>API — Interactive Tools, Deployment & Movement</h1>
+# API — Interactive Tools, Deployment & Movement
 
 [Back to API Reference](API_REFERENCE.md)
 
+---
+
+## Interactive Player Tools
+
+<details>
+<summary><b><code>chooseToken</code></b> <sup>async</sup> → <code>Array&lt;Token&gt; | null</code></summary>
+
 <br>
-
-<h2>Interactive Player Tools</h2>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>chooseToken</code></h4> <sup>async</sup> → <code>Array&lt;Token&gt; | null</code></summary>
 
 ```js
 const targets = await api.chooseToken(casterToken, options)
@@ -17,22 +17,24 @@ const targets = await api.chooseToken(casterToken, options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">range</b> | `number` | `null` | Max range highlight |
-| <b style="color:#e0a050">count</b> | `number` | `1` | Targets to pick (-1 for unlimited) |
-| <b style="color:#e0a050">filter</b> | `Function` | `null` | `(token) => boolean` |
-| <b style="color:#e0a050">includeHidden</b> | `boolean` | `false` | Include hidden tokens |
-| <b style="color:#e0a050">includeSelf</b> | `boolean` | `false` | Is the caster selectable? |
-| <b style="color:#e0a050">title</b> | `string` | `"SELECT TARGETS"` | Card header |
-| <b style="color:#e0a050">description</b> | `string` | `""` | Card description |
-| <b style="color:#e0a050">icon</b> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
-| <b style="color:#e0a050">headerClass</b> | `string` | `""` | Extra CSS class |
+| <kbd>range</kbd> | `number` | `null` | Max range highlight |
+| <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
+| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` |
+| <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
+| <kbd>includeSelf</kbd> | `boolean` | `false` | Is the caster selectable? |
+| <kbd>title</kbd> | `string` | `"SELECT TARGETS"` | Card header |
+| <kbd>description</kbd> | `string` | `""` | Card description |
+| <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>placeZone</code></h4> <sup>async</sup> → <code>Array&lt;MeasuredTemplate&gt;</code></summary>
+<details>
+<summary><b><code>placeZone</code></b> <sup>async</sup> → <code>Array&lt;MeasuredTemplate&gt;</code></summary>
+
+<br>
 
 ```js
 await api.placeZone(casterToken, options)
@@ -40,21 +42,22 @@ await api.placeZone(casterToken, options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">range</b> | `number` | `null` | Max range highlight |
-| <b style="color:#e0a050">size</b> | `number` | `1` | Zone size |
-| <b style="color:#e0a050">type</b> | `string` | `"Blast"` | `"Blast"`, `"Burst"`, `"Cone"`, `"Line"` |
-| <b style="color:#e0a050">fillColor</b> | `string` | `"#ff6400"` | Template color |
-| <b style="color:#e0a050">borderColor</b> | `string` | `"#964611ff"` | Template border |
-| <b style="color:#e0a050">texture</b> | `string` | `null` | Optional texture path |
-| <b style="color:#e0a050">count</b> | `number` | `1` | Number of zones (-1 for unlimited) |
-| <b style="color:#e0a050">hooks</b> | `Object` | `{}` | templatemacro hooks (see below) |
-| <b style="color:#e0a050">dangerous</b> | `Object` | `null` | `{ damageType, damageValue }` — ENG check on entry/turn start |
-| <b style="color:#e0a050">statusEffects</b> | `Array` | `[]` | Status effect IDs applied to tokens inside |
-| <b style="color:#e0a050">difficultTerrain</b> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` — ElevationRuler cost |
-| <b style="color:#e0a050">centerLabel</b> | `string` | `""` | Text at center of template on canvas |
-| <b style="color:#e0a050">title</b> | `string` | `"PLACE ZONE"` | Card header |
+| <kbd>range</kbd> | `number` | `null` | Max range highlight |
+| <kbd>size</kbd> | `number` | `1` | Zone size |
+| <kbd>type</kbd> | `string` | `"Blast"` | `"Blast"`, `"Burst"`, `"Cone"`, `"Line"` |
+| <kbd>fillColor</kbd> | `string` | `"#ff6400"` | Template color |
+| <kbd>borderColor</kbd> | `string` | `"#964611ff"` | Template border |
+| <kbd>texture</kbd> | `string` | `null` | Optional texture path |
+| <kbd>count</kbd> | `number` | `1` | Number of zones (-1 for unlimited) |
+| <kbd>hooks</kbd> | `Object` | `{}` | templatemacro hooks (see below) |
+| <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }` — ENG check on entry/turn start |
+| <kbd>statusEffects</kbd> | `Array` | `[]` | Status effect IDs applied to tokens inside |
+| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` — ElevationRuler cost |
+| <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
+| <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
 
-<details><summary><b>Custom Logic via <code>hooks</code></b></summary>
+<details>
+<summary><b>Custom Logic via <code>hooks</code></b></summary>
 
 Each hook entry supports two formats that can be combined:
 
@@ -99,10 +102,12 @@ api.placeZone(token, {
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>placeToken</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>placeToken</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.placeToken(options)
@@ -110,21 +115,23 @@ await api.placeToken(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">actor</b> | `Actor\|Array` | `null` | Single Actor, Array of Actors, or Array of `{actor, extraData}`. Array shows selector. |
-| <b style="color:#e0a050">range</b> | `number` | `null` | Placement range |
-| <b style="color:#e0a050">count</b> | `number` | `1` | Total tokens to place |
-| <b style="color:#e0a050">extraData</b> | `Object` | `{}` | Default token data overrides. Flags are shallow-merged with prototype flags. |
-| <b style="color:#e0a050">origin</b> | `Token\|{x,y}` | `null` | Measurement origin |
-| <b style="color:#e0a050">onSpawn</b> | `Function` | `null` | `(newTokenDoc, origin) => {}` |
-| <b style="color:#e0a050">title</b> | `string` | `"PLACE TOKEN"` | Card header |
-| <b style="color:#e0a050">noCard</b> | `boolean` | `false` | Skip info card |
+| <kbd>actor</kbd> | `Actor\|Array` | `null` | Single Actor, Array of Actors, or Array of `{actor, extraData}`. Array shows selector. |
+| <kbd>range</kbd> | `number` | `null` | Placement range |
+| <kbd>count</kbd> | `number` | `1` | Total tokens to place |
+| <kbd>extraData</kbd> | `Object` | `{}` | Default token data overrides. Flags are shallow-merged with prototype flags. |
+| <kbd>origin</kbd> | `Token\|{x,y}` | `null` | Measurement origin |
+| <kbd>onSpawn</kbd> | `Function` | `null` | `(newTokenDoc, origin) => {}` |
+| <kbd>title</kbd> | `string` | `"PLACE TOKEN"` | Card header |
+| <kbd>noCard</kbd> | `boolean` | `false` | Skip info card |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>knockBackToken</code></h4> <sup>async</sup> → <code>Array&lt;{tokenId, updateData}&gt;</code></summary>
+<details>
+<summary><b><code>knockBackToken</code></b> <sup>async</sup> → <code>Array&lt;{tokenId, updateData}&gt;</code></summary>
+
+<br>
 
 ```js
 await api.knockBackToken(tokens, distance, options)
@@ -134,25 +141,27 @@ Interactive knockback tool. Shows visual movement traces and requires confirmati
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">tokens</b> | `Array<Token>` | *required* | Tokens to knock back |
-| <b style="color:#e0a050">distance</b> | `number` | *required* | Knockback distance in spaces |
+| <kbd>tokens</kbd> | `Array<Token>` | *required* | Tokens to knock back |
+| <kbd>distance</kbd> | `number` | *required* | Knockback distance in spaces |
 
 **`options` Object:**
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">title</b> | `string` | `"KNOCKBACK"` | Card header |
-| <b style="color:#e0a050">description</b> | `string` | `"Select destination for each token."` | Card description |
-| <b style="color:#e0a050">triggeringToken</b> | `Token` | `null` | The token causing the knockback (for `onKnockback` trigger) |
-| <b style="color:#e0a050">actionName</b> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
-| <b style="color:#e0a050">item</b> | `Item` | `null` | Source item |
+| <kbd>title</kbd> | `string` | `"KNOCKBACK"` | Card header |
+| <kbd>description</kbd> | `string` | `"Select destination for each token."` | Card description |
+| <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the knockback (for `onKnockback` trigger) |
+| <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
+| <kbd>item</kbd> | `Item` | `null` | Source item |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>revertMovement</code></h4> <sup>async</sup> → <code>boolean</code></summary>
+<details>
+<summary><b><code>revertMovement</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
 
 ```js
 await api.revertMovement(token, destination)
@@ -162,15 +171,17 @@ Reverts a token to its previous position from movement history. If `destination`
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">token</b> | `Token` | *required* | The token to revert |
-| <b style="color:#e0a050">destination</b> | `{x, y}` | `null` | Override destination (world coordinates) |
+| <kbd>token</kbd> | `Token` | *required* | The token to revert |
+| <kbd>destination</kbd> | `{x, y}` | `null` | Override destination (world coordinates) |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>pickItem</code></h4> <sup>async</sup> → <code>Item | null</code></summary>
+<details>
+<summary><b><code>pickItem</code></b> <sup>async</sup> → <code>Item | null</code></summary>
+
+<br>
 
 ```js
 const item = await api.pickItem(items, options)
@@ -180,18 +191,20 @@ Prompts the user to pick an item from a list using a Choice Card.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">items</b> | `Array<Item>` | *required* | Array of items to choose from |
-| <b style="color:#e0a050">title</b> | `string` | `"PICK ITEM"` | Card title |
-| <b style="color:#e0a050">description</b> | `string` | `"Select an item:"` | Subtitle text |
-| <b style="color:#e0a050">icon</b> | `string` | `"fas fa-box"` | FontAwesome class |
-| <b style="color:#e0a050">formatText</b> | `Function` | `null` | `(item) => item.name` |
+| <kbd>items</kbd> | `Array<Item>` | *required* | Array of items to choose from |
+| <kbd>title</kbd> | `string` | `"PICK ITEM"` | Card title |
+| <kbd>description</kbd> | `string` | `"Select an item:"` | Subtitle text |
+| <kbd>icon</kbd> | `string` | `"fas fa-box"` | FontAwesome class |
+| <kbd>formatText</kbd> | `Function` | `null` | `(item) => item.name` |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getWeapons</code></h4> · <h4 style="display:inline"><code>reloadOneWeapon</code></h4> · <h4 style="display:inline"><code>rechargeSystem</code></h4> · <h4 style="display:inline"><code>findAura</code></h4> · <h4 style="display:inline"><code>findItemByLid</code></h4></summary>
+<details>
+<summary><b><code>getWeapons</code></b> · <b><code>reloadOneWeapon</code></b> · <b><code>rechargeSystem</code></b> · <b><code>findAura</code></b> · <b><code>findItemByLid</code></b></summary>
+
+<br>
 
 ```js
 api.getWeapons(entity)                           // → Array<Item> — all weapons on an actor
@@ -203,10 +216,12 @@ api.findItemByLid(actorOrToken, lid)              // → Item|null — find item
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>startChoiceCard</code></h4> <sup>async</sup> → <code>true | null</code></summary>
+<details>
+<summary><b><code>startChoiceCard</code></b> <sup>async</sup> → <code>true | null</code></summary>
+
+<br>
 
 ```js
 await api.startChoiceCard(options)
@@ -216,28 +231,29 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">mode</b> | `string` | `"or"` | `"or"` (pick one), `"and"` (confirm all), `"vote"` (live tally), `"vote-hidden"` (hidden tally) |
-| <b style="color:#e0a050">choices</b> | `Array` | `[]` | List of choice objects (see below) |
-| <b style="color:#e0a050">title</b> | `string` | `"CHOICE"` | Card header |
-| <b style="color:#e0a050">description</b> | `string` | `""` | Subtitle text |
-| <b style="color:#e0a050">icon</b> | `string` | `null` | FontAwesome class |
-| <b style="color:#e0a050">headerClass</b> | `string` | `""` | Optional CSS class |
-| <b style="color:#e0a050">userIdControl</b> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
+| <kbd>mode</kbd> | `string` | `"or"` | `"or"` (pick one), `"and"` (confirm all), `"vote"` (live tally), `"vote-hidden"` (hidden tally) |
+| <kbd>choices</kbd> | `Array` | `[]` | List of choice objects (see below) |
+| <kbd>title</kbd> | `string` | `"CHOICE"` | Card header |
+| <kbd>description</kbd> | `string` | `""` | Subtitle text |
+| <kbd>icon</kbd> | `string` | `null` | FontAwesome class |
+| <kbd>headerClass</kbd> | `string` | `""` | Optional CSS class |
+| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
 
 **Choice Object:**
 ```js
 { text: "Label", icon: "fas fa-check", data: { id: 1 }, callback: async (data) => { ... } }
 ```
 
-> [!TIP]
-> For vote modes, `userIdControl` must be a non-empty array of user IDs. The creator sees all votes and manually confirms the winner.
+> **Note:** For vote modes, `userIdControl` must be a non-empty array of user IDs. The creator sees all votes and manually confirms the winner.
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>openChoiceMenu</code></h4> <sup>async</sup> → <code>void</code></summary>
+<details>
+<summary><b><code>openChoiceMenu</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
 
 ```js
 await api.openChoiceMenu()
@@ -254,10 +270,12 @@ Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>moveToken</code></h4> <sup>async</sup> → <code>object | null</code></summary>
+<details>
+<summary><b><code>moveToken</code></b> <sup>async</sup> → <code>object | null</code></summary>
+
+<br>
 
 ```js
 await api.moveToken(token, options)
@@ -267,19 +285,21 @@ Moves a token to a destination. Two modes: pass `destination` for a direct move,
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">token</b> | `Token` | *required* | The token to move |
-| <b style="color:#e0a050">destination</b> | `{x, y}` | `null` | World coordinates. If omitted, interactive picker. |
-| <b style="color:#e0a050">range</b> | `number` | `-1` | Max range highlight (interactive mode) |
-| <b style="color:#e0a050">cost</b> | `number` | `null` | Movement cost in spaces |
-| <b style="color:#e0a050">canBeBlocked</b> | `boolean` | `true` | Whether engagement/overwatch can intercept |
-| <b style="color:#e0a050">title</b> | `string` | `"MOVE"` | Card header (interactive mode) |
+| <kbd>token</kbd> | `Token` | *required* | The token to move |
+| <kbd>destination</kbd> | `{x, y}` | `null` | World coordinates. If omitted, interactive picker. |
+| <kbd>range</kbd> | `number` | `-1` | Max range highlight (interactive mode) |
+| <kbd>cost</kbd> | `number` | `null` | Movement cost in spaces |
+| <kbd>canBeBlocked</kbd> | `boolean` | `true` | Whether engagement/overwatch can intercept |
+| <kbd>title</kbd> | `string` | `"MOVE"` | Card header (interactive mode) |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getTokenOwnerUserId</code></h4> → <code>Array&lt;string&gt;</code></summary>
+<details>
+<summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code></summary>
+
+<br>
 
 ```js
 api.getTokenOwnerUserId(token)
@@ -289,18 +309,18 @@ Returns the user ID(s) that own a token. Checks active non-GM players first, fal
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">token</b> | `Token` | The token to check |
+| <kbd>token</kbd> | `Token` | The token to check |
 
 </details>
 
+---
+
+## Deployment & Thrown Weapons
+
+<details>
+<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>getItemFlags</code></b> → <code>any</code></summary>
+
 <br>
-
-<h2>Deployment & Thrown Weapons</h2>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addItemFlags</code></h4> <sup>async</sup> → <code>Item</code> · <h4 style="display:inline"><code>getItemFlags</code></h4> → <code>any</code></summary>
 
 ```js
 await api.addItemFlags(item, flags)            // set flags under 'lancer-automations'
@@ -311,8 +331,8 @@ api.getItemFlags(item, flagName?)               // read flags (specific key or a
 
 | Key | Type | Used by | Description |
 |:----|:-----|:--------|:------------|
-| <b style="color:#e0a050">deployRange</b> | `number` | `placeDeployable` | Default placement range |
-| <b style="color:#e0a050">deployCount</b> | `number` | `placeDeployable` | Default number to place |
+| <kbd>deployRange</kbd> | `number` | `placeDeployable` | Default placement range |
+| <kbd>deployCount</kbd> | `number` | `placeDeployable` | Default number to place |
 
 **Example:**
 ```js
@@ -321,10 +341,12 @@ await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addExtraDeploymentLids</code></h4> <sup>async</sup> → <code>Item</code></summary>
+<details>
+<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Item</code></summary>
+
+<br>
 
 ```js
 await api.addExtraDeploymentLids(item, lids)
@@ -334,15 +356,17 @@ Adds extra deployable LIDs to an item via flags. Since Lancer's TypeDataModel pr
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">item</b> | `Item` | The item to update |
-| <b style="color:#e0a050">lids</b> | `string\|Array<string>` | LID string(s) to add |
+| <kbd>item</kbd> | `Item` | The item to update |
+| <kbd>lids</kbd> | `string\|Array<string>` | LID string(s) to add |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addExtraActions</code></h4> <sup>async</sup> · <h4 style="display:inline"><code>getItemActions</code></h4> · <h4 style="display:inline"><code>getActorActions</code></h4> · <h4 style="display:inline"><code>removeExtraActions</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>addExtraActions</code></b> <sup>async</sup> · <b><code>getItemActions</code></b> · <b><code>getActorActions</code></b> · <b><code>removeExtraActions</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.addExtraActions(target, actions)       // add to Item, Token, or Actor
@@ -353,9 +377,9 @@ await api.removeExtraActions(target, filter?)      // string name, predicate, or
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">target</b> | `Item\|Token\|Actor` | The document to update |
-| <b style="color:#e0a050">actions</b> | `Object\|Array<Object>` | Action object(s) with `{ name, activation, detail }` |
-| <b style="color:#e0a050">filter</b> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null |
+| <kbd>target</kbd> | `Item\|Token\|Actor` | The document to update |
+| <kbd>actions</kbd> | `Object\|Array<Object>` | Action object(s) with `{ name, activation, detail }` |
+| <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null |
 
 **Example:**
 ```js
@@ -365,10 +389,12 @@ await api.removeExtraActions(myToken, "Custom Strike");
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getItemDeployables</code></h4> → <code>string[]</code></summary>
+<details>
+<summary><b><code>getItemDeployables</code></b> → <code>string[]</code></summary>
+
+<br>
 
 ```js
 api.getItemDeployables(item, actor)
@@ -378,15 +404,17 @@ Returns the effective deployable LIDs for an item, merging `system.deployables` 
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">item</b> | `Item` | The item document |
-| <b style="color:#e0a050">actor</b> | `Actor` | Optional. Owner actor (needed for NPC tier selection) |
+| <kbd>item</kbd> | `Item` | The item document |
+| <kbd>actor</kbd> | `Actor` | Optional. Owner actor (needed for NPC tier selection) |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>placeDeployable</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>placeDeployable</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.placeDeployable(options)
@@ -394,25 +422,27 @@ await api.placeDeployable(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">deployable</b> | `Actor\|string\|Array` | *required* | LID, Actor, or array (shows selector) |
-| <b style="color:#e0a050">ownerActor</b> | `Actor` | *required* | Owner |
-| <b style="color:#e0a050">systemItem</b> | `Item` | `null` | Parent item |
-| <b style="color:#e0a050">consumeUse</b> | `boolean` | `false` | Consumes system use |
-| <b style="color:#e0a050">fromCompendium</b> | `boolean` | `false` | Creates new actor if not in world |
-| <b style="color:#e0a050">width</b> | `number` | `null` | Width override |
-| <b style="color:#e0a050">height</b> | `number` | `null` | Height override |
-| <b style="color:#e0a050">range</b> | `number` | `1` | Placement range (overridden by `deployRange` flag) |
-| <b style="color:#e0a050">count</b> | `number` | `1` | Total to place (overridden by `deployCount` flag) |
-| <b style="color:#e0a050">at</b> | `Token\|pos` | `null` | Measurement origin |
-| <b style="color:#e0a050">title</b> | `string` | `"DEPLOY"` | Card title |
-| <b style="color:#e0a050">noCard</b> | `boolean` | `false` | Auto-confirm |
+| <kbd>deployable</kbd> | `Actor\|string\|Array` | *required* | LID, Actor, or array (shows selector) |
+| <kbd>ownerActor</kbd> | `Actor` | *required* | Owner |
+| <kbd>systemItem</kbd> | `Item` | `null` | Parent item |
+| <kbd>consumeUse</kbd> | `boolean` | `false` | Consumes system use |
+| <kbd>fromCompendium</kbd> | `boolean` | `false` | Creates new actor if not in world |
+| <kbd>width</kbd> | `number` | `null` | Width override |
+| <kbd>height</kbd> | `number` | `null` | Height override |
+| <kbd>range</kbd> | `number` | `1` | Placement range (overridden by `deployRange` flag) |
+| <kbd>count</kbd> | `number` | `1` | Total to place (overridden by `deployCount` flag) |
+| <kbd>at</kbd> | `Token\|pos` | `null` | Measurement origin |
+| <kbd>title</kbd> | `string` | `"DEPLOY"` | Card title |
+| <kbd>noCard</kbd> | `boolean` | `false` | Auto-confirm |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>beginDeploymentCard</code></h4> <sup>async</sup> · <h4 style="display:inline"><code>deployWeaponToken</code></h4> <sup>async</sup></summary>
+<details>
+<summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> · <b><code>deployWeaponToken</code></b> <sup>async</sup></summary>
+
+<br>
 
 ```js
 await api.beginDeploymentCard({ actor, item, deployableOptions: [] })
@@ -426,10 +456,12 @@ await api.deployWeaponToken(weapon, ownerActor, originToken, options)
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>openDeployableMenu</code></h4> · <h4 style="display:inline"><code>recallDeployable</code></h4> · <h4 style="display:inline"><code>pickupWeaponToken</code></h4> · <h4 style="display:inline"><code>openThrowMenu</code></h4> · <h4 style="display:inline"><code>openItemBrowser</code></h4></summary>
+<details>
+<summary><b><code>openDeployableMenu</code></b> · <b><code>recallDeployable</code></b> · <b><code>pickupWeaponToken</code></b> · <b><code>openThrowMenu</code></b> · <b><code>openItemBrowser</code></b></summary>
+
+<br>
 
 ```js
 await api.openDeployableMenu(actor)      // open deployable management menu
@@ -441,10 +473,12 @@ await api.openItemBrowser(targetInput)    // open item browser
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>getActivatedItems</code></h4> → <code>Array&lt;Item&gt;</code></summary>
+<details>
+<summary><b><code>getActivatedItems</code></b> → <code>Array&lt;Item&gt;</code></summary>
+
+<br>
 
 ```js
 api.getActivatedItems(token)
@@ -454,14 +488,16 @@ Returns items currently marked as activated on a token (via `setItemAsActivated`
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">token</b> | `Token` | The token to inspect |
+| <kbd>token</kbd> | `Token` | The token to inspect |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>spawnHardCover</code></h4> <sup>async</sup> → <code>void</code></summary>
+<details>
+<summary><b><code>spawnHardCover</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
 
 ```js
 await api.spawnHardCover(originToken, options)
@@ -471,19 +507,21 @@ Spawns hard cover deployable tokens on the map.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <b style="color:#e0a050">range</b> | `number` | `null` | Placement range |
-| <b style="color:#e0a050">count</b> | `number` | `1` | Number of hard covers |
-| <b style="color:#e0a050">size</b> | `number` | `1` | Size override |
-| <b style="color:#e0a050">name</b> | `string` | `"Hard Cover"` | Display name |
-| <b style="color:#e0a050">title</b> | `string` | `"PLACE HARD COVER"` | Card header |
-| <b style="color:#e0a050">description</b> | `string` | `""` | Card description |
+| <kbd>range</kbd> | `number` | `null` | Placement range |
+| <kbd>count</kbd> | `number` | `1` | Number of hard covers |
+| <kbd>size</kbd> | `number` | `1` | Size override |
+| <kbd>name</kbd> | `string` | `"Hard Cover"` | Display name |
+| <kbd>title</kbd> | `string` | `"PLACE HARD COVER"` | Card header |
+| <kbd>description</kbd> | `string` | `""` | Card description |
 
 </details>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+---
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>addItemTag</code></h4> <sup>async</sup> → <code>Item</code> · <h4 style="display:inline"><code>removeItemTag</code></h4> <sup>async</sup> → <code>Item</code></summary>
+<details>
+<summary><b><code>addItemTag</code></b> <sup>async</sup> → <code>Item</code> · <b><code>removeItemTag</code></b> <sup>async</sup> → <code>Item</code></summary>
+
+<br>
 
 ```js
 await api.addItemTag(item, { id: "tg_heat_self", val: "2" })  // adds or updates tag
@@ -492,22 +530,22 @@ await api.removeItemTag(item, "tg_heat_self")                   // removes tag b
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <b style="color:#e0a050">item</b> | `Item` | The item to modify |
-| <b style="color:#e0a050">tagData</b> | `Object` | Tag object (e.g. `{ id: "tg_heat_self", val: "2" }`) |
-| <b style="color:#e0a050">tagId</b> | `string` | Tag ID to remove |
+| <kbd>item</kbd> | `Item` | The item to modify |
+| <kbd>tagData</kbd> | `Object` | Tag object (e.g. `{ id: "tg_heat_self", val: "2" }`) |
+| <kbd>tagId</kbd> | `string` | Tag ID to remove |
 
 </details>
 
-<br>
+---
 
-<h2>Movement Tracking</h2>
+## Movement Tracking
 
 These functions accept either a string `tokenId` or a `Token` document/object.
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
+<details>
+<summary><b><code>clearMoveData</code></b> · <b><code>getCumulativeMoveData</code></b> · <b><code>getIntentionalMoveData</code></b> · <b><code>clearMovementHistory</code></b> · <b><code>getMovementHistory</code></b> · <b><code>increaseMovementCap</code></b></summary>
 
-<details style="border-left: 3px solid #e0a050; border-bottom: 1px solid #555; padding-left: 12px; padding-bottom: 8px; margin-bottom: 16px;">
-<summary><h4 style="display:inline"><code>clearMoveData</code></h4> · <h4 style="display:inline"><code>getCumulativeMoveData</code></h4> · <h4 style="display:inline"><code>getIntentionalMoveData</code></h4> · <h4 style="display:inline"><code>clearMovementHistory</code></h4> · <h4 style="display:inline"><code>getMovementHistory</code></h4> · <h4 style="display:inline"><code>increaseMovementCap</code></h4></summary>
+<br>
 
 ```js
 api.clearMoveData(tokenOrId)
