@@ -433,7 +433,7 @@ flowchart LR
 
 </details>
 
-Each trigger carries a data payload. The full schema for each trigger is in the [API Reference](API_REFERENCE.md).
+Each trigger carries a data payload. The full schema for each trigger is in the [API Reference](doc/API_REFERENCE.md).
 
 ### Activation Types
 
@@ -614,7 +614,7 @@ async function(triggerType, triggerData, reactorToken, item, activationName, api
 
 The module strips the wrapper automatically. Much more readable, especially with CodeMirror installed.
 
-You can also register default activations by code instead of through the UI. See [API Reference: Registering Default Activations](API_REFERENCE.md#how-to-register-default-activations-by-code).
+You can also register default activations by code instead of through the UI. See [API Reference: Registering Default Activations](doc/API_HOWTO.md#how-to-register-activations).
 
 ---
 
@@ -727,7 +727,7 @@ All API functions are accessible at:
 const api = game.modules.get('lancer-automations').api;
 ```
 
-For full function signatures, trigger data schemas, bonus types, and code examples, see the [API Reference](API_REFERENCE.md).
+For full function signatures, trigger data schemas, bonus types, and code examples, see the [API Reference](doc/API_REFERENCE.md).
 
 ---
 
