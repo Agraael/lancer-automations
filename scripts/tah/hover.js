@@ -2,9 +2,9 @@
 
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus } from '../misc-tools.js';
 
-// ── range_preview aura ────────────────────────────────────────────────────────
+// ── LA_range_preview aura ────────────────────────────────────────────────────────
 
-const RANGE_PREVIEW_NAME = 'range_preview';
+const RANGE_PREVIEW_NAME = 'LA_range_preview';
 
 const RANGE_PREVIEW_TEMPLATE = {
     _v: 1,
@@ -58,7 +58,7 @@ function hasGAA() {
 }
 
 /**
- * Ensure the token document has a range_preview aura. Creates it (disabled) if missing.
+ * Ensure the token document has a LA_range_preview aura. Creates it (disabled) if missing.
  * @param {any} tokenDoc
  */
 async function ensureRangePreviewAura(tokenDoc) {
@@ -74,22 +74,26 @@ async function ensureRangePreviewAura(tokenDoc) {
 }
 
 /**
- * Enable range_preview aura in-memory with the given radius. Does NOT write to token flags.
+ * Enable LA_range_preview aura in-memory with the given radius. Does NOT write to token flags.
  * @param {any} token  — canvas Token object (not document)
  * @param {number} range
  */
-function activateRangePreview(token, range) {
+async function activateRangePreview(token, range) {
     if (!hasGAA())
         return;
     const auraLayer = /** @type {any} */ (canvas).gaaAuraLayer;
     if (!auraLayer)
         return;
-    const auras = auraLayer._auraManager?.getTokenAuras?.(token);
-    if (!auras)
-        return;
-    const aura = auras.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
-    if (!aura)
-        return;
+    let auras = auraLayer._auraManager?.getTokenAuras?.(token);
+    let aura = auras?.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
+    // If the aura doesn't exist yet, create it in flags and re-fetch from canvas
+    if (!aura) {
+        await ensureRangePreviewAura(token.document);
+        auras = auraLayer._auraManager?.getTokenAuras?.(token);
+        aura = auras?.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
+        if (!aura)
+            return;
+    }
     const cfg = foundry.utils.deepClone(/** @type {any} */ (aura).config);
     cfg.enabled = true;
     cfg.radiusCalculated = Math.max(1, range);
@@ -97,7 +101,7 @@ function activateRangePreview(token, range) {
 }
 
 /**
- * Disable range_preview aura in-memory.
+ * Disable LA_range_preview aura in-memory.
  * @param {any} token  — canvas Token object (not document)
  */
 function deactivateRangePreview(token) {
@@ -223,7 +227,7 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
     return null;
 }
 
-// ── Hook: ensure range_preview aura on token creation ─────────────────────────
+// ── Hook: ensure LA_range_preview aura on token creation ─────────────────────────
 
 Hooks.on('createToken', async (tokenDoc, _options, userId) => {
     if (userId !== game.user.id)
@@ -249,7 +253,7 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
     if (isEntering) {
         const range = await computePreviewRange(category, action?.name, actor, item ?? null, profile ?? null);
         if (range != null)
-            activateRangePreview(token, range);
+            await activateRangePreview(token, range);
     } else {
         deactivateRangePreview(token);
     }

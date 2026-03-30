@@ -2755,7 +2755,7 @@ async function _terrainPrinterHookFn(template, scene, token) {
         relatedToken: token,
         userIdControl: api.getTokenOwnerUserId(token),
         choices: [
-            { text: "Teleport", icon: "fas fa-route" },
+            { text: "Travel", icon: "fas fa-route" },
             { text: "Stay", icon: "fas fa-times" }
         ]
     });
