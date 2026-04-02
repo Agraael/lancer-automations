@@ -42,8 +42,8 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     let maxGroundHeight = 0;
 
     for (const [x, y] of cells) {
-        // Get existing terrain data at this cell — getCell(row, col) in THT v0.6+
-        const existingTerrain = terrainAPI.getCell(x, y) || [];
+        // Get existing terrain data at this cell
+        const existingTerrain = terrainAPI.getCell(y, x) || [];
 
         // Find the highest terrain height at this position (only consider solid height-using terrain)
         for (const terrain of existingTerrain) {
