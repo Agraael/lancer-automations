@@ -172,6 +172,7 @@ export class LancerHUD {
         this._categories   = null;
         resetStatsExpanded();
         $(document).off('mousedown.la-hud-cto');
+        $(document).off('mousemove.la-hud-drag mouseup.la-hud-drag');
         $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
             $(this).remove();
         });
@@ -267,10 +268,7 @@ export class LancerHUD {
             'cursor:context-menu',
         ].join(';') + ';';
 
-        const titleEl = $(`<div style="${S_TOKEN_TITLE}">${tokenName}</div>`);
-        titleEl.on('mouseenter', () => { titleEl.css({ color: 'var(--primary-color)', cursor: 'pointer' }); });
-        titleEl.on('mouseleave', () => { titleEl.css({ color: '#fff' }); });
-        titleEl.on('click', () => { actor.sheet?.render(true); });
+        const titleEl = $(`<div style="${S_TOKEN_TITLE}"><span class="la-hud-token-name">${tokenName}</span></div>`);
 
         const statsEl = buildStatsEl(actor, this._token);
 
@@ -287,14 +285,70 @@ export class LancerHUD {
         c1.prepend(titleEl);
 
         // c1 must exist in DOM before we can measure it below, so build hud first
-        const hud = $(`<div id="la-hud" style="position:fixed;left:${HUD_LEFT}px;top:${HUD_TOP}px;z-index:70;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));"></div>`);
+        const savedPos = game.settings.get('lancer-automations', 'tah.position');
+        const startLeft = savedPos?.left ?? HUD_LEFT;
+        const startTop  = savedPos?.top  ?? HUD_TOP;
+        const hud = $(`<div id="la-hud" style="position:fixed;left:${startLeft}px;top:${startTop}px;z-index:70;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));"></div>`);
         if (animate)
-            hud.css({ opacity: 0, left: HUD_LEFT - 18 });
+            hud.css({ opacity: 0, left: startLeft - 18 });
         hud.append(c1);
         $('body').append(hud);
         this._el = hud;
         if (animate)
-            hud.animate({ opacity: 1, left: HUD_LEFT }, 350);
+            hud.animate({ opacity: 1, left: startLeft }, 350);
+
+        // Lock / drag / reset controls
+        let unlocked = false;
+        const lockBtn = $(`<span class="la-hud-lock" title="Unlock to drag" style="cursor:pointer;font-size:0.75em;opacity:0;margin-left:auto;padding:0 2px;filter:grayscale(1) brightness(10);transition:opacity 0.15s;">🔒</span>`);
+        const resetBtn = $(`<span class="la-hud-reset" title="Reset position" style="cursor:pointer;font-size:0.7em;opacity:0;margin-left:2px;padding:0 2px;color:#fff;transition:opacity 0.15s;">↺</span>`);
+        titleEl.css({ display: 'flex', alignItems: 'center' });
+        titleEl.append(lockBtn).append(resetBtn);
+
+        // Title bar hover/click — must be after lockBtn/resetBtn creation
+        const nameSpan = titleEl.find('.la-hud-token-name');
+        nameSpan.on('mouseenter', () => { nameSpan.css({ color: 'var(--primary-color)', cursor: 'pointer' }); });
+        nameSpan.on('mouseleave', () => { nameSpan.css({ color: '', cursor: '' }); });
+        nameSpan.on('click', () => { actor.sheet?.render(true); });
+        titleEl.on('mouseenter', () => { lockBtn.css('opacity', unlocked ? 0.9 : 0.4); });
+        titleEl.on('mouseleave', () => { if (!unlocked) lockBtn.css('opacity', 0); });
+        titleEl.on('contextmenu', (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+
+        lockBtn.on('click', (ev) => {
+            ev.stopPropagation();
+            unlocked = !unlocked;
+            lockBtn.text(unlocked ? '🔓' : '🔒').css('opacity', unlocked ? 0.9 : 0).attr('title', unlocked ? 'Lock position' : 'Unlock to drag');
+            resetBtn.css('opacity', unlocked ? 0.6 : 0);
+            hud.css('cursor', unlocked ? 'grab' : '');
+        });
+
+        resetBtn.on('click', (ev) => {
+            ev.stopPropagation();
+            game.settings.set('lancer-automations', 'tah.position', null);
+            hud.animate({ left: HUD_LEFT, top: HUD_TOP }, 200);
+        });
+
+        let dragStart = null;
+        hud.on('mousedown', (ev) => {
+            if (!unlocked || ev.button !== 0) return;
+            if ($(ev.target).closest('.la-hud-col').length && !$(ev.target).closest('.la-hud-lock, .la-hud-reset').length)
+                return; // don't drag from menu items
+            ev.preventDefault();
+            dragStart = { x: ev.clientX, y: ev.clientY, left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
+            hud.css('cursor', 'grabbing');
+        });
+        $(document).on('mousemove.la-hud-drag', (ev) => {
+            if (!dragStart) return;
+            const dx = ev.clientX - dragStart.x;
+            const dy = ev.clientY - dragStart.y;
+            hud.css({ left: dragStart.left + dx, top: dragStart.top + dy });
+        });
+        $(document).on('mouseup.la-hud-drag', () => {
+            if (!dragStart) return;
+            dragStart = null;
+            hud.css('cursor', unlocked ? 'grab' : '');
+            const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
+            game.settings.set('lancer-automations', 'tah.position', pos);
+        });
 
         // c2 and c3 are absolutely positioned — never affect c1's layout
         const c2 = this._makeCol('');
@@ -1492,7 +1546,7 @@ export class LancerHUD {
                     label: `${ammo.name}`,
                     badge: `${cost}`,
                     badgeColor: '#1a8a3a',
-                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    icon: 'systems/lancer/assets/icons/ammo.svg',
                     onClick: () => {
                         const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
                         if (api?.TriggerUseAmmoFlow) {
@@ -2142,7 +2196,7 @@ export class LancerHUD {
                     label: ammo.name,
                     badge: `${cost}`,
                     badgeColor: '#1a8a3a',
-                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    icon: 'systems/lancer/assets/icons/ammo.svg',
                     hoverData: { actor, item: sysItem, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
                     onClick: () => {
                         const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
@@ -2201,7 +2255,7 @@ export class LancerHUD {
                     label: ammo.name,
                     badge: `${cost}`,
                     badgeColor: '#1a8a3a',
-                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    icon: 'systems/lancer/assets/icons/ammo.svg',
                     ...this._statusColors(status),
                     hoverData: { actor, item, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
                     onClick: () => {

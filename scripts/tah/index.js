@@ -50,6 +50,25 @@ Hooks.on('init', () => {
         default: 0.5,
         range: { min: 0, max: 3, step: 0.5 },
     });
+    game.settings.register(MODULE, 'tah.position', {
+        scope: 'client',
+        config: false,
+        type: Object,
+        default: null,
+    });
+});
+
+// ── Reset TAH position button in settings ────────────────────────────────────
+Hooks.on('renderSettingsConfig', (app, html) => {
+    const tahField = html.find(`[name="${MODULE}.tah.hoverCloseDelay"]`).closest('.form-group');
+    if (!tahField.length) return;
+    const btn = $(`<button type="button" style="margin-top:4px;"><i class="fas fa-undo"></i> Reset TAH Position</button>`);
+    btn.on('click', async (ev) => {
+        ev.preventDefault();
+        await game.settings.set(MODULE, 'tah.position', null);
+        ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
+    });
+    tahField.after($('<div class="form-group"></div>').append(btn));
 });
 
 // ── Token selection ──────────────────────────────────────────────────────────
