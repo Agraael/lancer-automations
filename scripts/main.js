@@ -69,6 +69,10 @@ import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow } from "./lancer-modif.js";
+import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
+import { checkCompatibility } from "./checkCompatibility.js";
+import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
@@ -1198,6 +1202,17 @@ function registerSettings() {
     });
 
     // ── Data Management ──
+    game.settings.registerMenu('lancer-automations', 'repairLCPDataMenu', {
+        name: 'Lancer System Patches & Fixes',
+        label: 'Apply Fixes',
+        hint: 'Rebuild all compendium and actor item data with Lancer Automations patches applied.',
+        icon: 'fas fa-wrench',
+        type: class extends FormApplication {
+            render() { repairLCPData(); return this; }
+        },
+        restricted: true
+    });
+
     game.settings.registerMenu('lancer-automations', 'resetSettings', {
         name: 'Reset Module',
         label: 'Reset to Defaults',
@@ -1559,7 +1574,8 @@ async function handleSocketEvent({ action, payload }) {
         }
     } else if (action === 'statRollRequest') {
         // Remote client: player rolls on their side, sends result back.
-        if (payload.targetUserId !== game.user.id) return;
+        if (payload.targetUserId !== game.user.id)
+            return;
         (async () => {
             const rollActor = await fromUuid(payload.actorUuid);
             if (!rollActor) {
@@ -2518,7 +2534,8 @@ async function onActivationStep(state) {
     // _sourceItemId is stamped by addExtraActions; the item ref is also passed from TAH.
     if (!item && state.data?.action?._sourceItemId && actor) {
         item = actor.items.get(state.data.action._sourceItemId) ?? null;
-        if (item) state.item = item;
+        if (item)
+            state.item = item;
     }
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
@@ -3033,7 +3050,9 @@ function wrapExtraActionRecharge(flowSteps, flows) {
             let hasExtraRechargeables = false;
             for (const item of state.actor.items) {
                 const ea = item.getFlag('lancer-automations', 'extraActions') || [];
-                if (ea.some(a => a.recharge && a.charged === false)) { hasExtraRechargeables = true; break; }
+                if (ea.some(a => a.recharge && a.charged === false)) {
+                    hasExtraRechargeables = true; break;
+                }
             }
             if (!hasExtraRechargeables) {
                 const actorEa = state.actor.getFlag('lancer-automations', 'extraActions') || [];
@@ -3050,8 +3069,10 @@ function wrapExtraActionRecharge(flowSteps, flows) {
 
     // (b) After Lancer applies native recharges, apply the same roll to extra actions.
     flowSteps.set('lancer-automations:rechargeExtraActions', async function rechargeExtraActions(state) {
-        if (!state.data?.la_hasExtraRechargeables) return true;
-        if (!state.data?.result?.roll) return true;
+        if (!state.data?.la_hasExtraRechargeables)
+            return true;
+        if (!state.data?.result?.roll)
+            return true;
         const rollTotal = state.data.result.roll.total;
 
         for (const item of state.actor.items) {
@@ -3065,7 +3086,8 @@ function wrapExtraActionRecharge(flowSteps, flows) {
                     changed = true;
                 }
             }
-            if (changed) await item.setFlag('lancer-automations', 'extraActions', extraActions);
+            if (changed)
+                await item.setFlag('lancer-automations', 'extraActions', extraActions);
         }
         const actorActions = state.actor.getFlag('lancer-automations', 'extraActions') || [];
         let actorChanged = false;
@@ -3077,7 +3099,8 @@ function wrapExtraActionRecharge(flowSteps, flows) {
                 actorChanged = true;
             }
         }
-        if (actorChanged) await state.actor.setFlag('lancer-automations', 'extraActions', actorActions);
+        if (actorChanged)
+            await state.actor.setFlag('lancer-automations', 'extraActions', actorActions);
         return true;
     });
     flows.get('NPCRechargeFlow')?.insertStepAfter('applyRecharge', 'lancer-automations:rechargeExtraActions');
@@ -3240,7 +3263,14 @@ function openResetMovementDialog(token) {
 Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
+    registerStatusFXSettings(); // StatusFX settings + config menu
     registerFlowStatePersistence();
+    injectDisabledSchemaField(); // Add system.disabled field to item schemas
+    injectDisabledCSS(); // Item Disabled system
+    injectInfectionSchemaField(); // Add system.infection field to actor schemas
+    injectInfectionDamageType(); // Add "Infection" to DamageField choices
+    injectInfectionCSS(); // Infection damage icon + color
+    patchStatRollCardTemplate();
 
     if (game.modules.get("elevationruler")?.active) {
         Hooks.once("ready", () => {
@@ -3260,7 +3290,8 @@ Hooks.on('init', () => {
                     this._noClimbingMalus = noClimbingMalus;
                     const result = wrapped(startCoords, endCoords, ...args);
                     this._noClimbingMalus = false;
-                    if (ignoreDifficultTerrain) return result - this.lastTerrainPenalty;
+                    if (ignoreDifficultTerrain)
+                        return result - this.lastTerrainPenalty;
                     return result;
                 },
                 "WRAPPER"
@@ -3271,7 +3302,8 @@ Hooks.on('init', () => {
     if (game.modules.get("templatemacro")?.active) {
         Hooks.once("ready", () => {
             const tmApi = game.modules.get("templatemacro")?.api;
-            if (!tmApi?.triggerDangerousZoneFlow) return;
+            if (!tmApi?.triggerDangerousZoneFlow)
+                return;
             const orig = tmApi.triggerDangerousZoneFlow;
             tmApi.triggerDangerousZoneFlow = async function(token, ...args) {
                 const immunityBonuses = getImmunityBonuses(token?.actor, "terrain");
@@ -3333,6 +3365,10 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     registerModuleFlows(flowSteps, flows);
     insertModuleFlowSteps(flowSteps, flows);
     registerAltStructFlowSteps(flowSteps, flows);
+    registerDisabledFlowSteps(flowSteps, flows); // Item Disabled system
+    registerMeleeCoverFix(flowSteps, flows);
+    registerUseAmmoFlow(flowSteps, flows); // Ammo flow
+    registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
 });
 
 Hooks.once('ready', async () => {
@@ -3550,7 +3586,8 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
+            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     }, {
         id: "immovable",
@@ -3641,7 +3678,8 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
+            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     });
 });
@@ -3752,6 +3790,10 @@ Hooks.on('ready', async () => {
         ...DowntimeAPI,
         ...ScanAPI,
         ...AurasAPI,
+        ...ItemDisabledAPI,
+        applyInfection,
+        repairLCPData,
+        TriggerUseAmmoFlow,
         // Internal main.js functions
         clearMoveData,
         undoMoveData,
@@ -3779,7 +3821,29 @@ Hooks.on('ready', async () => {
     await syncBuiltinStartups();
     runStartupScripts(game.modules.get('lancer-automations').api);
     Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
+
+    // Extra trackable attributes (action_tracker.move / reaction on token bars)
+    registerExtraTrackableAttributes();
+
+    // Custom flow dispatch (handles module-registered flows from chat buttons)
+    initCustomFlowDispatch();
+
+    // StatusFX — TokenMagic visual effects for statuses
+    initStatusFX();
+
+    // Infection — turn-end hooks
+    initInfectionHooks();
+
+    // Compatibility checker — detect and offer to fix conflicts with other modules
+    checkCompatibility();
 });
+
+// Item Disabled system – uncomment to activate
+Hooks.on('renderActorSheet', onRenderActorSheet);
+Hooks.on('renderActorSheet', onRenderActorSheetInfection);
+
+// Ammo editor on mech_system item sheets – uncomment to activate
+Hooks.on('renderItemSheet', onRenderItemSheet);
 
 Hooks.on('renderChatMessage', (app, html, data) => {
     bindChatMessageStateInterceptor(app, html);

@@ -1498,7 +1498,7 @@ pilot_armor/gear/weapon -> "pg_"     reserve -> "reserve_"
 - **TechAttackFlow**: initTechAttackData -> ... -> printTechAttackCard (always targets E-DEF)
 
 #### Damage
-- **DamageRollFlow**: initDamageData -> setDamageTags -> setDamageTargets -> showDamageHUD -> rollReliable -> rollNormalDamage -> rollCritDamage -> applyOverkillHeat -> printDamageCard -> executeCustomEffect
+- **DamageRollFlow**: initDamageData -> setDamageTags -> setDamageTargets -> showDamageHUD -> rollReliable -> rollNormalDamage -> rollCritDamage -> applyOverkillHeat -> printDamageCard
 
 #### Activation
 - **ActivationFlow**: initActivationData -> checks -> applySelfHeat -> updateItemAfterAction -> printActionUseCard

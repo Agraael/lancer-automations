@@ -37,6 +37,7 @@ export function buildStatsHtml(actor, token = null) {
     const hasRepairs  = sys.repairs != null;
     const repairs     = sys.repairs?.value ?? 0;
     const burn        = sys.burn ?? 0;
+    const infection   = sys.infection ?? 0;
     const oc          = sys.overcharge ?? 0;
     const reaction    = sys.action_tracker?.reaction ?? false;
 
@@ -108,7 +109,7 @@ export function buildStatsHtml(actor, token = null) {
         `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
+        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
         `</div>` +
         `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +

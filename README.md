@@ -43,6 +43,7 @@ The end goal is to move everything I need for my campaign into this module, so i
 - [Built-in Macros](#built-in-macros)
 - [API Reference](#api-reference)
 - [NPC Implementation Examples](#npc-implementation-examples)
+- [Lancer System Additions](#lancer-system-additions)
 - [Planned Features](#planned-features)
 - [Support](#support)
 
@@ -858,10 +859,59 @@ Places a smoke zone (soft cover) that persists until the start of the Strider's 
 
 ---
 
+## Lancer System Additions
+
+This module extends the Lancer system with several patches and new features that work externally, no system bundle editing required for other users.
+
+### Melee Cover Fix
+
+Melee attacks won't register cover by default, like in the core book. Using throw attack from Lancer Automations is considered a ranged attack.
+
+### Item Disabled
+
+Items can be marked as disabled. Works similarly to destroyed, but it is used for example for thrown weapons (they become disabled since they're on the ground).
+
+### Trackable Attributes
+
+Move and Reaction are trackable attributes. This can be used for token bar things, allowing you to see if a unit has its reaction or not.
+
+### StatusFX
+
+Lancer Automations handles StatusFX like Lancer QoL. They are almost the same for now, except some additions like Infection and Brace, and more to come. You can choose either of them.
+
+### LCP Data Repair
+
+Some fixes I personally made on the Lancer system cannot be shared easily, but now you have in the configuration a tool to fix LCP items with a few issues I found (for example ammos in Ammo Case).
+
+### Ammo System
+
+![ammo_list](doc/img/ammo_list.png)
+
+Ammo for things like Ammo Case are now listed in the sheet. The main Lancer sheet and Annoying's Lancer Alternative Sheets are both patched with injection.
+
+![ammo_message](doc/img/ammo_message.png)
+
+Ammo can be clicked to run the AmmoFlow and display a chat message with the details, it also consumes charges. Strangely some data gives ammo cost as nothing, so by default if there is no cost, it is 1.
+
+### Infection Damage Type
+
+Pretty tricky to do, I hope it works well.
+
+So [HORUS: Thy Hubris Manifest](https://cornylius.itch.io/thy-hubris-manifest) introduces the Infection damage type, and I really like it, so I decided to try to integrate it fully into Lancer.
+
+![infection_damage_sheet](doc/img/infection_damage_sheet.png)
+
+Basically it works like Burn damage but for Heat. Check out https://cornylius.itch.io/thy-hubris-manifest for more. It asks for a Systems check instead of Engineering.
+
+![infection_damage_card](doc/img/infection_damage_card.png)
+![infection_roll](doc/img/infection_roll.png)
+
+---
+
 ## Planned Features
 
 - More built-in item activations for the personal activation set
-- Theme from Lancer Systen, but with the way I did my messy work, it's gonna be painful to do.
+- new custom token bar hud ?
 
 ---
 

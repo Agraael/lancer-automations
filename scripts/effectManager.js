@@ -557,7 +557,7 @@ export async function executeEffectManager(options = {}) {
     }
     ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
-    const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Variable']
+    const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
         .map(t => `<option value="${t}">${t}</option>`).join('');
 
     const statusEffectIconsHtml = [...CONFIG.statusEffects]

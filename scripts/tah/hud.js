@@ -88,6 +88,15 @@ function brighten(hex, amount = 25) {
 const ICON_TECH_QUICK = 'systems/lancer/assets/icons/tech_quick.svg';
 const ICON_TECH_FULL  = 'systems/lancer/assets/icons/tech_full.svg';
 
+/** Build compact tag string for ammo allowed types/sizes (only shows restrictions). */
+function _ammoTagsHtml(checklist, label) {
+    if (!checklist) return '';
+    const entries = Object.entries(checklist);
+    const enabled = entries.filter(([, v]) => v).map(([k]) => k);
+    if (enabled.length === 0 || enabled.length === entries.length) return '';
+    return ` · ${enabled.join(', ')}`;
+}
+
 const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
 
 // ── Popup positioning ─────────────────────────────────────────────────────────
@@ -814,6 +823,7 @@ export class LancerHUD {
                 { label: 'Protocol',      childColLabel: 'Protocol', getChildren: () => this._catProtocols().getItems() },
                 { label: 'Free Actions',  childColLabel: 'Free Actions',     getChildren: () => this._catFreeActions().getItems() },
                 { label: 'Resources', childColLabel: 'Resources', getChildren: () => (items => items.length ? items : [])(this._resourceItems()) },
+                { label: 'Ammo', childColLabel: 'Ammo', getChildren: () => this._ammoItems() },
             ],
         };
     }
@@ -1367,7 +1377,15 @@ export class LancerHUD {
                             const depLids = getItemDeployables(item, actor);
                             const depActors = depLids.map(lid => getDeployableInfoSync(lid, actor)).filter(Boolean);
                             const deployablesHtml = depActors.length ? laRenderDeployables(depActors) : '';
-                            const bodyHtml = this._bodyHtml(sys) + actionsHtml + deployablesHtml;
+                            const ammoHtml = (sys.ammo ?? []).filter(a => a.name).map(a => {
+                                const cost = a.cost ?? 1;
+                                return `<div style="margin-top:4px;padding:3px 4px;background:rgba(255,255,255,0.04);border-radius:3px;">
+                                    <div style="font-size:0.78em;font-weight:bold;color:#1a8a3a;">${a.name} <span style="color:#888;font-weight:normal;">Cost: ${cost}</span></div>
+                                    ${a.description ? `<div style="font-size:0.75em;color:#bbb;margin-top:1px;">${a.description}</div>` : ''}
+                                </div>`;
+                            }).join('');
+                            const ammoSection = ammoHtml ? `<div style="margin-top:4px;"><div style="font-size:0.72em;font-weight:bold;color:#888;text-transform:uppercase;margin-bottom:2px;">Ammo</div>${ammoHtml}</div>` : '';
+                            const bodyHtml = this._bodyHtml(sys) + actionsHtml + deployablesHtml + ammoSection;
                             const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
                             toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p) });
                         },
@@ -1462,6 +1480,45 @@ export class LancerHUD {
                     },
                 });
             }
+        }
+        // Ammo entries
+        const ammoArr = sys.ammo ?? [];
+        if (ammoArr.filter(a => a.name).length) {
+            children.push({ isSectionLabel: true, label: 'Ammo' });
+            ammoArr.forEach((ammo, idx) => {
+                if (!ammo.name) return;
+                const cost = ammo.cost ?? 1;
+                children.push({
+                    label: `${ammo.name}`,
+                    badge: `${cost}`,
+                    badgeColor: '#1a8a3a',
+                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    onClick: () => {
+                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        if (api?.TriggerUseAmmoFlow) {
+                            api.TriggerUseAmmoFlow(item.uuid, idx);
+                        } else {
+                            // Fallback: use the flow dispatch
+                            const flowDef = game.lancer?.flows?.get('UseAmmoFlow');
+                            if (!flowDef) return;
+                            const FlowBase = typeof game.lancer.flows.get('StatRollFlow') === 'function'
+                                ? Object.getPrototypeOf(game.lancer.flows.get('StatRollFlow')) : null;
+                            if (!FlowBase) return;
+                            const GenericFlow = class extends FlowBase { constructor(u, d) { super(u, d || {}); } };
+                            GenericFlow.steps = flowDef.steps;
+                            new GenericFlow(actor.uuid, { itemUuid: item.uuid, ammoIndex: idx }).begin();
+                        }
+                    },
+                    onRightClick: (/** @type {any} */ row) => {
+                        const sizeTags = _ammoTagsHtml(ammo.allowed_sizes, 'Size');
+                        const typeTags = _ammoTagsHtml(ammo.allowed_types, 'Type');
+                        const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
+                            <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `Ammo · ${item.name}`, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
+                    hoverData: { actor, item, action: { name: ammo.name, activation: 'Ammo' }, category: 'Systems' },
+                });
+            });
         }
         return children;
     }
@@ -2069,6 +2126,41 @@ export class LancerHUD {
         return items;
     }
 
+    _ammoItems() {
+        const actor = this._actor;
+        const items = [];
+        const systems = actor.type === 'mech'
+            ? (actor.system?.loadout?.systems ?? []).map(s => s?.value).filter(Boolean)
+            : (actor.items?.filter(i => i.type === 'mech_system') ?? []);
+        for (const sysItem of systems) {
+            const ammoArr = sysItem.system?.ammo ?? [];
+            if (!ammoArr.filter(a => a.name).length) continue;
+            ammoArr.forEach((ammo, idx) => {
+                if (!ammo.name) return;
+                const cost = ammo.cost ?? 1;
+                items.push({
+                    label: ammo.name,
+                    badge: `${cost}`,
+                    badgeColor: '#1a8a3a',
+                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    hoverData: { actor, item: sysItem, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
+                    onClick: () => {
+                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        if (api?.TriggerUseAmmoFlow) api.TriggerUseAmmoFlow(sysItem.uuid, idx);
+                    },
+                    onRightClick: (/** @type {any} */ row) => {
+                        const sizeTags = _ammoTagsHtml(ammo.allowed_sizes);
+                        const typeTags = _ammoTagsHtml(ammo.allowed_types);
+                        const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
+                            <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${sysItem.id}-${idx}`, title: ammo.name, subtitle: sysItem.name, bodyHtml, theme: 'system', item: sysItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
+                });
+            });
+        }
+        return items;
+    }
+
     /** Build a single increment/decrement counter row item. */
     _buildCounterRow(/** @type {any} */ counter, path, /** @type {any} */ talent, icon = null) {
         return {
@@ -2081,6 +2173,56 @@ export class LancerHUD {
             max: counter.max,
             getValue: () => counter.value,
             onValueChanged: (newVal) => talent.update({ [path]: newVal }),
+        };
+    }
+
+    // ── AMMO category ────────────────────────────────────────────────────────
+
+    _catAmmo() {
+        const actor = this._actor;
+        const ammoItems = [];
+
+        // Collect all systems that have ammo
+        const systems = actor.type === 'mech'
+            ? (actor.system?.loadout?.systems ?? []).map(s => s?.value).filter(Boolean)
+            : (actor.items?.filter(i => i.type === 'mech_system') ?? []);
+
+        for (const item of systems) {
+            const sys = item.system;
+            const ammoArr = sys?.ammo ?? [];
+            if (!ammoArr.filter(a => a.name).length) continue;
+
+            const status = getItemStatus(item);
+
+            ammoArr.forEach((ammo, idx) => {
+                if (!ammo.name) return;
+                const cost = ammo.cost ?? 1;
+                ammoItems.push({
+                    label: ammo.name,
+                    badge: `${cost}`,
+                    badgeColor: '#1a8a3a',
+                    icon: 'modules/lancer-automations/icons/rifle.svg',
+                    ...this._statusColors(status),
+                    hoverData: { actor, item, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
+                    onClick: () => {
+                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        if (api?.TriggerUseAmmoFlow) api.TriggerUseAmmoFlow(item.uuid, idx);
+                    },
+                    onRightClick: (/** @type {any} */ row) => {
+                        const sizeTags = _ammoTagsHtml(ammo.allowed_sizes);
+                        const typeTags = _ammoTagsHtml(ammo.allowed_types);
+                        const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
+                            <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
+                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `${item.name}`, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    },
+                });
+            });
+        }
+
+        return {
+            label: 'Ammo',
+            colLabel: 'Ammo',
+            getItems: () => ammoItems.length ? ammoItems : [],
         };
     }
 
