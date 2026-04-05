@@ -129,10 +129,11 @@ export function injectInfectionCSS() {
         .damage--infection {
             color: #1a8a3a;
         }
-        /* Green tint: actor sheet weapon damage display (has i--dark + damage-- class), and damage HUD */
+        /* Green tint: actor sheet weapon damage display (has i--dark + damage-- class), damage HUD, and TTA tooltip */
         i.i--dark.damage--infection.cci-infection::before,
         .damage-hud .cci-infection::before,
-        #damage-hud .cci-infection::before {
+        #damage-hud .cci-infection::before,
+        .token-tooltip-alt-tooltip-container .cci-infection::before {
             filter: brightness(0) saturate(100%) invert(45%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(0.9);
         }
     `;
@@ -666,15 +667,15 @@ function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection) {
 }
 
 function _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection) {
-    const $burnDiv = $altBurnInput.closest('.la-combine-v');
+    const $burnDiv = $altBurnInput.closest('.la-flexcol');
     if (!$burnDiv.length) return;
 
     const infectionAlt = `
-        <div class="la-combine-v -divider -flex0 -width3ch -textaligncenter -glow-prmy -margin0-r la-infection-alt"
+        <div class="la-flexcol -divider -flex0 -width3ch -textaligncenter -glow-prmy -margin0-r la-infection-alt"
              style="--la-primary-color: #1a8a3a; margin-left: 4px;">
-            <input class="la-damage__input la-shadow -medium -inset la-text-text -width5 -heightfull -bordersround-lrt -small -bordersoff"
+            <input class="la-damage__input la-shadow -medium -inset la-text-text -width7 -heightfull -bordersround-lrt -small -bordersoff"
                    type="number" name="system.infection" value="${infection}" data-dtype="Number" />
-            <span class="la-damage__span -fontsize0 -heightfull -lineheight1">INFX</span>
+            <span class="la-damage__span -fontsizesmall -heightfull -lineheight3">INFX</span>
         </div>`;
     $burnDiv.after(infectionAlt);
 }

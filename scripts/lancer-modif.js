@@ -225,7 +225,7 @@ export function onRenderActorSheet(app, html, _data) {
         }
     });
 
-    // Dim disabled items (alt sheet)
+    // Disabled items (alt sheet) — show "DISABLED" in the subtitle like "DESTROYED"
     jHtml.find('[data-uuid][data-accept-types]').each(function () {
         const uuid = this.dataset.uuid;
         if (!uuid)
@@ -238,10 +238,25 @@ export function onRenderActorSheet(app, html, _data) {
         }
         if (!isDisableable(item) || !isItemDisabled(item))
             return;
+        // Don't override if already destroyed
+        if (item.system?.destroyed)
+            return;
 
-        // Apply alt sheet disabled styling
+        // Same as destroyed but orange "DISABLED" subtitle
         const $name = $(this).find('.la-top__span').first();
-        $name.addClass('la-text-warning -strikethrough');
+        $name.removeClass('la-text-header').addClass('la-text-repcap -strikethrough');
+
+        const $icon = $(this).find('.la-summary button i').first();
+        $icon.addClass('la-text-repcap');
+
+        const $subtitle = $(this).find('.la-summary .la-terminaltext span').first();
+        if ($subtitle.length)
+            $subtitle.text('DISABLED');
+
+        const $subtitleContainer = $(this).find('.la-summary .la-terminaltext').first();
+        $subtitleContainer.removeClass('la-text-header la-prmy-header').addClass('la-text-warning');
+
+        $(this).find('.la-range, .la-damage').addClass('la-text-repcap');
     });
 
     _injectDisabledContextMenu(jHtml);
@@ -387,24 +402,24 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
             const typeSizeTags = _buildTypeSizeTags(ammo.allowed_types, ammo.allowed_sizes);
 
             entries += `
-                <div class="la-combine-v -widthfull -alignstart" style="gap:2px;${i > 0 ? ' padding-top:4px; border-top:1px solid rgba(255,255,255,0.08);' : ''}">
-                    <div class="la-combine-h -widthfull -aligncenter -justifystart" style="gap:6px; flex-wrap:wrap;">
+                <div class="la-flexcol -widthfull -alignstart" style="gap:2px;${i > 0 ? ' padding-top:4px; border-top:1px solid rgba(255,255,255,0.08);' : ''}">
+                    <div class="la-flexrow -widthfull -aligncenter -justifystart" style="gap:6px; flex-wrap:wrap;">
                         <button type="button"
-                            class="la-ammo-use activation-free ${colorClass} clipped-bot-alt -padding1-r -padding0-tb -height3 -letterspacing0 la-text-header la-prmy-header"
+                            class="la-ammo-use activation-free ${colorClass} clipped-bot-alt -padding1-r -padding0-tb -letterspacing0 la-text-header la-prmy-header"
                             data-ammo-index="${i}" data-item-uuid="${uuid}"
                             title="Use ${ammo.name} (deducts ${cost} charge${cost > 1 ? 's' : ''})">
                             <span class="la-cmdline -fadein">&gt;://</span>${ammo.name}
                         </button>
                         <span class="lancer-tag compact-tag">Cost: ${cost}</span>${typeSizeTags ? `<span style="color:#555; margin:0 3px;">|</span><span style="font-size:0.75em; opacity:0.6;">${typeSizeTags}</span>` : ''}
                     </div>
-                    ${ammo.description ? `<div class="-fontsize-1" style="text-align:left;">${ammo.description}</div>` : ''}
+                    ${ammo.description ? `<div class="-fontsizesmall" style="text-align:left;">${ammo.description}</div>` : ''}
                 </div>`;
         }
 
         const $ammo = $(`
-            <div class="la-ammo-display la-effectbox la-bckg-card la-brdr-repcap -widthfull -fontsize1 -bordersround-ltb">
-                <span class="la-effectbox__span clipped-bot la-bckg-primary la-text-header -fontsize0">AMMO</span>
-                <div class="la-combine-v -widthfull" style="padding:4px 8px;">
+            <div class="la-ammo-display la-effectbox la-bckg-card la-brdr-repcap -widthfull -fontsizemedium-bordersround-ltb">
+                <span class="la-effectbox__span clipped-bot la-bckg-primary la-text-header -fontsizesmall">AMMO</span>
+                <div class="la-flexcol -widthfull" style="padding:4px 8px;">
                     ${entries}
                 </div>
             </div>`);
@@ -417,7 +432,7 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
         });
 
         // Insert before tags row
-        const $tagsRow = $content.find('.la-combine-h.-wrapwrap').last();
+        const $tagsRow = $content.find('.la-flexrow.-wrapwrap').last();
         if ($tagsRow.length) {
             $tagsRow.before($ammo);
         } else {

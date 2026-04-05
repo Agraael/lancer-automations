@@ -77,7 +77,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
 | [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)) | Required for boost detection, movement history accuracy, and difficult terrain penalty calculation |
-| [Token Factions](https://github.com/Agraael/foundryvtt-token-factions) | My fork that adds a multi-team disposition matrix so you can have more than two sides |
+| [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix so you can have more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
 
@@ -874,6 +874,10 @@ Items can be marked as disabled. Works similarly to destroyed, but it is used fo
 ### Trackable Attributes
 
 Move and Reaction are trackable attributes. This can be used for token bar things, allowing you to see if a unit has its reaction or not.
+
+### Token Tooltip Alt Config
+
+A custom [Token Tooltip Alt](https://foundryvtt.com/packages/token-tooltip-alt) configuration is included at [`misc/lancer-automations-tta.json`](misc/lancer-automations-tta.json). It is based on eranziel's Lancer TTA config with Infection and Reaction added. Import it from the TTA settings.
 
 ### StatusFX
 
