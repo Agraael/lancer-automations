@@ -22,10 +22,10 @@ let _pendingInfection = null;
 // 1. Schema injection — add system.infection field to actor data models
 // ---------------------------------------------------------------------------
 
-/** Inject `infection` NumberField into mech and NPC actor schemas. Call during `init`. */
+/** Inject `infection` NumberField into actors schemas. Call during `init`. */
 export function injectInfectionSchemaField() {
     const NumberField = foundry.data.fields.NumberField;
-    const actorKeys = ['mech', 'npc'];
+    const actorKeys = ['mech', 'npc', 'deployable', 'pilot'];
     let injected = 0;
     for (const key of actorKeys) {
         const model = CONFIG.Actor.dataModels?.[key];

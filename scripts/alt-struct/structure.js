@@ -18,7 +18,7 @@ const structTableTitles = [
 function structTableDescriptions(roll, remStruct) {
     switch (roll) {
     case 0:
-        return "Roll a <strong>HULL</strong> check. On a success, your mech is Lagging until the end of your next turn. On a Failure, your mech is immediately destroyed.";
+        return "Roll a <strong>HULL</strong> check. On a success, your mech is Dazed until the end of your next turn. On a Failure, your mech is immediately destroyed.";
     case 1:
         switch (remStruct) {
         case 2:
@@ -1211,7 +1211,7 @@ export async function handleDirectHitHullCheckResult(state) {
 
 /**
  * Handle Crushing Hit (Multiple 1's) after HULL check
- * Success: Apply LAGGING until end of next turn
+ * Success: Apply Dazed until end of next turn
  * Failure: Mech is destroyed
  */
 export async function handleCrushingHitHullCheckResult(state) {
@@ -1238,12 +1238,12 @@ export async function handleCrushingHitHullCheckResult(state) {
             try {
                 await applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ["Lagging"],
+                    effectNames: ["Dazed"],
                     note: "Crushing Hit - Cannot take reactions, can only take one quick action",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
             } catch (error) {
-                console.warn("lancer-automations (alt-struct): Could not apply LAGGING effect:", error);
+                console.warn("lancer-automations (alt-struct): Could not apply Dazed effect:", error);
             }
         }
     } else {

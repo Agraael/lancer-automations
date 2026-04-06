@@ -11,7 +11,7 @@ const SETTING_FX_CONFIG = 'statusFXConfig';
 
 const FX_DEFAULTS = {
     // Master toggle
-    master: false,
+    master: true,
     // TokenMagic visual effects
     fx_dangerZone:  true,
     fx_burn:        true,
@@ -23,11 +23,20 @@ const FX_DEFAULTS = {
     fx_jammed:      true,
     fx_intangible:  true,
     fx_infection:   true,
+    fx_exposed:     true,
+    fx_falling:     true,
+    fx_dazed:       true,
+    fx_stunned:     true,
+    fx_shredded:    true,
+    fx_slowed:      true,
+    fx_throttled:   true,
+    fx_immobilized:   true,
+    fx_blinded:     true,
     // Auto-status toggles
-    auto_dangerZone:  false,
-    auto_burn:        false,
-    auto_overshield:  false,
-    auto_infection:   false,
+    auto_dangerZone:  true,
+    auto_burn:        true,
+    auto_overshield:  true,
+    auto_infection:   true,
 };
 
 function getConfig() {
@@ -89,6 +98,15 @@ class StatusFXConfig extends FormApplication {
                 { key: 'jammed',      label: 'Jammed Effect',       enabled: config.fx_jammed },
                 { key: 'intangible',  label: 'Intangible Effect',   enabled: config.fx_intangible },
                 { key: 'infection',   label: 'Infection Glow',      enabled: config.fx_infection },
+                { key: 'exposed',    label: 'Exposed Effect',      enabled: config.fx_exposed },
+                { key: 'falling',    label: 'Falling Effect',      enabled: config.fx_falling },
+                { key: 'dazed',      label: 'Dazed Effect',        enabled: config.fx_dazed },
+                { key: 'stunned',    label: 'Stunned Effect',      enabled: config.fx_stunned },
+                { key: 'shredded',   label: 'Shredded / Stripped Effect', enabled: config.fx_shredded },
+                { key: 'slowed',     label: 'Slowed Effect',       enabled: config.fx_slowed },
+                { key: 'throttled',  label: 'Throttled Effect',    enabled: config.fx_throttled },
+                { key: 'immobilized', label: 'Immobilized / Staggered Effect', enabled: config.fx_immobilized },
+                { key: 'blinded',    label: 'Blinded Effect',     enabled: config.fx_blinded },
             ],
             autoStatuses: [
                 { key: 'dangerZone',  label: 'Auto Danger Zone (heat ≥ 50%)', enabled: config.auto_dangerZone },
@@ -300,13 +318,28 @@ const braceEffect = [
 
 const jammedEffect = [
     {
-        filterType: "electric",
-        filterId: "jammed",
+        filterType: "shadow",
+        filterId: "jammedShadow",
+        blur: 2,
+        quality: 5,
+        distance: 0,
+        alpha: 1,
+        padding: 100,
         color: 0xFFFFFF,
+        animated: {
+            blur: { active: true, loopDuration: 500, animType: "syncCosOscillation", val1: 2, val2: 4 }
+        }
+    },
+    {
+        filterType: "electric",
+        filterId: "jammedElectric",
+        color: 0x0033FF,
         time: 0,
-        blend: 1,
-        intensity: 5,
-        animated: { time: { active: true, speed: 0.0020, animType: "move" } }
+        blend: 2,
+        intensity: 1,
+        animated: {
+            time: { active: true, speed: 0.0020, animType: "move" }
+        }
     }
 ];
 
@@ -348,6 +381,46 @@ const intangibleEffect = [
     }
 ];
 
+const exposedEffect = [
+    {
+        filterType: "distortion",
+        filterId: "ExposedDistortion",
+        maskPath: "modules/tokenmagic/fx/assets/distortion-1.png",
+        maskSpriteScaleX: 7,
+        maskSpriteScaleY: 7,
+        padding: 10,
+        animated: {
+            maskSpriteX: { active: true, speed: 0.02, animType: "move" },
+            maskSpriteY: { active: true, speed: 0.03, animType: "move" }
+        }
+    },
+    {
+        filterType: "adjustment",
+        filterId: "ExposedAdjust",
+        saturation: 1.2,
+        brightness: 1,
+        contrast: 1,
+        red: 1.2,
+        green: 0.9,
+        blue: 0.8,
+        animated: {
+            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
+        }
+    },
+    {
+        filterType: "outline",
+        filterId: "ExposedOutline",
+        padding: 10,
+        color: 0xff6600,
+        thickness: 1,
+        quality: 5,
+        zOrder: 10,
+        animated: {
+            thickness: { active: true, loopDuration: 3000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
+        }
+    }
+];
+
 const infectionEffect = [
     {
         filterType: "xglow",
@@ -368,6 +441,321 @@ const infectionEffect = [
     }
 ];
 
+const fallingEffect = [
+    {
+        filterType: "smoke",
+        filterId: "FallingSmoke",
+        color: 0x99aacc,
+        time: 0,
+        blend: 2,
+        dimX: 1,
+        dimY: 0.1,
+        animated: {
+            time: { active: true, speed: 0.01, animType: "move" },
+            dimY: { active: true, val1: 0.05, val2: 0.15, animType: "cosOscillation", loopDuration: 4000 }
+        }
+    }
+];
+
+const dazedEffect = [
+    {
+        filterType: "oldfilm",
+        filterId: "DazedFilm",
+        sepia: 0,
+        noise: 0.3,
+        noiseSize: 1.0,
+        scratch: 0.9,
+        scratchDensity: 0.6,
+        scratchWidth: 1.2,
+        vignetting: 0.6,
+        vignettingAlpha: 0.5,
+        vignettingBlur: 0.2,
+        animated: {
+            seed: { active: true, animType: "randomNumber", val1: 0, val2: 1 },
+            vignetting: { active: true, animType: "syncCosOscillation", loopDuration: 2000, val1: 0.2, val2: 0.4 }
+        }
+    },
+    {
+        filterType: "outline",
+        filterId: "DazedOutline",
+        color: 0x000000,
+        thickness: 0,
+        zOrder: 61
+    }
+];
+
+const stunnedEffect = [
+    {
+        filterType: "oldfilm",
+        filterId: "StunnedFilm",
+        sepia: 0,
+        noise: 0.4,
+        noiseSize: 1.0,
+        scratch: 1.0,
+        scratchDensity: 0.8,
+        scratchWidth: 1.5,
+        vignetting: 0,
+        vignettingAlpha: 0,
+        vignettingBlur: 0,
+        animated: {
+            seed: { active: true, animType: "randomNumber", val1: 0, val2: 1 }
+        }
+    },
+    {
+        filterType: "outline",
+        filterId: "StunnedOutline",
+        color: 0x000000,
+        thickness: 0,
+        zOrder: 61
+    },
+    {
+        filterType: "electric",
+        filterId: "StunnedElectric",
+        color: 0xffdd33,
+        time: 0,
+        blend: 2,
+        intensity: 1,
+        animated: {
+            time: { active: true, speed: 0.0020, animType: "move" }
+        }
+    }
+];
+
+const shreddedEffect = [
+    {
+        filterType: "fracture",
+        filterId: "ShreddedCracks",
+        color: 0x786559,
+        intensity: 3.0,
+        scale: 20,
+        crackWidth: 0.04,
+        opacity: 0.8,
+        warpStrength: 1.0,
+        noiseScale: 0.0,
+        maskAmount: 0.3,
+        blend: 2,
+        timeSpeed: 0.3
+    },
+    {
+        filterType: "glow",
+        filterId: "ShreddedGlow",
+        outerStrength: 1,
+        innerStrength: 0,
+        color: 0x786559,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
+        }
+    },
+    {
+        filterType: "adjustment",
+        filterId: "ShreddedAdjust",
+        saturation: 1.1,
+        brightness: 1,
+        contrast: 1,
+        red: 1.1,
+        green: 1,
+        blue: 0.8,
+        animated: {
+            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
+        }
+    },
+];
+
+const strippedEffect = [
+    {
+        filterType: "fracture",
+        filterId: "StrippedCracks",
+        color: 0x786559,
+        intensity: 3.0,
+        scale: 20,
+        crackWidth: 0.04,
+        opacity: 0.8,
+        warpStrength: 1.0,
+        noiseScale: 0.0,
+        maskAmount: 0.3,
+        blend: 2,
+        timeSpeed: 0.3
+    },
+    {
+        filterType: "glow",
+        filterId: "StrippedGlow",
+        outerStrength: 1,
+        innerStrength: 0,
+        color: 0x786559,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
+        }
+    },
+    {
+        filterType: "adjustment",
+        filterId: "StrippedAdjust",
+        saturation: 0.8,
+        brightness: 1,
+        contrast: 1,
+        red: 0.85,
+        green: 0.9,
+        blue: 1.1,
+        animated: {
+            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.1 }
+        }
+    }
+];
+
+const slowedEffect = [
+    {
+        filterType: "wave",
+        filterId: "SlowedWave",
+        time: 0,
+        color: 0x998877,
+        strength: 0.01,
+        frequency: 10,
+        minIntensity: 0.5,
+        maxIntensity: 2.0,
+        inward: true,
+        animated: {
+            time: { active: true, speed: 0.001, animType: "move" }
+        }
+    },
+    {
+        filterType: "glow",
+        filterId: "SlowedGlow",
+        outerStrength: 1.5,
+        innerStrength: 0,
+        color: 0x998877,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 4000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
+        }
+    }
+];
+
+const throttledEffect = [
+    {
+        filterType: "fracture",
+        filterId: "ThrottledCracks",
+        color: 0xcc4422,
+        intensity: 3.0,
+        scale: 6,
+        crackWidth: 0.04,
+        opacity: 0.8,
+        warpStrength: 1.0,
+        noiseScale: 5.0,
+        maskAmount: 0.3,
+        blend: 2,
+        timeSpeed: 0.6
+    },
+    {
+        filterType: "glow",
+        filterId: "ThrottledGlow",
+        outerStrength: 1,
+        innerStrength: 0,
+        color: 0xcc4422,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
+        }
+    },
+    {
+        filterType: "adjustment",
+        filterId: "ThrottledAdjust",
+        saturation: 1.1,
+        brightness: 1,
+        contrast: 1,
+        red: 1.2,
+        green: 0.85,
+        blue: 0.75,
+        animated: {
+            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
+        }
+    }
+];
+
+const immobilizedEffect = [
+    {
+        filterType: "chains",
+        filterId: "ImmobilizedChains",
+        color: 0xccaa66,
+        intensity: 1.6,
+        scale: 3,
+        linkWidth: 0.02,
+        linkGap: 1.5,
+        opacity: 0.5,
+        blend: 2,
+        timeSpeed: 0.5
+    },
+    {
+        filterType: "glow",
+        filterId: "ImmobilizedGlow",
+        outerStrength: 1.5,
+        innerStrength: 0,
+        color: 0xccaa66,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 2 }
+        }
+    }
+];
+
+const staggeredEffect = [
+    {
+        filterType: "chains",
+        filterId: "StaggeredChains",
+        color: 0x9944cc,
+        intensity: 1.6,
+        scale: 3,
+        linkWidth: 0.02,
+        linkGap: 1.5,
+        opacity: 0.5,
+        blend: 2,
+        timeSpeed: 0.5
+    },
+    {
+        filterType: "glow",
+        filterId: "StaggeredGlow",
+        outerStrength: 1.5,
+        innerStrength: 0,
+        color: 0x9944cc,
+        quality: 0.5,
+        padding: 10,
+        animated: {
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 2 }
+        }
+    }
+];
+
+const blindedEffect = [
+    {
+        filterType: "crt",
+        filterId: "BlindedCRT",
+        lineWidth: 3,
+        lineContrast: 0.4,
+        noise: 0.1,
+        noiseSize: 1.5,
+        curvature: 0,
+        verticalLine: false,
+        vignetting: 0,
+        time: 0,
+        animated: {
+            time: { active: true, speed: 0.004, animType: "move" },
+            lineContrast: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.2, val2: 0.5 }
+        }
+    },
+    {
+        filterType: "adjustment",
+        filterId: "BlindedAdjust",
+        saturation: 0.5,
+        brightness: 0.95,
+        contrast: 1.1
+    }
+];
+
 // ---------------------------------------------------------------------------
 // Effect Map
 // ---------------------------------------------------------------------------
@@ -380,9 +768,20 @@ const EFFECT_MAP = [
     { name: 'Invisible',   key: 'invisible',  preset: invisibleEffect,  filterIds: ['invisible'] },
     { name: 'Hidden',      key: 'hidden',     preset: hiddenEffect,     filterIds: ['hidden'] },
     { name: 'Brace',       key: 'brace',      preset: braceEffect,      filterIds: ['brace'] },
-    { name: 'Jammed',      key: 'jammed',     preset: jammedEffect,     filterIds: ['jammed'] },
+    { name: 'Jammed',      key: 'jammed',     preset: jammedEffect,     filterIds: ['jammedShadow', 'jammedElectric'] },
     { name: 'Intangible',  key: 'intangible', preset: intangibleEffect, filterIds: ['intangible1', 'intangible2', 'intangible3'] },
     { name: 'Infection',   key: 'infection',  preset: infectionEffect,  filterIds: ['InfectionGlow'] },
+    { name: 'Exposed',    key: 'exposed',   preset: exposedEffect,   filterIds: ['ExposedDistortion', 'ExposedAdjust', 'ExposedOutline'] },
+    { name: 'Falling',    key: 'falling',   preset: fallingEffect,   filterIds: ['FallingSmoke'] },
+    { name: 'Dazed',      key: 'dazed',     preset: dazedEffect,     filterIds: ['DazedFilm', 'DazedOutline'] },
+    { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
+    { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedCracks', 'ShreddedGlow', 'ShreddedAdjust'] },
+    { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedCracks', 'StrippedGlow', 'StrippedAdjust'] },
+    { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedWave', 'SlowedGlow'] },
+    { name: 'Throttled',  key: 'throttled', preset: throttledEffect, filterIds: ['ThrottledCracks', 'ThrottledGlow', 'ThrottledAdjust'] },
+    { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
+    { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
+    { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
 ];
 
 // ---------------------------------------------------------------------------

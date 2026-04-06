@@ -1776,7 +1776,6 @@ All current statuses registered by the module and system:
         ]
     },
     { "id": "falling", "name": "Falling", "img": "modules/lancer-automations/icons/falling.svg", "description": "3 Kinetic AP per 3 spaces fallen, max 9 Kinetic AP." },
-    { "id": "lagging", "name": "Lagging", "img": "modules/lancer-automations/icons/lagging.svg", "description": "You can only take a quick action" },
     { "id": "infection", "name": "Infection", "img": "modules/lancer-automations/icons/infection.svg", "description": "Works like burn but targets heat instead" },
     { "id": "throttled", "name": "Throttled", "img": "modules/lancer-automations/icons/throttled.svg", "description": "Deals half damage, heat, and burn on attacks" },
     { "id": "blinded", "name": "Blinded", "img": "modules/lancer-automations/icons/blinded.svg", "description": "Line of sight reduced to 1" },

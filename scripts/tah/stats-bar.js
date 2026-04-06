@@ -46,13 +46,14 @@ export function buildStatsHtml(actor, token = null) {
     const hpColor    = lerpColor(244, 67, 54,  76, 175, 80,  hpRatio);   // red→green
     const heatColor  = lerpColor(136, 136, 136, 244, 67, 54, heatRatio); // grey→red
 
-    const strPips    = Array.from({ length: strMax },    (_, i) => `<span style="color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};">◆</span>`).join('');
-    const stressPips = Array.from({ length: stressMax }, (_, i) => `<span style="color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};">◆</span>`).join('');
+    const strPips    = Array.from({ length: strMax },    (_, i) => `<i class="cci cci-structure" style="font-size:1.1em;color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
+    const stressPips = Array.from({ length: stressMax }, (_, i) => `<i class="cci cci-reactor" style="font-size:1.1em;color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
 
     const hasOvercharge = !!sys.overcharge_sequence;
     const ocSeq    = hasOvercharge ? sys.overcharge_sequence.split(',').map(/** @type {(s:string)=>string} */ s => s.trim()) : [];
     const ocLabel  = hasOvercharge ? (ocSeq[Math.min(oc, ocSeq.length - 1)] ?? '—') : null;
-    const ocColor  = oc > 0 ? '#f88040' : '#555';
+    const ocMax    = ocSeq.length - 1;
+    const ocColor  = !hasOvercharge ? '#555' : ocMax > 0 ? lerpColor(204, 170, 50, 244, 67, 54, Math.min(oc / ocMax, 1)) : '#eb4034';
     const SEP = `<span style="color:#444;">│</span>`;
     const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${repairs > 0 ? 1 : 0.3};">`;
     const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
@@ -63,7 +64,7 @@ export function buildStatsHtml(actor, token = null) {
     const tokenId = token?.document?.id ?? token?.id ?? null;
     const inCombat = !!game.combat?.active &&
         !!(/** @type {any} */ (game.combat)?.combatants?.find((/** @type {{ tokenId: string }} */ c) => c.tokenId === tokenId));
-    const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(1px);display:inline-block;"></i>`;
+    const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(2px);display:inline-block;"></i>`;
     let movHtml;
     if (inCombat && token) {
         const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
@@ -109,7 +110,7 @@ export function buildStatsHtml(actor, token = null) {
         `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#ff6600;">🔥${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};">⚡${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
+        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
         `</div>` +
         `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +

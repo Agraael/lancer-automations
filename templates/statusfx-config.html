@@ -1,33 +1,49 @@
 <form>
     <div class="form-group" style="margin-bottom: 12px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
         <label style="font-weight: bold; font-size: 1.1em;">Enable StatusFX (Master Toggle)</label>
-        <input type="checkbox" name="master" {{#if master}}checked{{/if}} />
+        <input type="checkbox" name="master" id="la-statusfx-master" {{#if master}}checked{{/if}} />
         <p class="notes">When enabled, lancer-automations handles all status visual effects. If csm-lancer-qol is active, its conflicting features are automatically overridden.</p>
     </div>
 
-    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">TokenMagic Visual Effects</h2>
-    <p class="notes" style="margin-bottom: 8px;">Toggle individual TokenMagic effects applied when statuses are active. Requires TokenMagic module.</p>
+    <fieldset id="la-statusfx-rest" style="border: none; padding: 0; margin: 0;" {{#unless master}}disabled{{/unless}}>
+        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">TokenMagic Visual Effects</h2>
+        <p class="notes" style="margin-bottom: 8px;">Toggle individual TokenMagic effects applied when statuses are active. Requires TokenMagic module.</p>
 
-    {{#each fxEffects}}
-    <div class="form-group">
-        <label>{{this.label}}</label>
-        <input type="checkbox" name="fx_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
-    </div>
-    {{/each}}
+        {{#each fxEffects}}
+        <div class="form-group">
+            <label>{{this.label}}</label>
+            <input type="checkbox" name="fx_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
+        </div>
+        {{/each}}
 
-    <hr>
+        <hr>
 
-    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Auto-Status Icons</h2>
-    <p class="notes" style="margin-bottom: 8px;">Automatically toggle status icons based on actor data changes.</p>
+        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Auto-Status Icons</h2>
+        <p class="notes" style="margin-bottom: 8px;">Automatically toggle status icons based on actor data changes.</p>
 
-    {{#each autoStatuses}}
-    <div class="form-group">
-        <label>{{this.label}}</label>
-        <input type="checkbox" name="auto_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
-    </div>
-    {{/each}}
+        {{#each autoStatuses}}
+        <div class="form-group">
+            <label>{{this.label}}</label>
+            <input type="checkbox" name="auto_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
+        </div>
+        {{/each}}
+    </fieldset>
 
     <footer class="sheet-footer flexrow">
         <button type="submit"><i class="fas fa-save"></i> Save</button>
     </footer>
 </form>
+
+<script>
+(function() {
+    const master = document.getElementById('la-statusfx-master');
+    const rest = document.getElementById('la-statusfx-rest');
+    if (master && rest) {
+        master.addEventListener('change', () => {
+            rest.disabled = !master.checked;
+            rest.style.opacity = master.checked ? '1' : '0.4';
+        });
+        rest.style.opacity = master.checked ? '1' : '0.4';
+    }
+})();
+</script>

@@ -71,6 +71,7 @@ import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
+import './filters/customFilters.js';
 import { checkCompatibility } from "./checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
 
@@ -3573,6 +3574,13 @@ Hooks.on('hoverToken', (token, hovered) => {
     }
 });
 
+// Clear deployable connection lines if a token is deleted (e.g. destroyed while hovering)
+Hooks.on('deleteToken', () => {
+    if (deployableConnectionsGraphic && !deployableConnectionsGraphic.destroyed) {
+        deployableConnectionsGraphic.clear();
+    }
+});
+
 Hooks.on('lancer.statusesReady', () => {
     if (!game.settings.get('lancer-automations', 'additionalStatuses'))
         return;
@@ -3628,11 +3636,6 @@ Hooks.on('lancer.statusesReady', () => {
         img: "modules/lancer-automations/icons/falling.svg",
         description: "Characters take damage when they fall 3 or more spaces and cannot recover before hitting the ground. Characters fall 10 spaces per round in normal gravity, but can't fall in zero-G or very low-G environments. They take 3 Kinetic AP (armour piercing) damage for every three spaces fallen, to a maximum of 9 Kinetic AP. Falling is a type of involuntary movement."
     }, {
-        id: "lagging",
-        name: "Lagging",
-        img: "modules/lancer-automations/icons/lagging.svg",
-        description: "You can only take a quick action"
-    }, {
         id: "infection",
         name: "Infection",
         img: "modules/lancer-automations/icons/infection.svg",
@@ -3682,6 +3685,16 @@ Hooks.on('lancer.statusesReady', () => {
             { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     });
+
+    // Dazed — only add if not already registered (e.g. by a status compendium)
+    if (!CONFIG.statusEffects.find(s => s.id === 'dazed')) {
+        CONFIG.statusEffects.push({
+            id: "dazed",
+            name: "Dazed",
+            img: "modules/lancer-automations/icons/dazed.svg",
+            description: "DAZED mechs can only take one quick action \u2013 they cannot OVERCHARGE, move normally, nor take full actions, reactions, or free actions."
+        });
+    }
 });
 
 const userHelpers = new Map();

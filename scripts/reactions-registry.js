@@ -267,11 +267,11 @@ export function getDefaultGeneralReactionRegistry() {
                     } else if (triggerType === 'onStatusRemoved') {
                         await api.removeConstantBonus(reactorToken.actor, BRACE_BONUS_ID);
 
-                        const laggingStatus = CONFIG.statusEffects.find(s => s.id === 'lagging');
-                        if (laggingStatus) {
+                        const dazedStatus = CONFIG.statusEffects.find(s => s.id === 'dazed');
+                        if (dazedStatus) {
                             await api.applyEffectsToTokens({
                                 tokens: [reactorToken],
-                                effectNames: laggingStatus.id,
+                                effectNames: dazedStatus.id,
                                 duration: { label: 'start', turns: 1, rounds: 0 }
                             });
                         }
@@ -793,7 +793,7 @@ export function getDefaultGeneralReactionRegistry() {
             forceSynchronous: true,
             triggerSelf: true,
             triggerOther: false,
-            outOfCombat: false,
+            outOfCombat: true,
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onUpdate") {
                     const c = triggerData.change || {};
@@ -804,6 +804,8 @@ export function getDefaultGeneralReactionRegistry() {
                 }
 
                 if (triggerType === "onPreMove") {
+                    if (!game.combat?.active)
+                        return false;
                     const moveInfo = triggerData.moveInfo;
                     if (!moveInfo?.pathHexes || moveInfo.pathHexes.length === 0)
                         return false;

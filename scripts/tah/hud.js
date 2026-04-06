@@ -365,6 +365,13 @@ export class LancerHUD {
 
         for (const cat of categories) {
             const row = this._makeRow(cat.label, true);
+            if (cat.getItems && !cat.isStatusPanel && !cat.isLogPanel) {
+                try {
+                    const items = cat.getItems();
+                    // if (!items || !items.length)
+                    //     row.css({ opacity: 0.9 });
+                } catch { /* ignore */ }
+            }
             const openCat = () => {
                 this._searchActive = false;
                 _cancelCollapse();
@@ -676,6 +683,9 @@ export class LancerHUD {
             const rawChildren = item.getChildren ? item.getChildren() : null;
             const hasChildren = rawChildren !== null || !!item.isLogPanel;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
+
+            // if (hasChildren && rawChildren !== null && !rawChildren.length)
+            //     row.css({ opacity: 0.9 });
 
             if (item.highlightBg) {
                 const borderColor = item.highlightBorderColor ?? '#3a78b5';
