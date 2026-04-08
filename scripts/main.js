@@ -3931,7 +3931,12 @@ Hooks.on('ready', async () => {
 
 // Item Disabled system – uncomment to activate
 Hooks.on('renderActorSheet', onRenderActorSheet);
-Hooks.on('renderActorSheet', onRenderActorSheetInfection);
+Hooks.on('renderActorSheet', (app, html, data) => {
+    if (!game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')) {
+        return;
+    }
+    onRenderActorSheetInfection(app, html, data);
+});
 
 // Ammo editor on mech_system item sheets – uncomment to activate
 Hooks.on('renderItemSheet', onRenderItemSheet);

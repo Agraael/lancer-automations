@@ -1,0 +1,59 @@
+<form>
+    <div class="form-group" style="margin-bottom: 12px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
+        <label style="font-weight: bold; font-size: 1.1em;">Enable Custom Token Stat Bars</label>
+        <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}} />
+        <p class="notes">Replaces default token bars with the custom Lancer stat hub. Toggling this requires a reload (you will be prompted on save). Disabled when Bar Brawl is active.</p>
+    </div>
+
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Per-Token Defaults</h2>
+    <p class="notes" style="margin-bottom: 8px;">Defaults applied when a token doesn't have its own override. Per-token settings live in the Resources tab of the token configuration sheet.</p>
+
+    <div class="form-group">
+        <label>Hide Stat Bar by Default</label>
+        <input type="checkbox" name="defaultHidden" {{#if defaultHidden}}checked{{/if}} />
+        <p class="notes">Newly placed tokens (and any token without an explicit override) will not show the stat bar hub.</p>
+    </div>
+
+    <div class="form-group">
+        <label>Show Only In Combat by Default</label>
+        <input type="checkbox" name="defaultCombatOnly" {{#if defaultCombatOnly}}checked{{/if}} />
+        <p class="notes">Only display the stat bar hub while the token is part of an active combat encounter.</p>
+    </div>
+
+    <div class="form-group">
+        <label>Default Row Height (px)</label>
+        <input type="number" min="0" step="1" name="defaultRowHeight" value="{{defaultRowHeight}}" placeholder="auto" />
+        <p class="notes">Override the height of each bar row. Leave blank for the automatic value (scales with grid size).</p>
+    </div>
+
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Visibility Modes</h2>
+    <p class="notes" style="margin-bottom: 8px;">Who can see the stat bar hub. <strong>All</strong> uses the normal hover/control/target rules. <strong>Owners only</strong> hides the bars from non-owning players. <strong>None</strong> hides them entirely (controlled tokens still show for the owner).</p>
+
+    <div class="form-group">
+        <label>Out of Combat</label>
+        <select name="visOutOfCombat">
+            {{#each visChoicesOut}}
+            <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>In Combat</label>
+        <select name="visInCombat">
+            {{#each visChoicesIn}}
+            <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+        </select>
+    </div>
+
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Bulk Apply</h2>
+    <div class="form-group">
+        <button type="button" class="la-apply-defaults"><i class="fas fa-stamp"></i> Apply Defaults to Current Scene</button>
+        <p class="notes">Writes the per-token default values above onto every Lancer token on the active scene, replacing any existing per-token overrides.</p>
+    </div>
+
+    <footer class="sheet-footer flexrow">
+        <button type="submit"><i class="fas fa-save"></i> Save</button>
+    </footer>
+</form>

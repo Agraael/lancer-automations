@@ -3,6 +3,16 @@
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatBar';
+const SETTING_DEFAULT_HIDDEN = 'statBarDefaultHidden';
+const SETTING_DEFAULT_COMBAT_ONLY = 'statBarDefaultCombatOnly';
+const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
+const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
+const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
+
+// Visibility-mode values for the in/out-of-combat settings.
+const VIS_ALL = 'all';
+const VIS_OWNER = 'owner';
+const VIS_NONE = 'none';
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -116,18 +126,41 @@ function hasReaction(actor) {
 const FLAG_HIDDEN = 'statBarHidden';
 const FLAG_COMBAT_ONLY = 'statBarCombatOnly';
 const FLAG_ROW_HEIGHT = 'statBarRowHeight';
+const FLAG_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
+const FLAG_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
+
+function getWorldSetting(key, fallback) {
+    try {
+        const v = game.settings.get(MODULE_ID, key);
+        return v ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
 
 function statBarHidden(tokenDoc) {
-    return tokenDoc?.getFlag?.(MODULE_ID, FLAG_HIDDEN) === true;
+    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_HIDDEN);
+    if (flag === true || flag === false) {
+        return flag;
+    }
+    return getWorldSetting(SETTING_DEFAULT_HIDDEN, false) === true;
 }
 
 function statBarCombatOnly(tokenDoc) {
-    return tokenDoc?.getFlag?.(MODULE_ID, FLAG_COMBAT_ONLY) === true;
+    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_COMBAT_ONLY);
+    if (flag === true || flag === false) {
+        return flag;
+    }
+    return getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false) === true;
 }
 
 function statBarRowHeight(tokenDoc) {
     const v = tokenDoc?.getFlag?.(MODULE_ID, FLAG_ROW_HEIGHT);
-    return Number.isFinite(v) && v > 0 ? Number(v) : 0;
+    if (Number.isFinite(v) && v > 0) {
+        return Number(v);
+    }
+    const fallback = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
+    return Number.isFinite(fallback) && fallback > 0 ? Number(fallback) : 0;
 }
 
 function isTokenInCombat(token) {
@@ -164,6 +197,32 @@ function shouldShowBars(token) {
         return false;
     }
     if (statBarCombatOnly(token.document) && !isTokenInCombat(token)) {
+        return false;
+    }
+    // Visibility mode (all / owner / none) — chosen per combat state.
+    // Per-token flag overrides the world default when set.
+    const inCombat = isTokenInCombat(token);
+    const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
+    const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
+    const tokenMode = token.document?.getFlag?.(MODULE_ID, flagKey);
+    const mode = (tokenMode === VIS_ALL || tokenMode === VIS_OWNER || tokenMode === VIS_NONE)
+        ? tokenMode
+        : getWorldSetting(settingKey, VIS_ALL);
+    if (mode === VIS_NONE) {
+        // Even in NONE, allow self-controlled and ongoing flash overrides so
+        // the player can still inspect what they own.
+        if (_flashingTokens.has(token.id)) {
+            return true;
+        }
+        if (token.controlled) {
+            return true;
+        }
+        return false;
+    }
+    if (mode === VIS_OWNER && !token.actor?.isOwner) {
+        if (_flashingTokens.has(token.id)) {
+            return true;
+        }
         return false;
     }
     if (_flashingTokens.has(token.id)) {
@@ -229,7 +288,9 @@ function getEffectiveMax(actor, hostId) {
         const max = sys.hp?.max ?? 0;
         const value = Math.max(0, sys.hp?.value ?? 0);
         const os = Math.max(0, sys.overshield?.value ?? 0);
-        return Math.max(max, value + os, value);
+        // Effective max = whichever is largest of nominal max, current HP, or
+        // overshield value. Overshield does NOT stack on top of HP for sizing.
+        return Math.max(max, value, os);
     }
     if (hostId === 'heat') {
         const ownMax = sys.heat?.max ?? 0;
@@ -345,7 +406,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
         return;
     }
 
-    const { layoutOffsetX, pipColW, rowHeight, rowGap, startY, indicatorW, rightColX, rightColW } = geom;
+    const { layoutOffsetX, pipColW, rowHeight, rowGap, startY, indicatorW, reactionExtension, rightColX, rightColW } = geom;
     const visibleIds = geom.visibleIds;
 
     if (barId === 'hp' || barId === 'heat') {
@@ -525,7 +586,8 @@ function spawnFlash(token, barId, oldVal, newVal) {
     }
 
     if (barId === 'reaction') {
-        const x = 0;
+        // Reaction now hangs off the left edge of the bar block.
+        const x = -reactionExtension;
         const y = startY + 1;
         const w = indicatorW - 2;
         const h = rowHeight - 2;
@@ -629,21 +691,38 @@ function drawStatHub() {
 
     const width = Math.min(token.w, MAX_BAR_WIDTH);
     const rowHeightOverride = statBarRowHeight(token.document);
+    // Scale to grid size, not token size, so a 2x2 mech and a 1x1 NPC on the
+    // same map get bars the same thickness.
     const rowHeight = rowHeightOverride > 0
         ? rowHeightOverride
-        : Math.max(7, Math.floor(canvas.dimensions.size / 16));
+        : Math.max(5, Math.floor(canvas.dimensions.size * 0.07));
     const rowGap = 1;
     const startY = token.h + 3 - rowHeight;
 
-    // Reaction slot — square cell on the left edge (omitted for deployables).
+    // Reaction slot now extends past the LEFT edge of the bars (mirroring
+    // armor on the right). The hub's main bar geometry starts at x=0.
     const indicatorW = reactionEnabled ? rowHeight : 0;
     const indicatorGap = reactionEnabled ? 1 : 0;
-    const layoutOffsetX = indicatorW + indicatorGap;
+    const reactionExtension = indicatorW + indicatorGap;
+    const layoutOffsetX = 0;
 
-    const usableW = width - layoutOffsetX;
-    // Pilots/deployables: HP bar fills the whole row (no pip column).
-    const pipColW = mechStats ? Math.floor(usableW * 0.32) : 0;
+    const usableW = width;
     const colGap = mechStats ? 1 : 0;
+    // Pip column width is set so that one pip = (col width when 4 pips) / 4.
+    // With fewer than 4 pips the column shrinks; capped at 4 pips for sizing
+    // so structures/stresses above 4 don't make the column wider.
+    let pipColW = 0;
+    if (mechStats) {
+        const baseColW = Math.floor(usableW * 0.32);
+        const innerGap = 1;
+        // Width of a single pip slot when the column shows 4 pips.
+        const pipSlotW = (baseColW - 2 - innerGap * 3) / 4;
+        // Largest pip count present on the actor (cap at 4 for sizing).
+        const structMax = actor.system?.structure?.max ?? 0;
+        const stressMax = actor.system?.stress?.max ?? 0;
+        const pipCount = Math.min(4, Math.max(structMax, stressMax, 1));
+        pipColW = Math.ceil(pipCount * pipSlotW + innerGap * (pipCount - 1) + 2);
+    }
 
     // Armor ticks sit past the right edge of the HP bar. GM/owners only.
     const canSeeArmor = game.user?.isGM || actor.isOwner;
@@ -660,6 +739,8 @@ function drawStatHub() {
 
     const container = new PIXI.Container();
     container.name = 'la-stat-hub';
+    // Center the bars on the token. The reaction extension on the left and
+    // armor extension on the right both stick past the centered bar block.
     container.position.set((token.w - width) / 2, startY);
     token.bars.addChild(container);
 
@@ -667,14 +748,16 @@ function drawStatHub() {
     container.addChild(gfx);
 
     gfx.lineStyle(0);
-    // Reaction indicator (row 0). Skipped entirely for deployables.
+    // Reaction indicator — square cell hanging off the LEFT edge of the bars
+    // on the HP row only (mirrors armor on the right). Skipped for deployables.
     if (reactionEnabled) {
         const reactionAvailable = actor.system?.action_tracker?.reaction === true;
+        const reactionX = -reactionExtension;
         gfx.beginFill(0x111111, 0.9);
-        gfx.drawRect(0, 0, indicatorW, rowHeight);
+        gfx.drawRect(reactionX, 0, indicatorW, rowHeight);
         gfx.endFill();
         gfx.beginFill(reactionAvailable ? 0x9944cc : 0x333333, reactionAvailable ? 1 : 0.6);
-        gfx.drawRect(1, 1, indicatorW - 2, rowHeight - 2);
+        gfx.drawRect(reactionX + 1, 1, indicatorW - 2, rowHeight - 2);
         gfx.endFill();
     }
 
@@ -855,6 +938,7 @@ function drawStatHub() {
         startY,
         visibleIds,
         indicatorW,
+        reactionExtension,
         rightColX,
         rightColW,
     };
@@ -1007,13 +1091,145 @@ function injectLancerHud(hud, html, actor) {
 export function registerTokenStatBarSettings() {
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
         name: 'Custom Token Stat Bars',
-        hint: 'Replaces default token bars with my custom token bar , very similar to Bar Brawl but with my own personal tweaks. Disabled when Bar Brawl is active.',
+        hint: 'Replaces default token bars with my custom token bar, very similar to Bar Brawl but with my own personal tweaks. Disabled when Bar Brawl is active.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false,
         requiresReload: true,
     });
+    game.settings.register(MODULE_ID, SETTING_DEFAULT_HIDDEN, {
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_DEFAULT_COMBAT_ONLY, {
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_DEFAULT_ROW_HEIGHT, {
+        scope: 'world', config: false, type: Number, default: 0,
+    });
+    game.settings.register(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, {
+        scope: 'world', config: false, type: String, default: VIS_ALL,
+    });
+    game.settings.register(MODULE_ID, SETTING_VIS_IN_COMBAT, {
+        scope: 'world', config: false, type: String, default: VIS_ALL,
+    });
+
+    game.settings.registerMenu(MODULE_ID, 'tokenStatBarConfigMenu', {
+        name: 'Custom Token Stat Bars',
+        label: 'Configure Stat Bars',
+        hint: 'Per-token defaults, visibility modes (in/out of combat)',
+        icon: 'fas fa-heart-pulse',
+        type: TokenStatBarConfig,
+        restricted: true,
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Settings menu form
+// ---------------------------------------------------------------------------
+
+class TokenStatBarConfig extends FormApplication {
+    static get defaultOptions() {
+        return foundry.utils.mergeObject(super.defaultOptions, {
+            id: 'la-token-stat-bar-config',
+            title: 'Lancer Automations — Token Stat Bars',
+            template: `modules/${MODULE_ID}/templates/token-stat-bar-config.html`,
+            width: 560,
+            closeOnSubmit: true,
+        });
+    }
+
+    getData() {
+        const visChoices = [
+            { value: VIS_ALL, label: 'All (default behaviour)' },
+            { value: VIS_OWNER, label: 'Owners only' },
+            { value: VIS_NONE, label: 'None (hidden)' },
+        ];
+        return {
+            enabled: getWorldSetting(SETTING_ENABLED, false),
+            defaultHidden: getWorldSetting(SETTING_DEFAULT_HIDDEN, false),
+            defaultCombatOnly: getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false),
+            defaultRowHeight: getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0) || '',
+            visOutOfCombat: getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL),
+            visInCombat: getWorldSetting(SETTING_VIS_IN_COMBAT, VIS_ALL),
+            visChoicesOut: visChoices.map(c => ({ ...c, selected: c.value === getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL) })),
+            visChoicesIn: visChoices.map(c => ({ ...c, selected: c.value === getWorldSetting(SETTING_VIS_IN_COMBAT, VIS_ALL) })),
+        };
+    }
+
+    activateListeners(html) {
+        super.activateListeners(html);
+        html.find('button.la-apply-defaults').on('click', async (ev) => {
+            ev.preventDefault();
+            await applyDefaultsToCurrentScene();
+        });
+    }
+
+    async _updateObject(_event, formData) {
+        const previousEnabled = getWorldSetting(SETTING_ENABLED, false);
+        const newEnabled = !!formData.enabled;
+
+        await game.settings.set(MODULE_ID, SETTING_ENABLED, newEnabled);
+        await game.settings.set(MODULE_ID, SETTING_DEFAULT_HIDDEN, !!formData.defaultHidden);
+        await game.settings.set(MODULE_ID, SETTING_DEFAULT_COMBAT_ONLY, !!formData.defaultCombatOnly);
+        const rowH = Number(formData.defaultRowHeight);
+        await game.settings.set(MODULE_ID, SETTING_DEFAULT_ROW_HEIGHT, Number.isFinite(rowH) && rowH > 0 ? rowH : 0);
+        await game.settings.set(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, formData.visOutOfCombat || VIS_ALL);
+        await game.settings.set(MODULE_ID, SETTING_VIS_IN_COMBAT, formData.visInCombat || VIS_ALL);
+
+        // Refresh visibility immediately so the new modes apply without a reload
+        // (unless the master toggle changed, in which case we need a reload).
+        refreshVisibleLancerTokens();
+
+        if (previousEnabled !== newEnabled) {
+            const DialogV2 = foundry.applications?.api?.DialogV2;
+            if (DialogV2) {
+                await DialogV2.confirm({
+                    window: { title: 'Reload Required' },
+                    content: '<p>The Custom Token Stat Bars master toggle was changed. Reload Foundry now?</p>',
+                    yes: { callback: () => foundry.utils.debouncedReload() },
+                });
+            } else {
+                foundry.utils.debouncedReload?.();
+            }
+        }
+    }
+}
+
+async function applyDefaultsToCurrentScene() {
+    if (!canvas?.scene) {
+        ui.notifications?.warn('No active scene.');
+        return;
+    }
+    const defaultHidden = getWorldSetting(SETTING_DEFAULT_HIDDEN, false);
+    const defaultCombatOnly = getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false);
+    const defaultRowHeight = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
+    const updates = [];
+    for (const tok of canvas.tokens?.placeables ?? []) {
+        if (!isLancerCombatant(tok.actor)) {
+            continue;
+        }
+        updates.push({
+            _id: tok.document.id,
+            [`flags.${MODULE_ID}.${FLAG_HIDDEN}`]: defaultHidden,
+            [`flags.${MODULE_ID}.${FLAG_COMBAT_ONLY}`]: defaultCombatOnly,
+            [`flags.${MODULE_ID}.${FLAG_ROW_HEIGHT}`]: defaultRowHeight || null,
+            // Clear per-token visibility overrides so the world setting applies.
+            [`flags.${MODULE_ID}.-=${FLAG_VIS_OUT_OF_COMBAT}`]: null,
+            [`flags.${MODULE_ID}.-=${FLAG_VIS_IN_COMBAT}`]: null,
+        });
+    }
+    if (updates.length === 0) {
+        ui.notifications?.info('No Lancer tokens on this scene.');
+        return;
+    }
+    try {
+        await canvas.scene.updateEmbeddedDocuments('Token', updates);
+        ui.notifications?.info(`Applied defaults to ${updates.length} token(s).`);
+    } catch (e) {
+        console.warn(`${MODULE_ID} | apply defaults failed`, e);
+        ui.notifications?.error('Failed to apply defaults — see console.');
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1276,6 +1492,18 @@ export function initTokenStatBar() {
         const hidden = statBarHidden(tokenDoc);
         const combatOnly = statBarCombatOnly(tokenDoc);
         const rowHeight = statBarRowHeight(tokenDoc);
+        const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
+        const visIn = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_IN_COMBAT) ?? '';
+        const visOption = (val, label, current) =>
+            `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`;
+        const visSelect = (name, current) => `
+            <select name="${name}">
+                ${visOption('', 'Use world default', current)}
+                ${visOption(VIS_ALL, 'All', current)}
+                ${visOption(VIS_OWNER, 'Owners only', current)}
+                ${visOption(VIS_NONE, 'None', current)}
+            </select>
+        `;
         // Foundry's submit handler reads bar1/bar2 attribute fields off the
         // form. Preserve the document values via hidden inputs so saving the
         // sheet doesn't crash with "Cannot read properties of undefined".
@@ -1299,6 +1527,16 @@ export function initTokenStatBar() {
                 <label>Row Height (px)</label>
                 <input type="number" min="0" step="1" name="flags.${MODULE_ID}.${FLAG_ROW_HEIGHT}" value="${rowHeight || ''}" placeholder="auto"/>
                 <p class="notes">Override the height of each bar row, in pixels. Leave blank for the default (scales with grid size).</p>
+            </div>
+            <div class="form-group">
+                <label>Visibility — Out of Combat</label>
+                ${visSelect(`flags.${MODULE_ID}.${FLAG_VIS_OUT_OF_COMBAT}`, visOut)}
+                <p class="notes">Per-token override of who sees the bars when no combat is active. Leave on "Use world default" to inherit from the module settings.</p>
+            </div>
+            <div class="form-group">
+                <label>Visibility — In Combat</label>
+                ${visSelect(`flags.${MODULE_ID}.${FLAG_VIS_IN_COMBAT}`, visIn)}
+                <p class="notes">Per-token override of who sees the bars while this token is in an active combat.</p>
             </div>
         `;
         if (typeof app.setPosition === 'function') {
