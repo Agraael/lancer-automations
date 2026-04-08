@@ -62,6 +62,7 @@ export class StatusPanel {
     }
 
     close() {
+        $('.la-status-tooltip').remove();
         if (this._subtypePanel) {
             this._subtypePanel.remove();
             this._subtypePanel = null;
@@ -101,6 +102,7 @@ export class StatusPanel {
     }
 
     open(anchorRow) {
+        $('.la-status-tooltip').remove();
         if (this._panel) {
             this._panel.stop(true).remove();
             this._panel = null;

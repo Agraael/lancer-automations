@@ -85,8 +85,13 @@ class StatusFXConfig extends FormApplication {
 
     getData() {
         const config = getConfig();
+        let additionalStatuses = true;
+        try {
+            additionalStatuses = game.settings.get(MODULE_ID, 'additionalStatuses');
+        } catch { /* setting may not be registered yet */ }
         return {
             master: config.master,
+            additionalStatuses,
             fxEffects: [
                 { key: 'dangerZone',  label: 'Danger Zone Glow',   enabled: config.fx_dangerZone },
                 { key: 'burn',        label: 'Burn Glow',           enabled: config.fx_burn },
@@ -120,10 +125,45 @@ class StatusFXConfig extends FormApplication {
     async _updateObject(_event, formData) {
         const config = getConfig();
         for (const [key, val] of Object.entries(formData)) {
+            // additionalStatuses is saved separately below
+            if (key === 'additionalStatuses') {
+                continue;
+            }
             config[key] = val;
         }
         await game.settings.set(MODULE_ID, SETTING_FX_CONFIG, config);
+
+        // additionalStatuses is its own world setting, not part of statusFXConfig
+        if ('additionalStatuses' in formData) {
+            try {
+                await game.settings.set(MODULE_ID, 'additionalStatuses', !!formData.additionalStatuses);
+            } catch (e) {
+                console.warn(`${MODULE_ID} | Could not save additionalStatuses setting`, e);
+            }
+        }
+
         ui.notifications.info('StatusFX configuration saved.');
+
+        try {
+            /** @type {any} */
+            const dialogOpts = {
+                id: 'reload-world-confirm',
+                modal: true,
+                rejectClose: false,
+                window: { title: 'SETTINGS.ReloadPromptTitle' },
+                position: { width: 400 },
+                content: `<p>${game.i18n.localize('SETTINGS.ReloadPromptBody')}</p>`,
+            };
+            const reload = await foundry.applications.api.DialogV2.confirm(dialogOpts);
+            if (reload) {
+                if (game.user.can('SETTINGS_MODIFY')) {
+                    game.socket.emit('reload');
+                }
+                foundry.utils.debouncedReload();
+            }
+        } catch (e) {
+            console.warn(`${MODULE_ID} | reload-confirm dialog failed`, e);
+        }
     }
 }
 
@@ -137,7 +177,8 @@ export function registerStatusFXSettings() {
         scope: 'world',
         config: false,
         type: Object,
-        default: { ...FX_DEFAULTS }
+        default: { ...FX_DEFAULTS },
+        requiresReload: true,
     });
 
     game.settings.registerMenu(MODULE_ID, 'statusFXConfigMenu', {
@@ -610,11 +651,11 @@ const slowedEffect = [
         filterType: "wave",
         filterId: "SlowedWave",
         time: 0,
-        color: 0x998877,
+        color: 0xC4B3A9,
         strength: 0.01,
         frequency: 10,
-        minIntensity: 0.5,
-        maxIntensity: 2.0,
+        minIntensity: 0.7,
+        maxIntensity: 1.5,
         inward: true,
         animated: {
             time: { active: true, speed: 0.001, animType: "move" }
@@ -625,7 +666,7 @@ const slowedEffect = [
         filterId: "SlowedGlow",
         outerStrength: 1.5,
         innerStrength: 0,
-        color: 0x998877,
+        color: 0xC4B3A9,
         quality: 0.5,
         padding: 10,
         animated: {

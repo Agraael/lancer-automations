@@ -6,15 +6,25 @@
     </div>
 
     <fieldset id="la-statusfx-rest" style="border: none; padding: 0; margin: 0;" {{#unless master}}disabled{{/unless}}>
+        <div class="form-group">
+            <label>Additional Statuses &amp; Effects</label>
+            <input type="checkbox" name="additionalStatuses" {{#if additionalStatuses}}checked{{/if}} />
+            <p class="notes">Registers extra statuses (Resist All, Disengage, Grappling, Throttled, etc.) into the standard status effects list. The Infection status is always registered regardless of this setting.</p>
+        </div>
+
+        <hr>
+
         <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">TokenMagic Visual Effects</h2>
         <p class="notes" style="margin-bottom: 8px;">Toggle individual TokenMagic effects applied when statuses are active. Requires TokenMagic module.</p>
 
+        <div style="max-height: 240px; overflow-y: auto; border: 1px solid rgba(120,46,34,0.3); border-radius: 3px; padding: 6px 8px 6px 6px;">
         {{#each fxEffects}}
         <div class="form-group">
             <label>{{this.label}}</label>
             <input type="checkbox" name="fx_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
         </div>
         {{/each}}
+        </div>
 
         <hr>
 

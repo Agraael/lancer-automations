@@ -71,6 +71,8 @@ import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
+import { registerSettingsMenus } from "./settingsMenus.js";
+import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
 import './filters/customFilters.js';
 import { checkCompatibility } from "./checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
@@ -1039,10 +1041,10 @@ async function handleTrigger(triggerType, data) {
 function registerSettings() {
     // ── Core ──
     game.settings.register('lancer-automations', 'reactionNotificationMode', {
-        name: 'Notification Mode',
+        name: 'Activation Notification Mode',
         hint: 'Who should see the activation popup? (GM/Owner)',
         scope: 'world',
-        config: true,
+        config: false,
         type: String,
         choices: {
             "both": "GM and Owner",
@@ -1056,7 +1058,7 @@ function registerSettings() {
         name: 'Consume Reaction on Activation',
         hint: 'When a Reaction-type activation fires, automatically spend the token\'s reaction.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1065,17 +1067,18 @@ function registerSettings() {
         name: 'Token HUD Bonus Button',
         hint: 'Show a button on the Token HUD to open the Lancer Effect Manager.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: true
     });
 
     // ── Features ──
+    // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register('lancer-automations', 'additionalStatuses', {
-        name: 'LaSossis Additional statutes and effects',
+        name: 'LaSossis Additional statuses and effects',
         hint: 'If enabled, registers additional statuses and effects from Lancer Automations into the standard status effects list.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: true
     });
@@ -1084,7 +1087,7 @@ function registerSettings() {
         name: 'Automate Knockback on Hit',
         hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1093,7 +1096,7 @@ function registerSettings() {
         name: 'Automate Throw Choice for Thrown Weapons',
         hint: 'If enabled, weapons with the "Thrown" tag will show a choice card asking to Attack or Throw at the start of the attack flow.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1102,7 +1105,7 @@ function registerSettings() {
         name: 'Enable Stat Roll Target Selection',
         hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1111,7 +1114,7 @@ function registerSettings() {
         name: 'Treat Generic Prints as Activations',
         hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1120,7 +1123,7 @@ function registerSettings() {
         name: 'Enable Path Hex Calculation',
         hint: 'Calculates the token\'s exact path hexes during movement. Essential for accurate onPreMove and onMove interception. Works best with my Elevation Ruler fork.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: true
     });
@@ -1129,7 +1132,7 @@ function registerSettings() {
         name: 'Experimental Boost Detection (WIP)',
         hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or my own fork.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1138,7 +1141,7 @@ function registerSettings() {
         name: 'Movement Cap Detection [beta]',
         hint: 'Automatically cancel drag movement that would exceed the token\'s movement cap during combat. Requires Elevation Ruler Fork.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1147,7 +1150,7 @@ function registerSettings() {
         name: 'Show Deployable Lines',
         hint: 'If enabled, hovering over tokens you own will draw subtle red lines connecting them to their active deployables and thrown weapons.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: true
     });
@@ -1157,7 +1160,7 @@ function registerSettings() {
         name: 'Alternative Structure & Stress Rules',
         hint: 'Enable integrated alt-structure rules (alternative to the standalone lancer-alt-structure module). Requires page reload. Disable if the standalone lancer-alt-structure module is also active.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false,
         onChange: () => ui.notifications.info("lancer-automations: Alt Structure setting changed — reload required.")
@@ -1168,7 +1171,7 @@ function registerSettings() {
         name: 'Drag Vision Radius Multiplier',
         hint: 'Scale the token vision radius shown while dragging (requires "Drag Vision" enabled in Foundry core settings). 1 = full vision, 0.5 = half, 0 = none.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Number,
         range: { min: 0, max: 1, step: 0.05 },
         default: 1
@@ -1253,9 +1256,9 @@ function registerSettings() {
         name: 'Link Manually Placed Deployables',
         hint: 'When a deployable token is dragged onto the scene, automatically link it to an owner token and fire the onDeploy trigger. If the owner actor is unlinked (e.g. NPC), prompts to choose the owner token.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 }
 
@@ -2330,6 +2333,36 @@ function _buildCancelFn({ setFlag, getIgnoreCallback, defaultReason, defaultTitl
     return fn;
 }
 
+async function stunnedAutoFailStep(state) {
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    if (!token)
+        return true;
+
+    const isStunned = !!findEffectOnToken(token, 'stunned');
+    if (!isStunned)
+        return true;
+
+    const path = (state.data?.path || '').toLowerCase();
+    const title = (state.data?.title || '').toUpperCase();
+    const isHullOrAgi = path.includes('hull') || path.includes('agi')
+        || title.includes('HULL') || title.includes('AGI');
+    if (!isHullOrAgi)
+        return true;
+
+    if (state.data?.roll_str)
+        state.data.roll_str = `(${state.data.roll_str}) * 0`;
+
+    const statLabel = (path.includes('hull') || title.includes('HULL')) ? 'HULL' : 'AGILITY';
+    await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ token: token.document }),
+        content: `<div class="lancer-chat-message"><b>${statLabel}</b><br>`
+            + `<span style="color:#c0392b;font-weight:bold;">AUTOMATIC FAILURE</span> &mdash; ${token.name} is <b>Stunned</b> and automatically fails ${statLabel} checks and saves.</div>`
+    });
+
+    return true;
+}
+
 async function onInitCheckStep(state) {
     state = injectExtraDataUtility(state);
     if (state.data?._ignoredCancel)
@@ -3131,6 +3164,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onActivation', onActivationStep);
     flowSteps.set('lancer-automations:onInitActivation', onInitActivationStep);
     flowSteps.set('lancer-automations:onInitCheck', onInitCheckStep);
+    flowSteps.set('lancer-automations:stunnedAutoFail', stunnedAutoFailStep);
     flowSteps.set('lancer-automations:onInitAttack', onInitAttackStep);
     flowSteps.set('lancer-automations:onInitTechAttack', onInitTechAttackStep);
     // Register Knockback steps
@@ -3203,6 +3237,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
 
     flows.get('StatRollFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepStatRoll', 'lancer-automations:onInitCheck');
+    flows.get('StatRollFlow')?.insertStepBefore('rollCheck', 'lancer-automations:stunnedAutoFail');
     flows.get('StatRollFlow')?.insertStepAfter('rollCheck', 'lancer-automations:onCheck');
 
     flows.get('ActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
@@ -3265,6 +3300,8 @@ Hooks.on('init', () => {
     console.log('lancer-automations | Init');
     registerSettings();
     registerStatusFXSettings(); // StatusFX settings + config menu
+    registerSettingsMenus(); // Grouped Activations / Combat / Deployables menus
+    registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
     registerFlowStatePersistence();
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
@@ -3582,6 +3619,37 @@ Hooks.on('deleteToken', () => {
 });
 
 Hooks.on('lancer.statusesReady', () => {
+    // Always register infection — it's needed by the StatusFX auto-status logic
+    // even when the broader additionalStatuses pack is disabled.
+    if (!CONFIG.statusEffects.find(s => s.id === 'infection')) {
+        CONFIG.statusEffects.push({
+            id: "infection",
+            name: "Infection",
+            img: "modules/lancer-automations/icons/infection.svg",
+            description: "Like Burn, but applies Heat instead of damage. Characters immediately take Heat equal to the Infection received, and the value stacks if Infection is already present. At the end of their turn, they roll a Systems check: on success they clear all Infection, otherwise they take Heat equal to the current Infection. Anything that clears Burn (e.g. Stabilize) also clears Infection."
+        });
+    }
+
+    // Register QoL status effects if csm-lancer-qol module is not active.
+    // These effects are normally provided by csm-lancer-qol; we add them as a fallback
+    // so users without that module still get them. Skips any that already exist.
+    if (!game.modules.get('csm-lancer-qol')?.active) {
+        const qolStatusEffects = [
+            { id: "dangerzone", name: "Danger Zone", img: "systems/lancer/assets/icons/white/status_dangerzone.svg" },
+            { id: "burn", name: "Burn", img: "icons/svg/fire.svg" },
+            { id: "overshield", name: "Overshield", img: "icons/svg/circle.svg" },
+            { id: "engaged", name: "Engaged", img: "systems/lancer/assets/icons/white/status_engaged.svg" },
+            { id: "cascading", name: "Cascading", img: "icons/svg/paralysis.svg" },
+            { id: "bolster", name: "Bolstered", img: "systems/lancer/assets/icons/white/accuracy.svg" },
+            { id: "mia", name: "M.I.A.", img: "modules/lancer-automations/icons/mia_lg.svg" }
+        ];
+        for (const eff of qolStatusEffects) {
+            if (!CONFIG.statusEffects.find(s => s.id === eff.id)) {
+                CONFIG.statusEffects.push(eff);
+            }
+        }
+    }
+
     if (!game.settings.get('lancer-automations', 'additionalStatuses'))
         return;
 
@@ -3635,11 +3703,6 @@ Hooks.on('lancer.statusesReady', () => {
         name: "Falling",
         img: "modules/lancer-automations/icons/falling.svg",
         description: "Characters take damage when they fall 3 or more spaces and cannot recover before hitting the ground. Characters fall 10 spaces per round in normal gravity, but can't fall in zero-G or very low-G environments. They take 3 Kinetic AP (armour piercing) damage for every three spaces fallen, to a maximum of 9 Kinetic AP. Falling is a type of involuntary movement."
-    }, {
-        id: "infection",
-        name: "Infection",
-        img: "modules/lancer-automations/icons/infection.svg",
-        description: "Works in the same way as burn but target heat instead"
     }, {
         id: "throttled",
         name: "Throttled",
@@ -3843,6 +3906,9 @@ Hooks.on('ready', async () => {
 
     // StatusFX — TokenMagic visual effects for statuses
     initStatusFX();
+
+    // Token stat bar — custom multi-bar token hub (Bar Brawl alternative)
+    initTokenStatBar();
 
     // Infection — turn-end hooks
     initInfectionHooks();

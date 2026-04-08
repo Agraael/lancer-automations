@@ -27,10 +27,13 @@ function lerpColor(r1, g1, b1, r2, g2, b2, t) {
  */
 export function buildStatsHtml(actor, token = null) {
     const sys = actor.system;
-    const strVal    = sys.structure?.value ?? 4;
-    const strMax    = sys.structure?.max  ?? 4;
-    const stressVal = sys.stress?.value   ?? 4;
-    const stressMax = sys.stress?.max     ?? 4;
+    const strVal    = sys.structure?.value ?? 0;
+    const strMax    = sys.structure?.max  ?? 0;
+    const stressVal = sys.stress?.value   ?? 0;
+    const stressMax = sys.stress?.max     ?? 0;
+    const hasStructure = strMax > 0;
+    const hasStress    = stressMax > 0;
+    const hasHeat      = (sys.heat?.max ?? 0) > 0;
     const hp          = sys.hp     ?? { value: 0, max: 0 };
     const heat        = sys.heat   ?? { value: 0, max: 0 };
     const overshield  = sys.overshield?.value ?? 0;
@@ -43,8 +46,18 @@ export function buildStatsHtml(actor, token = null) {
 
     const hpRatio    = hp.max > 0 ? hp.value / hp.max : 1;
     const heatRatio  = heat.max > 0 ? heat.value / heat.max : 0;
-    const hpColor    = lerpColor(244, 67, 54,  76, 175, 80,  hpRatio);   // red→green
-    const heatColor  = lerpColor(136, 136, 136, 244, 67, 54, heatRatio); // grey→red
+    // HP: red → yellow → green (two-stop, avoids brown midpoint)
+    const hpColor = hpRatio < 0.5
+        ? lerpColor(244, 67, 54, 255, 215, 0,  hpRatio * 2)
+        : lerpColor(255, 215, 0, 76, 175, 80, (hpRatio - 0.5) * 2);
+    // Heat: grey → yellow → orange → red (3-segment)
+    let heatColor;
+    if (heatRatio < 1 / 3)
+        heatColor = lerpColor(136, 136, 136, 255, 215, 0,  heatRatio * 3);
+    else if (heatRatio < 2 / 3)
+        heatColor = lerpColor(255, 215, 0, 255, 140, 0, (heatRatio - 1 / 3) * 3);
+    else
+        heatColor = lerpColor(255, 140, 0, 244, 67, 54, (heatRatio - 2 / 3) * 3);
 
     const strPips    = Array.from({ length: strMax },    (_, i) => `<i class="cci cci-structure" style="font-size:1.1em;color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
     const stressPips = Array.from({ length: stressMax }, (_, i) => `<i class="cci cci-reactor" style="font-size:1.1em;color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
@@ -107,10 +120,10 @@ export function buildStatsHtml(actor, token = null) {
     return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;">` +
         `<div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
-        `${strPips}${SEP}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
+        `${hasStructure ? `${strPips}${SEP}` : ''}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${stressPips}${SEP}<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
+        `${hasStress ? `${stressPips}${SEP}` : ''}${hasHeat ? `<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>` : ''}${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
         `</div>` +
         `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +
@@ -148,20 +161,29 @@ export function buildStatsEl(actor, token = null) {
     } else {
         detail.css({ display: 'none', overflow: 'hidden' });
     }
+    const openDetail = () => {
+        if (_statsExpanded) return;
+        _statsExpanded = true;
+        detail.stop(true).css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
+            .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function () {
+                $(this).css('width', '');
+            });
+        toggle.find('span').text('◀');
+    };
+    const closeDetail = () => {
+        if (!_statsExpanded) return;
+        _statsExpanded = false;
+        detail.stop(true).animate({ width: 0, opacity: 0 }, 120, function () {
+            $(this).css({ display: 'none', width: '', opacity: '' });
+        });
+        toggle.find('span').text('▶');
+    };
+    el.on('mouseenter', openDetail);
+    el.on('mouseleave', closeDetail);
     toggle.on('click', (ev) => {
         ev.stopPropagation();
-        _statsExpanded = !_statsExpanded;
-        if (_statsExpanded) {
-            detail.css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
-                .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function () {
-                    $(this).css('width', '');
-                });
-        } else {
-            detail.animate({ width: 0, opacity: 0 }, 120, function () {
-                $(this).css({ display: 'none', width: '', opacity: '' });
-            });
-        }
-        toggle.find('span').text(_statsExpanded ? '◀' : '▶');
+        if (_statsExpanded) closeDetail();
+        else openDetail();
     });
     return el;
 }

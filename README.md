@@ -36,6 +36,7 @@ The end goal is to move everything I need for my campaign into this module, so i
 - [Interactive Tools](#interactive-tools)
 - [TemplateMacro: Lancer Tools](#templatemacro-lancer-tools)
 - [Item Flags & Injection](#item-flags--injection)
+- [Extra Actions](#extra-actions)
 - [Automation System](#automation-system)
 - [Optional Features](#optional-features)
   - [Lancer Automations HUD (Beta)](#lancer-automations-hud-beta)
@@ -351,6 +352,28 @@ The module lets you attach additional deployables to any item, including NPC fea
 These deployables are recognized and read by the deploy macro just like native ones.
 
 ![Deployable finder tool](doc/img/deployable-finder.png)
+
+## Extra Actions
+
+The Extra Actions system lets you attach additional action buttons to items, tokens, or actors at runtime. Actions added this way appear alongside an item's native `system.actions` and can be triggered from the chat card or sheet just like built-in actions. They survive across reloads (stored as flags) and can be removed or filtered later.
+
+This is the mechanism behind features like NPC abilities that grant a temporary "Fall Prone" action, the Citadel Terraformer's print sub-actions, or any homebrew effect that needs to inject a one-off action onto a target.
+
+**Storage**
+
+- When the target is an **item**, actions are stored on the item's `extraActions` flag and merged with `system.actions` whenever the item is rendered.
+- When the target is a **token or actor**, actions are stored on the actor and exposed via `getActorActions(target)`.
+
+**API surface** (available on `game.modules.get('lancer-automations').api`):
+
+| Function | Purpose |
+|---|---|
+| `addExtraActions(target, actions)` | Add one or more action objects to an item, token, or actor. |
+| `getItemActions(item)` | Return the merged list of `system.actions` plus any extra actions stored on an item. |
+| `getActorActions(tokenOrActor)` | Return the extra actions attached to an actor or token. |
+| `removeExtraActions(target, filter?)` | Remove extra actions. `filter` may be a predicate, an action name, an array of names, or omitted to clear all. |
+
+The Automation System exposes a matching `reactionPath` selector — for example `"extraActions.Fall Prone"` — so reactions can fire specifically when an extra action is activated. See [Trigger Reference](#trigger-reference) and the API docs in `doc/API_INTERACTIVE.md` for full details.
 
 ## Automation System
 
@@ -878,6 +901,12 @@ Move and Reaction are trackable attributes. This can be used for token bar thing
 ### Token Tooltip Alt Config
 
 A custom [Token Tooltip Alt](https://foundryvtt.com/packages/token-tooltip-alt) configuration is included at [`misc/lancer-automations-tta.json`](misc/lancer-automations-tta.json). It is based on eranziel's Lancer TTA config with Infection and Reaction added. Import it from the TTA settings.
+
+### Custom Token Stat Bars
+
+![custom_bar_brawl](doc/img/custom_bar_brawl.png)
+
+I made my own custom Bar Brawl, tailored to Lancer. You can toggle it from the module settings — you'll need to deactivate Bar Brawl for it to run.
 
 ### StatusFX
 

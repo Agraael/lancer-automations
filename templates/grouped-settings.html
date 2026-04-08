@@ -1,0 +1,27 @@
+<form>
+    {{#each items}}
+    <div class="form-group">
+        <label>{{this.label}}</label>
+        <div class="form-fields">
+            {{#if this.isBoolean}}
+                <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} />
+            {{/if}}
+            {{#if this.isNumber}}
+                <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" />
+            {{/if}}
+            {{#if this.isSelect}}
+                <select name="{{this.key}}">
+                    {{#each this.choices}}
+                    <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                    {{/each}}
+                </select>
+            {{/if}}
+        </div>
+        {{#if this.hint}}<p class="notes">{{this.hint}}</p>{{/if}}
+    </div>
+    {{/each}}
+
+    <footer class="sheet-footer flexrow">
+        <button type="submit"><i class="fas fa-save"></i> Save</button>
+    </footer>
+</form>
