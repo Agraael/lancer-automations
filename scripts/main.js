@@ -1083,6 +1083,16 @@ function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-automations', 'enableInfectionDamageIntegration', {
+        name: 'Infection Damage Integration',
+        hint: 'Adds Infection as a fully integrated Lancer damage type. Requires reload.',
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true,
+        requiresReload: true
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
@@ -3306,8 +3316,10 @@ Hooks.on('init', () => {
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField(); // Add system.infection field to actor schemas
-    injectInfectionDamageType(); // Add "Infection" to DamageField choices
-    injectInfectionCSS(); // Infection damage icon + color
+    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')) {
+        injectInfectionDamageType(); // Add "Infection" to DamageField choices
+        injectInfectionCSS(); // Infection damage icon + color
+    }
     patchStatRollCardTemplate();
 
     if (game.modules.get("elevationruler")?.active) {
