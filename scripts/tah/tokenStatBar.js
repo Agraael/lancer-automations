@@ -670,7 +670,9 @@ function drawStatHub() {
         if (visibleIds.has('structure') || visibleIds.has('hp')) {
             rows.push([find('structure'), find('hp')]);
         }
-        if (visibleIds.has('stress') || visibleIds.has('heat')) {
+        // Stress is paired with heat — if heat is hidden, drop stress too so
+        // we don't render an orphan row.
+        if (visibleIds.has('heat')) {
             rows.push([find('stress'), find('heat')]);
         }
     } else {
@@ -958,6 +960,9 @@ function drawStatHub() {
     }
     token.bars.height = totalHeight;
 
+    // Elevation badge — replaces the vanilla "+N" tooltip text.
+    drawElevationBadge(token);
+
     // fvtt-perf-optim freezes our bars by caching them as bitmap. Undo it.
     const tok = token;
     setTimeout(() => {
@@ -974,6 +979,105 @@ function drawStatHub() {
         };
         undoCache(tok.bars);
     }, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Elevation badge — directional indicator, top-right of token
+// ---------------------------------------------------------------------------
+
+function drawElevationBadge(token) {
+    const prev = token.children?.find(c => c.name === 'la-elevation-badge');
+    if (prev) {
+        token.removeChild(prev);
+        prev.destroy({ children: true });
+    }
+
+    // Hide the core elevation tooltip.
+    if (token.tooltip) {
+        token.tooltip.visible = false;
+    }
+
+    const elevation = token.document?.elevation;
+    if (!Number.isFinite(elevation) || elevation === 0) {
+        return;
+    }
+
+    const isPositive = elevation > 0;
+    const label = Math.abs(elevation).toString();
+
+    // Sized to match effect icons (_shrinkEffectIcons).
+    const gridPx = canvas.dimensions?.size ?? 100;
+    const iconSize = Math.max(8, Math.round(gridPx * 0.1));
+    const cellH = iconSize;
+    const cellW = iconSize;
+    let arrowH = Math.max(3, Math.round(cellH * 0.5));
+    if (arrowH % 2 !== 0) {
+        arrowH += 1;
+    }
+    const halfW = Math.round(cellW / 2);
+
+    const badge = new PIXI.Container();
+    badge.name = 'la-elevation-badge';
+    badge.eventMode = 'none';
+
+    const gfx = new PIXI.Graphics();
+    badge.addChild(gfx);
+    gfx.lineStyle(0);
+
+    const arrowColor = isPositive ? 0x55aacc : 0xcc7744;
+
+    if (isPositive) {
+        // ▲ arrow then dark cell
+        gfx.beginFill(arrowColor, 1);
+        gfx.moveTo(halfW, 0);
+        gfx.lineTo(cellW, arrowH);
+        gfx.lineTo(0, arrowH);
+        gfx.closePath();
+        gfx.endFill();
+
+        gfx.beginFill(0x111111, 0.9);
+        gfx.drawRect(0, arrowH, cellW, cellH);
+        gfx.endFill();
+        gfx.beginFill(arrowColor, 0.7);
+        gfx.drawRect(1, arrowH, cellW - 2, 1);
+        gfx.endFill();
+    } else {
+        // Dark cell then ▼ arrow
+        gfx.beginFill(0x111111, 0.9);
+        gfx.drawRect(0, 0, cellW, cellH);
+        gfx.endFill();
+        gfx.beginFill(arrowColor, 0.7);
+        gfx.drawRect(1, cellH - 1, cellW - 2, 1);
+        gfx.endFill();
+
+        gfx.beginFill(arrowColor, 1);
+        gfx.moveTo(0, cellH);
+        gfx.lineTo(cellW, cellH);
+        gfx.lineTo(halfW, cellH + arrowH);
+        gfx.closePath();
+        gfx.endFill();
+    }
+
+    const fontSize = Math.max(7, Math.round(cellH * 0.85));
+    const style = PreciseText.getTextStyle({
+        fontFamily: CONFIG.canvasTextStyle?.fontFamily ?? 'Signika',
+        fontSize,
+        fontWeight: 'bold',
+        fill: '#dddddd',
+        align: 'center',
+    });
+    const txt = new PreciseText(label, style);
+    txt.anchor.set(0.5, 0.5);
+    const bodyCenterY = isPositive
+        ? arrowH + Math.round(cellH / 2)
+        : Math.round(cellH / 2);
+    txt.position.set(halfW, bodyCenterY);
+    badge.addChild(txt);
+
+    // Align the cell body with the status icon row (y=0).
+    const badgeY = isPositive ? -arrowH : 0;
+    badge.position.set(token.w - cellW, badgeY);
+    token.addChild(badge);
 }
 
 // ---------------------------------------------------------------------------
@@ -1341,6 +1445,10 @@ export function initTokenStatBar() {
         if (!isEnabled() || !isLancerCombatant(token?.actor)) {
             return;
         }
+
+        // Keep the elevation badge in sync and suppress core tooltip.
+        drawElevationBadge(token);
+
         if (!token.bars) {
             return;
         }

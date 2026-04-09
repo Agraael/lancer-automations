@@ -2135,7 +2135,7 @@ export class LancerHUD {
         if (actions.length) {
             if (hasBoth)
                 items.push({ label: 'ACTIONS', isSectionLabel: true });
-            actions.forEach(action => items.push({
+            actions.forEach((action, actionIdx) => items.push({
                 label: action.name,
                 icon: getActivationIcon(action),
                 onClick: () => {
@@ -2144,7 +2144,7 @@ export class LancerHUD {
                         if (opt)
                             executeInvade(this._actor, opt);
                     } else {
-                        /** @type {any} */ (talent).beginActivationFlow(`system.ranks.${rankIdx}`);
+                        /** @type {any} */ (talent).beginActivationFlow(`system.ranks.${rankIdx}.actions.${actionIdx}`);
                     }
                 },
                 onRightClick: this._actionPopup(action, talent.name),
@@ -2574,7 +2574,9 @@ export class LancerHUD {
                             if (opt)
                                 executeInvade(actor, opt);
                         } else {
-                            si.beginActivationFlow(`system.ranks.${rankIdx ?? 0}`);
+                            const ri = rankIdx ?? 0;
+                            const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ a => a.name === action.name);
+                            si.beginActivationFlow(`system.ranks.${ri}.actions.${ai >= 0 ? ai : 0}`);
                         }
                     } else
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
@@ -2600,8 +2602,11 @@ export class LancerHUD {
                                 executeInvade(a, opt);
                         } else {
                             const equiv = /** @type {any} */ (a).items.find(i => i.system?.lid === si.system?.lid);
-                            if (equiv)
-                                equiv.beginActivationFlow(`system.ranks.${rankIdx ?? 0}`);
+                            if (equiv) {
+                                const ri = rankIdx ?? 0;
+                                const ai = (equiv.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ ac => ac.name === action.name);
+                                equiv.beginActivationFlow(`system.ranks.${ri}.actions.${ai >= 0 ? ai : 0}`);
+                            }
                         }
                     } else {
                         executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' });

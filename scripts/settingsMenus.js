@@ -135,7 +135,7 @@ export function registerSettingsMenus() {
     game.settings.registerMenu(MODULE_ID, 'activationsConfigMenu', {
         name: 'Activations Automations',
         label: 'Configure Activations',
-        hint: 'Settings for activation notifications, reaction consumption, and chat-card automation.',
+        hint: 'Notifications, reaction consumption, chat-card triggers.',
         icon: 'fas fa-bolt',
         type: ActivationsConfig,
         restricted: true,
@@ -144,7 +144,7 @@ export function registerSettingsMenus() {
     game.settings.registerMenu(MODULE_ID, 'combatMovementConfigMenu', {
         name: 'Combat & Movement',
         label: 'Configure Combat & Movement',
-        hint: 'Settings for knockback, throw, stat-roll targeting, path/hex calculation, boost detection, drag vision, and alternative structure rules.',
+        hint: 'Knockback, throw, movement tracking, vision, alt-structure.',
         icon: 'fas fa-running',
         type: CombatMovementConfig,
         restricted: true,
@@ -153,7 +153,7 @@ export function registerSettingsMenus() {
     game.settings.registerMenu(MODULE_ID, 'deployablesDisplayConfigMenu', {
         name: 'Deployables & Display',
         label: 'Configure Deployables & Display',
-        hint: 'Settings for manual deployable linking and on-canvas display lines.',
+        hint: 'Deployable linking and on-canvas display.',
         icon: 'fas fa-cubes',
         type: DeployablesDisplayConfig,
         restricted: true,

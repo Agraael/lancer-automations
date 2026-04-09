@@ -1042,7 +1042,7 @@ function registerSettings() {
     // ── Core ──
     game.settings.register('lancer-automations', 'reactionNotificationMode', {
         name: 'Activation Notification Mode',
-        hint: 'Who should see the activation popup? (GM/Owner)',
+        hint: 'Who sees the activation popup.',
         scope: 'world',
         config: false,
         type: String,
@@ -1056,7 +1056,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'consumeReaction', {
         name: 'Consume Reaction on Activation',
-        hint: 'When a Reaction-type activation fires, automatically spend the token\'s reaction.',
+        hint: 'Auto-spend the token\'s reaction when a Reaction activation fires.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1065,7 +1065,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'showBonusHudButton', {
         name: 'Token HUD Bonus Button',
-        hint: 'Show a button on the Token HUD to open the Lancer Effect Manager.',
+        hint: 'Adds a button on the Token HUD to open the Effect Manager.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1076,7 +1076,7 @@ function registerSettings() {
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register('lancer-automations', 'additionalStatuses', {
         name: 'LaSossis Additional statuses and effects',
-        hint: 'If enabled, registers additional statuses and effects from Lancer Automations into the standard status effects list.',
+        hint: 'Extra statuses (Resist All, Disengage, Grappling, etc.) in the status effects list.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1095,7 +1095,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
-        hint: 'If enabled, successful hits with weapons/tech that have the "Knockback X" tag will automatically trigger the Knockback tool on the targets.',
+        hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1104,7 +1104,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enableThrowFlow', {
         name: 'Automate Throw Choice for Thrown Weapons',
-        hint: 'If enabled, weapons with the "Thrown" tag will show a choice card asking to Attack or Throw at the start of the attack flow.',
+        hint: 'Thrown-tagged weapons prompt Attack or Throw at the start of the flow.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1113,7 +1113,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'statRollTargeting', {
         name: 'Enable Stat Roll Target Selection',
-        hint: 'If enabled, stat rolls (HULL, AGI, etc.) will prompt for an optional target to calculate difficulty (Save Target vs Stat).',
+        hint: 'Stat rolls prompt for a target to auto-calculate difficulty.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1122,7 +1122,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
         name: 'Treat Generic Prints as Activations',
-        hint: 'If enabled, items printed to chat using the generic method (SimpleHTMLFlow) will trigger onActivation events. Use this to automate items that lack specific mechanical flows.',
+        hint: 'Items printed via the generic method also trigger onActivation events.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1131,7 +1131,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enablePathHexCalculation', {
         name: 'Enable Path Hex Calculation',
-        hint: 'Calculates the token\'s exact path hexes during movement. Essential for accurate onPreMove and onMove interception. Works best with my Elevation Ruler fork.',
+        hint: 'Tracks exact path hexes during movement. Needed for movement interception.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1140,7 +1140,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'experimentalBoostDetection', {
         name: 'Experimental Boost Detection (WIP)',
-        hint: 'Detect Boost based on cumulative drag movement exceeding the token base speed. Adds moveInfo (isBoost, boostSet) to onMove triggerData. Requires Elevation Ruler or my own fork.',
+        hint: 'Detects Boost when cumulative drag exceeds base speed. Requires Elevation Ruler.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1149,7 +1149,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enableMovementCapDetection', {
         name: 'Movement Cap Detection [beta]',
-        hint: 'Automatically cancel drag movement that would exceed the token\'s movement cap during combat. Requires Elevation Ruler Fork.',
+        hint: 'Cancel drag movement exceeding the token\'s movement cap. Requires Elevation Ruler.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1158,7 +1158,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'showDeployableLines', {
         name: 'Show Deployable Lines',
-        hint: 'If enabled, hovering over tokens you own will draw subtle red lines connecting them to their active deployables and thrown weapons.',
+        hint: 'Draw lines between owned tokens and their deployables on hover.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1168,7 +1168,7 @@ function registerSettings() {
     // ── Alt Structure ──
     game.settings.register('lancer-automations', 'enableAltStruct', {
         name: 'Alternative Structure & Stress Rules',
-        hint: 'Enable integrated alt-structure rules (alternative to the standalone lancer-alt-structure module). Requires page reload. Disable if the standalone lancer-alt-structure module is also active.',
+        hint: 'Integrated alt-structure rules. Disable if using the standalone module. Requires reload.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1179,7 +1179,7 @@ function registerSettings() {
     // ── Vision ──
     game.settings.register('lancer-automations', 'dragVisionMultiplier', {
         name: 'Drag Vision Radius Multiplier',
-        hint: 'Scale the token vision radius shown while dragging (requires "Drag Vision" enabled in Foundry core settings). 1 = full vision, 0.5 = half, 0 = none.',
+        hint: '1 = full vision while dragging, 0.5 = half, 0 = none.',
         scope: 'client',
         config: false,
         type: Number,
@@ -1264,7 +1264,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'linkManualDeploy', {
         name: 'Link Manually Placed Deployables',
-        hint: 'When a deployable token is dragged onto the scene, automatically link it to an owner token and fire the onDeploy trigger. If the owner actor is unlinked (e.g. NPC), prompts to choose the owner token.',
+        hint: 'Auto-link dragged deployable tokens to their owner and fire onDeploy.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -3005,6 +3005,124 @@ function wrapRollDamageForNoBonusDmg(flowSteps) {
  * (no damage dice) don't abort. If the original step returns false but
  * knockback is enabled, we allow the flow to continue.
  */
+// Inject a Flat Modifier input into the stat roll HUD. The Svelte component
+// only renders it for "attack" kind, so we inject our own DOM and fold the
+// result back into the roll string.
+function wrapStatRollFlatModifier(flowSteps) {
+    const orig = flowSteps.get('showStatRollHUD');
+    if (!orig) {
+        return;
+    }
+    flowSteps.set('showStatRollHUD', async function wrappedShowStatRollHUD(state) {
+        if (!state.data) {
+            throw new TypeError('Stat roll flow state missing!');
+        }
+        const bonus = state.data.bonus || 0;
+        let flatMod = 0;
+
+        const observer = new MutationObserver(() => {
+            const dialog = document.getElementById('hase-accdiff-dialog');
+            if (!dialog || dialog.querySelector('.la-stat-flat-mod')) {
+                return;
+            }
+            observer.disconnect();
+            flatMod = 0;
+            _injectStatFlatModRow(dialog, bonus, (v) => {
+                flatMod = v;
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        const result = await orig(state);
+        observer.disconnect();
+
+        if (result !== false && flatMod !== 0) {
+            state.data.bonus = bonus + flatMod;
+            const accTotal = state.data.acc_diff?.base?.total || 0;
+            const accStr = accTotal !== 0 ? ` + ${accTotal}d6kh1` : '';
+            state.data.roll_str = `1d20+${state.data.bonus}${accStr}`;
+        }
+        return result;
+    });
+}
+
+// Builds DOM matching the Lancer system's Svelte accdiff-flat-bonus structure.
+function _injectStatFlatModRow(dialog, bonus, onChange) {
+    // Label — identical to the attack dialog's "Flat Modifier" header.
+    const label = document.createElement('label');
+    label.className = 'flexrow accdiff-weight lancer-border-primary';
+    label.setAttribute('for', 'accdiff-flat-bonus');
+    label.textContent = 'Flat Modifier';
+
+    // Container grid — matches accdiff-grid accdiff-flat-bonus.
+    const grid = document.createElement('div');
+    grid.className = 'la-stat-flat-mod accdiff-grid accdiff-flat-bonus svelte-k5ear2';
+
+    // Left column: "Base: +N"
+    const leftCol = document.createElement('div');
+    leftCol.className = 'accdiff-other-grid svelte-k5ear2';
+    const leftSpan = document.createElement('span');
+    leftSpan.className = 'svelte-k5ear2';
+    const leftB = document.createElement('b');
+    leftB.textContent = 'Base:';
+    leftSpan.appendChild(leftB);
+    leftSpan.append(` +${bonus}`);
+    leftCol.appendChild(leftSpan);
+
+    // Middle column: input + plus/minus buttons
+    const midCol = document.createElement('div');
+    midCol.className = 'accdiff-other-grid accdiff-flat-mod svelte-k5ear2';
+    midCol.style.position = 'relative';
+    const input = document.createElement('input');
+    input.className = 'accdiff-flat-mod__input svelte-k5ear2';
+    input.type = 'number';
+    input.value = '0';
+    const plusBtn = document.createElement('button');
+    plusBtn.className = 'accdiff-flat-mod__plus svelte-k5ear2';
+    plusBtn.type = 'button';
+    plusBtn.innerHTML = '<i class="fas fa-plus svelte-k5ear2"></i>';
+    const minusBtn = document.createElement('button');
+    minusBtn.className = 'accdiff-flat-mod__minus svelte-k5ear2';
+    minusBtn.type = 'button';
+    minusBtn.innerHTML = '<i class="fas fa-minus svelte-k5ear2"></i>';
+    midCol.append(input, plusBtn, minusBtn);
+
+    // Right column: "Total: +N"
+    const rightCol = document.createElement('div');
+    rightCol.className = 'accdiff-other-grid svelte-k5ear2';
+    const rightSpan = document.createElement('span');
+    rightSpan.className = 'svelte-k5ear2';
+    const rightB = document.createElement('b');
+    rightB.textContent = 'Total:';
+    rightSpan.appendChild(rightB);
+    rightSpan.append(' ');
+    const totalText = document.createTextNode(`+${bonus}`);
+    rightSpan.appendChild(totalText);
+    rightCol.appendChild(rightSpan);
+
+    grid.append(leftCol, midCol, rightCol);
+
+    // Insert before the first child of the dialog (same position as attack HUD).
+    dialog.prepend(grid);
+    dialog.prepend(label);
+
+    const update = () => {
+        const v = Number(input.value) || 0;
+        onChange(v);
+        const total = bonus + v;
+        totalText.textContent = (total >= 0 ? '+' : '') + total;
+    };
+    input.addEventListener('input', update);
+    plusBtn.addEventListener('click', () => {
+        input.value = (Number(input.value) || 0) + 1;
+        update();
+    });
+    minusBtn.addEventListener('click', () => {
+        input.value = (Number(input.value) || 0) - 1;
+        update();
+    });
+}
+
 function wrapRollReliable(flowSteps) {
     const origRollReliable = flowSteps.get('rollReliable');
     if (!origRollReliable)
@@ -3231,6 +3349,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('DamageRollFlow')?.insertStepAfter('lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:noBonusDmgInject');
+
+    // Flat Modifier input on stat roll HUD
+    wrapStatRollFlatModifier(flowSteps);
 
     // Wrap rollReliable so knockback-only flows (no damage dice) don't abort
     wrapRollReliable(flowSteps);

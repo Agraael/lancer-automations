@@ -94,7 +94,7 @@ export function buildStatsHtml(actor, token = null) {
         }
         movHtml = `${SEP}${movIcon}<span title="Movement used / cap" style="color:${movColor};">${regularCost}/${cap}</span>`;
     } else {
-        movHtml = `${SEP}${movIcon}<span title="Movement" style="color:#aaa;">∞</span>`;
+        movHtml = `${SEP}${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`;
     }
 
     // Secondary stats row

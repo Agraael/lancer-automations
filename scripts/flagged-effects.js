@@ -1025,9 +1025,44 @@ export function initCollapseHook() {
             _collapseRemoveDuplicates(this);
             // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
             wrapped(...args);
+            _shrinkEffectIcons(this);
             // POST: add count badges for each collapsed group.
             _collapseAddBadges(this);
         }, 'WRAPPER');
+}
+
+/**
+ * Shrink effect icons and re-lay them out at the smaller size.
+ * @param {Token} token
+ */
+function _shrinkEffectIcons(token) {
+    const bg = token.effects?.bg;
+    if (!bg || !token.effects?.children)
+        return;
+
+    const sprites = token.effects.children.filter(c => c !== bg && c instanceof PIXI.Sprite);
+    if (sprites.length === 0)
+        return;
+
+    const gridPx = canvas.dimensions?.size ?? 100;
+    const size = Math.max(8, Math.round(gridPx * 0.1));
+    const rows = Math.floor(token.document.height * 5);
+
+    for (let i = 0; i < sprites.length; i++) {
+        const s = sprites[i];
+        s.width = size;
+        s.height = size;
+        s.x = Math.floor(i / rows) * size;
+        s.y = (i % rows) * size;
+    }
+
+    bg.clear();
+    bg.beginFill(0x000000, 0.4);
+    bg.lineStyle(1, 0x000000, 1);
+    for (const s of sprites) {
+        bg.drawRoundedRect(s.x, s.y, size, size, 2);
+    }
+    bg.endFill();
 }
 
 /**
