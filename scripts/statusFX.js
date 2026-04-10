@@ -32,6 +32,7 @@ const FX_DEFAULTS = {
     fx_throttled:   true,
     fx_immobilized:   true,
     fx_blinded:     true,
+    fx_flying:      true,
     // Auto-status toggles
     auto_dangerZone:  true,
     auto_burn:        true,
@@ -112,6 +113,7 @@ class StatusFXConfig extends FormApplication {
                 { key: 'throttled',  label: 'Throttled Effect',    enabled: config.fx_throttled },
                 { key: 'immobilized', label: 'Immobilized / Staggered Effect', enabled: config.fx_immobilized },
                 { key: 'blinded',    label: 'Blinded Effect',     enabled: config.fx_blinded },
+                { key: 'flying',     label: 'Flying Hover Bob',   enabled: config.fx_flying },
             ],
             autoStatuses: [
                 { key: 'dangerZone',  label: 'Auto Danger Zone (heat ≥ 50%)', enabled: config.auto_dangerZone },
@@ -963,6 +965,58 @@ function blockQoLEffects() {
 }
 
 // ---------------------------------------------------------------------------
+// Flying hover animation — subtle up/down bob on the token mesh
+// ---------------------------------------------------------------------------
+
+const _flyingTickers = new Map();
+
+function startFlyingBob(token) {
+    if (_flyingTickers.has(token.id)) {
+        return;
+    }
+    const amplitude = Math.max(2, Math.floor(canvas.dimensions.size * 0.02));
+    const periodMs = 2000;
+    // Capture the mesh's resting Y so the bob oscillates around it.
+    const restY = token.mesh.position.y;
+    const tick = () => {
+        if (token.destroyed || !token.actor?.statuses?.has('flying')) {
+            stopFlyingBob(token);
+            return;
+        }
+        const t = (performance.now() % periodMs) / periodMs;
+        // Ranges from 0 (rest) to -amplitude (up). Never goes below origin.
+        const offset = -(0.5 - 0.5 * Math.cos(t * Math.PI * 2)) * amplitude;
+        token.mesh.position.y = restY + offset;
+    };
+    _flyingTickers.set(token.id, { tick, restY });
+    canvas.app.ticker.add(tick);
+}
+
+function stopFlyingBob(token) {
+    const entry = _flyingTickers.get(token.id);
+    if (!entry) {
+        return;
+    }
+    canvas.app.ticker.remove(entry.tick);
+    _flyingTickers.delete(token.id);
+    if (!token.destroyed && token.mesh) {
+        token.mesh.position.y = entry.restY;
+    }
+}
+
+function refreshFlyingBob(token) {
+    if (!isMasterEnabled() || !isFXEnabled('flying')) {
+        stopFlyingBob(token);
+        return;
+    }
+    if (token.actor?.statuses?.has('flying')) {
+        startFlyingBob(token);
+    } else {
+        stopFlyingBob(token);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 
@@ -973,6 +1027,11 @@ export function initStatusFX() {
     Hooks.on('createActiveEffect', onCreateActiveEffect);
     Hooks.on('deleteActiveEffect', onDeleteActiveEffect);
     Hooks.on('updateActor', onUpdateActor);
+
+    // Flying bob — drive from refreshToken so it tracks status changes.
+    Hooks.on('refreshToken', (token) => {
+        refreshFlyingBob(token);
+    });
 
     blockQoLEffects();
 
