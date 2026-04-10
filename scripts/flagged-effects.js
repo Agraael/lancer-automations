@@ -7,6 +7,14 @@ function log(...args) {
 let notificationQueue = [];
 let notificationTimer = null;
 
+function _isStatBarActive() {
+    try {
+        return game.settings.get('lancer-automations', 'tokenStatBar') === true;
+    } catch {
+        return false;
+    }
+}
+
 // Settings cache for external module lookups
 const _statusCache = {
     data: null,
@@ -1025,7 +1033,10 @@ export function initCollapseHook() {
             _collapseRemoveDuplicates(this);
             // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
             wrapped(...args);
-            _shrinkEffectIcons(this);
+            // Only shrink icons when the custom stat bar is active.
+            if (_isStatBarActive()) {
+                _shrinkEffectIcons(this);
+            }
             // POST: add count badges for each collapsed group.
             _collapseAddBadges(this);
         }, 'WRAPPER');
@@ -1046,6 +1057,11 @@ function _shrinkEffectIcons(token) {
 
     const gridPx = canvas.dimensions?.size ?? 100;
     const size = Math.max(8, Math.round(gridPx * 0.1));
+
+    // Skip if already at the target size (avoids re-layout churn).
+    if (sprites[0].width === size && sprites[0].height === size)
+        return;
+
     const rows = Math.floor(token.document.height * 5);
 
     for (let i = 0; i < sprites.length; i++) {
