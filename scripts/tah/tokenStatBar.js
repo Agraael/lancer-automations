@@ -9,7 +9,6 @@ const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
 const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
 
-// Visibility-mode values for the in/out-of-combat settings.
 const VIS_ALL = 'all';
 const VIS_OWNER = 'owner';
 const VIS_NONE = 'none';
@@ -24,13 +23,31 @@ const _flashingTokens = new Set();
 const _fadeState = new Map();
 let originalDrawBars = null;
 
+// Overlay on canvas.tokens — hubs render above all tokens.
+let _hubOverlay = null;
+function getHubOverlay() {
+    if (_hubOverlay && !_hubOverlay.destroyed) {
+        return _hubOverlay;
+    }
+    if (!canvas?.tokens) {
+        return null;
+    }
+    _hubOverlay = new PIXI.Container();
+    _hubOverlay.name = 'la-stat-bar-overlay';
+    _hubOverlay.sortableChildren = true;
+    _hubOverlay.zIndex = 99999;
+    canvas.tokens.addChild(_hubOverlay);
+    return _hubOverlay;
+}
+
+const _overlayHubs = new Map();
+
 const FLASH_HOLD_MS = 250;
 const FLASH_SHRINK_MS = 1300;
 const FLASH_TOTAL_MS = FLASH_HOLD_MS + FLASH_SHRINK_MS;
 const FLASH_LINGER_MS = 600;
 
-// Cap on hub width in pixels. Tokens larger than this get a centered hub
-// instead of one that scales to the full token width.
+// Hub width cap — larger tokens get a centered hub.
 const MAX_BAR_WIDTH = 500;
 
 // ---------------------------------------------------------------------------
@@ -199,8 +216,7 @@ function shouldShowBars(token) {
     if (statBarCombatOnly(token.document) && !isTokenInCombat(token)) {
         return false;
     }
-    // Visibility mode (all / owner / none) — chosen per combat state.
-    // Per-token flag overrides the world default when set.
+    // Visibility mode per combat state. Per-token flag overrides world default.
     const inCombat = isTokenInCombat(token);
     const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
     const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
@@ -209,8 +225,7 @@ function shouldShowBars(token) {
         ? tokenMode
         : getWorldSetting(settingKey, VIS_ALL);
     if (mode === VIS_NONE) {
-        // Even in NONE, allow self-controlled and ongoing flash overrides so
-        // the player can still inspect what they own.
+        // NONE still allows controlled + flash overrides.
         if (_flashingTokens.has(token.id)) {
             return true;
         }
@@ -277,8 +292,7 @@ function getVisibleBars(actor) {
     });
 }
 
-// Effective max for a host bar — if the current value (or, for HP, the
-// HP+overshield total) exceeds the actor's nominal max, the bar grows to fit.
+// Effective max — bar grows if value or overshield exceeds nominal max.
 function getEffectiveMax(actor, hostId) {
     const sys = actor?.system;
     if (!sys) {
@@ -288,8 +302,7 @@ function getEffectiveMax(actor, hostId) {
         const max = sys.hp?.max ?? 0;
         const value = Math.max(0, sys.hp?.value ?? 0);
         const os = Math.max(0, sys.overshield?.value ?? 0);
-        // Effective max = whichever is largest of nominal max, current HP, or
-        // overshield value. Overshield does NOT stack on top of HP for sizing.
+        // Largest of max, HP, or overshield. OS doesn't stack on HP for sizing.
         return Math.max(max, value, os);
     }
     if (hostId === 'heat') {
@@ -325,7 +338,7 @@ function refreshVisibleLancerTokens() {
         if (!isLancerCombatant(tok.actor)) {
             continue;
         }
-        if (!tok.bars || tok.bars.children.length === 0) {
+        if (!_overlayHubs.has(tok.id)) {
             continue;
         }
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
@@ -336,8 +349,14 @@ function refreshVisibleLancerTokens() {
 // Fade + flash animations
 // ---------------------------------------------------------------------------
 
+function _getFadeTarget(token) {
+    const entry = _overlayHubs.get(token.id);
+    return entry?.wrapper ?? token.bars;
+}
+
 function fadeBars(token, targetAlpha) {
-    if (!token?.bars) {
+    const target = _getFadeTarget(token);
+    if (!target) {
         return;
     }
     const id = token.id;
@@ -348,19 +367,20 @@ function fadeBars(token, targetAlpha) {
     if (cur) {
         canvas.app.ticker.remove(cur.tick);
     }
-    const startAlpha = token.bars.alpha ?? 1;
+    const startAlpha = target.alpha ?? 1;
     const duration = 150;
     const startTime = performance.now();
 
     const tick = () => {
-        if (!token.bars || token.destroyed) {
+        const t2 = _getFadeTarget(token);
+        if (!t2 || token.destroyed) {
             canvas.app.ticker.remove(tick);
             _fadeState.delete(id);
             return;
         }
         const t = Math.min(1, (performance.now() - startTime) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
-        token.bars.alpha = startAlpha + (targetAlpha - startAlpha) * eased;
+        t2.alpha = startAlpha + (targetAlpha - startAlpha) * eased;
         if (t >= 1) {
             canvas.app.ticker.remove(tick);
             _fadeState.delete(id);
@@ -374,7 +394,10 @@ function fadeBars(token, targetAlpha) {
 function runFlashAnimation(token, name, drawAt) {
     const flashGfx = new PIXI.Graphics();
     flashGfx.name = name;
-    token.addChild(flashGfx);
+    // Flash goes into the overlay hub if available.
+    const entry = _overlayHubs.get(token.id);
+    const parent = entry?.hub ?? token;
+    parent.addChild(flashGfx);
 
     const flashStart = performance.now();
     const tick = () => {
@@ -414,9 +437,6 @@ function spawnFlash(token, barId, oldVal, newVal) {
             return;
         }
         const rowIdx = barId === 'hp' ? 0 : 1;
-        // Use the largest of pre/post values and the current effective max so
-        // flashes positioned past the nominal cap (over-cap healing/damage)
-        // still land inside the visible bar.
         const hostMax = Math.max(getEffectiveMax(token.actor, barId), oldVal, newVal);
         if (hostMax <= 0) {
             return;
@@ -481,7 +501,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
         }
         runFlashAnimation(token, `la-flash-${barId}`, (gfx, eased) => {
             const remainingW = initialFlashW * (1 - eased);
-            // Pips drain from the left, so flash direction is reversed vs HP/Heat.
+            // Pips drain left, so reversed direction.
             const drawX = isDamage
                 ? flashStartX + (initialFlashW - remainingW)
                 : flashStartX;
@@ -567,7 +587,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
         const initialFlashW = flashW;
         runFlashAnimation(token, `la-flash-${barId}`, (gfx, eased) => {
             const remainingW = initialFlashW * (1 - eased);
-            // Reversed vs host bars so the wipe reads as a different stat.
+            // Reversed vs host bar.
             let drawX;
             if (barId === 'burn') {
                 drawX = isReduction
@@ -586,7 +606,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
     }
 
     if (barId === 'reaction') {
-        // Reaction now hangs off the left edge of the bar block.
+        // Reaction hangs off the left edge.
         const x = -reactionExtension;
         const y = startY + 1;
         const w = indicatorW - 2;
@@ -617,7 +637,7 @@ function drawSegment(gfx, x, y, w, h, def, v) {
     gfx.beginFill(0x111111, 0.9);
     gfx.drawRect(x, y, w, h);
     gfx.endFill();
-    // Slightly brighter interior so the 1px border reads as a frame.
+    // Brighter interior — 1px border reads as a frame.
     gfx.beginFill(0x222222, 0.9);
     gfx.drawRect(x + 1, y + 1, w - 2, h - 2);
     gfx.endFill();
@@ -644,11 +664,73 @@ function drawSegment(gfx, x, y, w, h, def, v) {
     }
 }
 
+function _removeOverlayHub(tokenId) {
+    _removeSyncTicker(tokenId);
+    const entry = _overlayHubs.get(tokenId);
+    if (!entry) {
+        return;
+    }
+    if (!entry.wrapper.destroyed) {
+        entry.wrapper.destroy({ children: true });
+    }
+    _overlayHubs.delete(tokenId);
+}
+
+// Per-frame position sync so the hub follows token drag.
+const _syncTickers = new Map();
+
+function _ensureSyncTicker(token) {
+    if (_syncTickers.has(token.id)) {
+        return;
+    }
+    const tick = () => {
+        const entry = _overlayHubs.get(token.id);
+        if (!entry || token.destroyed) {
+            canvas.app.ticker.remove(tick);
+            _syncTickers.delete(token.id);
+            return;
+        }
+        entry.wrapper.position.set(token.position.x, token.position.y);
+    };
+    _syncTickers.set(token.id, tick);
+    canvas.app.ticker.add(tick);
+}
+
+function _removeSyncTicker(tokenId) {
+    const tick = _syncTickers.get(tokenId);
+    if (tick) {
+        canvas.app.ticker.remove(tick);
+        _syncTickers.delete(tokenId);
+    }
+}
+
+function _syncHubPosition(token) {
+    const entry = _overlayHubs.get(token.id);
+    if (!entry) {
+        return;
+    }
+    entry.wrapper.position.set(token.position.x, token.position.y);
+    _ensureSyncTicker(token);
+}
+
 function drawStatHub() {
     const token = this;
     const actor = token?.actor;
 
     token.bars.removeChildren();
+
+    // Preserve flash children before destroying the old hub.
+    const oldEntry = _overlayHubs.get(token.id);
+    const savedFlashes = [];
+    if (oldEntry?.hub) {
+        for (const child of [...oldEntry.hub.children]) {
+            if (child.name?.startsWith('la-flash-')) {
+                oldEntry.hub.removeChild(child);
+                savedFlashes.push(child);
+            }
+        }
+    }
+    _removeOverlayHub(token.id);
 
     if (!isEnabled() || !isLancerCombatant(actor)) {
         if (originalDrawBars) {
@@ -657,8 +739,12 @@ function drawStatHub() {
         return;
     }
 
-    // Override displayBars so our hub draws even when the doc says NEVER.
     token.displayBars = CONST.TOKEN_DISPLAY_MODES.ALWAYS;
+
+    const overlay = getHubOverlay();
+    if (!overlay) {
+        return;
+    }
 
     const visibleIds = new Set(getVisibleBars(actor).map(d => d.id));
     const find = id => BAR_DEFS.find(d => d.id === id);
@@ -693,16 +779,14 @@ function drawStatHub() {
 
     const width = Math.min(token.w, MAX_BAR_WIDTH);
     const rowHeightOverride = statBarRowHeight(token.document);
-    // Scale to grid size, not token size, so a 2x2 mech and a 1x1 NPC on the
-    // same map get bars the same thickness.
+    // Scales with grid, not token size.
     const rowHeight = rowHeightOverride > 0
         ? rowHeightOverride
         : Math.max(5, Math.floor(canvas.dimensions.size * 0.07));
     const rowGap = 1;
     const startY = token.h + 3 - rowHeight;
 
-    // Reaction slot now extends past the LEFT edge of the bars (mirroring
-    // armor on the right). The hub's main bar geometry starts at x=0.
+    // Reaction extends left of the bar block.
     const indicatorW = reactionEnabled ? rowHeight : 0;
     const indicatorGap = reactionEnabled ? 1 : 0;
     const reactionExtension = indicatorW + indicatorGap;
@@ -710,26 +794,22 @@ function drawStatHub() {
 
     const usableW = width;
     const colGap = mechStats ? 1 : 0;
-    // Pip column width is set so that one pip = (col width when 4 pips) / 4.
-    // With fewer than 4 pips the column shrinks; capped at 4 pips for sizing
-    // so structures/stresses above 4 don't make the column wider.
+    // Pip column shrinks with fewer pips, capped at 4 for sizing.
     let pipColW = 0;
     if (mechStats) {
         const baseColW = Math.floor(usableW * 0.32);
         const innerGap = 1;
-        // Width of a single pip slot when the column shows 4 pips.
         const pipSlotW = (baseColW - 2 - innerGap * 3) / 4;
-        // Largest pip count present on the actor (cap at 4 for sizing).
         const structMax = actor.system?.structure?.max ?? 0;
         const stressMax = actor.system?.stress?.max ?? 0;
         const pipCount = Math.min(4, Math.max(structMax, stressMax, 1));
         pipColW = Math.ceil(pipCount * pipSlotW + innerGap * (pipCount - 1) + 2);
     }
 
-    // Armor ticks sit past the right edge of the HP bar. GM/owners only.
+    // Armor ticks — right of HP bar, GM/owners only.
     const canSeeArmor = game.user?.isGM || actor.isOwner;
     const armorVal = canSeeArmor ? Math.max(0, Math.min(8, actor.system?.armor ?? 0)) : 0;
-    const armorTickW = 2;
+    const armorTickW = 1;
     const armorTickGap = 1;
     const armorW = armorVal > 0
         ? armorVal * armorTickW + (armorVal - 1) * armorTickGap + 2
@@ -739,19 +819,23 @@ function drawStatHub() {
     const rightColX = layoutOffsetX + pipColW + colGap;
     const rightColW = usableW - pipColW - colGap;
 
+    const wrapper = new PIXI.Container();
+    wrapper.name = `la-hub-wrapper-${token.id}`;
+    wrapper.position.set(token.position.x, token.position.y);
+    overlay.addChild(wrapper);
+
     const container = new PIXI.Container();
     container.name = 'la-stat-hub';
-    // Center the bars on the token. The reaction extension on the left and
-    // armor extension on the right both stick past the centered bar block.
     container.position.set((token.w - width) / 2, startY);
-    token.bars.addChild(container);
+    wrapper.addChild(container);
+
+    _overlayHubs.set(token.id, { wrapper, hub: container });
 
     const gfx = new PIXI.Graphics();
     container.addChild(gfx);
 
     gfx.lineStyle(0);
-    // Reaction indicator — square cell hanging off the LEFT edge of the bars
-    // on the HP row only (mirrors armor on the right). Skipped for deployables.
+    // Reaction — hangs off the left edge. Skipped for deployables.
     if (reactionEnabled) {
         const reactionAvailable = actor.system?.action_tracker?.reaction === true;
         const reactionX = -reactionExtension;
@@ -774,7 +858,7 @@ function drawStatHub() {
         }
     });
 
-    // Armor ticks (HP row, right side).
+    // Armor ticks (HP row, right extension).
     if (armorVal > 0 && visibleIds.has('hp')) {
         const armorX = rightColX + rightColW + armorGap;
         const innerH = rowHeight - 2;
@@ -789,8 +873,7 @@ function drawStatHub() {
         }
     }
 
-    // Overshield overlay on the HP row. Sized against the same effective max
-    // the HP bar uses, so it grows with the bar when HP is over-cap.
+    // Overshield overlay on HP row.
     const osVal = actor.system?.overshield?.value ?? 0;
     const hpMax = getEffectiveMax(actor, 'hp');
     if (osVal > 0 && hpMax > 0 && visibleIds.has('hp')) {
@@ -840,7 +923,7 @@ function drawStatHub() {
         tick();
     }
 
-    // Burn/Infection stripes — pulse over the host bar at next-tick width.
+    // Burn/Infection pulsing stripes.
     const drawCounterStripe = (rowIdx, def, hostId, direction) => {
         if (!visibleIds.has(hostId)) {
             return;
@@ -882,7 +965,7 @@ function drawStatHub() {
         stripeGfx.drawRect(stripeX, stripeY, stripeW, stripeH);
         stripeGfx.endFill();
 
-        // 1px black edge on the side facing away from the host fill.
+        // Separator edge.
         stripeGfx.beginFill(0x000000, 1);
         const delimX = direction === 'left' ? stripeX : stripeX + stripeW - 1;
         stripeGfx.drawRect(delimX, stripeY, 1, stripeH);
@@ -902,9 +985,7 @@ function drawStatHub() {
     drawCounterStripe(0, find('burn'), 'hp', 'left');
     drawCounterStripe(1, find('infection'), 'heat', 'right');
 
-    // Heat decorations on their own Graphics so they layer above the stripe.
-    // Only render when the actor has a real native heat max — synthetic max
-    // (HP-scaled) gets a plain bar with no fill terminator or danger zone.
+    // Heat fill terminator + danger zone. Only for actors with a real heat max.
     if (visibleIds.has('heat') && (actor.system?.heat?.max ?? 0) > 0) {
         const heatBarX = rightColX + 1;
         const heatBarW = rightColW - 2;
@@ -931,13 +1012,13 @@ function drawStatHub() {
         }
     }
 
-    // Stash geometry so spawnFlash() can position overlays without recomputing.
+    // Geometry for spawnFlash(). startY=0 because the container is already offset.
     token._laBarsGeom = {
         layoutOffsetX,
         pipColW,
         rowHeight,
         rowGap,
-        startY,
+        startY: 0,
         visibleIds,
         indicatorW,
         reactionExtension,
@@ -945,25 +1026,37 @@ function drawStatHub() {
         rightColW,
     };
 
-    // Seed the snapshot once; updateActor owns all later writes.
+    // Seed snapshot; updateActor writes subsequent ones.
     if (!_lastValues.has(token.id)) {
         _lastValues.set(token.id, snapshotValues(actor));
     }
 
     const totalHeight = rows.length * (rowHeight + rowGap) - rowGap;
     token.bars.visible = true;
-    // Only zero alpha on the very first draw — otherwise a redraw mid-hover
-    // would briefly hide bars that are already visible.
-    if (token.bars.alpha === undefined || token._laFirstDraw !== false) {
-        token.bars.alpha = 0;
+    token.bars.height = totalHeight;
+    // Zero alpha only on first draw so redraws don't flicker.
+    if (wrapper.alpha === undefined || token._laFirstDraw !== false) {
+        wrapper.alpha = 0;
         token._laFirstDraw = false;
     }
-    token.bars.height = totalHeight;
+
+    // HP / Heat value labels.
+    const hpLabelX = (armorVal > 0 && visibleIds.has('hp'))
+        ? rightColX + rightColW + armorGap + armorW + 2
+        : rightColX + rightColW + 2;
+    _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, hpLabelX, rowHeight, rowGap);
+
+    // Re-attach saved flashes on top of everything.
+    for (const flash of savedFlashes) {
+        if (!flash.destroyed) {
+            container.addChild(flash);
+        }
+    }
 
     // Elevation badge — replaces the vanilla "+N" tooltip text.
     drawElevationBadge(token);
 
-    // fvtt-perf-optim freezes our bars by caching them as bitmap. Undo it.
+    // Undo fvtt-perf-optim bitmap caching.
     const tok = token;
     setTimeout(() => {
         if (tok.destroyed || !tok.bars) {
@@ -979,6 +1072,83 @@ function drawStatHub() {
         };
         undoCache(tok.bars);
     }, 0);
+}
+
+// ---------------------------------------------------------------------------
+// HP / Heat value labels
+// ---------------------------------------------------------------------------
+
+function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatLabelX, rowHeight, rowGap) {
+    if (!game.user?.isGM && !actor.isOwner) {
+        return;
+    }
+    const innerH = rowHeight - 2;
+    const renderScale = 4;
+    const renderFontSize = Math.max(8, (innerH + 2) * renderScale);
+    const renderStroke = Math.max(1, Math.round(renderFontSize * 0.15));
+
+    const makeStyle = (fill) => new PIXI.TextStyle({
+        fontFamily: 'Signika, sans-serif',
+        fontSize: renderFontSize,
+        fontWeight: 'bold',
+        fill,
+        stroke: 0x000000,
+        strokeThickness: renderStroke,
+        align: 'left',
+    });
+    const whiteStyle = makeStyle(0xffffff);
+
+    rows.forEach((row, rowIdx) => {
+        const rightDef = row[1];
+        if (!rightDef || !visibleIds.has(rightDef.id)) {
+            return;
+        }
+        if (rightDef.id !== 'hp' && rightDef.id !== 'heat') {
+            return;
+        }
+
+        // Segments: value + optional colored OS/burn/infection suffixes.
+        const segments = [];
+        const v = rightDef.getValue(actor);
+        segments.push({ text: `${v.value ?? 0}`, style: whiteStyle });
+
+        if (rightDef.id === 'hp') {
+            const os = actor.system?.overshield?.value ?? 0;
+            const burn = actor.system?.burn ?? 0;
+            if (os > 0) {
+                segments.push({ text: ` ${os}`, style: makeStyle(0x4488ff) });
+            }
+            if (burn > 0) {
+                segments.push({ text: ` ${burn}`, style: makeStyle(0xff4444) });
+            }
+        } else if (rightDef.id === 'heat') {
+            const infection = actor.system?.infection ?? 0;
+            if (infection > 0) {
+                segments.push({ text: ` ${infection}`, style: makeStyle(0x1a8844) });
+            }
+        }
+
+        const labelX = rightDef.id === 'hp' ? hpLabelX : heatLabelX;
+        const labelContainer = new PIXI.Container();
+        labelContainer.name = 'la-bar-label';
+        labelContainer.scale.set(1 / renderScale);
+        labelContainer.position.set(
+            labelX,
+            rowIdx * (rowHeight + rowGap) + rowHeight / 2
+        );
+        labelContainer.eventMode = 'none';
+
+        let cursorX = 0;
+        for (const seg of segments) {
+            const txt = new PIXI.Text(seg.text, seg.style);
+            txt.anchor.set(0, 0.5);
+            txt.position.set(cursorX, 0);
+            labelContainer.addChild(txt);
+            cursorX += txt.width;
+        }
+
+        container.addChild(labelContainer);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1111,7 +1281,7 @@ function injectLancerHud(hud, html, actor) {
 
     const cell = (name, value, color, title) => resourceCell({ name, value, color, title });
 
-    // 100px wide → 2 inputs per row at 40% + margins.
+    // 100px wide, 2 inputs per row.
     const containerStyle = 'display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; width: 100px; height: fit-content;';
 
     // Top: Overshield, Infection, Burn.
@@ -1121,8 +1291,7 @@ function injectLancerHud(hud, html, actor) {
         cell('system.burn',              sys?.burn ?? 0,              COLORS.burn,       'Burn');
     const topAttribute = `<div class="attribute la-hud-top" style="${containerStyle} position: absolute; top: 44px; transform: translateY(-100%); left: 50%; margin-left: -50px;">${topInner}</div>`;
 
-    // Bottom: Structure / HP / Stress / Heat. Pilots & deployables drop the
-    // mech-only structure and stress cells.
+    // Bottom: Structure, HP, Stress, Heat (pilots/deployables skip struct/stress).
     const mechStats = hasMechStats(actor);
     const bottomInner =
         (mechStats ? cell('system.structure.value', sys?.structure?.value ?? 0, COLORS.structure, `Structure (max ${sys?.structure?.max ?? 0})`) : '') +
@@ -1137,7 +1306,7 @@ function injectLancerHud(hud, html, actor) {
     middleCol.append(topAttribute);
     middleCol.append(bottomAttribute);
 
-    // Left: Reaction box centered next to the icon column. Skipped for deployables.
+    // Left: Reaction box. Skipped for deployables.
     if (hasReaction(actor)) {
         const reactionVal = sys?.action_tracker?.reaction === true ? 1 : 0;
         const reactionInput = resourceCell({
@@ -1150,7 +1319,7 @@ function injectLancerHud(hud, html, actor) {
         $html.find('.col.left').prepend(reactionBox);
     }
 
-    // Foundry's _onAttributeUpdate writes to the token doc; we target actor.system.* instead.
+    // Writes to actor.system.* instead of token doc.
     const focusOutHandler = async (ev) => {
         ev.preventDefault();
         const input = ev.currentTarget;
@@ -1341,7 +1510,7 @@ async function applyDefaultsToCurrentScene() {
 // ---------------------------------------------------------------------------
 
 export function initTokenStatBar() {
-    // Bar Brawl handles bars itself, don't double-up.
+    // Skip if Bar Brawl is active.
     if (game.modules.get('barbrawl')?.active) {
         console.log(`${MODULE_ID} | Bar Brawl detected — skipping custom token stat bar registration.`);
         return;
@@ -1350,7 +1519,7 @@ export function initTokenStatBar() {
     originalDrawBars = CONFIG.Token.objectClass.prototype.drawBars;
 
     if (game.modules.get('lib-wrapper')?.active) {
-        // MIXED so we can short-circuit on Lancer actors and chain otherwise.
+        // MIXED: short-circuit on Lancer actors, chain otherwise.
         libWrapper.register(MODULE_ID, 'CONFIG.Token.objectClass.prototype.drawBars',
             function (wrapped, ...args) {
                 if (isEnabled() && isLancerCombatant(this.actor)) {
@@ -1359,7 +1528,7 @@ export function initTokenStatBar() {
                 return wrapped(...args);
             }, 'MIXED');
 
-        // Kill vanilla bar attribute lookups so they can't fight us with stale data.
+        // Neutralise vanilla bar attribute lookups.
         libWrapper.register(MODULE_ID, 'CONFIG.Token.documentClass.prototype.getBarAttribute',
             function (wrapped, ...args) {
                 if (isEnabled() && isLancerCombatant(this.actor)) {
@@ -1384,7 +1553,7 @@ export function initTokenStatBar() {
         };
     }
 
-    // Spawn damage/heal flashes when watched values change.
+    // Value change detection + flash spawning.
     Hooks.on('updateActor', (actor, change) => {
         if (!isEnabled() || !isLancerCombatant(actor)) {
             return;
@@ -1402,6 +1571,7 @@ export function initTokenStatBar() {
             const prev = _lastValues.get(tok.id) ?? {};
             const next = snapshotValues(actor);
 
+            // Redraw hub with new values.
             try {
                 tok.drawBars();
             } catch (e) {
@@ -1416,7 +1586,7 @@ export function initTokenStatBar() {
                     flashed = true;
                 }
             }
-            // Only flash reaction when it gets spent, not on turn reset.
+            // Reaction: only flash on spent, not turn reset.
             if (prev.reaction === true && next.reaction === false) {
                 spawnFlash(tok, 'reaction', 1, 0);
                 flashed = true;
@@ -1424,9 +1594,12 @@ export function initTokenStatBar() {
 
             _lastValues.set(tok.id, next);
 
-            if (flashed && tok.bars) {
+            if (flashed) {
                 _flashingTokens.add(tok.id);
-                tok.bars.alpha = 1;
+                const ft = _getFadeTarget(tok);
+                if (ft) {
+                    ft.alpha = 1;
+                }
                 setTimeout(() => {
                     _flashingTokens.delete(tok.id);
                     if (tok?.destroyed) {
@@ -1440,42 +1613,42 @@ export function initTokenStatBar() {
         }
     });
 
-    // Visibility follows hover/control/target.
+    // Refresh visibility + position sync.
     Hooks.on('refreshToken', (token) => {
         if (!isEnabled() || !isLancerCombatant(token?.actor)) {
             return;
         }
 
-        // Keep the elevation badge in sync and suppress core tooltip.
+        // Elevation badge.
         drawElevationBadge(token);
 
-        if (!token.bars) {
-            return;
-        }
-        if (token.bars.children.length === 0) {
+        // Create hub if missing.
+        if (!_overlayHubs.has(token.id)) {
             try {
                 token.drawBars();
             } catch (e) {
                 console.warn(`${MODULE_ID} | drawBars on refresh failed`, e);
             }
         }
-        if (token.bars.children.length === 0) {
+        if (!_overlayHubs.has(token.id)) {
             return;
         }
-        token.bars.visible = true;
-        fadeBars(token, shouldShowBars(token) ? 1 : 0);
+        // Position sync.
+        _syncHubPosition(token);
 
-        // Nudge the nameplate below the hub when the bars are showing, and
-        // snap it back to its native position when they fade out.
+        const show = shouldShowBars(token);
+        fadeBars(token, show ? 1 : 0);
+
+        // Nameplate offset.
+        const entry = _overlayHubs.get(token.id);
         const nameplate = token.nameplate;
-        if (nameplate?.visible) {
-            const hub = token.bars.children.find(c => c.name === 'la-stat-hub');
-            const barsShown = hub && shouldShowBars(token);
+        if (nameplate?.visible && entry) {
+            const hub = entry.hub;
             if (token._laBaseNameplateY === undefined) {
                 token._laBaseNameplateY = nameplate.position.y;
             }
-            if (barsShown) {
-                const desiredY = hub.position.y + token.bars.height + 4;
+            if (show) {
+                const desiredY = hub.position.y + (token.bars?.height ?? 0) + 4;
                 nameplate.position.y = Math.max(token._laBaseNameplateY, desiredY);
             } else {
                 nameplate.position.y = token._laBaseNameplateY;
@@ -1483,7 +1656,7 @@ export function initTokenStatBar() {
         }
     });
 
-    // Hold Alt to peek at all visible Lancer tokens.
+    // Alt-key peek.
     window.addEventListener('keydown', (ev) => {
         if (ev.key !== 'Alt' || _altHeld) {
             return;
@@ -1506,9 +1679,16 @@ export function initTokenStatBar() {
         refreshVisibleLancerTokens();
     });
 
-    // Sweep existing tokens. Needed because canvasReady may have already fired
-    // by the time our ready hook runs (other modules await before us).
+    // Sweep — canvasReady may have fired before our ready hook.
     const sweepLancerTokens = () => {
+        // Clear stale overlay hubs from previous canvas.
+        for (const [, entry] of _overlayHubs) {
+            if (!entry.wrapper.destroyed) {
+                entry.wrapper.destroy({ children: true });
+            }
+        }
+        _overlayHubs.clear();
+        _hubOverlay = null;
         if (!isEnabled()) {
             return;
         }
@@ -1528,6 +1708,11 @@ export function initTokenStatBar() {
     }
     Hooks.on('canvasReady', sweepLancerTokens);
 
+    // Cleanup on token removal.
+    Hooks.on('destroyToken', (token) => {
+        _removeOverlayHub(token.id);
+    });
+
     Hooks.on('drawToken', (token) => {
         if (!isEnabled() || !isLancerCombatant(token?.actor)) {
             return;
@@ -1539,8 +1724,7 @@ export function initTokenStatBar() {
         }
     });
 
-    // Force displayBars=NONE on new Lancer tokens so the token config sheet
-    // matches what we actually render.
+    // Force displayBars=NONE on new Lancer tokens.
     Hooks.on('preCreateToken', (tokenDoc, data) => {
         if (!isEnabled()) {
             return;
@@ -1552,7 +1736,7 @@ export function initTokenStatBar() {
         tokenDoc.updateSource({ displayBars: CONST.TOKEN_DISPLAY_MODES.NONE });
     });
 
-    // Same fix for tokens placed before the setting was enabled.
+    // Fix existing tokens that predate the setting.
     const sweepDisplayBars = async () => {
         if (!isEnabled() || !canvas?.scene || !game.user?.isGM) {
             return;
@@ -1582,8 +1766,7 @@ export function initTokenStatBar() {
     }
     Hooks.on('canvasReady', sweepDisplayBars);
 
-    // Replace the contents of the Token Config Resources tab with our own
-    // toggles when the stat bar is managing this token.
+    // Token Config Resources tab override.
     Hooks.on('renderTokenConfig', (app, html) => {
         if (!isEnabled()) {
             return;
@@ -1612,9 +1795,7 @@ export function initTokenStatBar() {
                 ${visOption(VIS_NONE, 'None', current)}
             </select>
         `;
-        // Foundry's submit handler reads bar1/bar2 attribute fields off the
-        // form. Preserve the document values via hidden inputs so saving the
-        // sheet doesn't crash with "Cannot read properties of undefined".
+        // Hidden bar1/bar2 fields so Foundry's submit handler doesn't crash.
         const bar1Attr = tokenDoc.bar1?.attribute ?? '';
         const bar2Attr = tokenDoc.bar2?.attribute ?? '';
         tab.innerHTML = `
@@ -1652,7 +1833,7 @@ export function initTokenStatBar() {
         }
     });
 
-    // Token flags drive visibility — re-evaluate when they change.
+    // Re-evaluate when per-token flags change.
     Hooks.on('updateToken', (tokenDoc, change) => {
         if (!isEnabled()) {
             return;
@@ -1675,7 +1856,7 @@ export function initTokenStatBar() {
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
     });
 
-    // Combat-only toggle: refresh visibility on combat lifecycle changes.
+    // Combat lifecycle → refresh combat-only tokens.
     const refreshAllForCombat = () => {
         if (!isEnabled()) {
             return;

@@ -3066,7 +3066,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange) {
     const leftB = document.createElement('b');
     leftB.textContent = 'Base:';
     leftSpan.appendChild(leftB);
-    leftSpan.append(` +${bonus}`);
+    leftSpan.append(` ${bonus >= 0 ? '+' : ''}${bonus}`);
     leftCol.appendChild(leftSpan);
 
     // Middle column: input + plus/minus buttons
@@ -3096,7 +3096,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange) {
     rightB.textContent = 'Total:';
     rightSpan.appendChild(rightB);
     rightSpan.append(' ');
-    const totalText = document.createTextNode(`+${bonus}`);
+    const totalText = document.createTextNode(`${bonus >= 0 ? '+' : ''}${bonus}`);
     rightSpan.appendChild(totalText);
     rightCol.appendChild(rightSpan);
 

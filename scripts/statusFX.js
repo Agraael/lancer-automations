@@ -1,6 +1,7 @@
 /**
  * StatusFX — TokenMagic visual effects for Lancer statuses
  */
+/*global TokenMagic */
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_FX_CONFIG = 'statusFXConfig';
@@ -799,6 +800,23 @@ const blindedEffect = [
     }
 ];
 
+const flyingEffect = [
+    {
+        filterType: "transform",
+        filterId: "FlyingBob",
+        padding: 0,
+        translationY: 0,
+        animated: {
+            translationY: {
+                animType: "cosOscillation",
+                val1: 0,
+                val2: 0.03,
+                loopDuration: 2000
+            }
+        }
+    }
+];
+
 // ---------------------------------------------------------------------------
 // Effect Map
 // ---------------------------------------------------------------------------
@@ -825,6 +843,7 @@ const EFFECT_MAP = [
     { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
     { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
     { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
+    { name: 'Flying',    key: 'flying',      preset: flyingEffect,    filterIds: ['FlyingBob'] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -965,58 +984,6 @@ function blockQoLEffects() {
 }
 
 // ---------------------------------------------------------------------------
-// Flying hover animation — subtle up/down bob on the token mesh
-// ---------------------------------------------------------------------------
-
-const _flyingTickers = new Map();
-
-function startFlyingBob(token) {
-    if (_flyingTickers.has(token.id)) {
-        return;
-    }
-    const amplitude = Math.max(2, Math.floor(canvas.dimensions.size * 0.02));
-    const periodMs = 2000;
-    // Capture the mesh's resting Y so the bob oscillates around it.
-    const restY = token.mesh.position.y;
-    const tick = () => {
-        if (token.destroyed || !token.actor?.statuses?.has('flying')) {
-            stopFlyingBob(token);
-            return;
-        }
-        const t = (performance.now() % periodMs) / periodMs;
-        // Ranges from 0 (rest) to -amplitude (up). Never goes below origin.
-        const offset = -(0.5 - 0.5 * Math.cos(t * Math.PI * 2)) * amplitude;
-        token.mesh.position.y = restY + offset;
-    };
-    _flyingTickers.set(token.id, { tick, restY });
-    canvas.app.ticker.add(tick);
-}
-
-function stopFlyingBob(token) {
-    const entry = _flyingTickers.get(token.id);
-    if (!entry) {
-        return;
-    }
-    canvas.app.ticker.remove(entry.tick);
-    _flyingTickers.delete(token.id);
-    if (!token.destroyed && token.mesh) {
-        token.mesh.position.y = entry.restY;
-    }
-}
-
-function refreshFlyingBob(token) {
-    if (!isMasterEnabled() || !isFXEnabled('flying')) {
-        stopFlyingBob(token);
-        return;
-    }
-    if (token.actor?.statuses?.has('flying')) {
-        startFlyingBob(token);
-    } else {
-        stopFlyingBob(token);
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 
@@ -1027,11 +994,6 @@ export function initStatusFX() {
     Hooks.on('createActiveEffect', onCreateActiveEffect);
     Hooks.on('deleteActiveEffect', onDeleteActiveEffect);
     Hooks.on('updateActor', onUpdateActor);
-
-    // Flying bob — drive from refreshToken so it tracks status changes.
-    Hooks.on('refreshToken', (token) => {
-        refreshFlyingBob(token);
-    });
 
     blockQoLEffects();
 
