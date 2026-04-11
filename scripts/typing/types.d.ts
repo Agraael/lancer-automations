@@ -317,7 +317,7 @@ interface TriggerDataOnDeploy extends TriggerDataBase {
     distanceToTrigger: number | null;
 }
 
-interface TriggerDataOnHeat extends TriggerDataBase {
+interface TriggerDataonHeatGain extends TriggerDataBase {
     triggeringToken: Token;
     heatGained: number;
     currentHeat: number;
@@ -325,7 +325,7 @@ interface TriggerDataOnHeat extends TriggerDataBase {
     distanceToTrigger: number | null;
 }
 
-interface TriggerDataOnClearHeat extends TriggerDataBase {
+interface TriggerDataonHeatLoss extends TriggerDataBase {
     triggeringToken: Token;
     heatCleared: number;
     currentHeat: number;
@@ -339,7 +339,7 @@ interface TriggerDataOnHpLoss extends TriggerDataBase {
     distanceToTrigger: number | null;
 }
 
-interface TriggerDataOnHPRestored extends TriggerDataBase {
+interface TriggerDataonHpGain extends TriggerDataBase {
     triggeringToken: Token;
     hpRestored: number;
     currentHP: number;
@@ -377,10 +377,10 @@ type TriggerData =
     | TriggerDataOnPreStatusApplied
     | TriggerDataOnPreStatusRemoved
     | TriggerDataOnDeploy
-    | TriggerDataOnHeat
-    | TriggerDataOnClearHeat
+    | TriggerDataonHeatGain
+    | TriggerDataonHeatLoss
     | TriggerDataOnHpLoss
-    | TriggerDataOnHPRestored
+    | TriggerDataonHpGain
     | TriggerDataOnDestroyed
     | TriggerDataOnStructure
     | TriggerDataOnStress
@@ -402,9 +402,9 @@ type TriggerType =
     | "onInitCheck"
     | "onStatusApplied" | "onStatusRemoved"
     | "onPreStatusApplied" | "onPreStatusRemoved"
-    | "onDestroyed" | "onStructure" | "onStress"
-    | "onHeat" | "onClearHeat"
-    | "onHpLoss" | "onHPRestored"
+    | "onDestroyed" | "onPreStructure" | "onStructure" | "onPreStress" | "onStress"
+    | "onPreHeatChange" | "onHeatGain" | "onHeatLoss"
+    | "onPreHpChange" | "onHpLoss" | "onHpGain"
     | "onDeploy"
     | "onTurnStart" | "onTurnEnd"
     | "onEnterCombat" | "onExitCombat"
@@ -697,7 +697,7 @@ interface LancerAutomationsAPI {
     getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;
     getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;
-    executeStatRoll(actor: any, stat: string, title: string, target?: number | Token | TokenDocument | "token", extraData?: { targetStat?: string; sendToOwner?: boolean; cardTitle?: string; cardDescription?: string; [key: string]: any }): Promise<{ completed: boolean; total?: number; roll?: any; passed?: boolean }>;
+    executeStatRoll(actor: any, stat: string, title: string, target?: number | Token | TokenDocument | "token", extraData?: { targetStat?: string; sendToOwner?: boolean; cardTitle?: string; cardDescription?: string;[key: string]: any }): Promise<{ completed: boolean; total?: number; roll?: any; passed?: boolean }>;
 
     [key: string]: any;
 }
@@ -727,7 +727,7 @@ interface ReactionConfig {
     enabled?: boolean;
     onlyOnSourceMatch?: boolean;
     autoActivate?: boolean;
-    forceSynchronous?: boolean;
+    awaitActivationCompletion?: boolean;
     actionType?: string;
     frequency?: string;
     activationType?: "code" | "macro" | "item-use" | "flow" | "none";

@@ -24,6 +24,13 @@ function makeConfigForm({ id, title, template, fields }) {
 
         getData() {
             const items = fields.map(f => {
+                if (f.type === 'section') {
+                    return { type: 'section', label: f.label, isSection: true };
+                }
+                if (f.type === 'table') {
+                    const table = f.getTable();
+                    return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows: table.rows };
+                }
                 let value;
                 try {
                     value = game.settings.get(MODULE_ID, f.key);
@@ -39,19 +46,41 @@ function makeConfigForm({ id, title, template, fields }) {
                     value,
                     isBoolean: f.type === 'boolean',
                     isNumber: f.type === 'number',
+                    isString: f.type === 'string',
+                    isFolder: f.type === 'folder',
+                    isColor: f.type === 'color',
                     isSelect: f.type === 'select',
-                    choices: f.choices ?? (setting.choices
-                        ? Object.entries(setting.choices).map(([k, v]) => ({
-                              value: k, label: v, selected: k === value
-                          }))
-                        : []),
+                    isSection: f.type === 'section',
+                    choices: (typeof f.getChoices === 'function' ? f.getChoices() : f.choices)
+                        ?? (setting.choices
+                            ? Object.entries(setting.choices).map(([k, v]) => ({
+                                  value: k, label: v, selected: k === value
+                              }))
+                            : []),
                 };
             });
             return { items };
         }
 
+        activateListeners(html) {
+            super.activateListeners(html);
+            _injectFCSLocks(html, fields, this);
+        }
+
         async _updateObject(_event, formData) {
+            // Collect all saveable keys including table cell keys.
+            const allFields = [];
             for (const f of fields) {
+                if (!f.key && f.type === 'table' && f.tableKeys) {
+                    for (const tk of f.tableKeys) {
+                        const setting = game.settings.settings.get(`${MODULE_ID}.${tk}`);
+                        allFields.push({ key: tk, type: setting?.type === Boolean ? 'boolean' : 'string' });
+                    }
+                } else if (f.key && f.type !== 'section') {
+                    allFields.push(f);
+                }
+            }
+            for (const f of allFields) {
                 if (!(f.key in formData)) {
                     // Unchecked checkboxes are absent from formData — set them to false
                     if (f.type === 'boolean') {
@@ -110,6 +139,73 @@ const CombatMovementConfig = makeConfigForm({
         { key: 'experimentalBoostDetection', type: 'boolean' },
         { key: 'dragVisionMultiplier', type: 'number' },
         { key: 'enableAltStruct', type: 'boolean' },
+        { key: 'enableInfectionDamageIntegration', type: 'boolean' },
+    ],
+});
+
+// ---------------------------------------------------------------------------
+// Wreck Automation
+// ---------------------------------------------------------------------------
+
+const WreckConfig = makeConfigForm({
+    id: 'la-wreck-config',
+    title: 'Lancer Automations — Wreck Automation',
+    template: `modules/${MODULE_ID}/templates/grouped-settings.html`,
+    fields: [
+        { key: 'enableWrecks', type: 'boolean' },
+        { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' },
+        { key: 'enableRemoveFromCombat', type: 'boolean' },
+        { key: 'enableWreckAnimation', type: 'boolean' },
+        { key: 'enableWreckAudio', type: 'boolean' },
+        { key: 'squadLostOnDeath', type: 'boolean' },
+        { key: 'wreckTerrainType', type: 'select', label: 'Wreck Terrain Type', getChoices: () => {
+            const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
+            const choices = [{ value: '', label: 'None (disabled)', selected: current === '' }];
+            try {
+                const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
+                for (const t of types) {
+                    choices.push({ value: t.id, label: t.name || t.id, selected: t.id === current });
+                }
+            } catch {}
+            return choices;
+        }},
+        { key: 'disableHumanDeathSound', type: 'boolean' },
+        { key: 'enableWipOnDeath', type: 'boolean' },
+        // Per-category table.
+        { type: 'table', label: 'Per-Category Settings',
+          tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
+                      'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
+          getTable: () => {
+            const modeChoices = (key) => {
+                const cur = game.settings.get(MODULE_ID, key);
+                return [
+                    { value: 'token', label: 'Token', selected: cur === 'token' },
+                    { value: 'tile', label: 'Tile', selected: cur === 'tile' },
+                ];
+            };
+            return {
+                columns: ['Category', 'Mode', 'Terrain'],
+                rows: [
+                    { label: 'Mech', cells: [
+                        { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
+                        { isBoolean: true, name: 'wreckTerrain_mech', checked: game.settings.get(MODULE_ID, 'wreckTerrain_mech') },
+                    ]},
+                    { label: 'Human / Pilot / Squad', cells: [
+                        { isSelect: true, name: 'wreckMode_human', choices: modeChoices('wreckMode_human') },
+                        { isBoolean: true, name: 'wreckTerrain_human', checked: game.settings.get(MODULE_ID, 'wreckTerrain_human') },
+                    ]},
+                    { label: 'Monstrosity', cells: [
+                        { isSelect: true, name: 'wreckMode_monstrosity', choices: modeChoices('wreckMode_monstrosity') },
+                        { isBoolean: true, name: 'wreckTerrain_monstrosity', checked: game.settings.get(MODULE_ID, 'wreckTerrain_monstrosity') },
+                    ]},
+                    { label: 'Biological', cells: [
+                        { isSelect: true, name: 'wreckMode_biological', choices: modeChoices('wreckMode_biological') },
+                        { isBoolean: true, name: 'wreckTerrain_biological', checked: game.settings.get(MODULE_ID, 'wreckTerrain_biological') },
+                    ]},
+                ],
+            };
+          },
+        },
     ],
 });
 
@@ -128,8 +224,134 @@ const DeployablesDisplayConfig = makeConfigForm({
 });
 
 // ---------------------------------------------------------------------------
+// Token Action HUD
+// ---------------------------------------------------------------------------
+
+const TokenActionHudConfig = makeConfigForm({
+    id: 'la-tah-config',
+    title: 'Lancer Automations — Token Action HUD',
+    template: `modules/${MODULE_ID}/templates/grouped-settings.html`,
+    fields: [
+        { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
+        { key: 'tah.clickToOpen', type: 'boolean' },
+        { key: 'tah.hoverCloseDelay', type: 'number' },
+        { key: 'tah.rangePreview', type: 'boolean' },
+        // Threat aura
+        { key: 'tah.auraColorThreat', type: 'color', label: 'Threat Color' },
+        { key: 'tah.auraOpacityThreat', type: 'number', label: 'Threat Opacity' },
+        { key: 'tah.auraDefaultThreat', type: 'select', label: 'Threat Default' },
+        // Sensor aura
+        { key: 'tah.auraColorSensor', type: 'color', label: 'Sensor Color' },
+        { key: 'tah.auraOpacitySensor', type: 'number', label: 'Sensor Opacity' },
+        { key: 'tah.auraDefaultSensor', type: 'select', label: 'Sensor Default' },
+        // Max Range aura
+        { key: 'tah.auraColorRange', type: 'color', label: 'Max Range Color' },
+        { key: 'tah.auraOpacityRange', type: 'number', label: 'Max Range Opacity' },
+        { key: 'tah.auraDefaultRange', type: 'select', label: 'Max Range Default' },
+    ],
+});
+
+// ---------------------------------------------------------------------------
 // Menu registration
 // ---------------------------------------------------------------------------
+
+// Inject Force Client Settings lock icons into our custom config forms.
+function _getFCSData() {
+    if (!game.modules.get('force-client-settings')?.active) {
+        return null;
+    }
+    try {
+        const forced = new Map(Object.entries(
+            game.settings.get('force-client-settings', 'forced') ?? {}
+        ));
+        const unlocked = new Map(Object.entries(
+            game.settings.get('force-client-settings', 'unlocked') ?? {}
+        ));
+        return { forced, unlocked };
+    } catch {
+        return null;
+    }
+}
+
+// Cycle FCS force mode: open → soft → hard → open.
+async function _toggleFCSForce(key, fcs) {
+    if (!game.user?.isGM) {
+        return;
+    }
+    const currentMode = fcs.forced.get(key)?.mode ?? 'open';
+    const forced = Object.fromEntries(fcs.forced);
+    if (currentMode === 'open') {
+        forced[key] = { mode: 'soft' };
+    } else if (currentMode === 'soft') {
+        forced[key] = { mode: 'hard' };
+    } else {
+        delete forced[key];
+    }
+    await game.settings.set('force-client-settings', 'forced', forced);
+    // Update local cache.
+    fcs.forced = new Map(Object.entries(forced));
+}
+
+function _injectFCSLocks(html, fields, app) {
+    const fcs = _getFCSData();
+    if (!fcs) {
+        return;
+    }
+    const isGM = game.user?.isGM;
+    const fa = {
+        'hard-gm': 'fa-lock',
+        'soft-gm': 'fa-unlock-keyhole',
+        'open-gm': 'fa-lock-keyhole-open',
+        'unlocked-gm': 'fa-dungeon',
+        'hard-client': 'fa-lock',
+        'soft-client': 'fa-unlock-keyhole',
+        'unlocked-client': 'fa-lock-keyhole-open',
+    };
+    const $html = $(html);
+    for (const f of fields) {
+        const key = `${MODULE_ID}.${f.key}`;
+        const setting = game.settings.settings.get(key);
+        if (!setting || setting.scope === 'world') {
+            continue;
+        }
+        const $input = $html.find(`[name="${f.key}"]`);
+        if ($input.length === 0) {
+            continue;
+        }
+        const $group = $input.closest('.form-group');
+        const $label = $group.find('label').first();
+        if ($label.length === 0) {
+            continue;
+        }
+        let mode = fcs.forced.get(key)?.mode ?? 'open';
+        if ((mode === 'soft' || isGM) && fcs.unlocked.has(key)) {
+            mode = 'unlocked';
+        }
+        const modeKey = mode + (isGM ? '-gm' : '-client');
+        // Non-GM + unforced = no icon needed.
+        if (modeKey === 'open-client') {
+            continue;
+        }
+        const icon = fa[modeKey];
+        if (!icon) {
+            continue;
+        }
+        const $icon = $('<span>')
+            .html('&nbsp;')
+            .prop('title', game.i18n.localize(`FORCECLIENTSETTINGS.ui.${modeKey}-hint`))
+            .data('settings-key', key)
+            .addClass(`fas ${icon}`)
+            .css({ cursor: 'pointer', marginRight: '4px' })
+            .on('click', async () => {
+                await _toggleFCSForce(key, fcs);
+                app.render();
+            });
+        $label.prepend($icon);
+        if (['hard-client', 'soft-client'].includes(modeKey)) {
+            $input.prop('disabled', true);
+        }
+    }
+}
 
 export function registerSettingsMenus() {
     game.settings.registerMenu(MODULE_ID, 'activationsConfigMenu', {
@@ -144,9 +366,18 @@ export function registerSettingsMenus() {
     game.settings.registerMenu(MODULE_ID, 'combatMovementConfigMenu', {
         name: 'Combat & Movement',
         label: 'Configure Combat & Movement',
-        hint: 'Knockback, throw, movement tracking, vision, alt-structure.',
+        hint: 'Knockback, throw, movement tracking, vision, alt-structure, infection.',
         icon: 'fas fa-running',
         type: CombatMovementConfig,
+        restricted: true,
+    });
+
+    game.settings.registerMenu(MODULE_ID, 'wreckConfigMenu', {
+        name: 'Wreck Automation',
+        label: 'Configure Wrecks',
+        hint: 'Wreck spawning, FX, terrain, combat removal.',
+        icon: 'fas fa-skull-crossbones',
+        type: WreckConfig,
         restricted: true,
     });
 
@@ -157,5 +388,14 @@ export function registerSettingsMenus() {
         icon: 'fas fa-cubes',
         type: DeployablesDisplayConfig,
         restricted: true,
+    });
+
+    game.settings.registerMenu(MODULE_ID, 'tahConfigMenu', {
+        name: 'Token Action HUD',
+        label: 'Configure Token Action HUD',
+        hint: 'Action HUD display, interaction mode, close delay.',
+        icon: 'fas fa-th-list',
+        type: TokenActionHudConfig,
+        restricted: false,
     });
 }

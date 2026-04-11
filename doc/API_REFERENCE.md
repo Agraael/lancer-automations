@@ -148,15 +148,24 @@ Fires *before* movement is finalized. Allows interception.
 
 </details>
 
-<details><summary><b>Damage & Structure Triggers</b></summary>
+<details><summary><b>Structure & Stress Triggers</b></summary>
 
-- **`onStructure`**: `{ triggeringToken, remainingStructure, rollResult }`.
-- **`onStress`**: `{ triggeringToken, remainingStress, rollResult }`.
-- **`onHeat`**: `{ triggeringToken, heatGained, currentHeat, inDangerZone }`.
+- **`onPreStructure`**: Before the structure roll. `{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, showCard, userIdControl) }`. Can cancel the entire structure flow.
+- **`onStructure`**: After the structure roll. `{ triggeringToken, remainingStructure, rollResult }`.
+- **`onPreStress`**: Before the overheat roll. `{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl) }`. Can cancel the entire overheat flow.
+- **`onStress`**: After the overheat roll. `{ triggeringToken, remainingStress, rollResult }`.
 - **`onDestroyed`**: `{ triggeringToken }`.
-- **`onHpLoss`**: `{ triggeringToken, hpLost, currentHP }`.
-- **`onHPRestored`**: `{ triggeringToken, hpRestored, currentHP, maxHP }`.
-- **`onClearHeat`**: `{ triggeringToken, heatCleared, currentHeat }`.
+
+</details>
+
+<details><summary><b>HP & Heat Triggers</b></summary>
+
+- **`onPreHpChange`**: Before HP changes. `{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, showCard, userIdControl), modifyHpChange(newValue) }`. Can cancel or modify the HP value.
+- **`onHpGain`**: After HP increases. `{ triggeringToken, hpChange, currentHP, maxHP }`.
+- **`onHpLoss`**: After HP decreases. `{ triggeringToken, hpLost, currentHP }`.
+- **`onPreHeatChange`**: Before heat changes. `{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, showCard, userIdControl), modifyHeatChange(newValue) }`. Can cancel or modify the heat value.
+- **`onHeatGain`**: After heat increases. `{ triggeringToken, heatChange, currentHeat, inDangerZone }`.
+- **`onHeatLoss`**: After heat decreases. `{ triggeringToken, heatCleared, currentHeat }`.
 
 </details>
 
@@ -194,7 +203,7 @@ Code to run when a token is created on the scene.
 {
     triggers: ["onMove"],        // Array of trigger names
     enabled: true,               // Master toggle
-    forceSynchronous: false,     // Wait for resolution (required for onPreMove, onInitActivation, onInitAttack, onInitTechAttack, onInitCheck intercepts)
+    awaitActivationCompletion: false,     // Wait for resolution (required for onPreMove, onInitActivation, onInitAttack, onInitTechAttack, onInitCheck intercepts)
     triggerDescription: "",      // Header text for the reaction card
     effectDescription: "",       // Body text for the reaction card
     actionType: "Reaction",      // Reaction, Free Action, Quick, Full, Protocol, Other

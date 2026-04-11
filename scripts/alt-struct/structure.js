@@ -104,6 +104,13 @@ export async function npcOneStructStep(state) {
     state.data.desc = "Your mech is damaged beyond repair \u2013 it is destroyed. You may still exit it as normal.";
     state.data.result = undefined;
 
+    const onPreStructureStep = game.lancer.flowSteps?.get("lancer-automations:onPreStructure");
+    if (onPreStructureStep) {
+        const proceed = await onPreStructureStep(state);
+        if (!proceed)
+            return false;
+    }
+
     const onStructureStep = game.lancer.flowSteps?.get("lancer-automations:onStructure");
     if (onStructureStep)
         await onStructureStep(state);

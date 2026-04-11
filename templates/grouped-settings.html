@@ -1,24 +1,70 @@
 <form>
     {{#each items}}
-    <div class="form-group">
-        <label>{{this.label}}</label>
-        <div class="form-fields">
-            {{#if this.isBoolean}}
-                <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} />
-            {{/if}}
-            {{#if this.isNumber}}
-                <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" />
-            {{/if}}
-            {{#if this.isSelect}}
-                <select name="{{this.key}}">
-                    {{#each this.choices}}
-                    <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-                    {{/each}}
-                </select>
-            {{/if}}
+    {{#if this.isSection}}
+    <h2 style="border-bottom: 1px solid #782e22; margin: 10px 0 6px; font-size: 1em;">{{this.label}}</h2>
+    {{else if this.isTable}}
+    <table style="width:100%; border-collapse:collapse; margin: 6px 0;">
+        <thead>
+            <tr>
+                {{#each this.columns}}
+                <th style="text-align:left; padding:3px 6px; border-bottom:1px solid #782e22; font-size:0.85em; font-weight:bold;">{{this}}</th>
+                {{/each}}
+            </tr>
+        </thead>
+        <tbody>
+            {{#each this.rows}}
+            <tr style="border-bottom:1px solid rgba(0,0,0,0.08);">
+                <td style="padding:3px 6px; font-weight:bold;">{{this.label}}</td>
+                {{#each this.cells}}
+                <td style="padding:3px 6px;">
+                    {{#if this.isSelect}}
+                    <select name="{{this.name}}" style="width:100%;">
+                        {{#each this.choices}}
+                        <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                        {{/each}}
+                    </select>
+                    {{/if}}
+                    {{#if this.isBoolean}}
+                    <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} />
+                    {{/if}}
+                </td>
+                {{/each}}
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="form-group" style="margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold; flex: 1;">{{this.label}}</label>
+            <div style="flex-shrink: 0; margin-left: 8px;">
+                {{#if this.isBoolean}}
+                    <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} />
+                {{/if}}
+                {{#if this.isNumber}}
+                    <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" style="width: 80px;" />
+                {{/if}}
+                {{#if this.isString}}
+                    <input type="text" name="{{this.key}}" value="{{this.value}}" style="width: 200px;" />
+                {{/if}}
+                {{#if this.isFolder}}
+                    <file-picker name="{{this.key}}" type="folder" value="{{this.value}}"></file-picker>
+                {{/if}}
+                {{#if this.isColor}}
+                    <input type="color" name="{{this.key}}" value="{{this.value}}" style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
+                {{/if}}
+                {{#if this.isSelect}}
+                    <select name="{{this.key}}">
+                        {{#each this.choices}}
+                        <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                        {{/each}}
+                    </select>
+                {{/if}}
+            </div>
         </div>
-        {{#if this.hint}}<p class="notes">{{this.hint}}</p>{{/if}}
+        {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
     </div>
+    {{/if}}
     {{/each}}
 
     <footer class="sheet-footer flexrow">

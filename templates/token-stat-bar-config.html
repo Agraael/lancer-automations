@@ -1,56 +1,66 @@
 <form>
-    <div class="form-group" style="margin-bottom: 12px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
-        <label style="font-weight: bold; font-size: 1.1em;">Enable Custom Token Stat Bars</label>
-        <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}} />
-        <p class="notes">Replaces default token bars with the custom Lancer stat hub. Toggling this requires a reload (you will be prompted on save). Disabled when Bar Brawl is active.</p>
+    <div style="margin-bottom: 10px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold; font-size: 1.1em;">Enable Custom Token Stat Bars</label>
+            <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}} />
+        </div>
+        <p class="notes" style="margin: 4px 0 0; font-size: 0.85em; opacity: 0.8;">Requires reload when toggled. Disabled when Bar Brawl is active.</p>
     </div>
 
-    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Per-Token Defaults</h2>
-    <p class="notes" style="margin-bottom: 8px;">Defaults applied when a token doesn't have its own override. Per-token settings live in the Resources tab of the token configuration sheet.</p>
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">Per-Token Defaults</h2>
+    <p class="notes" style="margin-bottom: 6px; font-size: 0.85em; opacity: 0.8;">Applied when a token has no per-token override (set in the Resources tab).</p>
 
-    <div class="form-group">
-        <label>Hide Stat Bar by Default</label>
-        <input type="checkbox" name="defaultHidden" {{#if defaultHidden}}checked{{/if}} />
-        <p class="notes">Newly placed tokens (and any token without an explicit override) will not show the stat bar hub.</p>
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">Hide Stat Bar by Default</label>
+            <input type="checkbox" name="defaultHidden" {{#if defaultHidden}}checked{{/if}} />
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>Show Only In Combat by Default</label>
-        <input type="checkbox" name="defaultCombatOnly" {{#if defaultCombatOnly}}checked{{/if}} />
-        <p class="notes">Only display the stat bar hub while the token is part of an active combat encounter.</p>
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">Show Only In Combat by Default</label>
+            <input type="checkbox" name="defaultCombatOnly" {{#if defaultCombatOnly}}checked{{/if}} />
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>Default Row Height (px)</label>
-        <input type="number" min="0" step="1" name="defaultRowHeight" value="{{defaultRowHeight}}" placeholder="auto" />
-        <p class="notes">Override the height of each bar row. Leave blank for the automatic value (scales with grid size).</p>
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">Default Row Height (px)</label>
+            <input type="number" min="0" step="1" name="defaultRowHeight" value="{{defaultRowHeight}}" placeholder="auto" style="width: 80px;" />
+        </div>
+        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Leave blank for auto (scales with grid).</p>
     </div>
 
-    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Visibility Modes</h2>
-    <p class="notes" style="margin-bottom: 8px;">Who can see the stat bar hub. <strong>All</strong> uses the normal hover/control/target rules. <strong>Owners only</strong> hides the bars from non-owning players. <strong>None</strong> hides them entirely (controlled tokens still show for the owner).</p>
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">Visibility Modes</h2>
+    <p class="notes" style="margin-bottom: 6px; font-size: 0.85em; opacity: 0.8;"><b>All</b> = hover/control/target. <b>Owners</b> = only owners see bars. <b>None</b> = hidden (controlled still shows).</p>
 
-    <div class="form-group">
-        <label>Out of Combat</label>
-        <select name="visOutOfCombat">
-            {{#each visChoicesOut}}
-            <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-            {{/each}}
-        </select>
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">Out of Combat</label>
+            <select name="visOutOfCombat">
+                {{#each visChoicesOut}}
+                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                {{/each}}
+            </select>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>In Combat</label>
-        <select name="visInCombat">
-            {{#each visChoicesIn}}
-            <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-            {{/each}}
-        </select>
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">In Combat</label>
+            <select name="visInCombat">
+                {{#each visChoicesIn}}
+                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                {{/each}}
+            </select>
+        </div>
     </div>
 
-    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Bulk Apply</h2>
-    <div class="form-group">
+    <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">Bulk Apply</h2>
+    <div style="margin-bottom: 6px;">
         <button type="button" class="la-apply-defaults"><i class="fas fa-stamp"></i> Apply Defaults to Current Scene</button>
-        <p class="notes">Writes the per-token default values above onto every Lancer token on the active scene, replacing any existing per-token overrides.</p>
+        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Overwrites per-token settings on all Lancer tokens in the active scene.</p>
     </div>
 
     <footer class="sheet-footer flexrow">

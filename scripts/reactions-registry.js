@@ -10,7 +10,64 @@ export function registerExternalGeneralReactions(reactions) {
 }
 
 export function getDefaultItemReactionRegistry() {
-    const builtInDefaults = {};
+    const builtInDefaults = {
+        "ms_custom_paint_job": {
+            category: "System",
+            itemType: "mech_system",
+            reactions: [{
+                name: "Custom Paint Job",
+                triggers: ["onPreStructure"],
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: true,
+                autoActivate: true,
+                awaitActivationCompletion: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                    return triggerData.triggeringToken?.id === reactorToken.id
+                        && !item.system?.destroyed && !item.system?.disabled;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const result = await api.startChoiceCard({
+                        title: "CUSTOM PAINT JOB",
+                        item,
+                        originToken: reactorToken,
+                        choices: [
+                            { text: "Use", icon: "fas fa-dice-d6", callback: async () => {} },
+                            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
+                        ]
+                    });
+                    if (result?.choiceIdx !== 0)
+                        return;
+                    const roll = await new Roll("1d6").evaluate();
+                    await roll.toMessage({
+                        speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
+                        flavor: `<b>Custom Paint Job</b>`
+                    });
+                    await item.update({ "system.disabled": true });
+                    if (roll.total >= 6) {
+                        await reactorToken.actor.update({ "system.hp.value": 1 });
+                        ChatMessage.create({
+                            speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
+                            content: `<b>Custom Paint Job — Success!</b> The hit simply scratched the paint. Back to 1 HP.`
+                        });
+                        triggerData.cancelStructure(
+                            "Custom Paint Job — scratched the paint.",
+                            "CUSTOM PAINT JOB", false,
+                            null, null, null,
+                            { item, originToken: reactorToken }
+                        );
+                    } else {
+                        ChatMessage.create({
+                            speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
+                            content: `<b>Custom Paint Job — Failed!</b> Rolled ${roll.total}, needed 6.`
+                        });
+                    }
+                }
+            }]
+        }
+    };
     return { ...builtInDefaults, ...externalItemReactions };
 }
 
@@ -57,7 +114,7 @@ export function getDefaultGeneralReactionRegistry() {
                 isReaction: true,
                 checkReaction: true,
                 autoActivate: true,
-                forceSynchronous: true,
+                awaitActivationCompletion: true,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -468,7 +525,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                forceSynchronous: true,
+                awaitActivationCompletion: true,
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -790,7 +847,7 @@ export function getDefaultGeneralReactionRegistry() {
             isReaction: false,
             checkReaction: false,
             autoActivate: true,
-            forceSynchronous: true,
+            awaitActivationCompletion: true,
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,

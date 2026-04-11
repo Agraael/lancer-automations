@@ -1,6 +1,6 @@
 /*global game, canvas, Hooks, foundry */
 
-import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus } from '../misc-tools.js';
+import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus } from '../misc-tools.js';
 
 // ── LA_range_preview aura ────────────────────────────────────────────────────────
 
@@ -227,6 +227,202 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
     return null;
 }
 
+// ── Persistent range auras (Threat / Sensors / Max Range) ─────────────────────
+
+const AURA_DEFS = {
+    LA_max_Threat: {
+        settingColor: 'tah.auraColorThreat',
+        settingOpacity: 'tah.auraOpacityThreat',
+        settingDefault: 'tah.auraDefaultThreat',
+        defaultColor: '#9514ff',
+        lineDashSize: 15, lineGapSize: 15,
+        getRadius: (actor) => getActorMaxThreat(actor),
+    },
+    LA_Sensor: {
+        settingColor: 'tah.auraColorSensor',
+        settingOpacity: 'tah.auraOpacitySensor',
+        settingDefault: 'tah.auraDefaultSensor',
+        defaultColor: '#549eff',
+        lineDashSize: 11, lineGapSize: 11,
+        getRadius: (actor) => actor?.system?.sensor_range ?? (actor?.type === 'pilot' ? 5 : 10),
+    },
+    LA_max_range: {
+        settingColor: 'tah.auraColorRange',
+        settingOpacity: 'tah.auraOpacityRange',
+        settingDefault: 'tah.auraDefaultRange',
+        defaultColor: '#ff7b00',
+        lineDashSize: 13, lineGapSize: 13,
+        getRadius: (actor) => {
+            const ranges = getMaxWeaponRanges_WithBonus(actor);
+            return Math.max(0, ...Object.entries(ranges)
+                .filter(([t]) => t !== 'Threat')
+                .map(([, v]) => v));
+        },
+    },
+};
+
+function _buildPersistentTemplate(auraName) {
+    const def = AURA_DEFS[auraName];
+    if (!def) return null;
+    let color = def.defaultColor;
+    let opacity = 1;
+    try {
+        color = game.settings.get('lancer-automations', def.settingColor) || def.defaultColor;
+        opacity = game.settings.get('lancer-automations', def.settingOpacity) ?? 1;
+    } catch { /* use defaults */ }
+
+    return {
+        _v: 1,
+        unified: true,
+        name: auraName,
+        enabled: false,
+        onlyEnabledInCombat: false,
+        animation: true,
+        animationType: 'pulse',
+        pulseToMax: false,
+        animationWhenSelected: true,
+        animationSpeed: 0.1,
+        keyPressMode: 'DISABLED',
+        keyToPress: 'AltLeft',
+        lineType: 1,
+        lineWidth: 3,
+        lineColor: color,
+        lineOpacity: opacity,
+        lineDashSize: def.lineDashSize,
+        lineGapSize: def.lineGapSize,
+        fillType: 0,
+        fillColor: color,
+        fillOpacity: 0.1,
+        fillTexture: '',
+        fillTextureOffset: { x: 0, y: 0 },
+        fillTextureScale: { x: 100, y: 100 },
+        ownerVisibility: {
+            default: false, hovered: true, controlled: true,
+            dragging: true, targeted: false, turn: false,
+        },
+        nonOwnerVisibility: {
+            default: false, hovered: false, controlled: false,
+            dragging: false, targeted: false, turn: false,
+        },
+        effects: [],
+        macros: [],
+        terrainHeightTools: {
+            rulerOnDrag: 'NONE',
+            targetTokens: '',
+            onlyWhenAltPressed: false,
+        },
+    };
+}
+
+async function ensurePersistentAura(tokenDoc, auraName) {
+    if (!hasGAA()) return;
+    const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
+    if (auras.some(a => a.name === auraName)) return;
+    const template = _buildPersistentTemplate(auraName);
+    if (!template) return;
+    template.id = foundry.utils.randomID();
+    template.radius = '1';
+    await tokenDoc.setFlag('grid-aware-auras', 'auras', [...auras, template]);
+}
+
+function _getAuraFromCanvas(token, auraName) {
+    const auraLayer = canvas.gaaAuraLayer;
+    if (!auraLayer) return null;
+    const auras = auraLayer._auraManager?.getTokenAuras?.(token);
+    return auras?.find(a => a.config?.name === auraName) ?? null;
+}
+
+export function isPersistentAuraActive(token, auraName) {
+    const aura = _getAuraFromCanvas(token, auraName);
+    return aura?.config?.enabled === true;
+}
+
+export async function togglePersistentAura(token, auraName, radius) {
+    if (!hasGAA()) return;
+    let aura = _getAuraFromCanvas(token, auraName);
+    if (!aura) {
+        await ensurePersistentAura(token.document, auraName);
+        aura = _getAuraFromCanvas(token, auraName);
+        if (!aura) return;
+    }
+    const cfg = foundry.utils.deepClone(aura.config);
+    cfg.enabled = !cfg.enabled;
+    if (cfg.enabled) {
+        cfg.radiusCalculated = Math.max(1, radius);
+    }
+    aura.update(cfg, { force: true });
+}
+
+export async function setPersistentAura(token, auraName, enabled, radius) {
+    if (!hasGAA()) return;
+    let aura = _getAuraFromCanvas(token, auraName);
+    if (!aura) {
+        await ensurePersistentAura(token.document, auraName);
+        aura = _getAuraFromCanvas(token, auraName);
+        if (!aura) return;
+    }
+    const cfg = foundry.utils.deepClone(aura.config);
+    if (cfg.enabled === enabled && (!enabled || cfg.radiusCalculated === radius)) return;
+    cfg.enabled = enabled;
+    cfg.radiusCalculated = Math.max(1, radius);
+    aura.update(cfg, { force: true });
+}
+
+export function updatePersistentAuraRadii(token) {
+    if (!hasGAA()) return;
+    const actor = token?.actor;
+    if (!actor) return;
+    for (const [name, def] of Object.entries(AURA_DEFS)) {
+        if (!isPersistentAuraActive(token, name)) continue;
+        const aura = _getAuraFromCanvas(token, name);
+        if (!aura) continue;
+        const radius = def.getRadius(actor);
+        if (radius > 0 && aura.config.radiusCalculated !== radius) {
+            const cfg = foundry.utils.deepClone(aura.config);
+            cfg.radiusCalculated = radius;
+            aura.update(cfg, { force: true });
+        }
+    }
+}
+
+export function getAuraDefaultMode(auraName) {
+    const def = AURA_DEFS[auraName];
+    if (!def) return 'none';
+    try {
+        return game.settings.get('lancer-automations', def.settingDefault) || 'none';
+    } catch {
+        return 'none';
+    }
+}
+
+export async function applyDefaultAuras(token) {
+    if (!hasGAA()) return;
+    const actor = token?.actor;
+    if (!actor) return;
+    for (const [name, def] of Object.entries(AURA_DEFS)) {
+        const mode = getAuraDefaultMode(name);
+        if (mode === 'none') continue;
+        const inCombat = !!game.combat?.combatants?.find(c => c.token?.id === token.id);
+        if (mode === 'combat' && !inCombat) continue;
+        const radius = def.getRadius(actor);
+        if (radius > 0) {
+            await setPersistentAura(token, name, true, radius);
+        }
+    }
+}
+
+export async function disableCombatAuras(token) {
+    if (!hasGAA()) return;
+    for (const name of Object.keys(AURA_DEFS)) {
+        if (getAuraDefaultMode(name) !== 'combat') continue;
+        if (isPersistentAuraActive(token, name)) {
+            await setPersistentAura(token, name, false, 1);
+        }
+    }
+}
+
+export { AURA_DEFS };
+
 // ── Hook: ensure LA_range_preview aura on token creation ─────────────────────────
 
 Hooks.on('createToken', async (tokenDoc, _options, userId) => {
@@ -248,6 +444,8 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
  */
 export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering }) {
     if (!token)
+        return;
+    if (!game.settings.get('lancer-automations', 'tah.rangePreview'))
         return;
 
     if (isEntering) {

@@ -433,7 +433,9 @@ flowchart LR
 | `onTechHit` | After a tech attack hits |
 | `onTechMiss` | After a tech attack misses |
 | `onDamage` | After damage is rolled |
+| `onPreStructure` | Before structure roll, can cancel |
 | `onStructure` | After a structure roll |
+| `onPreStress` | Before overheat roll, can cancel |
 | `onStress` | After an overheat roll |
 | `onCheck` | After a stat check resolves (HULL, AGI, SYS, ENG) |
 | `onInitCheck` | At the very start of a stat check flow, can cancel |
@@ -447,9 +449,11 @@ flowchart LR
 | `onPreStatusRemoved` | Before a status is removed, can cancel |
 | `onStatusApplied` | When a status effect is applied to a token |
 | `onStatusRemoved` | When a status effect is removed from a token |
-| `onHeat` | When a token gains heat |
-| `onClearHeat` | When a token's heat is cleared |
-| `onHPRestored` | When a token regains HP |
+| `onPreHpChange` | Before HP changes, can cancel or modify |
+| `onPreHeatChange` | Before heat changes, can cancel or modify |
+| `onHeatGain` | When a token gains heat |
+| `onHeatLoss` | When a token's heat is cleared |
+| `onHpGain` | When a token regains HP |
 | `onHpLoss` | When a token loses HP |
 | `onDestroyed` | When a token is destroyed |
 | `onDeploy` | When a deployable is placed |
@@ -528,7 +532,7 @@ A built-in tool in the activation config that lets you browse your world's compe
 
 **Evaluate function**
 
-A code block that validates whether the activation should proceed. For timing-sensitive triggers, this should be synchronous (see Force Synchronous below). Return `true` to allow, `false` to skip.
+A code block that validates whether the activation should proceed. For timing-sensitive triggers, this should be synchronous (see Await Activation Completion below). Return `true` to allow, `false` to skip.
 
 ```javascript
 function(triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -556,9 +560,9 @@ Click an entry to expand its details, then click Activate to run it. In module s
 
 By default, activating an LID-based activation prints the item card to chat and then runs your code. Setting the mode to **instead** skips the chat card entirely.
 
-### Force Synchronous
+### Await Activation Completion
 
-For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `triggerData.flowState.injectBonus` **must not be async**. If you write an async function without enabling the **Force Synchronous** flag, the module will warn you and the timing-sensitive block will likely fail silently.
+For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `triggerData.flowState.injectBonus` **must not be async**. If you write an async function without enabling the **Await Activation Completion** flag, the module will warn you and the timing-sensitive block will likely fail silently.
 
 ### Movement Cancel & Redirect (onPreMove)
 
@@ -573,13 +577,28 @@ For example, when a token tries to move away, check if it's within an enemy's en
 
 ### Action & Status Cancellation (onInit / onPreStatus)
 
-Several other triggers allow you to cancel an operation before it completes. Any code that uses these functions **must not be async** (use **Force Synchronous**).
+Several other triggers allow you to cancel an operation before it completes. Any code that uses these functions **must not be async** (use **Await Activation Completion**).
 
-- `triggerData.cancelAction(reasonText?, title?, showCard?, userIdControl?)`: stop an item activation or general action in `onInitActivation`
-- `triggerData.cancelAttack(reasonText?, title?, showCard?, userIdControl?)`: stop an attack before the HUD appears in `onInitAttack`
-- `triggerData.cancelTechAttack(reasonText?, title?, showCard?, userIdControl?)`: stop a tech attack in `onInitTechAttack`
-- `triggerData.cancelCheck(reasonText?, title?, showCard?, userIdControl?)`: stop a stat check in `onInitCheck`
-- `triggerData.cancelChange(reasonText?, title?, showCard?, userIdControl?)`: stop a status effect from being applied or removed in `onPreStatusApplied` / `onPreStatusRemoved`
+- `triggerData.cancelAction(...)`: stop an item activation in `onInitActivation`
+- `triggerData.cancelAttack(...)`: stop an attack in `onInitAttack`
+- `triggerData.cancelTechAttack(...)`: stop a tech attack in `onInitTechAttack`
+- `triggerData.cancelCheck(...)`: stop a stat check in `onInitCheck`
+- `triggerData.cancelChange(...)`: stop a status effect in `onPreStatusApplied` / `onPreStatusRemoved`
+- `triggerData.cancelStructure(...)`: prevent structure roll in `onPreStructure`
+- `triggerData.cancelStress(...)`: prevent overheat roll in `onPreStress`
+- `triggerData.cancelHpChange(...)`: block HP change in `onPreHpChange`
+- `triggerData.cancelHeatChange(...)`: block heat change in `onPreHeatChange`
+
+All cancel functions accept `(reasonText?, title?, showCard?, userIdControl?)`.
+
+### HP & Heat Modification (onPreHpChange / onPreHeatChange)
+
+In addition to cancelling, you can modify the value being applied:
+
+- `triggerData.modifyHpChange(newValue)`: change the HP value in `onPreHpChange`
+- `triggerData.modifyHeatChange(newValue)`: change the heat value in `onPreHeatChange`
+
+For example, reduce incoming damage by half, or cap heat gain at a certain threshold.
 
 ![Choice card GM control](doc/img/choice-gm-control.png)
 
@@ -907,6 +926,32 @@ A custom [Token Tooltip Alt](https://foundryvtt.com/packages/token-tooltip-alt) 
 ![custom_bar_brawl](doc/img/custom_bar_brawl.png)
 
 I made my own custom Bar Brawl, tailored to Lancer. You can toggle it from the module settings — you'll need to deactivate Bar Brawl for it to run.
+
+### Wreck System
+
+Unlike Lancer QoL's wreck system which swaps the token image, this one spawns a new deployable actor token on death. That wreck token can be resurrected from the TAH (Utility > Combat > Resurrect), which deletes the wreck and respawns the original unit.
+
+Per-category wreck mode (Token or Tile) and terrain spawning can be configured independently for Mech, Human, Monstrosity, and Biological types. On each prototype token's L.A tab, you can override the wreck image, effect, and sound — if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
+
+You can point to your own custom wreck assets folder in the Wreck Automation settings. The expected directory structure is:
+
+```
+wrecks/
+├── s1/                    # Size 1 wreck images
+│   ├── human/             # Human-specific
+│   └── monstrosity/       # Monstrosity-specific
+├── s2/                    # Size 2 wreck images
+│   └── squad/
+├── s3/                    # Size 3 wreck images
+├── effects/               # Explosion effects
+│   └── biological/        # Biological-specific
+└── audio/                 # Explosion sounds
+    ├── biological/
+    ├── human/
+    └── monstrosity/
+```
+
+The built-in folder ships with more sounds and effects than the original Lancer QoL set.
 
 ### StatusFX
 

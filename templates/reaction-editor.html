@@ -6,11 +6,15 @@
         <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
             <span>General Activation</span>
-            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item required)</span>
+            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item
+                required)</span>
         </label>
-        <div style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; font-size: 0.85em;">
-            <a class="clipboard-copy" title="Copy activation to clipboard" style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-copy"></i> Copy</a>
-            <a class="clipboard-paste" title="Load activation from clipboard" style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-paste"></i> Paste</a>
+        <div
+            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; font-size: 0.85em;">
+            <a class="clipboard-copy" title="Copy activation to clipboard"
+                style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-copy"></i> Copy</a>
+            <a class="clipboard-paste" title="Load activation from clipboard"
+                style="color: var(--primary-color); cursor: pointer;"><i class="fas fa-paste"></i> Paste</a>
         </div>
     </div>
 
@@ -24,7 +28,8 @@
             </div>
             <div style="flex: 3;">
                 <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
-                <input type="text" name="commentsGeneral" value="{{comments}}" placeholder="Brief notes for the list...">
+                <input type="text" name="commentsGeneral" value="{{comments}}"
+                    placeholder="Brief notes for the list...">
                 <p class="notes">Shown in the manager list.</p>
             </div>
         </div>
@@ -73,8 +78,9 @@
             <a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
                 style="margin-left: 8px; color: var(--primary-color); cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
                     class="fas fa-eye"></i></a>
-            <a class="find-item-btn" title="Find Item" style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i
-                    class="fas fa-search"></i> Item Finder</a>
+            <a class="find-item-btn" title="Find Item"
+                style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i class="fas fa-search"></i>
+                Item Finder</a>
         </span>
         <a class="find-deployable-btn" title="Find Deployable LID"
             style="color: var(--primary-color); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
@@ -87,8 +93,8 @@
         <label>Action Path</label>
         <div class="form-fields">
             <input type="text" name="reactionPath" value="{{reactionPath}}">
-            <a class="find-action-btn" title="Find Action" style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i
-                    class="fas fa-bolt"></i></a>
+            <a class="find-action-btn" title="Find Action"
+                style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i class="fas fa-bolt"></i></a>
         </div>
         <p class="notes">Path within <code>system</code> to the action data. Leave empty to use the item itself.
             (system)</p>
@@ -109,7 +115,7 @@
 
     <!-- Custom Trigger Description -->
     <div class="form-group">
-        <label>Trigger Description <span class="optional">(optional)</span></label>
+        <label>Trigger Description</label>
         <div class="form-fields">
             <textarea name="triggerDescription" rows="2"
                 placeholder="When this reaction triggers...">{{triggerDescription}}</textarea>
@@ -119,7 +125,7 @@
 
     <!-- Custom Effect Description -->
     <div class="form-group">
-        <label>Effect Description <span class="optional">(optional)</span></label>
+        <label>Effect Description</label>
         <div class="form-fields">
             <textarea name="effectDescription" rows="2"
                 placeholder="What this reaction does...">{{effectDescription}}</textarea>
@@ -167,15 +173,15 @@
                 <div class="options-grid">
                     <!-- Check Reaction -->
                     <label class="checkbox {{#unless (eq actionType 'Reaction')}}hidden{{/unless}}"
-                        id="checkReactionContainer"
-                        title="Block activation if the token has no reaction available.">
+                        id="checkReactionContainer" title="Block activation if the token has no reaction available.">
                         <input type="checkbox" name="checkReaction" id="checkReaction" {{#if
                             checkReaction}}checked{{/if}}>
                         <span>Check Reaction</span>
                     </label>
 
                     <!-- Check Usage (item-based only) -->
-                    <label class="checkbox item-only" title="Block activation if the item is unloaded, out of uses, or uncharged."
+                    <label class="checkbox item-only"
+                        title="Block activation if the item is unloaded, out of uses, or uncharged."
                         style="{{#if isGeneral}}display:none{{/if}}">
                         <input type="checkbox" name="checkUsage" id="checkUsage" {{#if checkUsage}}checked{{/if}}>
                         <span>Check Usage</span>
@@ -187,12 +193,13 @@
                         <span>Auto Activate</span>
                     </label>
 
-                    <!-- Force Synchronous (only when Auto Activate is checked) -->
+                    <!-- Await Activation Completion (only when Auto Activate is checked) -->
                     <label class="checkbox force-sync-option"
                         title="Run activation code synchronously. Required for cancelAction/cancelAttack/cancelTechAttack/cancelCheck in their respective onInit triggers, and cancelTriggeredMove in onPreMove. Also ensures bonuses like Accuracy are applied before rolls begin."
                         {{#unless autoActivate}}style="display:none" {{/unless}}>
-                        <input type="checkbox" name="forceSynchronous" {{#if forceSynchronous}}checked{{/if}}>
-                        <span>Force Sync</span>
+                        <input type="checkbox" name="awaitActivationCompletion" {{#if
+                            awaitActivationCompletion}}checked{{/if}}>
+                        <span>Await Activation</span>
                     </label>
 
                     <!-- React to Self -->
@@ -246,48 +253,48 @@
         <div class="column-right">
             <div class="panel-section full-height">
                 <h3 class="panel-header">Triggers</h3>
-                <div class="trigger-grid-container">
+                <div class="trigger-groups-container">
                     {{#each triggers}}
-                    <label class="checkbox trigger-item" title="{{lookup ../triggerHelp @key}}">
-                        <input type="checkbox" name="trigger.{{@key}}" {{#if (eq this true)}}checked{{/if}}>
-                        <span class="trigger-label">{{@key}}</span>
-                    </label>
+                    <div class="trigger-group">
+                        <div class="trigger-group-header" data-group="{{@index}}">
+                            <i class="fas fa-caret-down trigger-group-caret"></i>
+                            <span>{{this.label}}</span>
+                            <span class="trigger-group-count"></span>
+                        </div>
+                        <div class="trigger-group-body" data-group="{{@index}}">
+                            {{#each this.items}}
+                            <label class="checkbox trigger-item" title="{{lookup ../../triggerHelp this.key}}">
+                                <input type="checkbox" name="trigger.{{this.key}}" {{#if this.checked}}checked{{/if}}>
+                                <span class="trigger-label">{{this.key}}</span>
+                            </label>
+                            {{/each}}
+                        </div>
+                    </div>
                     {{/each}}
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Evaluate Function -->
-    <div class="form-group stacked">
-        <label>Evaluate Function <a class="expand-editor" data-target="evaluate" title="Expand Editor"><i
-                    class="fas fa-expand"></i></a></label>
-        <div class="form-fields">
-            <textarea name="evaluate" rows="10"
-                style="font-family: monospace; white-space: pre;">{{evaluate}}</textarea>
-        </div>
-        <p class="notes">
-            JavaScript code to evaluate if the reaction should trigger.<br>
-            Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>
-            (null for general), <code>activationName</code>, <code>api</code>.<br>
-            Must return <code>true</code> or <code>false</code>.
-        </p>
-
-        <details style="margin-top: 10px;">
-            <summary style="cursor: pointer; font-weight: bold; color: #444;">Trigger Data Reference</summary>
-            <div class="trigger-help"
-                style="font-size: 0.8em; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; margin-top: 5px; display: grid; grid-template-columns: 1fr; gap: 4px; border: 1px solid #ccc;">
-                {{#each triggerHelp}}
-                <div style="padding: 2px;"><strong>{{@key}}:</strong> <code
-                        style="background: none; border: none; font-family: monospace; color: #000;">{{this}}</code>
-                </div>
-                {{/each}}
-            </div>
-        </details>
+    <div style="margin-bottom: 6px; text-align: right;">
+        <a id="open-trigger-ref" style="font-size: 0.8em; cursor: pointer; color: var(--primary-color); text-decoration: none;"><i class="fas fa-book"></i> Trigger Data Reference</a>
     </div>
 
-    <!-- Custom Activation -->
-    <div class="form-group">
+    <!-- Evaluate Function -->
+    <details class="code-section" open>
+        <summary class="code-section-header">Evaluate Function <a class="expand-editor" data-target="evaluate" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <div class="form-group stacked" style="margin-top: 4px;">
+            <div class="form-fields">
+                <textarea name="evaluate" rows="8" style="font-family: monospace; white-space: pre;">{{evaluate}}</textarea>
+            </div>
+            <p class="notes">
+                Must return <code>true</code> or <code>false</code>. Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code>.
+            </p>
+        </div>
+    </details>
+
+    <!-- Activation Type -->
+    <div class="form-group" style="margin-top: 6px;">
         <label>Activation Type</label>
         <div class="form-fields" style="display: flex; gap: 8px; align-items: center;">
             <select name="activationType" id="activationType" style="flex: 1;">
@@ -301,8 +308,7 @@
                 <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Flow</option>
             </select>
         </div>
-        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run
-            after or instead of flow.</p>
+        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run after or instead of flow.</p>
     </div>
 
     <!-- Macro Name (shown when activationType = macro) -->
@@ -311,64 +317,41 @@
         <div class="form-fields">
             <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
         </div>
-        <p class="notes">Name of the macro to execute.</p>
-        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available arguments:</strong> <code>triggerType</code>, <code>triggerData</code>,
-            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
-            <code>api</code>
-        </p>
+        <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
     </div>
 
     <!-- Activation Code (shown when activationType = code) -->
-    <div class="form-group stacked activation-code" style="display:none;">
-        <label>Activation Code <a class="expand-editor" data-target="activationCode" title="Expand Editor"><i
-                    class="fas fa-expand"></i></a></label>
-        <div class="form-fields">
-            <textarea name="activationCode" rows="6"
-                style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
+    <details class="code-section activation-code" style="display:none;">
+        <summary class="code-section-header">Activation Code <a class="expand-editor" data-target="activationCode" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <div class="form-group stacked" style="margin-top: 4px;">
+            <div class="form-fields">
+                <textarea name="activationCode" rows="6" style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
+            </div>
+            <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
         </div>
-        <p class="notes">JavaScript code to execute.</p>
-        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>triggerType</code>, <code>triggerData</code>,
-            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
-            <code>api</code>
-        </p>
-    </div>
+    </details>
 
     <!-- onInit Code -->
-    <div class="form-group stacked">
-        <label>onInit Code <span class="optional">(optional)</span> <a class="expand-editor" data-target="onInit"
-                title="Expand Editor"><i class="fas fa-expand"></i></a></label>
-        <div class="form-fields">
-            <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
+    <details class="code-section">
+        <summary class="code-section-header">onInit Code <a class="expand-editor" data-target="onInit" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <div class="form-group stacked" style="margin-top: 4px;">
+            <div class="form-fields">
+                <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
+            </div>
+            <p class="notes">Runs when a token enters the scene. Variables: <code>token</code>, <code>item</code>, <code>api</code></p>
         </div>
-        <p class="notes">
-            JavaScript code executed when a token is created on the scene.<br>
-            Useful for applying passive effects or setting up initial state.
-        </p>
-        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>token</code>, <code>item</code> (null for general),
-            <code>api</code>
-        </p>
-    </div>
+    </details>
 
     <!-- onMessage Code -->
-    <div class="form-group stacked">
-        <label>onMessage Code <span class="optional">(optional)</span> <a class="expand-editor" data-target="onMessage"
-                title="Expand Editor"><i class="fas fa-expand"></i></a></label>
-        <div class="form-fields">
-            <textarea name="onMessage" rows="6" style="font-family: monospace; white-space: pre;">{{onMessage}}</textarea>
+    <details class="code-section">
+        <summary class="code-section-header">onMessage Code <a class="expand-editor" data-target="onMessage" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <div class="form-group stacked" style="margin-top: 4px;">
+            <div class="form-fields">
+                <textarea name="onMessage" rows="6" style="font-family: monospace; white-space: pre;">{{onMessage}}</textarea>
+            </div>
+            <p class="notes">Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables: <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
         </div>
-        <p class="notes">
-            JavaScript code executed when a message is sent to this reactor via <code>triggerData.sendMessageToReactor(data, userId)</code>.<br>
-            Useful for cross-client communication between reactions.
-        </p>
-        <p class="notes" style="font-size: 0.85em; margin-top: 4px; color: #666;">
-            <strong>Available variables:</strong> <code>triggerType</code>, <code>data</code>,
-            <code>reactorToken</code>, <code>item</code> (null for general), <code>activationName</code>,
-            <code>api</code>
-        </p>
-    </div>
+    </details>
 
     <footer class="sheet-footer flexrow">
         <button type="submit">
@@ -387,6 +370,57 @@
         background: var(--primary-color);
         color: #fff;
         border-bottom: none;
+    }
+
+    /* ===== Collapsible Code Sections ===== */
+    .code-section {
+        margin-bottom: 6px;
+        border: 1px solid rgba(120, 46, 34, 0.2);
+        border-radius: 4px;
+    }
+
+    .code-section-header {
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 0.95em;
+        padding: 5px 8px;
+        color: #333;
+        user-select: none;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .code-section-header::-webkit-details-marker {
+        display: none;
+    }
+
+    .code-section-header::before {
+        content: '\f0da';
+        font-family: 'Font Awesome 5 Free';
+        font-weight: 900;
+        font-size: 0.8em;
+        color: var(--primary-color);
+        transition: transform 0.15s ease;
+        display: inline-block;
+        width: 10px;
+    }
+
+    .code-section[open] > .code-section-header::before {
+        transform: rotate(90deg);
+    }
+
+    .code-section-header:hover {
+        background: color-mix(in srgb, var(--primary-color), transparent 95%);
+    }
+
+    .code-section > .form-group {
+        padding: 0 8px 6px;
+    }
+
+    .code-section .expand-editor {
+        margin-left: auto;
     }
 
     #reaction-editor .window-header .window-title {
@@ -485,19 +519,71 @@
     }
 
     /* ===== Triggers ===== */
-    .trigger-grid-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-        gap: 4px;
+    .trigger-groups-container {
         flex: 1;
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid rgba(120, 46, 34, 0.2);
+        border-radius: 3px;
+        padding: 2px;
+    }
+
+    .trigger-group {
+        margin-bottom: 2px;
+    }
+
+    .trigger-group-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        font-size: 0.8em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--primary-color);
+        border-bottom: 1px solid color-mix(in srgb, var(--primary-color), transparent 80%);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .trigger-group-header:hover {
+        background: color-mix(in srgb, var(--primary-color), transparent 95%);
+    }
+
+    .trigger-group-caret {
+        transition: transform 0.15s ease;
+        font-size: 0.9em;
+    }
+
+    .trigger-group.collapsed .trigger-group-caret {
+        transform: rotate(-90deg);
+    }
+
+    .trigger-group.collapsed .trigger-group-body {
+        display: none;
+    }
+
+    .trigger-group-count {
+        font-weight: normal;
+        font-size: 0.85em;
+        opacity: 0.6;
+        margin-left: auto;
+    }
+
+    .trigger-group-body {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 2px;
+        padding: 3px 0 3px 14px;
     }
 
     .trigger-item {
         display: flex;
         align-items: center;
         white-space: nowrap;
-        font-size: 0.85em;
-        padding: 3px 4px;
+        font-size: 0.82em;
+        padding: 2px 4px;
         border-radius: 4px;
         transition: background 0.15s ease;
     }

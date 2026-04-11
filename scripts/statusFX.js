@@ -121,7 +121,8 @@ class StatusFXConfig extends FormApplication {
                 { key: 'burn',        label: 'Auto Burn icon (burn > 0)',      enabled: config.auto_burn },
                 { key: 'overshield',  label: 'Auto Overshield icon (OS > 0)',  enabled: config.auto_overshield },
                 { key: 'infection',   label: 'Auto Infection icon (infection > 0)', enabled: config.auto_infection },
-            ]
+            ],
+            removeStatusesOnDeath: config.removeStatusesOnDeath ?? false
         };
     }
 
@@ -957,6 +958,23 @@ function onUpdateActor(actor, change, _options, userId) {
         autoStatusOvershield(actor);
     if (change.system?.infection !== undefined)
         autoStatusInfection(actor);
+    if (change.system?.structure?.value !== undefined)
+        removeStatusesOnDeath(actor);
+}
+
+async function removeStatusesOnDeath(actor) {
+    const config = getConfig();
+    if (!config.removeStatusesOnDeath)
+        return;
+    if (actor.system.structure.value > 0)
+        return;
+
+    const effects = actor.effects.filter(e => !e.getFlag('core', 'overlay'));
+    if (effects.length === 0)
+        return;
+
+    console.log(`${MODULE_ID} | Removing ${effects.length} status(es) from "${actor.name}" (structure 0)`);
+    await actor.deleteEmbeddedDocuments('ActiveEffect', effects.map(e => e.id));
 }
 
 // ---------------------------------------------------------------------------

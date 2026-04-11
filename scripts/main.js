@@ -73,6 +73,7 @@ import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorShee
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
 import { registerSettingsMenus } from "./settingsMenus.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
+import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
 import './filters/customFilters.js';
 import { checkCompatibility } from "./checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
@@ -318,6 +319,15 @@ Hooks.on('lancer-automations.runOnMessage', ({ token, itemLid, reactionPath, act
 });
 
 function evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat) {
+    // Skip if this general reaction already triggered a cancel on a previous pass
+    const cancelledBy = data._cancelledBy;
+    if (cancelledBy?.length > 0) {
+        const isCancelled = cancelledBy.some(c =>
+            c.tokenId === token.id && c.reactionName === reactionName
+        );
+        if (isCancelled)
+            return null;
+    }
     const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
     if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
         if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
@@ -662,6 +672,16 @@ async function checkReactions(triggerType, data) {
                         continue;
                     }
 
+                    // Skip if this reaction already triggered a cancel on a previous pass
+                    const cancelledBy = enrichedData._cancelledBy;
+                    if (cancelledBy?.length > 0) {
+                        const isCancelled = cancelledBy.some(c =>
+                            c.tokenId === token.id && c.lid === lid && c.reactionPath === (reaction.reactionPath || "")
+                        );
+                        if (isCancelled)
+                            continue;
+                    }
+
                     let shouldTrigger = false;
 
                     if (typeof reaction.evaluate === 'function') {
@@ -692,12 +712,18 @@ async function checkReactions(triggerType, data) {
 
                     if (shouldTrigger) {
                         const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, item, reaction, activationName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, item, reaction, activationName), sendMessageToReactor: _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType) };
+                        // Inject reactor identity on all cancel functions so _buildCancelFn can record who cancelled
+                        const reactorIdentity = { tokenId: token.id, lid, reactionPath: reaction.reactionPath || "" };
+                        for (const key of Object.keys(reactionTriggerData)) {
+                            if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function')
+                                reactionTriggerData[key]._reactorIdentity = reactorIdentity;
+                        }
                         if (reaction.autoActivate) {
                             try {
                                 const p = activateReaction(triggerType, reactionTriggerData, token, item, activationName, reaction, false);
                                 if (p instanceof Promise) {
                                     p.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
-                                    if (reaction.forceSynchronous !== false) {
+                                    if (reaction.awaitActivationCompletion !== false) {
                                         reactionsPromises.push(p);
                                     }
                                 }
@@ -728,12 +754,17 @@ async function checkReactions(triggerType, data) {
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
                 const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
+                const reactorIdentity = { tokenId: token.id, reactionName };
+                for (const key of Object.keys(reactionTriggerData)) {
+                    if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function')
+                        reactionTriggerData[key]._reactorIdentity = reactorIdentity;
+                }
                 if (reaction.autoActivate) {
                     try {
                         const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
                         if (p instanceof Promise) {
                             p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
-                            if (reaction.forceSynchronous !== false) {
+                            if (reaction.awaitActivationCompletion !== false) {
                                 reactionsPromises.push(p);
                             }
                         }
@@ -759,12 +790,17 @@ async function checkReactions(triggerType, data) {
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
                 const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
+                const reactorIdentity = { tokenId: token.id, reactionName };
+                for (const key of Object.keys(reactionTriggerData)) {
+                    if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function')
+                        reactionTriggerData[key]._reactorIdentity = reactorIdentity;
+                }
                 if (reaction.autoActivate) {
                     try {
                         const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
                         if (p instanceof Promise) {
                             p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
-                            if (reaction.forceSynchronous !== false) {
+                            if (reaction.awaitActivationCompletion !== false) {
                                 reactionsPromises.push(p);
                             }
                         }
@@ -1087,7 +1123,7 @@ function registerSettings() {
         name: 'Infection Damage Integration',
         hint: 'Adds Infection as a fully integrated Lancer damage type. Requires reload.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: true,
         requiresReload: true
@@ -1149,7 +1185,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enableMovementCapDetection', {
         name: 'Movement Cap Detection [beta]',
-        hint: 'Cancel drag movement exceeding the token\'s movement cap. Requires Elevation Ruler.',
+        hint: 'Cancel drag movement exceeding the token\'s movement cap. Works best with Elevation Ruler.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1185,6 +1221,69 @@ function registerSettings() {
         type: Number,
         range: { min: 0, max: 1, step: 0.05 },
         default: 1
+    });
+
+    // ── Wreck system ──
+    game.settings.register('lancer-automations', 'enableWrecks', {
+        name: 'Wreck Automation',
+        hint: 'Automate wrecking on structure reaching 0.',
+        scope: 'world', config: false, type: Boolean, default: true,
+    });
+    // Per-category wreck mode + terrain.
+    const wreckModeChoices = { token: 'Token', tile: 'Tile' };
+    for (const cat of ['mech', 'human', 'monstrosity', 'biological']) {
+        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+        game.settings.register('lancer-automations', `wreckMode_${cat}`, {
+            name: `${label}: Wreck Mode`,
+            hint: `How ${label} wrecks are placed.`,
+            scope: 'world', config: false, type: String, default: 'token',
+            choices: wreckModeChoices,
+        });
+        game.settings.register('lancer-automations', `wreckTerrain_${cat}`, {
+            name: `${label}: Spawn Terrain`,
+            hint: `Spawn difficult terrain when a ${label} is wrecked.`,
+            scope: 'world', config: false, type: Boolean, default: cat === 'mech' || cat === 'monstrosity',
+        });
+    }
+    game.settings.register('lancer-automations', 'wreckAssetsPath', {
+        name: 'Wreck Assets Folder',
+        hint: 'Custom folder for wreck images/effects/audio. Leave blank for built-in.',
+        scope: 'world', config: false, type: String, default: '',
+    });
+    game.settings.register('lancer-automations', 'enableRemoveFromCombat', {
+        name: 'Remove Wrecks from Combat',
+        hint: 'Remove wrecked tokens from the combat tracker.',
+        scope: 'world', config: false, type: Boolean, default: true,
+    });
+    game.settings.register('lancer-automations', 'enableWreckAnimation', {
+        name: 'Wreck Explosion Effects',
+        hint: 'Play explosion effects when tokens are wrecked.',
+        scope: 'world', config: false, type: Boolean, default: true,
+    });
+    game.settings.register('lancer-automations', 'enableWreckAudio', {
+        name: 'Wreck Explosion Audio',
+        hint: 'Play explosion sounds when tokens are wrecked.',
+        scope: 'world', config: false, type: Boolean, default: true,
+    });
+    game.settings.register('lancer-automations', 'squadLostOnDeath', {
+        name: 'Squad MIA on Death',
+        hint: 'Apply MIA status to dead squads.',
+        scope: 'world', config: false, type: Boolean, default: true,
+    });
+    game.settings.register('lancer-automations', 'wreckTerrainType', {
+        name: 'Wreck Terrain Type',
+        hint: 'Terrain Height Tools terrain type ID for wreck difficult terrain.',
+        scope: 'world', config: false, type: String, default: '',
+    });
+    game.settings.register('lancer-automations', 'disableHumanDeathSound', {
+        name: 'Disable Human Death Sound',
+        hint: 'Mute wreck sounds for human/pilot/squad deaths.',
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
+    game.settings.register('lancer-automations', 'enableWipOnDeath', {
+        name: 'Remove Statuses on Death',
+        hint: 'Clear all status effects when structure reaches zero.',
+        scope: 'world', config: false, type: Boolean, default: false,
     });
 
     // ── Debug ──
@@ -1383,6 +1482,8 @@ async function handleSocketEvent({ action, payload }) {
         if (target?.actor) {
             target.actor.deleteEmbeddedDocuments("ActiveEffect", [payload.effectID]);
         }
+    } else if (action === 'preLoadImageForAll') {
+        if (payload) await preLoadImageForAll(payload);
     } else if (action === 'moveTokens') {
         if (!game.user.isGM)
             return;
@@ -2104,6 +2205,48 @@ async function onDamageStep(state) {
     return true;
 }
 
+async function onPreStructureStep(state) {
+    state = injectExtraDataUtility(state);
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const remainingStructure = actor?.system?.structure?.value ?? 0;
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
+
+    let cancelStructureTriggered = false;
+    const cancelStructure = _buildCancelFn({
+        setFlag: () => {
+            cancelStructureTriggered = true;
+        },
+        cancelledBy: state.data._cancelledBy,
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.('StructureFlow');
+            if (flowClass) {
+                const newFlow = new flowClass(state.actor?.uuid || state.uuid, { ...state.data });
+                await newFlow.begin();
+            }
+        },
+        defaultReason: "Structure damage has been prevented.",
+        defaultTitle: "STRUCTURE PREVENTED",
+    });
+
+    await handleTrigger('onPreStructure', {
+        triggeringToken: token,
+        remainingStructure,
+        cancelStructure,
+        _cancelledBy: state.data._cancelledBy,
+        flowState: state
+    });
+
+    if (cancelStructureTriggered) {
+        await cancelStructure.wait();
+        return false;
+    }
+    return true;
+}
+
 async function onStructureStep(state) {
     state = injectExtraDataUtility(state);
     const actor = state.actor;
@@ -2112,6 +2255,48 @@ async function onStructureStep(state) {
     const rollResult = state.data?.result?.roll?.total;
     const triggerData = { triggeringToken: token, remainingStructure, rollResult };
     await handleTrigger('onStructure', triggerData);
+    return true;
+}
+
+async function onPreStressStep(state) {
+    state = injectExtraDataUtility(state);
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const remainingStress = actor?.system?.stress?.value ?? 0;
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
+
+    let cancelStressTriggered = false;
+    const cancelStress = _buildCancelFn({
+        setFlag: () => {
+            cancelStressTriggered = true;
+        },
+        cancelledBy: state.data._cancelledBy,
+        getIgnoreCallback: () => async () => {
+            const flowClass = game.lancer?.flows?.get?.('OverheatFlow');
+            if (flowClass) {
+                const newFlow = new flowClass(state.actor?.uuid || state.uuid, { ...state.data });
+                await newFlow.begin();
+            }
+        },
+        defaultReason: "Stress damage has been prevented.",
+        defaultTitle: "STRESS PREVENTED",
+    });
+
+    await handleTrigger('onPreStress', {
+        triggeringToken: token,
+        remainingStress,
+        cancelStress,
+        _cancelledBy: state.data._cancelledBy,
+        flowState: state
+    });
+
+    if (cancelStressTriggered) {
+        await cancelStress.wait();
+        return false;
+    }
     return true;
 }
 
@@ -2274,7 +2459,9 @@ async function onCheckStep(state) {
  * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
  * @returns {Function & { wait: () => Promise<any>|null }}
  */
-function _buildCancelFn({ setFlag, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null }) {
+function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null }) {
+    if (!cancelledBy)
+        console.error('lancer-automations | _buildCancelFn: missing cancelledBy array');
     const cancelledReasons = [];
     const preConfirms = [];
     let cardPending = false;
@@ -2282,6 +2469,10 @@ function _buildCancelFn({ setFlag, getIgnoreCallback, defaultReason, defaultTitl
 
     const fn = (reasonText = defaultReason, title = defaultTitle, showCard = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
         setFlag();
+        if (!fn._reactorIdentity && !fn._engineCancel)
+            console.error('lancer-automations | cancel called without _reactorIdentity');
+        if (fn._reactorIdentity && cancelledBy)
+            cancelledBy.push(fn._reactorIdentity);
         if (!showCard)
             return;
         if (reasonText)
@@ -2375,33 +2566,32 @@ async function stunnedAutoFailStep(state) {
 
 async function onInitCheckStep(state) {
     state = injectExtraDataUtility(state);
-    if (state.data?._ignoredCancel)
-        return true;
-
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const statName = state.data?.title || 'Unknown';
     const targetVal = state.la_extraData?.targetVal ?? 10;
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
 
     let cancelCheckTriggered = false;
     const cancelCheck = _buildCancelFn({
         setFlag: () => {
             cancelCheckTriggered = true;
         },
+        cancelledBy: state.data._cancelledBy,
         getIgnoreCallback: () => async () => {
             const flowClass = game.lancer?.flows?.get?.(state.name);
             if (flowClass) {
                 let newFlow;
                 if (state.name === "StatRollFlow") {
-                    newFlow = new flowClass(state.actor, state.data);
+                    newFlow = new flowClass(state.actor, { ...state.data });
                 } else {
                     ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
                     return;
                 }
-                if (newFlow.state) {
-                    newFlow.state.data._ignoredCancel = true;
-                    await newFlow.begin();
-                }
+                await newFlow.begin();
             }
         },
         defaultReason: "This check has been canceled.",
@@ -2414,6 +2604,7 @@ async function onInitCheckStep(state) {
         checkAgainstToken: state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null,
         targetVal: targetVal,
         cancelCheck,
+        _cancelledBy: state.data._cancelledBy,
         flowState: state
     });
 
@@ -2429,14 +2620,15 @@ async function onInitCheckStep(state) {
 }
 
 async function onInitAttackStep(state) {
-    if (state.data?._ignoredCancel)
-        return true;
-
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
     const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
 
     const actionData = {
         type: state.data?.type || "attack",
@@ -2455,22 +2647,20 @@ async function onInitAttackStep(state) {
         setFlag: () => {
             cancelAttackTriggered = true;
         },
+        cancelledBy: state.data._cancelledBy,
         getIgnoreCallback: () => async () => {
             const flowClass = game.lancer?.flows?.get?.(state.name);
             if (flowClass) {
                 let newFlow;
                 if (state.name === "WeaponAttackFlow") {
-                    newFlow = new flowClass(state.item, state.data);
+                    newFlow = new flowClass(state.item, { ...state.data });
                 } else if (state.name === "BasicAttackFlow") {
-                    newFlow = new flowClass(state.item || state.actor, state.data);
+                    newFlow = new flowClass(state.item || state.actor, { ...state.data });
                 } else {
                     ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
                     return;
                 }
-                if (newFlow.state) {
-                    newFlow.state.data._ignoredCancel = true;
-                    await newFlow.begin();
-                }
+                await newFlow.begin();
             }
         },
         defaultReason: "This attack has been canceled.",
@@ -2485,6 +2675,7 @@ async function onInitAttackStep(state) {
         tags: actionData.tags,
         actionData,
         cancelAttack,
+        _cancelledBy: state.data._cancelledBy,
         flowState: state
     });
 
@@ -2500,14 +2691,15 @@ async function onInitAttackStep(state) {
 }
 
 async function onInitTechAttackStep(state) {
-    if (state.data?._ignoredCancel)
-        return true;
-
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const techItem = item;
     const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
 
     const actionData = {
         type: state.data?.type || "tech",
@@ -2526,20 +2718,18 @@ async function onInitTechAttackStep(state) {
         setFlag: () => {
             cancelTechAttackTriggered = true;
         },
+        cancelledBy: state.data._cancelledBy,
         getIgnoreCallback: () => async () => {
             const flowClass = game.lancer?.flows?.get?.(state.name);
             if (flowClass) {
                 let newFlow;
                 if (state.name === "TechAttackFlow") {
-                    newFlow = new flowClass(state.item, state.data);
+                    newFlow = new flowClass(state.item, { ...state.data });
                 } else {
                     ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
                     return;
                 }
-                if (newFlow.state) {
-                    newFlow.state.data._ignoredCancel = true;
-                    await newFlow.begin();
-                }
+                await newFlow.begin();
             }
         },
         defaultReason: "This tech attack has been canceled.",
@@ -2555,6 +2745,7 @@ async function onInitTechAttackStep(state) {
         tags: actionData.tags,
         actionData,
         cancelTechAttack,
+        _cancelledBy: state.data._cancelledBy,
         flowState: state
     });
 
@@ -2673,12 +2864,13 @@ async function onActivationStep(state) {
 }
 
 async function onInitActivationStep(state) {
-    if (state.data?._ignoredCancel)
-        return true;
-
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const item = state.item;
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
@@ -2710,27 +2902,24 @@ async function onInitActivationStep(state) {
     };
 
     let cancelActivation = false;
-    // Synchronous — sets the cancel flag immediately so it works when called from non-async evaluate functions.
     const cancelAction = _buildCancelFn({
         setFlag: () => {
             cancelActivation = true;
         },
+        cancelledBy: state.data._cancelledBy,
         getIgnoreCallback: () => async () => {
             const flowClass = game.lancer?.flows?.get?.(state.name);
             if (flowClass) {
                 let newFlow;
                 if (state.name === "SimpleActivationFlow") {
-                    newFlow = new flowClass(state.actor.uuid, state.data);
+                    newFlow = new flowClass(state.actor.uuid, { ...state.data });
                 } else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name)) {
-                    newFlow = new flowClass(state.item, state.data);
+                    newFlow = new flowClass(state.item, { ...state.data });
                 } else {
                     ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
                     return;
                 }
-                if (newFlow.state) {
-                    newFlow.state.data._ignoredCancel = true;
-                    await newFlow.begin();
-                }
+                await newFlow.begin();
             }
         },
         defaultReason: "This activation has been canceled.",
@@ -2745,6 +2934,7 @@ async function onInitActivationStep(state) {
         item,
         actionData,
         cancelAction,
+        _cancelledBy: state.data._cancelledBy,
         flowState: state
     });
 
@@ -3284,7 +3474,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-automations:onDamage', onDamageStep);
+    flowSteps.set('lancer-automations:onPreStructure', onPreStructureStep);
     flowSteps.set('lancer-automations:onStructure', onStructureStep);
+    flowSteps.set('lancer-automations:onPreStress', onPreStressStep);
     flowSteps.set('lancer-automations:onStress', onStressStep);
     flowSteps.set('lancer-automations:onTechAttack', onTechAttackStep);
     flowSteps.set('lancer-automations:onTechHitMiss', onTechHitMissStep);
@@ -3364,7 +3556,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Extra-action recharge system (piggybacks on NPC recharge flow)
     wrapExtraActionRecharge(flowSteps, flows);
 
+    flows.get('StructureFlow')?.insertStepBefore('preStructureRollChecks', 'lancer-automations:onPreStructure');
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
+    flows.get('OverheatFlow')?.insertStepBefore('preOverheatRollChecks', 'lancer-automations:onPreStress');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
 
     flows.get('StatRollFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepStatRoll', 'lancer-automations:onInitCheck');
@@ -3409,17 +3603,21 @@ function openResetMovementDialog(token) {
                 label: "Reset History",
                 callback: () => clearMovementHistory(token, false)
             },
-            revert: {
-                icon: '<i class="fas fa-undo-alt"></i>',
-                label: "Reset & Revert Movement",
-                callback: () => clearMovementHistory(token, true)
-            },
+            ...(game.modules.get('elevationruler')?.active
+                && game.settings.get('elevationruler', 'token-ruler-combat-history')
+                ? {
+                    revert: {
+                        icon: '<i class="fas fa-undo-alt"></i>',
+                        label: "Reset & Revert Movement",
+                        callback: () => clearMovementHistory(token, true)
+                    },
+                } : {}),
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
                 label: "Cancel"
             }
         },
-        default: "revert"
+        default: "clear"
     }, {
         classes: ["lancer-dialog-base", "lancer-no-title"],
         width: 400,
@@ -3976,8 +4174,16 @@ registerBuiltinStartup({
     id: 'builtin-lasossis-items',
     settingKey: 'enableLaSossisItems',
     name: "LaSossis's Items",
-    description: "Activations from the module author",
+    description: "LaSossis's item activations",
     filePath: 'startups/itemActivations.js'
+});
+
+registerBuiltinStartup({
+    id: 'builtin-lasossis-personal',
+    settingKey: 'enablePersonalStuff',
+    name: "LaSossis's Personal Stuff",
+    description: "Personal tweaks",
+    filePath: 'startups/personalStuff.js'
 });
 
 Hooks.on('ready', async () => {
@@ -4045,6 +4251,9 @@ Hooks.on('ready', async () => {
 
     // Infection — turn-end hooks
     initInfectionHooks();
+
+    // Wreck system — token config tab
+    initWreckTokenConfig();
 
     // Compatibility checker — detect and offer to fix conflicts with other modules
     checkCompatibility();
@@ -4188,12 +4397,15 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
     if (html.find('.lancer-ruler-reset-button').length)
         return;
 
-    if (!game.modules.get("elevationruler")?.active || !game.combat?.started) {
+    if (!game.combat?.started) {
         return;
     }
 
+    const hasERHistory = game.modules.get('elevationruler')?.active
+        && game.settings.get('elevationruler', 'token-ruler-combat-history');
+
     const resetButtonHtml = `
-    <div class="control-icon lancer-ruler-reset-button" title="Revert Last Movement">
+    <div class="control-icon lancer-ruler-reset-button" title="${hasERHistory ? 'Revert Last Movement' : 'Reset Movement History'}">
         <i class="fas fa-shoe-prints fa-fw"></i>
     </div>
   `;
@@ -4208,7 +4420,11 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         if (!token)
             return;
 
-        await revertMovement(token);
+        if (hasERHistory) {
+            await revertMovement(token);
+        } else {
+            clearMovementHistory(token, false);
+        }
     });
 
     btn.on('contextmenu', async (event) => {
@@ -4243,12 +4459,26 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
 
 });
 
+// Init movement cap for all combatants when combat starts.
+Hooks.on('combatStart', (combat) => {
+    if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')) {
+        return;
+    }
+    for (const combatant of combat.combatants) {
+        const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
+        if (token) {
+            initMovementCap(token);
+        }
+    }
+});
+
 Hooks.on('createCombatant', async (combatant, options, userId) => {
     if (game.user.id !== userId)
         return;
     const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
     if (!token)
         return;
+    initMovementCap(token);
     await handleTrigger('onEnterCombat', { triggeringToken: token });
 });
 
@@ -4278,7 +4508,7 @@ Hooks.on('updateCombat', async (combat, change, options, userId) => {
 });
 
 Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
-    // skipPreStatusHooks: re-creation from immunity "Allow" path — bypass all pre-checks
+    // Immunity bypass
     if (options?.skipPreStatusHooks)
         return true;
 
@@ -4324,12 +4554,14 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
     }
 
     let cancelChange = false;
+    const _cancelledBy = options?._cancelledBy || [];
     const cancelChangeFn = _buildCancelFn({
         setFlag: () => {
             cancelChange = true;
         },
+        cancelledBy: _cancelledBy,
         getIgnoreCallback: () => async () => {
-            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { skipPreStatusHooks: true });
+            await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { _cancelledBy });
         },
         defaultReason: "This status change has been blocked.",
         defaultTitle: "STATUS BLOCKED",
@@ -4337,7 +4569,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
         choice2Text: "Ignore (Allow Effect)",
     });
 
-    handleTrigger('onPreStatusApplied', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
+    handleTrigger('onPreStatusApplied', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn, _cancelledBy });
 
     if (cancelChange) {
         cancelChangeFn.wait()?.catch(() => {});
@@ -4346,6 +4578,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
 });
 
 Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
+    // Immunity bypass
     if (options?.skipPreStatusHooks)
         return true;
 
@@ -4359,12 +4592,14 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
         return;
 
     let cancelChange = false;
+    const _cancelledBy = options?._cancelledBy || [];
     const cancelChangeFn = _buildCancelFn({
         setFlag: () => {
             cancelChange = true;
         },
+        cancelledBy: _cancelledBy,
         getIgnoreCallback: () => async () => {
-            effect.delete({ skipPreStatusHooks: true });
+            effect.delete({ _cancelledBy: _cancelledBy });
         },
         defaultReason: "This status removal has been blocked.",
         defaultTitle: "REMOVAL BLOCKED",
@@ -4372,7 +4607,7 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
         choice2Text: "Ignore (Delete Effect)",
     });
 
-    handleTrigger('onPreStatusRemoved', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn });
+    handleTrigger('onPreStatusRemoved', { triggeringToken: token, statusId, effect, cancelChange: cancelChangeFn, _cancelledBy: _cancelledBy });
 
     if (cancelChange) {
         cancelChangeFn.wait()?.catch(() => {});
@@ -4476,6 +4711,113 @@ Hooks.on('createToken', (tokenDocument, options, userId) => {
     }, 100);
 });
 
+Hooks.on('preUpdateActor', (actor, change, options, userId) => {
+    if (userId !== game.userId)
+        return true;
+    if (options._bypassPreChange)
+        return true;
+
+    const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
+    if (!token)
+        return true;
+
+    let blocked = false;
+
+    // HP change
+    if (change.system?.hp?.value !== undefined) {
+        const previousHP = previousHPValues.get(actor.id) ?? actor.system.hp.value;
+        const newHP = change.system.hp.value;
+        const delta = newHP - previousHP;
+        if (delta !== 0) {
+            const _cancelledBy = options._cancelledBy || [];
+            let cancelHpTriggered = false;
+            let modifiedValue = null;
+
+            const cancelHpChange = _buildCancelFn({
+                setFlag: () => {
+                    cancelHpTriggered = true;
+                },
+                cancelledBy: _cancelledBy,
+                getIgnoreCallback: () => async () => {
+                    actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
+                },
+                defaultReason: "HP change has been prevented.",
+                defaultTitle: "HP CHANGE PREVENTED",
+            });
+
+            const modifyHpChange = (newValue) => {
+                modifiedValue = newValue;
+            };
+
+            handleTrigger('onPreHpChange', {
+                triggeringToken: token,
+                previousHP,
+                newHP,
+                delta,
+                cancelHpChange,
+                modifyHpChange,
+                _cancelledBy
+            });
+
+            if (cancelHpTriggered) {
+                cancelHpChange.wait()?.catch(() => {});
+                blocked = true;
+            } else if (modifiedValue !== null) {
+                change.system.hp.value = modifiedValue;
+            }
+        }
+    }
+
+    // Heat change
+    if (change.system?.heat?.value !== undefined) {
+        const previousHeat = previousHeatValues.get(actor.id) ?? actor.system.heat.value;
+        const newHeat = change.system.heat.value;
+        const delta = newHeat - previousHeat;
+        if (delta !== 0) {
+            const _cancelledBy = options._cancelledBy || [];
+            let cancelHeatTriggered = false;
+            let modifiedValue = null;
+
+            const cancelHeatChange = _buildCancelFn({
+                setFlag: () => {
+                    cancelHeatTriggered = true;
+                },
+                cancelledBy: _cancelledBy,
+                getIgnoreCallback: () => async () => {
+                    actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
+                },
+                defaultReason: "Heat change has been prevented.",
+                defaultTitle: "HEAT CHANGE PREVENTED",
+            });
+
+            const modifyHeatChange = (newValue) => {
+                modifiedValue = newValue;
+            };
+
+            handleTrigger('onPreHeatChange', {
+                triggeringToken: token,
+                previousHeat,
+                newHeat,
+                delta,
+                cancelHeatChange,
+                modifyHeatChange,
+                _cancelledBy
+            });
+
+            if (cancelHeatTriggered) {
+                cancelHeatChange.wait()?.catch(() => {});
+                blocked = true;
+            } else if (modifiedValue !== null) {
+                change.system.heat.value = modifiedValue;
+            }
+        }
+    }
+
+    if (blocked)
+        return false;
+    return true;
+});
+
 Hooks.on('updateActor', async (actor, change, options, userId) => {
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     if (!token)
@@ -4489,10 +4831,10 @@ Hooks.on('updateActor', async (actor, change, options, userId) => {
         if (heatChange > 0) {
             const heatMax = actor.system.heat.max;
             const inDangerZone = currentHeat >= Math.floor(heatMax / 2);
-            await handleTrigger('onHeat', { triggeringToken: token, heatChange, currentHeat, inDangerZone });
+            await handleTrigger('onHeatGain', { triggeringToken: token, heatChange, currentHeat, inDangerZone });
         } else if (heatChange < 0) {
             const heatCleared = Math.abs(heatChange);
-            await handleTrigger('onClearHeat', { triggeringToken: token, heatCleared, currentHeat });
+            await handleTrigger('onHeatLoss', { triggeringToken: token, heatCleared, currentHeat });
         }
 
         previousHeatValues.set(actor.id, currentHeat);
@@ -4505,13 +4847,53 @@ Hooks.on('updateActor', async (actor, change, options, userId) => {
 
         if (hpChange > 0) {
             const maxHP = actor.system.hp.max;
-            await handleTrigger('onHPRestored', { triggeringToken: token, hpChange, currentHP, maxHP });
+            await handleTrigger('onHpGain', { triggeringToken: token, hpChange, currentHP, maxHP });
         } else if (hpChange < 0) {
             const hpLost = Math.abs(hpChange);
             await handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
         }
 
         previousHPValues.set(actor.id, currentHP);
+    }
+
+    // Wreck system: structure reaches 0 -> wreck the token.
+    if (change.system?.structure !== undefined && game.userId === userId) {
+        try {
+            if (game.settings.get('lancer-automations', 'enableWrecks')) {
+                await updateStructure(token);
+            }
+        } catch (e) {
+            console.warn('lancer-automations | wreck updateStructure error:', e);
+        }
+    }
+
+    // Deployable HP=0 -> destroy with FX.
+    if (change.system?.hp !== undefined
+        && actor.type === 'deployable'
+        && (actor.system?.hp?.value ?? 1) <= 0
+        && game.userId === userId) {
+        console.log(`lancer-automations | Deployable ${token.name} destroyed (HP <= 0)`);
+        if (game.combat && token.combatant) {
+            await game.combat.combatants.get(token.combatant._id)?.delete();
+        }
+        await token.document.delete();
+    }
+});
+
+// Wreck system hooks
+Hooks.on('canvasReady', () => {
+    if (game.settings.get('lancer-automations', 'enableWrecks')) {
+        canvasReadyWreck();
+    }
+});
+Hooks.on('createToken', (tokenDoc, options, userId) => {
+    if (game.settings.get('lancer-automations', 'enableWrecks')) {
+        preWreck(tokenDoc, options, userId);
+    }
+});
+Hooks.on('renderTileHUD', (app, html, context) => {
+    if (game.settings.get('lancer-automations', 'enableWrecks')) {
+        tileHUDButton(app, html, context);
     }
 });
 
@@ -4521,6 +4903,9 @@ Hooks.on('renderSettings', (app, html) => {
         return;
     }
 
+    const overviewButton = $(`<button id="lancer-automations-overview" data-action="lancer-automations-overview">
+        <i class="fas fa-cog"></i> Lancer Automations
+    </button>`);
     const managerButton = $(`<button id="lancer-automations-manager" data-action="lancer-automations-manager">
         <i class="fas fa-tasks"></i> Activation Manager
     </button>`);
@@ -4528,9 +4913,18 @@ Hooks.on('renderSettings', (app, html) => {
     const helpButton = lancerHeader.find('button#triggler-form');
     if (helpButton.length > 0) {
         helpButton.after(managerButton);
+        helpButton.after(overviewButton);
     } else {
+        lancerHeader.append(overviewButton);
         lancerHeader.append(managerButton);
     }
+
+    overviewButton.on('click', (ev) => {
+        ev.preventDefault();
+        const sheet = game.settings.sheet;
+        sheet.render(true);
+        setTimeout(() => sheet.activateTab?.('lancer-automations'), 100);
+    });
 
     managerButton.on('click', async (ev) => {
         ev.preventDefault();
@@ -4607,18 +5001,21 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         };
 
         const continueCallback = async () => {
-            // Re-submit the original movement with a flag to bypass preUpdateToken
+            // Re-submit the original movement, carrying _cancelledBy so only the
+            // reactions that already cancelled are skipped on this pass
             const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
             if (change.elevation !== undefined)
                 originalUpdate.elevation = change.elevation;
-            token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+            token.document.update(originalUpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
         };
+        triggerData._cancelledBy = options._cancelledBy || [];
         let _moveTrace = null;
         const _cancelMoveCard = _buildCancelFn({
             setFlag: () => {
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
             },
+            cancelledBy: triggerData._cancelledBy,
             getIgnoreCallback: () => continueCallback,
             defaultReason: "This movement has been canceled.",
             defaultTitle: "MOVEMENT CANCELED",
@@ -4639,6 +5036,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         });
         // Adapter: preserves the original signature (no title param, showCard is 2nd).
         triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+            _cancelMoveCard._reactorIdentity = triggerData.cancelTriggeredMove._reactorIdentity;
+            _cancelMoveCard._engineCancel = triggerData.cancelTriggeredMove._engineCancel;
             return _cancelMoveCard(reasonText, undefined, showCard, userIdControl, preConfirm, postChoice, opts);
         };
 
@@ -4655,9 +5054,12 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             };
 
             if (showCard) {
-                // Cancel immediately because we cannot block Foundry synchronously with async code
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
+                // Record who triggered this reroute
+                const identity = triggerData.changeTriggeredMove._reactorIdentity;
+                if (identity && triggerData._cancelledBy)
+                    triggerData._cancelledBy.push(identity);
 
                 if (preConfirm) {
                     const confirmed = await preConfirm();
@@ -4689,11 +5091,10 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                             icon: "fas fa-times",
                             callback: async () => {
                                 await postChoice?.(false);
-                                // Re-submit the original movement with a flag to bypass preUpdateToken
                                 const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
                                 if (change.elevation !== undefined)
                                     originalUpdate.elevation = change.elevation;
-                                token.document.update(originalUpdate, { ...options, IgnorePreMove: true, isDrag: true });
+                                token.document.update(originalUfpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
                             }}
                     ]
                 });
@@ -4704,19 +5105,25 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             } else {
                 triggerData.cancel();
                 cancelRulerDrag(token, moveInfo);
+                const identity = triggerData.changeTriggeredMove._reactorIdentity;
+                if (identity && triggerData._cancelledBy)
+                    triggerData._cancelledBy.push(identity);
                 executeChange();
             }
         };
 
         // Movement cap check: block the move if it would exceed the cap (combat only, non-free moves)
         const isTokenInCombat = !!game.combat?.combatants.find(c => c.token?.id === token.id);
-        if (game.settings.get('lancer-automations', 'enableMovementCapDetection')
+        if (!options.ignoreMovementCap
+            && game.settings.get('lancer-automations', 'enableMovementCapDetection')
             && isTokenInCombat && !moveIsFreeMovement && moveToMovementCost > 0) {
             const cap = getMovementCap(token);
             const history = getMovementHistory(token);
             const spent = history.exists ? history.intentional.regularCost : 0;
             if (spent <= cap && spent + moveToMovementCost > cap) {
                 const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
+                options.ignoreMovementCap = true;
+                triggerData.cancelTriggeredMove._engineCancel = true;
                 triggerData.cancelTriggeredMove(
                     `Not enough movement points (${spent + moveToMovementCost} > ${cap}). ` +
                     `Increase your movement cap with Boost, or hold <b>${freeKey}</b> for free movement.`
@@ -4726,7 +5133,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 
         // Call handleTrigger without await. If onPreMove reactions are synchronous,
         // cancelUpdate will be set to true before we check it on the next line.
-        handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove });
+        handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy });
 
         if (cancelUpdate) {
             return false;

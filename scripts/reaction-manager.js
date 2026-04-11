@@ -31,7 +31,7 @@ export function stringToFunction(str, args = [], reaction = null) {
         const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
         const foundTriggers = reaction?.triggers?.filter(t => sensitiveTriggers.has(t)) || [];
 
-        const isForceSync = reaction?.forceSynchronous;
+        const isForceSync = reaction?.awaitActivationCompletion;
 
         if ((foundKeywords.length > 0 || foundTriggers.length > 0) && !isForceSync) {
             let reason = "";
@@ -42,7 +42,7 @@ export function stringToFunction(str, args = [], reaction = null) {
                 reason += (reason ? " and " : "") + `is associated with sensitive triggers (${foundTriggers.join(', ')})`;
             }
 
-            ui.notifications.warn(`lancer-automations | Evaluation for "${reaction?.name || 'Activation'}" is async and ${reason} without "Force Synchronous". This will likely fail to block movement or timing-sensitive bonuses.`, {permanent: true});
+            ui.notifications.warn(`lancer-automations | Evaluation for "${reaction?.name || 'Activation'}" is async and ${reason} without "Await Activation Completion". This will likely fail to block movement or timing-sensitive bonuses.`, {permanent: true});
         }
     }
     scriptCache.set(cacheKey, fn);
@@ -144,6 +144,16 @@ export class ReactionManager {
         game.settings.register(ReactionManager.ID, "enableLaSossisItems", {
             name: "LaSossis's Items",
             hint: "Those are the item activations i made for myself, it wil create a startup script that registers them as default item activations.",
+            scope: "world",
+            config: true,
+            type: Boolean,
+            default: false,
+            requiresReload: true
+        });
+
+        game.settings.register(ReactionManager.ID, "enablePersonalStuff", {
+            name: "LaSossis's Personal Stuff",
+            hint: "My personal bag of tweaks, might not be useful to anyone else.",
             scope: "world",
             config: true,
             type: Boolean,
@@ -1223,7 +1233,8 @@ export class ReactionConfig extends FormApplication {
         const li = $(event.currentTarget).closest('.script-item');
         const id = li.data('id');
         const scripts = ReactionManager.getStartupScripts();
-        const script = scripts.find(s => s.id === id);
+        const script = scripts.find(s => s.id === id)
+            || (ReactionManager.builtinStartups || []).find(s => s.id === id);
         if (!script)
             return;
         this._openScriptEditor(script);
@@ -1461,7 +1472,7 @@ export class ReactionEditor extends FormApplication {
             }
         }
 
-        const triggerHelp = {
+        this._triggerHelp = {
             onAttack: "{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData, distanceToTrigger }",
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
@@ -1474,9 +1485,11 @@ export class ReactionEditor extends FormApplication {
             onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger }",
+            onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, showCard, userIdControl), distanceToTrigger }",
             onStructure: "{ triggeringToken, remainingStructure, rollResult, distanceToTrigger }",
+            onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl), distanceToTrigger }",
             onStress: "{ triggeringToken, remainingStress, rollResult, distanceToTrigger }",
-            onHeat: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
+            onHeatGain: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
             onDestroyed: "{ triggeringToken, distanceToTrigger }",
             onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
@@ -1487,9 +1500,11 @@ export class ReactionEditor extends FormApplication {
             onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, userIdControl), distanceToTrigger }",
             onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, userIdControl) }",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger, endActivation }",
-            onHPRestored: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
+            onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, showCard, userIdControl), modifyHpChange(newValue), distanceToTrigger }",
+            onHpGain: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
-            onClearHeat: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
+            onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, showCard, userIdControl), modifyHeatChange(newValue), distanceToTrigger }",
+            onHeatLoss: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
             onKnockback: "{ triggeringToken, range, pushedActors: [Actor], actionName, item, distanceToTrigger }",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger }",
             onUpdate: "{ triggeringToken, document, change, options }",
@@ -1514,11 +1529,11 @@ export class ReactionEditor extends FormApplication {
             triggerOther: reaction.triggerOther !== false,
             outOfCombat: reaction.outOfCombat === true,
             autoActivate: reaction.autoActivate || false,
-            forceSynchronous: reaction.forceSynchronous ?? (reaction.autoActivate ?? false),
+            awaitActivationCompletion: reaction.awaitActivationCompletion ?? (reaction.autoActivate ?? false),
             onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
-            triggerHelp: triggerHelp,
+            triggerHelp: this._triggerHelp,
             activationType: reaction.activationType || "flow",
             activationMode: reaction.activationMode || "after",
             activationMacro: reaction.activationMacro || "",
@@ -1596,7 +1611,7 @@ export class ReactionEditor extends FormApplication {
                     checkReaction: html.find('input[name="checkReaction"]').prop('checked'),
                     checkUsage: html.find('input[name="checkUsage"]').prop('checked'),
                     autoActivate: html.find('input[name="autoActivate"]').prop('checked'),
-                    forceSynchronous: html.find('input[name="forceSynchronous"]').prop('checked'),
+                    awaitActivationCompletion: html.find('input[name="awaitActivationCompletion"]').prop('checked'),
                     triggerSelf: html.find('input[name="triggerSelf"]').prop('checked'),
                     triggerOther: html.find('input[name="triggerOther"]').prop('checked'),
                     outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
@@ -2000,6 +2015,119 @@ export class ReactionEditor extends FormApplication {
         });
 
         html.find('.expand-editor').on('click', this._onExpandEditor.bind(this));
+
+        // Trigger group collapse/expand + count badges
+        const updateGroupCounts = () => {
+            html.find('.trigger-group').each(function () {
+                const checked = $(this).find('.trigger-group-body input:checked').length;
+                const countEl = $(this).find('.trigger-group-count');
+                countEl.text(checked > 0 ? `(${checked})` : '');
+            });
+        };
+        html.find('.trigger-group-header').on('click', function () {
+            $(this).closest('.trigger-group').toggleClass('collapsed');
+        });
+        html.find('.trigger-group-body input').on('change', updateGroupCounts);
+        updateGroupCounts();
+
+        // Auto-collapse groups with no checked triggers
+        html.find('.trigger-group').each(function () {
+            const checked = $(this).find('.trigger-group-body input:checked').length;
+            if (checked === 0)
+                $(this).addClass('collapsed');
+        });
+
+        // Trigger data reference popup
+        html.find('#open-trigger-ref').on('click', () => {
+            if (this._triggerRefPopup && document.body.contains(this._triggerRefPopup)) {
+                this._triggerRefPopup.remove();
+                this._triggerRefPopup = null;
+                return;
+            }
+
+            const triggerHelp = this._triggerHelp ?? {};
+            const checked = new Set();
+            html.find('input[name^="trigger."]:checked').each(function () {
+                checked.add($(this).attr('name').replace('trigger.', ''));
+            });
+
+            const rows = Object.entries(triggerHelp).map(([key, help]) => {
+                const isActive = checked.has(key);
+                const inner = help.replace(/^\{\s*|\s*\}$/g, '');
+                // Split on commas but not inside parentheses
+                const fields = [];
+                let depth = 0, current = '';
+                for (const ch of inner) {
+                    if (ch === '(') depth++;
+                    else if (ch === ')') depth--;
+                    if (ch === ',' && depth === 0) {
+                        fields.push(current.trim());
+                        current = '';
+                    } else {
+                        current += ch;
+                    }
+                }
+                if (current.trim())
+                    fields.push(current.trim());
+
+                const tags = fields.map(f => {
+                    const fnMatch = f.match(/^(\w+)\((.+)\)$/);
+                    if (fnMatch) {
+                        return `<span title="${fnMatch[1]}( ${fnMatch[2]} )" style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold; cursor: help;">${fnMatch[1]}()</span>`;
+                    }
+                    // No-arg function like modifyHpChange(newValue) already caught above,
+                    // but also catch fn() with no args
+                    if (f.match(/^\w+\(\)$/)) {
+                        return `<span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold;">${f}</span>`;
+                    }
+                    return `<span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: #e8e8e8; color: #333;">${f}</span>`;
+                }).join('');
+                return `<div style="padding: 5px 8px; border-bottom: 1px solid #f0f0f0; ${isActive ? 'background: color-mix(in srgb, var(--primary-color), transparent 93%);' : ''}">
+                    <div style="font-weight: bold; font-size: 0.85em; margin-bottom: 3px; ${isActive ? 'color: var(--primary-color);' : 'color: #333;'}">${key}</div>
+                    <div style="line-height: 1.5;">${tags}</div>
+                </div>`;
+            }).join('');
+
+            const popup = document.createElement('div');
+            popup.innerHTML = `
+                <div style="display: flex; align-items: center; padding: 6px 10px; background: var(--primary-color); color: #fff; cursor: move; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 0.85em;">
+                    <span style="flex:1;">Trigger Data Reference</span>
+                    <span id="trigger-ref-close" style="cursor: pointer; font-size: 1.2em; line-height: 1;">&times;</span>
+                </div>
+                <div style="max-height: 400px; overflow-y: auto; padding: 4px;">${rows}</div>
+            `;
+            Object.assign(popup.style, {
+                position: 'fixed', top: '100px', left: '100px', width: '420px',
+                background: '#fff', border: '2px solid var(--primary-color)',
+                borderRadius: '6px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                zIndex: '10000', fontFamily: 'inherit'
+            });
+
+            // Drag
+            const header = popup.querySelector('div');
+            let dragging = false, dx = 0, dy = 0;
+            header.addEventListener('mousedown', (e) => {
+                dragging = true;
+                dx = e.clientX - popup.offsetLeft;
+                dy = e.clientY - popup.offsetTop;
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!dragging)
+                    return;
+                popup.style.left = (e.clientX - dx) + 'px';
+                popup.style.top = (e.clientY - dy) + 'px';
+            });
+            document.addEventListener('mouseup', () => { dragging = false; });
+
+            popup.querySelector('#trigger-ref-close').addEventListener('click', () => {
+                popup.remove();
+                this._triggerRefPopup = null;
+            });
+
+            document.body.appendChild(popup);
+            this._triggerRefPopup = popup;
+        });
     }
 
     async _onExpandEditor(event) {
@@ -2286,22 +2414,21 @@ export class ReactionEditor extends FormApplication {
     }
 
     _getTriggerOptions(selected) {
-        const options = [
-            "onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd",
-            "onPreMove", "onMove", "onKnockback",
-            "onInitAttack", "onAttack", "onHit", "onMiss", "onDamage",
-            "onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss",
-            "onInitActivation", "onActivation", "onDeploy",
-            "onInitCheck", "onCheck",
-            "onPreStatusApplied", "onPreStatusRemoved",
-            "onStatusApplied", "onStatusRemoved",
-            "onHPRestored", "onHpLoss", "onHeat", "onClearHeat",
-            "onStructure", "onStress", "onDestroyed", "onUpdate"
+        const groups = [
+            { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd"] },
+            { label: "Movement", triggers: ["onPreMove", "onMove", "onKnockback"] },
+            { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onDamage"] },
+            { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
+            { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitCheck", "onCheck", "onDeploy"] },
+            { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
+            { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
+            { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
+            { label: "Other", triggers: ["onUpdate"] }
         ];
-        return options.reduce((obj, trigger) => {
-            obj[trigger] = selected.includes(trigger);
-            return obj;
-        }, {});
+        return groups.map(g => ({
+            label: g.label,
+            items: g.triggers.map(t => ({ key: t, checked: selected.includes(t) }))
+        }));
     }
 
     async _updateObject(event, formData) {
@@ -2345,7 +2472,7 @@ export class ReactionEditor extends FormApplication {
                 checkReaction: formData.checkReaction === true,
                 checkUsage: formData.checkUsage === true,
                 autoActivate: formData.autoActivate === true,
-                forceSynchronous: formData.forceSynchronous === true,
+                awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",
@@ -2378,7 +2505,7 @@ export class ReactionEditor extends FormApplication {
                 checkReaction: formData.checkReaction === true,
                 checkUsage: formData.checkUsage === true,
                 autoActivate: formData.autoActivate === true,
-                forceSynchronous: formData.forceSynchronous === true,
+                awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "after",

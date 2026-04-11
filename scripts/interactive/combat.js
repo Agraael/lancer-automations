@@ -218,12 +218,16 @@ export async function clearMovementHistory(tokens, revert = false) {
         return;
 
     const elevationRulerActive = game.modules.get("elevationruler")?.active;
+    const lancerAutomations = game.modules.get('lancer-automations');
+
+    // Always clear our own movement cap/history even without Elevation Ruler.
     if (!elevationRulerActive) {
-        ui.notifications.warn("Elevation Ruler module is not active. Movement history cannot be cleared.");
+        for (const token of tokenList) {
+            lancerAutomations?.api?.clearMoveData?.(token.id ?? token.document?.id);
+        }
         return;
     }
 
-    const lancerAutomations = game.modules.get('lancer-automations');
     for (const token of tokenList) {
         if (revert) {
             while (true) {

@@ -54,14 +54,28 @@ export function injectInfectionSchemaField() {
  * Call during `init`.
  */
 export async function injectInfectionDamageType() {
-    // Patch DamageType enum via dynamic import of the hashed bundle
+    // Patch DamageType enum via dynamic import of the hashed bundle.
+    // On Forge VTT, relative imports resolve to a different origin than the CDN
+    // URL used by the original <script> tag, causing a duplicate module. We find
+    // the script tag's actual URL and import relative to that instead.
     try {
-        const entryResp = await fetch('/systems/lancer/lancer.mjs');
+        let bundleUrl = null;
+
+        // Find the lancer entry script tag to get its actual base URL
+        const lancerScript = /** @type {HTMLScriptElement} */ (document.querySelector('script[type="module"][src$="/lancer.mjs"]'));
+        const baseUrl = lancerScript
+            ? lancerScript.src.replace(/lancer\.mjs$/, '')
+            : '/systems/lancer/';
+
+        const entryResp = await fetch(`${baseUrl}lancer.mjs`);
         const entryText = await entryResp.text();
         const match = entryText.match(/import\s+["']\.\/([^"']+)["']/);
         if (match) {
-            const bundleName = match[1];
-            const bundle = await import(`/systems/lancer/${bundleName}`);
+            bundleUrl = `${baseUrl}${match[1]}`;
+        }
+
+        if (bundleUrl) {
+            const bundle = await import(bundleUrl);
             if (bundle.D && !bundle.D.Infection) {
                 bundle.D.Infection = "Infection";
                 console.log(`${MODULE_ID} | Added "Infection" to DamageType enum via bundle export`);

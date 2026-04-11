@@ -21,10 +21,10 @@ function isRelevantActor(actorId) {
 
 Hooks.on('init', () => {
     game.settings.register(MODULE, SETTING, {
-        name: 'Token Action HUD [BETA]',
-        hint: 'Show a cascading action HUD when a token is selected. This is a beta feature — expect rough edges.',
+        name: 'Token Action HUD',
+        hint: 'Show a cascading action HUD when a token is selected. Requires reload.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: false,
         requiresReload: true,
@@ -34,21 +34,80 @@ Hooks.on('init', () => {
         },
     });
     game.settings.register(MODULE, 'tah.clickToOpen', {
-        name: 'TAH: Click to Open',
-        hint: 'Open HUD categories and sub-menus on click instead of hover. Takes effect on next HUD render.',
+        name: 'Click to Open',
+        hint: 'Open categories on click instead of hover.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE, 'tah.hoverCloseDelay', {
-        name: 'TAH: Hover Close Delay (seconds)',
-        hint: 'How long the HUD stays open after the mouse leaves it. Higher values give more time to move between columns.',
+        name: 'Hover Close Delay (seconds)',
+        hint: 'How long the HUD stays open after the mouse leaves.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Number,
         default: 0.5,
         range: { min: 0, max: 3, step: 0.5 },
+    });
+    game.settings.register(MODULE, 'tah.rangePreview', {
+        name: 'TAH: Weapon Range Preview',
+        hint: 'Show weapon range on the map when hovering items in the HUD. Requires Grid Aware Auras.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: true,
+    });
+    // Persistent aura colors + opacity
+    game.settings.register(MODULE, 'tah.auraColorThreat', {
+        name: 'Threat Aura Color',
+        hint: 'Color of the Max Threat range aura.',
+        scope: 'client', config: true, type: String, default: '#9514ff',
+    });
+    game.settings.register(MODULE, 'tah.auraColorSensor', {
+        name: 'Sensor Aura Color',
+        hint: 'Color of the Sensor range aura.',
+        scope: 'client', config: true, type: String, default: '#549eff',
+    });
+    game.settings.register(MODULE, 'tah.auraColorRange', {
+        name: 'Max Range Aura Color',
+        hint: 'Color of the Max Range aura.',
+        scope: 'client', config: true, type: String, default: '#ff7b00',
+    });
+    game.settings.register(MODULE, 'tah.auraOpacityThreat', {
+        name: 'Threat Aura Opacity',
+        scope: 'client', config: true, type: Number, default: 1,
+        range: { min: 0, max: 1, step: 0.1 },
+    });
+    game.settings.register(MODULE, 'tah.auraOpacitySensor', {
+        name: 'Sensor Aura Opacity',
+        scope: 'client', config: true, type: Number, default: 1,
+        range: { min: 0, max: 1, step: 0.1 },
+    });
+    game.settings.register(MODULE, 'tah.auraOpacityRange', {
+        name: 'Max Range Aura Opacity',
+        scope: 'client', config: true, type: Number, default: 1,
+        range: { min: 0, max: 1, step: 0.1 },
+    });
+    // Default toggle mode per aura
+    const auraDefaultChoices = { none: 'None', combat: 'In Combat', all: 'Always' };
+    game.settings.register(MODULE, 'tah.auraDefaultThreat', {
+        name: 'Threat Aura Default',
+        hint: 'When to auto-enable the Threat aura.',
+        scope: 'client', config: true, type: String, default: 'none',
+        choices: auraDefaultChoices,
+    });
+    game.settings.register(MODULE, 'tah.auraDefaultSensor', {
+        name: 'Sensor Aura Default',
+        hint: 'When to auto-enable the Sensor aura.',
+        scope: 'client', config: true, type: String, default: 'none',
+        choices: auraDefaultChoices,
+    });
+    game.settings.register(MODULE, 'tah.auraDefaultRange', {
+        name: 'Max Range Aura Default',
+        hint: 'When to auto-enable the Max Range aura.',
+        scope: 'client', config: true, type: String, default: 'none',
+        choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.position', {
         scope: 'client',
@@ -174,6 +233,35 @@ Hooks.on('deleteCombat', () => {
         return;
     if (hud._token)
         hud.scheduleRefresh();
+});
+
+// ── Persistent range auras — combat auto-toggle + data refresh ─────────────
+
+import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii } from './hover.js';
+
+Hooks.on('combatStart', (combat) => {
+    for (const c of combat.combatants) {
+        const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
+        if (tok) applyDefaultAuras(tok);
+    }
+});
+
+Hooks.on('createCombatant', (combatant) => {
+    const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
+    if (tok) applyDefaultAuras(tok);
+});
+
+Hooks.on('deleteCombat', (combat) => {
+    for (const c of combat.combatants) {
+        const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
+        if (tok) disableCombatAuras(tok);
+    }
+});
+
+Hooks.on('updateActor', (actor) => {
+    for (const tok of actor.getActiveTokens()) {
+        updatePersistentAuraRadii(tok);
+    }
 });
 
 // ── Manual force-refresh (fired by lancer-automations flows and TAH lancer) ──

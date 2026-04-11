@@ -107,7 +107,7 @@ const CONSUMPTION_TRIGGER_OPTIONS = `
     <option value="onActivation">On Activation</option>
     <option value="onDeploy">On Deploy</option>
     <option value="onCheck">On Check</option>
-    <option value="onHeat">On Heat</option>
+    <option value="onHeatGain">On Heat</option>
     <option value="onHpLoss">On HP Loss</option>
     <option value="onTurnStart">On Turn Start</option>
     <option value="onTurnEnd">On Turn End</option>
@@ -521,7 +521,7 @@ export async function executeEffectManager(options = {}) {
         value: "onCheck",
         label: "On Check"
     }, {
-        value: "onHeat",
+        value: "onHeatGain",
         label: "On Heat"
     },
     {

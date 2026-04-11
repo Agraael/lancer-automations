@@ -1,42 +1,50 @@
 <form>
-    <div class="form-group" style="margin-bottom: 12px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
-        <label style="font-weight: bold; font-size: 1.1em;">Enable StatusFX (Master Toggle)</label>
-        <input type="checkbox" name="master" id="la-statusfx-master" {{#if master}}checked{{/if}} />
-        <p class="notes">When enabled, lancer-automations handles all status visual effects. If csm-lancer-qol is active, its conflicting features are automatically overridden.</p>
+    <div style="margin-bottom: 10px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold; font-size: 1.1em;">Enable StatusFX (Master Toggle)</label>
+            <input type="checkbox" name="master" id="la-statusfx-master" {{#if master}}checked{{/if}} />
+        </div>
+        <p class="notes" style="margin: 4px 0 0; font-size: 0.85em; opacity: 0.8;">Handles all status visual effects. Overrides csm-lancer-qol if active.</p>
     </div>
 
     <fieldset id="la-statusfx-rest" style="border: none; padding: 0; margin: 0;" {{#unless master}}disabled{{/unless}}>
-        <div class="form-group">
-            <label>Additional Statuses &amp; Effects</label>
-            <input type="checkbox" name="additionalStatuses" {{#if additionalStatuses}}checked{{/if}} />
-            <p class="notes">Registers extra statuses (Resist All, Disengage, Grappling, Throttled, etc.) into the standard status effects list. The Infection status is always registered regardless of this setting.</p>
+        <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label style="font-weight: bold;">Additional Statuses &amp; Effects</label>
+                <input type="checkbox" name="additionalStatuses" {{#if additionalStatuses}}checked{{/if}} />
+            </div>
+            <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Extra statuses (Resist All, Disengage, Grappling, etc.). Infection is always registered.</p>
         </div>
 
-        <hr>
+        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">TokenMagic Visual Effects</h2>
+        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">Requires TokenMagic module.</p>
 
-        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">TokenMagic Visual Effects</h2>
-        <p class="notes" style="margin-bottom: 8px;">Toggle individual TokenMagic effects applied when statuses are active. Requires TokenMagic module.</p>
-
-        <div style="max-height: 240px; overflow-y: auto; border: 1px solid rgba(120,46,34,0.3); border-radius: 3px; padding: 6px 8px 6px 6px;">
+        <div style="max-height: 240px; overflow-y: auto; border: 1px solid rgba(120,46,34,0.3); border-radius: 3px; padding: 4px 6px;">
         {{#each fxEffects}}
-        <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
             <label>{{this.label}}</label>
             <input type="checkbox" name="fx_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
         </div>
         {{/each}}
         </div>
 
-        <hr>
-
-        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 8px;">Auto-Status Icons</h2>
-        <p class="notes" style="margin-bottom: 8px;">Automatically toggle status icons based on actor data changes.</p>
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Auto-Status Icons</h2>
+        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">Toggle status icons based on actor data.</p>
 
         {{#each autoStatuses}}
-        <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
             <label>{{this.label}}</label>
             <input type="checkbox" name="auto_{{this.key}}" {{#if this.enabled}}checked{{/if}} />
         </div>
         {{/each}}
+
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Death</h2>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
+            <label style="font-weight: bold;">Remove Statuses on Death</label>
+            <input type="checkbox" name="removeStatusesOnDeath" {{#if removeStatusesOnDeath}}checked{{/if}} />
+        </div>
+        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Clear all status effects when structure reaches zero.</p>
     </fieldset>
 
     <footer class="sheet-footer flexrow">

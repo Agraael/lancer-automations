@@ -1,13 +1,14 @@
 /* global $, window, game, CONFIG */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus } from '../misc-tools.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
-import { onHudRowHover } from './hover.js';
+import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS } from './hover.js';
+import { resurrect } from '../wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
@@ -658,6 +659,21 @@ export class LancerHUD {
                             return; suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay();
                     });
                     cell.data('restingBg', restingBg(cur));
+                } else if (item.subtype === 'toggle') {
+                    let on = !!item.getValue();
+                    const onColor = 'var(--primary-color)';
+                    const offColor = '#666';
+                    const switchHtml = `<span class="la-toggle-switch" style="display:inline-block;width:28px;height:14px;border-radius:2px;background:${on ? onColor : offColor};position:relative;cursor:pointer;transition:background 0.15s;flex-shrink:0;"><span class="la-toggle-knob" style="position:absolute;top:1px;left:${on ? '14px' : '1px'};width:13px;height:12px;border-radius:1px;background:#fff;transition:left 0.15s;"></span></span>`;
+                    cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span>${switchHtml}</div>`);
+                    cell.find('.la-toggle-switch').on('click', (ev) => {
+                        ev.stopPropagation();
+                        on = !on;
+                        item.onToggle(on);
+                        const sw = cell.find('.la-toggle-switch');
+                        sw.css('background', on ? onColor : offColor);
+                        sw.find('.la-toggle-knob').css('left', on ? '14px' : '1px');
+                    });
+                    cell.data('restingBg', BG_DEFAULT);
                 } else {
                     cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><input type="number" class="la-type-val" value="${item.getValue()}" style="width:44px;text-align:center;background:#fff;border:1px solid #bbb;color:#111;font-size:0.9em;padding:2px 4px;"></div>`);
                     cell.find('.la-type-val').on('change', (ev) => {
@@ -1351,6 +1367,9 @@ export class LancerHUD {
                 { label: 'Suicide',          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }) },
                 { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token) },
             ] : []),
+            ...(token.document.getFlag('lancer-automations', 'isWreck') ? [
+                { label: 'Resurrect', icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token) },
+            ] : []),
             ...(actor?.type === 'npc' ? [
                 { label: 'Recharge', icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginRechargeFlow() },
                 { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
@@ -1372,13 +1391,21 @@ export class LancerHUD {
             })() : []),
         ];
 
+        const hasERHistory = game.modules.get('elevationruler')?.active
+            && (() => { try { return game.settings.get('elevationruler', 'token-ruler-combat-history'); } catch { return false; } })();
+        const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection');
+
         const movementItems = [
             { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },
             { label: 'Fall', icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token) },
+            // History tools: reset always available, revert only with ER history.
             { label: 'Reset History',  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false) },
-            { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
-            { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true) },
-            {
+            ...(hasERHistory ? [
+                { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
+                { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true) },
+            ] : []),
+            // Move Cap editable input when cap tracking is on, otherwise just show base speed.
+            ...(capEnabled ? [{
                 inputCell: true,
                 subtype: 'type',
                 name: 'Move Cap',
@@ -1386,12 +1413,89 @@ export class LancerHUD {
                 getValue: () => game.modules.get('lancer-automations')?.api?.getMovementCap(token) ?? 0,
                 onValueChanged: (newVal) => {
                     const api = game.modules.get('lancer-automations')?.api;
-                    if (!api)
-                        return;
+                    if (!api) return;
                     api.increaseMovementCap(token, newVal - api.getMovementCap(token));
                 },
-            },
+            }] : [{
+                inputCell: true,
+                subtype: 'type',
+                name: 'Speed',
+                icon: 'modules/lancer-automations/icons/path-distance.svg',
+                getValue: () => actor?.system?.speed ?? 0,
+                onValueChanged: () => {},
+            }]),
         ];
+
+        const _showWeaponBreakdown = (row, actor, rangeType) => {
+            const items = actor?.items ?? [];
+            const lines = [];
+            for (const item of items) {
+                if (!['mech_weapon', 'npc_feature', 'pilot_weapon'].includes(item.type)) continue;
+                if (item.type === 'npc_feature' && item.system?.type !== 'Weapon') continue;
+                const profiles = item.system?.profiles ?? [{ range: item.system?.range ?? [] }];
+                for (const profile of profiles) {
+                    const ranges = profile.all_range ?? profile.range ?? [];
+                    for (const r of ranges) {
+                        if (r.type !== rangeType) continue;
+                        const val = parseInt(r.val) || 0;
+                        if (val <= 0) continue;
+                        const pName = profiles.length > 1 && profile.name ? ` (${profile.name})` : '';
+                        lines.push(`<li>${item.name}${pName}: <b>${val}</b></li>`);
+                    }
+                }
+            }
+            if (lines.length === 0) {
+                lines.push(`<li>No ${rangeType.toLowerCase()} weapons found</li>`);
+            }
+            const bodyHtml = `<ul style="list-style:none;padding:0;margin:0;">${lines.join('')}</ul>`;
+            toggleDetailPopup({
+                cssClass: 'la-hud-popup',
+                dataKey: 'range-breakdown',
+                dataValue: rangeType,
+                title: `${rangeType} Breakdown`,
+                subtitle: actor.name,
+                bodyHtml,
+                theme: 'system',
+                row,
+                showPopupAt: (p, r) => this._showPopupAt(p, r),
+            });
+        };
+
+        // Ranges section — persistent aura toggles.
+        const hasGAA = !!game.modules.get('grid-aware-auras')?.active;
+        const threatVal = getActorMaxThreat(actor);
+        const sensorVal = actor?.system?.sensor_range ?? (actor?.type === 'pilot' ? 5 : 10);
+        const allRanges = getMaxWeaponRanges_WithBonus(actor);
+        const maxRangeVal = Math.max(0, ...Object.entries(allRanges)
+            .filter(([t]) => t !== 'Threat')
+            .map(([, v]) => v));
+
+        const rangeItems = hasGAA ? [
+            {
+                inputCell: true,
+                subtype: 'toggle',
+                name: `Threat (${threatVal})`,
+                icon: 'systems/lancer/assets/icons/white/threat.svg',
+                getValue: () => isPersistentAuraActive(token, 'LA_max_Threat'),
+                onToggle: (on) => setPersistentAura(token, 'LA_max_Threat', on, threatVal),
+            },
+            {
+                inputCell: true,
+                subtype: 'toggle',
+                name: `Sensors (${sensorVal})`,
+                icon: 'systems/lancer/assets/icons/white/sensor.svg',
+                getValue: () => isPersistentAuraActive(token, 'LA_Sensor'),
+                onToggle: (on) => setPersistentAura(token, 'LA_Sensor', on, sensorVal),
+            },
+            {
+                inputCell: true,
+                subtype: 'toggle',
+                name: `Max Range (${maxRangeVal})`,
+                icon: 'systems/lancer/assets/icons/white/range.svg',
+                getValue: () => isPersistentAuraActive(token, 'LA_max_range'),
+                onToggle: (on) => setPersistentAura(token, 'LA_max_range', on, maxRangeVal),
+            },
+        ] : [];
 
         return {
             label: 'Utility',
@@ -1400,6 +1504,7 @@ export class LancerHUD {
                 { label: 'Combat',    childColLabel: 'Combat',    getChildren: () => combatItems },
                 { label: 'Gameplay',  childColLabel: 'Gameplay',  getChildren: () => gameplayItems },
                 { label: 'Movement',  childColLabel: 'Movement',  getChildren: () => movementItems },
+                ...(rangeItems.length > 0 ? [{ label: 'Ranges', childColLabel: 'Ranges', getChildren: () => rangeItems }] : []),
                 { label: 'Log', isLogPanel: true },
                 { label: 'Misc', childColLabel: 'Misc', getChildren: () => [
                     { label: 'Vote',     icon: 'modules/lancer-automations/icons/vote.svg',              onClick: () => { const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; if (api?.openChoiceMenu) api.openChoiceMenu(); else /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.'); } },

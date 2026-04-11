@@ -330,7 +330,7 @@ Hooks.on('lancer-automations.ready', (api) => {
 
                 {
                     triggers: ["onPreMove"],
-                    forceSynchronous: true,
+                    awaitActivationCompletion: true,
                     comments: "Block movement while IMMOBILIZED",
                     triggerSelf: true,
                     triggerOther: false,
