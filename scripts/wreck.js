@@ -144,13 +144,15 @@ async function spawnDifficultTerrain(token) {
     try {
         const terrainAPI = globalThis.terrainHeightTools;
         if (!terrainAPI) return;
-        const tokenHeight = token.actor?.prototypeToken?.flags?.['wall-height']?.tokenHeight ?? 1;
-        const terrainHeight = Math.floor(tokenHeight * 2) / 2;
+        const wallHeight = token.actor?.prototypeToken?.flags?.['wall-height']?.tokenHeight;
+        const rawHeight = wallHeight ?? (token.actor?.system?.size ?? 1);
+        const terrainHeight = Math.floor(rawHeight * 2) / 2;
         const cells = getTokenCells(token);
         if (cells.length === 0) return;
         const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
-        for (const [x, y] of cells) {
-            const existing = terrainAPI.getCell(x, y) || [];
+        // Each cell gets its own elevation based on the ground below it.
+        for (const [row, col] of cells) {
+            const existing = terrainAPI.getCell(col, row) || [];
             let maxH = 0;
             for (const t of existing) {
                 const tt = terrainTypes.find(ty => ty.id === t.terrainTypeId);
@@ -158,10 +160,10 @@ async function spawnDifficultTerrain(token) {
                     maxH = Math.max(maxH, (t.elevation || 0) + (t.height || 0));
                 }
             }
-            await terrainAPI.paintCells([[x, y]], {
+            await terrainAPI.paintCells([[row, col]], {
                 id: terrainTypeId,
-                height: maxH + terrainHeight,
-                elevation: 0
+                height: terrainHeight,
+                elevation: maxH
             }, { mode: 'additiveMerge' });
         }
     } catch (e) {
@@ -288,7 +290,7 @@ async function wreckIt(token) {
 
     if (tileWreck) {
         new Sequence()
-            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
+            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
             .effect().file(effString).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
                 .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(() => {
@@ -310,7 +312,7 @@ async function wreckIt(token) {
             .play();
     } else {
         new Sequence()
-            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
+            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
             .effect().file(effString).scaleToObject(2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
                 .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(async () => {
@@ -384,6 +386,7 @@ export async function resurrect(token) {
         log(`No actor found for wreck token ${token.name}`);
         return token;
     }
+    delete tokenData._id;
     tokenData.x = token.document.x;
     tokenData.y = token.document.y;
     const fullRestore = {

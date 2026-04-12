@@ -1643,13 +1643,11 @@ export function initTokenStatBar() {
         const entry = _overlayHubs.get(token.id);
         const nameplate = token.nameplate;
         if (nameplate?.visible && entry) {
-            const hub = entry.hub;
             if (token._laBaseNameplateY === undefined) {
                 token._laBaseNameplateY = nameplate.position.y;
             }
             if (show) {
-                const desiredY = hub.position.y + (token.bars?.height ?? 0) + 4;
-                nameplate.position.y = Math.max(token._laBaseNameplateY, desiredY);
+                nameplate.position.y = token._laBaseNameplateY + (token.bars?.height ?? 0) + 8;
             } else {
                 nameplate.position.y = token._laBaseNameplateY;
             }

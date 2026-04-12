@@ -286,6 +286,8 @@ const MiscConfig = makeConfigForm({
     template: `modules/${MODULE_ID}/templates/grouped-settings.html`,
     fields: [
         { key: 'allowHalfSizeTokens', type: 'boolean' },
+        { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
+        { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
     ],
 });
 

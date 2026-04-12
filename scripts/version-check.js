@@ -23,13 +23,21 @@ export async function checkModuleUpdate(moduleId) {
             const parts = manifestUrl.split("/");
             const owner = parts[3];
             const repo = parts[4];
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
 
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
             const apiResponse = await fetch(apiUrl);
             if (apiResponse.ok) {
-                const data = await apiResponse.json();
-                remoteVersion = data.tag_name.replace(/^v/, "");
-                releaseNotes = data.body || "";
+                const allReleases = await apiResponse.json();
+                const missed = allReleases.filter(r => {
+                    const v = r.tag_name.replace(/^v/, "");
+                    return foundry.utils.isNewerVersion(v, module.version);
+                });
+                if (missed.length > 0) {
+                    remoteVersion = missed[0].tag_name.replace(/^v/, "");
+                    releaseNotes = missed
+                        .map(r => `## ${r.tag_name}\n${r.body || ""}`)
+                        .join("\n\n---\n\n");
+                }
             } else {
                 const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/module.json`;
                 const rawResponse = await fetch(rawUrl);
