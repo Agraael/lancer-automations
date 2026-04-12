@@ -14,8 +14,9 @@ I'm a bit shy about that, but one day someone asked if they could give me money,
 
 In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
 
-Check out my other modules and tools: [List of stuff](https://www.patreon.com/posts/list-of-stuff-149377511)
 </details>
+
+Check out my other modules and tools: [List of stuff](https://www.patreon.com/posts/list-of-stuff-149377511)
 
 ---
 
