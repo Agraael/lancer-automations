@@ -50,6 +50,10 @@ function makeConfigForm({ id, title, template, fields }) {
                     isFolder: f.type === 'folder',
                     isColor: f.type === 'color',
                     isSelect: f.type === 'select',
+                    isSlider: f.type === 'slider',
+                    sliderMin: f.min ?? setting.range?.min ?? 0,
+                    sliderMax: f.max ?? setting.range?.max ?? 1,
+                    sliderStep: f.step ?? setting.range?.step ?? 0.1,
                     isSection: f.type === 'section',
                     choices: (typeof f.getChoices === 'function' ? f.getChoices() : f.choices)
                         ?? (setting.choices
@@ -93,7 +97,7 @@ function makeConfigForm({ id, title, template, fields }) {
                     continue;
                 }
                 let val = formData[f.key];
-                if (f.type === 'number') val = Number(val);
+                if (f.type === 'number' || f.type === 'slider') val = Number(val);
                 if (f.type === 'boolean') val = !!val;
                 try {
                     await game.settings.set(MODULE_ID, f.key, val);
@@ -157,7 +161,7 @@ const WreckConfig = makeConfigForm({
         { key: 'enableRemoveFromCombat', type: 'boolean' },
         { key: 'enableWreckAnimation', type: 'boolean' },
         { key: 'enableWreckAudio', type: 'boolean' },
-        { key: 'wreckMasterVolume', type: 'number', label: 'Wreck Master Volume' },
+        { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Master Volume' },
         { key: 'squadLostOnDeath', type: 'boolean' },
         { key: 'wreckTerrainType', type: 'select', label: 'Wreck Terrain Type', getChoices: () => {
             const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';

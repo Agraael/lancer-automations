@@ -59,6 +59,12 @@
                 {{#if this.isColor}}
                     <input type="color" name="{{this.key}}" value="{{this.value}}" style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
                 {{/if}}
+                {{#if this.isSlider}}
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" style="width:120px;" oninput="this.nextElementSibling.textContent=this.value" />
+                        <span style="min-width:28px;text-align:center;font-size:0.9em;">{{this.value}}</span>
+                    </div>
+                {{/if}}
                 {{#if this.isSelect}}
                     <select name="{{this.key}}">
                         {{#each this.choices}}
