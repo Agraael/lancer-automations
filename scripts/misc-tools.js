@@ -800,8 +800,10 @@ export async function executeReactorExplosion(token) {
     const BASE_SCALE = 0.2;
     const systemSize = Math.floor(myActor?.system?.size || 1);
     const scaleFactor = (systemSize + 2) * BASE_SCALE;
-    const tokenCenterX = token.document.x + (token.document.width * canvas.grid.size) / 2;
-    const tokenCenterY = token.document.y + (token.document.height * canvas.grid.size) / 2;
+    const gpW = Math.max(1, token.document.width);
+    const gpH = Math.max(1, token.document.height);
+    const tokenCenterX = token.document.x + (gpW * canvas.grid.size) / 2;
+    const tokenCenterY = token.document.y + (gpH * canvas.grid.size) / 2;
     const tokenCenter = { x: tokenCenterX, y: tokenCenterY };
 
     await Sequencer.Preloader.preloadForClients([

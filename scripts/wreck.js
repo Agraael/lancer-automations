@@ -38,7 +38,7 @@ export function getTokenCategory(token) {
     if (hasLid('npcc_squad')) return 'squad';
     if (hasLid('npcc_monstrosity')) return 'monstrosity';
     if (hasLid('npcc_human')) return 'human';
-    if (items.some(i => i.type === 'npc_template' && i.system?.lid?.includes('specialist'))) return 'human';
+    if (hasLid('npcc_specialist')) return 'human';
     if (items.some(i => i.system?.role === 'biological')) return 'biological';
     return 'mech';
 }
@@ -185,6 +185,7 @@ async function getOrCreateWreckActor() {
             actorLink: false,
             displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
             displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
+            texture: { src: `modules/${MODULE_ID}/icons/tombstone.svg` },
         },
     });
     log('Created Template Wreck actor');
@@ -196,7 +197,7 @@ async function getOrCreateWreckActor() {
 // ---------------------------------------------------------------------------
 
 export async function preLoadImageForAll(src, push = false) {
-    if (!src) return src;
+    if (!src || !src.trim()) return src;
     if (push) {
         game.socket.emit(`module.${MODULE_ID}`, { action: 'preLoadImageForAll', payload: src });
     }
@@ -287,7 +288,7 @@ async function wreckIt(token) {
 
     if (tileWreck) {
         new Sequence()
-            .sound().file(souString).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
+            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
             .effect().file(effString).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
                 .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(() => {
@@ -309,7 +310,7 @@ async function wreckIt(token) {
             .play();
     } else {
         new Sequence()
-            .sound().file(souString).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
+            .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio'))
             .effect().file(effString).scaleToObject(2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
                 .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(async () => {
@@ -327,6 +328,9 @@ async function wreckIt(token) {
                                 y: token.document.y,
                                 width: token.document.width,
                                 height: token.document.height,
+                                hexagonalShape: token.document.hexagonalShape,
+                                lockRotation: token.document.lockRotation,
+                                rotation: token.document.rotation,
                                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 delta: {
@@ -339,12 +343,14 @@ async function wreckIt(token) {
                                     [MODULE_ID]: {
                                         isWreck: true,
                                         tokenDocument: token.document.toObject(),
-                                    }
+                                    },
+                                    lancer: {
+                                        manual_token_size: token.document.getFlag('lancer', 'manual_token_size') ?? false,
+                                    },
                                 }
                             };
-                            if (imgString) {
-                                tokenData.texture = { src: imgString, scaleX: wreckScale, scaleY: wreckScale };
-                            }
+                            const textureSrc = imgString || `modules/${MODULE_ID}/icons/tombstone.svg`;
+                            tokenData.texture = { src: textureSrc, scaleX: wreckScale, scaleY: wreckScale };
                             const wreckToken = await wreckActor.getTokenDocument(tokenData);
                             await canvas.scene.createEmbeddedDocuments('Token', [wreckToken]);
                         }
@@ -380,16 +386,22 @@ export async function resurrect(token) {
     }
     tokenData.x = token.document.x;
     tokenData.y = token.document.y;
+    const fullRestore = {
+        'system.structure.value': actor.system.structure?.max ?? 1,
+        'system.stress.value': actor.system.stress?.max ?? 1,
+        'system.hp.value': actor.system.hp?.max ?? 1,
+        'system.heat.value': 0,
+        'system.burn': 0,
+        'system.overshield.value': 0,
+    };
     if (tokenData.actorLink) {
-        if (actor.system.structure.value === 0) {
-            await actor.update({ 'system.structure.value': 1 });
-        }
+        await actor.update(fullRestore);
         const newTokenDoc = await actor.getTokenDocument({ x: tokenData.x, y: tokenData.y });
         await canvas.scene.createEmbeddedDocuments('Token', [newTokenDoc]);
     } else {
         const [newToken] = await canvas.scene.createEmbeddedDocuments('Token', [tokenData]);
-        if (newToken?.actor?.system?.structure?.value === 0) {
-            await newToken.actor.update({ 'system.structure.value': 1 });
+        if (newToken?.actor) {
+            await newToken.actor.update(fullRestore);
         }
     }
     await token.document.delete();

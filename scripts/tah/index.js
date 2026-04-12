@@ -62,31 +62,31 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraColorThreat', {
         name: 'Threat Aura Color',
         hint: 'Color of the Max Threat range aura.',
-        scope: 'client', config: true, type: String, default: '#9514ff',
+        scope: 'client', config: false, type: String, default: '#9514ff',
     });
     game.settings.register(MODULE, 'tah.auraColorSensor', {
         name: 'Sensor Aura Color',
         hint: 'Color of the Sensor range aura.',
-        scope: 'client', config: true, type: String, default: '#549eff',
+        scope: 'client', config: false, type: String, default: '#549eff',
     });
     game.settings.register(MODULE, 'tah.auraColorRange', {
         name: 'Max Range Aura Color',
         hint: 'Color of the Max Range aura.',
-        scope: 'client', config: true, type: String, default: '#ff7b00',
+        scope: 'client', config: false, type: String, default: '#ff7b00',
     });
     game.settings.register(MODULE, 'tah.auraOpacityThreat', {
         name: 'Threat Aura Opacity',
-        scope: 'client', config: true, type: Number, default: 1,
+        scope: 'client', config: false, type: Number, default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.auraOpacitySensor', {
         name: 'Sensor Aura Opacity',
-        scope: 'client', config: true, type: Number, default: 1,
+        scope: 'client', config: false, type: Number, default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.auraOpacityRange', {
         name: 'Max Range Aura Opacity',
-        scope: 'client', config: true, type: Number, default: 1,
+        scope: 'client', config: false, type: Number, default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     // Default toggle mode per aura
@@ -94,19 +94,19 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraDefaultThreat', {
         name: 'Threat Aura Default',
         hint: 'When to auto-enable the Threat aura.',
-        scope: 'client', config: true, type: String, default: 'none',
+        scope: 'client', config: false, type: String, default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraDefaultSensor', {
         name: 'Sensor Aura Default',
         hint: 'When to auto-enable the Sensor aura.',
-        scope: 'client', config: true, type: String, default: 'none',
+        scope: 'client', config: false, type: String, default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraDefaultRange', {
         name: 'Max Range Aura Default',
         hint: 'When to auto-enable the Max Range aura.',
-        scope: 'client', config: true, type: String, default: 'none',
+        scope: 'client', config: false, type: String, default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.position', {

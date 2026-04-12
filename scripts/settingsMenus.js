@@ -157,6 +157,7 @@ const WreckConfig = makeConfigForm({
         { key: 'enableRemoveFromCombat', type: 'boolean' },
         { key: 'enableWreckAnimation', type: 'boolean' },
         { key: 'enableWreckAudio', type: 'boolean' },
+        { key: 'wreckMasterVolume', type: 'number', label: 'Wreck Master Volume' },
         { key: 'squadLostOnDeath', type: 'boolean' },
         { key: 'wreckTerrainType', type: 'select', label: 'Wreck Terrain Type', getChoices: () => {
             const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
@@ -236,18 +237,51 @@ const TokenActionHudConfig = makeConfigForm({
         { key: 'tah.clickToOpen', type: 'boolean' },
         { key: 'tah.hoverCloseDelay', type: 'number' },
         { key: 'tah.rangePreview', type: 'boolean' },
-        // Threat aura
-        { key: 'tah.auraColorThreat', type: 'color', label: 'Threat Color' },
-        { key: 'tah.auraOpacityThreat', type: 'number', label: 'Threat Opacity' },
-        { key: 'tah.auraDefaultThreat', type: 'select', label: 'Threat Default' },
-        // Sensor aura
-        { key: 'tah.auraColorSensor', type: 'color', label: 'Sensor Color' },
-        { key: 'tah.auraOpacitySensor', type: 'number', label: 'Sensor Opacity' },
-        { key: 'tah.auraDefaultSensor', type: 'select', label: 'Sensor Default' },
-        // Max Range aura
-        { key: 'tah.auraColorRange', type: 'color', label: 'Max Range Color' },
-        { key: 'tah.auraOpacityRange', type: 'number', label: 'Max Range Opacity' },
-        { key: 'tah.auraDefaultRange', type: 'select', label: 'Max Range Default' },
+        // Aura settings table.
+        { type: 'table', label: 'Range Auras',
+          tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
+                      'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor',
+                      'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'],
+          getTable: () => {
+            const defaultChoices = (key) => {
+                const cur = game.settings.get(MODULE_ID, key);
+                return [
+                    { value: 'none', label: 'None', selected: cur === 'none' },
+                    { value: 'combat', label: 'Combat', selected: cur === 'combat' },
+                    { value: 'all', label: 'Always', selected: cur === 'all' },
+                ];
+            };
+            const makeRow = (label, colorKey, opacityKey, defaultKey) => ({
+                label,
+                cells: [
+                    { isColor: true, name: colorKey, value: game.settings.get(MODULE_ID, colorKey) },
+                    { isNumber: true, name: opacityKey, value: game.settings.get(MODULE_ID, opacityKey) },
+                    { isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) },
+                ],
+            });
+            return {
+                columns: ['Aura', 'Color', 'Opacity', 'Default'],
+                rows: [
+                    makeRow('Threat', 'tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat'),
+                    makeRow('Sensor', 'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor'),
+                    makeRow('Max Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
+                ],
+            };
+          },
+        },
+    ],
+});
+
+// ---------------------------------------------------------------------------
+// Misc
+// ---------------------------------------------------------------------------
+
+const MiscConfig = makeConfigForm({
+    id: 'la-misc-config',
+    title: 'Lancer Automations — Miscellaneous',
+    template: `modules/${MODULE_ID}/templates/grouped-settings.html`,
+    fields: [
+        { key: 'allowHalfSizeTokens', type: 'boolean' },
     ],
 });
 
@@ -397,5 +431,14 @@ export function registerSettingsMenus() {
         icon: 'fas fa-th-list',
         type: TokenActionHudConfig,
         restricted: false,
+    });
+
+    game.settings.registerMenu(MODULE_ID, 'miscConfigMenu', {
+        name: 'Miscellaneous',
+        label: 'Configure Misc',
+        hint: 'Half-size tokens and other options.',
+        icon: 'fas fa-cog',
+        type: MiscConfig,
+        restricted: true,
     });
 }

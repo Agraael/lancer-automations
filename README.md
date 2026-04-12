@@ -13,6 +13,8 @@
 I'm a bit shy about that, but one day someone asked if they could give me money, feels good. Anyway, here's the thing.
 
 In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
+
+Check out my other modules and tools: [List of stuff](https://www.patreon.com/posts/list-of-stuff-149377511)
 </details>
 
 ---
@@ -81,6 +83,13 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix so you can have more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
+
+### Recommended
+
+| Module | Description |
+|--------|-------------|
+| [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) | Bulk NPC import from LCP JSON, Comp/Con v3 cloud sync for pilots, pilot import with reserves/projects/organizations. |
+| [Actor Browser (fork)](https://github.com/Agraael/vtt-actor-browser-fork) | Browse and search actors across folders and compendiums with filtering and drag-and-drop. |
 
 ---
 
@@ -586,10 +595,17 @@ Several other triggers allow you to cancel an operation before it completes. Any
 - `triggerData.cancelChange(...)`: stop a status effect in `onPreStatusApplied` / `onPreStatusRemoved`
 - `triggerData.cancelStructure(...)`: prevent structure roll in `onPreStructure`
 - `triggerData.cancelStress(...)`: prevent overheat roll in `onPreStress`
+- `triggerData.cancelStructureOutcome(...)`: stop structure outcome after the roll in `onStructure`
+- `triggerData.cancelStressOutcome(...)`: stop stress outcome after the roll in `onStress`
 - `triggerData.cancelHpChange(...)`: block HP change in `onPreHpChange`
 - `triggerData.cancelHeatChange(...)`: block heat change in `onPreHeatChange`
 
 All cancel functions accept `(reasonText?, title?, showCard?, userIdControl?)`.
+
+`onStructure` and `onStress` also expose:
+- `triggerData.rollResult`: the roll total
+- `triggerData.rollDice`: array of individual die results (e.g. `[3, 3]` for doubles)
+- `triggerData.modifyRoll(newTotal)`: override the roll total before outcome steps run
 
 ### HP & Heat Modification (onPreHpChange / onPreHeatChange)
 
@@ -931,7 +947,9 @@ I made my own custom Bar Brawl, tailored to Lancer. You can toggle it from the m
 
 Unlike Lancer QoL's wreck system which swaps the token image, this one spawns a new deployable actor token on death. That wreck token can be resurrected from the TAH (Utility > Combat > Resurrect), which deletes the wreck and respawns the original unit.
 
-Per-category wreck mode (Token or Tile) and terrain spawning can be configured independently for Mech, Human, Monstrosity, and Biological types. On each prototype token's L.A tab, you can override the wreck image, effect, and sound — if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
+Per-category wreck mode (Token or Tile) and terrain spawning can be configured independently for Mech, Human, Monstrosity, and Biological types. Wrecks can optionally spawn difficult terrain at the death location (requires Terrain Height Tools), with the terrain height matching the token's wall-height. The wreck image/effect scale is adjustable per token via the L.A tab.
+
+On each prototype token's L.A tab, you can override the wreck mode, terrain spawning, wreck image, effect, sound, and scale — if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
 
 You can point to your own custom wreck assets folder in the Wreck Automation settings. The expected directory structure is:
 

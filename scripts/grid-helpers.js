@@ -2,6 +2,19 @@
 
 // Shared grid helper functions used across lancer-automations modules.
 
+/**
+ * Returns dimensions clamped to a minimum of 1 grid unit.
+ * Tokens with sub-1 document size (e.g. 0.5-size mechs) still occupy a full
+ * grid cell for all game-mechanic purposes (distance, spawning, footprints).
+ */
+export function getGameplayDimensions(token) {
+    const doc = token.document ?? token;
+    return {
+        width: Math.max(1, doc.width),
+        height: Math.max(1, doc.height)
+    };
+}
+
 export function isHexGrid() {
     return canvas.grid.type === CONST.GRID_TYPES.HEXODDR ||
         canvas.grid.type === CONST.GRID_TYPES.HEXEVENR ||
@@ -268,6 +281,15 @@ export function getMinGridDistance(token1, token2, overridePos1 = null) {
  * @returns {Object} The snapped top-left position {x, y}
  */
 export function snapTokenCenter(token, centerPoint) {
+    const doc = token.document ?? token;
+    if (doc.width < 1 || doc.height < 1) {
+        const offset = pixelToOffset(centerPoint.x, centerPoint.y);
+        const cellCenter = getHexCenter(offset.col, offset.row);
+        return {
+            x: cellCenter.x - (token.w / 2),
+            y: cellCenter.y - (token.h / 2)
+        };
+    }
     const topLeftX = centerPoint.x - (token.w / 2);
     const topLeftY = centerPoint.y - (token.h / 2);
     return token.getSnappedPosition({ x: topLeftX, y: topLeftY });

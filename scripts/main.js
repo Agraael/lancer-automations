@@ -1275,9 +1275,20 @@ function registerSettings() {
         hint: 'Terrain Height Tools terrain type ID for wreck difficult terrain.',
         scope: 'world', config: false, type: String, default: '',
     });
+    game.settings.register('lancer-automations', 'wreckMasterVolume', {
+        name: 'Wreck Master Volume',
+        hint: 'Volume of wreck explosion sounds (0 = mute, 1 = full).',
+        scope: 'world', config: false, type: Number, default: 1,
+        range: { min: 0, max: 1.5, step: 0.1 },
+    });
     game.settings.register('lancer-automations', 'disableHumanDeathSound', {
         name: 'Disable Human Death Sound',
         hint: 'Mute wreck sounds for human/pilot/squad deaths.',
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
+    game.settings.register('lancer-automations', 'allowHalfSizeTokens', {
+        name: 'Allow Half-Size Tokens',
+        hint: 'Size 0.5 actors get 0.5 grid token dimensions instead of being forced to 1.',
         scope: 'world', config: false, type: Boolean, default: false,
     });
     game.settings.register('lancer-automations', 'enableWipOnDeath', {
@@ -2221,13 +2232,7 @@ async function onPreStructureStep(state) {
             cancelStructureTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
-            const flowClass = game.lancer?.flows?.get?.('StructureFlow');
-            if (flowClass) {
-                const newFlow = new flowClass(state.actor?.uuid || state.uuid, { ...state.data });
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => async () => {},
         defaultReason: "Structure damage has been prevented.",
         defaultTitle: "STRUCTURE PREVENTED",
     });
@@ -2252,9 +2257,38 @@ async function onStructureStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStructure = actor?.system?.structure?.value ?? 0;
-    const rollResult = state.data?.result?.roll?.total;
-    const triggerData = { triggeringToken: token, remainingStructure, rollResult };
-    await handleTrigger('onStructure', triggerData);
+    const roll = state.data?.result?.roll;
+    const rollResult = roll?.total;
+    const rollDice = roll?.dice?.[0]?.results?.map(r => r.result) ?? [];
+    if (!state.data) state.data = {};
+    if (!state.data._cancelledBy) state.data._cancelledBy = [];
+
+    let cancelTriggered = false;
+    const cancelStructureOutcome = _buildCancelFn({
+        setFlag: () => { cancelTriggered = true; },
+        cancelledBy: state.data._cancelledBy,
+        getIgnoreCallback: () => async () => {},
+        defaultReason: "Structure outcome has been overridden.",
+        defaultTitle: "STRUCTURE OUTCOME OVERRIDDEN",
+    });
+
+    const modifyRoll = (newTotal) => {
+        if (state.data?.result?.roll) {
+            state.data.result.roll._total = newTotal;
+        }
+    };
+
+    await handleTrigger('onStructure', {
+        triggeringToken: token, remainingStructure, rollResult, rollDice,
+        cancelStructureOutcome, modifyRoll,
+        _cancelledBy: state.data._cancelledBy,
+        flowState: state,
+    });
+
+    if (cancelTriggered) {
+        await cancelStructureOutcome.wait?.();
+        return false;
+    }
     return true;
 }
 
@@ -2274,13 +2308,7 @@ async function onPreStressStep(state) {
             cancelStressTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
-            const flowClass = game.lancer?.flows?.get?.('OverheatFlow');
-            if (flowClass) {
-                const newFlow = new flowClass(state.actor?.uuid || state.uuid, { ...state.data });
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => async () => {},
         defaultReason: "Stress damage has been prevented.",
         defaultTitle: "STRESS PREVENTED",
     });
@@ -2305,9 +2333,38 @@ async function onStressStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStress = actor?.system?.stress?.value ?? 0;
-    const rollResult = state.data?.result?.roll?.total;
-    const triggerData = { triggeringToken: token, remainingStress, rollResult };
-    await handleTrigger('onStress', triggerData);
+    const roll = state.data?.result?.roll;
+    const rollResult = roll?.total;
+    const rollDice = roll?.dice?.[0]?.results?.map(r => r.result) ?? [];
+    if (!state.data) state.data = {};
+    if (!state.data._cancelledBy) state.data._cancelledBy = [];
+
+    let cancelTriggered = false;
+    const cancelStressOutcome = _buildCancelFn({
+        setFlag: () => { cancelTriggered = true; },
+        cancelledBy: state.data._cancelledBy,
+        getIgnoreCallback: () => async () => {},
+        defaultReason: "Stress outcome has been overridden.",
+        defaultTitle: "STRESS OUTCOME OVERRIDDEN",
+    });
+
+    const modifyRoll = (newTotal) => {
+        if (state.data?.result?.roll) {
+            state.data.result.roll._total = newTotal;
+        }
+    };
+
+    await handleTrigger('onStress', {
+        triggeringToken: token, remainingStress, rollResult, rollDice,
+        cancelStressOutcome, modifyRoll,
+        _cancelledBy: state.data._cancelledBy,
+        flowState: state,
+    });
+
+    if (cancelTriggered) {
+        await cancelStressOutcome.wait?.();
+        return false;
+    }
     return true;
 }
 
@@ -2581,19 +2638,7 @@ async function onInitCheckStep(state) {
             cancelCheckTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
-            const flowClass = game.lancer?.flows?.get?.(state.name);
-            if (flowClass) {
-                let newFlow;
-                if (state.name === "StatRollFlow") {
-                    newFlow = new flowClass(state.actor, { ...state.data });
-                } else {
-                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                    return;
-                }
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => async () => {},
         defaultReason: "This check has been canceled.",
         defaultTitle: "CHECK CANCELED",
     });
@@ -2648,21 +2693,7 @@ async function onInitAttackStep(state) {
             cancelAttackTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
-            const flowClass = game.lancer?.flows?.get?.(state.name);
-            if (flowClass) {
-                let newFlow;
-                if (state.name === "WeaponAttackFlow") {
-                    newFlow = new flowClass(state.item, { ...state.data });
-                } else if (state.name === "BasicAttackFlow") {
-                    newFlow = new flowClass(state.item || state.actor, { ...state.data });
-                } else {
-                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                    return;
-                }
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => async () => {},
         defaultReason: "This attack has been canceled.",
         defaultTitle: "ATTACK CANCELED",
     });
@@ -2719,19 +2750,7 @@ async function onInitTechAttackStep(state) {
             cancelTechAttackTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
-            const flowClass = game.lancer?.flows?.get?.(state.name);
-            if (flowClass) {
-                let newFlow;
-                if (state.name === "TechAttackFlow") {
-                    newFlow = new flowClass(state.item, { ...state.data });
-                } else {
-                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                    return;
-                }
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => async () => {},
         defaultReason: "This tech attack has been canceled.",
         defaultTitle: "TECH ATTACK CANCELED",
     });
@@ -3190,14 +3209,45 @@ function wrapRollDamageForNoBonusDmg(flowSteps) {
     }
 }
 
-/**
- * Wraps the system's 'rollReliable' step so that knockback-only flows
- * (no damage dice) don't abort. If the original step returns false but
- * knockback is enabled, we allow the flow to continue.
- */
-// Inject a Flat Modifier input into the stat roll HUD. The Svelte component
-// only renders it for "attack" kind, so we inject our own DOM and fold the
-// result back into the roll string.
+// Allow 0.5-size tokens instead of Lancer's Math.max(1, size).
+// Wraps the original Lancer methods so all normal behavior is preserved,
+// then fixes up sub-1 sizes after the original has run and snapped.
+function patchHalfSizeTokens() {
+    const docClass = CONFIG.Token.documentClass;
+    if (!docClass) return;
+
+    const origPreCreate = docClass.prototype._preCreate;
+    docClass.prototype._preCreate = async function (...args) {
+        const result = await origPreCreate.call(this, ...args);
+        const autoSize = game.settings.get(game.system.id, 'automationOptions')?.token_size;
+        if (autoSize && !this.getFlag(game.system.id, 'manual_token_size')) {
+            const s = this.actor?.system?.size;
+            if (s !== undefined && s < 1) {
+                const gs = canvas?.grid?.size || 100;
+                const cx = this.x + (this.width * gs / 2);
+                const cy = this.y + (this.height * gs / 2);
+                this.updateSource({ width: s, height: s, x: cx - (s * gs / 2), y: cy - (s * gs / 2) });
+            }
+        }
+        return result;
+    };
+
+    const origRelatedUpdate = docClass.prototype._onRelatedUpdate;
+    docClass.prototype._onRelatedUpdate = function (...args) {
+        origRelatedUpdate.call(this, ...args);
+        const autoSize = game.settings.get(game.system.id, 'automationOptions')?.token_size;
+        if (autoSize && !this.getFlag(game.system.id, 'manual_token_size')) {
+            const s = this.actor?.system?.size;
+            if (s !== undefined && s < 1 && this.isOwner && this.id && (this.width !== s || this.height !== s)) {
+                this.update({ width: s, height: s });
+            }
+        }
+    };
+
+    console.log('lancer-automations | Patched token sizing to allow 0.5-size tokens');
+}
+
+// Inject Flat Modifier input into the stat roll HUD.
 function wrapStatRollFlatModifier(flowSteps) {
     const orig = flowSteps.get('showStatRollHUD');
     if (!orig) {
@@ -4254,6 +4304,11 @@ Hooks.on('ready', async () => {
 
     // Wreck system — token config tab
     initWreckTokenConfig();
+
+    // Allow 0.5-size tokens instead of forcing minimum 1.
+    if (game.settings.get('lancer-automations', 'allowHalfSizeTokens')) {
+        patchHalfSizeTokens();
+    }
 
     // Compatibility checker — detect and offer to fix conflicts with other modules
     checkCompatibility();

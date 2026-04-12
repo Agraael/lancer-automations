@@ -25,7 +25,7 @@ export function stringToFunction(str, args = [], reaction = null) {
         fn = new Function(...args, trimmed);
     }
     if (fn.constructor.name === 'AsyncFunction') {
-        const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck'];
+        const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck', 'cancelStructure', 'cancelStress', 'cancelStructureOutcome', 'cancelStressOutcome', 'cancelHpChange', 'cancelHeatChange', 'modifyRoll', 'modifyHpChange', 'modifyHeatChange'];
         const foundKeywords = blockingKeywords.filter(k => trimmed.includes(k));
 
         const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
@@ -1486,9 +1486,9 @@ export class ReactionEditor extends FormApplication {
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onStructure: "{ triggeringToken, remainingStructure, rollResult, distanceToTrigger }",
+            onStructure: "{ triggeringToken, remainingStructure, rollResult, rollDice, cancelStructureOutcome(reasonText, title, showCard, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
             onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onStress: "{ triggeringToken, remainingStress, rollResult, distanceToTrigger }",
+            onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, showCard, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
             onHeatGain: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
             onDestroyed: "{ triggeringToken, distanceToTrigger }",
             onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",

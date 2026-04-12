@@ -195,7 +195,7 @@
 
                     <!-- Await Activation Completion (only when Auto Activate is checked) -->
                     <label class="checkbox force-sync-option"
-                        title="Run activation code synchronously. Required for cancelAction/cancelAttack/cancelTechAttack/cancelCheck in their respective onInit triggers, and cancelTriggeredMove in onPreMove. Also ensures bonuses like Accuracy are applied before rolls begin."
+                        title="Run activation code synchronously. Required for cancel functions (cancelAction, cancelAttack, cancelTechAttack, cancelCheck, cancelStructure, cancelStress, cancelStructureOutcome, cancelStressOutcome, cancelHpChange, cancelHeatChange) and cancelTriggeredMove in onPreMove. Also ensures bonuses like Accuracy are applied before rolls begin."
                         {{#unless autoActivate}}style="display:none" {{/unless}}>
                         <input type="checkbox" name="awaitActivationCompletion" {{#if
                             awaitActivationCompletion}}checked{{/if}}>

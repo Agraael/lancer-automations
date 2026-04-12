@@ -27,6 +27,12 @@
                     {{#if this.isBoolean}}
                     <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} />
                     {{/if}}
+                    {{#if this.isColor}}
+                    <input type="color" name="{{this.name}}" value="{{this.value}}" style="width:36px;height:24px;padding:1px;cursor:pointer;" />
+                    {{/if}}
+                    {{#if this.isNumber}}
+                    <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" style="width:50px;" />
+                    {{/if}}
                 </td>
                 {{/each}}
             </tr>

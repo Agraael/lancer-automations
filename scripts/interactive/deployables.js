@@ -245,62 +245,19 @@ export async function pickupWeaponToken(ownerToken) {
         return null;
     }
 
-    const choices = thrownTokens.map((t, idx) => {
-        const flags = t.document.flags?.['lancer-automations'];
-        return { idx, token: t, name: flags?.weaponName || t.name, img: t.document?.texture?.src || 'icons/svg/item-bag.svg' };
-    });
-    const listHtml = choices.map(c => `
-        <div class="la-pickup-item" data-idx="${c.idx}"
-             style="display:flex;align-items:center;padding:5px 8px;border:1px solid #444;margin-bottom:3px;
-                    cursor:pointer;border-radius:3px;background:rgba(255,255,255,0.03);transition:all 0.15s;">
-            <img src="${c.img}" style="width:28px;height:28px;object-fit:contain;margin-right:8px;border:1px solid #333;flex-shrink:0;">
-            <div style="flex:1;">
-                <div style="font-weight:bold;">${c.name}</div>
-                <div style="font-size:0.68em;opacity:0.45;text-transform:uppercase;font-weight:bold;letter-spacing:0.5px;">Thrown Weapon</div>
-            </div>
-            <i class="fas fa-check" style="color:#ff6400;margin-left:6px;font-size:0.85em;visibility:hidden;"></i>
-        </div>`).join('');
-    const content = `
-        <div class="lancer-dialog-header">
-            <div class="lancer-dialog-title">PICK UP WEAPON</div>
-            <div class="lancer-dialog-subtitle">${choices.length} thrown weapon(s) available.</div>
-        </div>
-        <div class="lancer-dialog-body" style="padding:10px;">
-            <div style="max-height:350px;overflow-y:auto;padding-right:5px;">${listHtml}</div>
-        </div>`;
-    const pickedToken = await new Promise(resolveDialog => {
-        let selectedIdx = null;
-        new Dialog({
-            title: 'Pick Up Weapon',
-            content,
-            buttons: {
-                confirm: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: 'Pick Up',
-                    callback: () => resolveDialog(selectedIdx !== null ? choices[selectedIdx].token : null),
-                },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: 'Cancel',
-                    callback: () => resolveDialog(null),
-                },
-            },
-            default: 'confirm',
-            render: (html) => {
-                const confirmBtn = html.parent().find('button.confirm');
-                confirmBtn.prop('disabled', true);
-                html.find('.la-pickup-item').on('click', function() {
-                    html.find('.la-pickup-item').css({ 'border-color': '#444', background: 'rgba(255,255,255,0.03)' }).find('i').css('visibility', 'hidden');
-                    selectedIdx = Number.parseInt($(this).data('idx'));
-                    $(this).css({ 'border-color': '#ff6400', background: 'rgba(255,100,0,0.05)' }).find('i').css('visibility', 'visible');
-                    confirmBtn.prop('disabled', false);
-                });
-            },
-        }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 400, top: 450, left: 150 }).render(true);
+    const selected = await chooseToken(ownerToken, {
+        count: 1,
+        includeSelf: false,
+        selection: thrownTokens,
+        title: "PICK UP WEAPON",
+        description: `${thrownTokens.length} thrown weapon(s) available.`,
+        icon: "fas fa-hand"
     });
 
-    if (!pickedToken)
+    if (!selected || selected.length === 0)
         return null;
+
+    const pickedToken = selected[0];
     const flags = pickedToken.document?.flags?.['lancer-automations'];
     const weaponId = flags?.weaponId;
     const weaponName = flags?.weaponName || "Weapon";

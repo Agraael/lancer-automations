@@ -132,13 +132,14 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
     const drawFootprint = (targetX, targetY, lineColor, fillColor) => {
         trace.lineStyle(3, lineColor, 0.8);
         trace.beginFill(fillColor, 0.3);
-        if (isHexGrid()) {
-            const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
-            for (const o of offsets) {
+        const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
+        for (const o of offsets) {
+            if (isHexGrid()) {
                 drawHexAt(trace, o.col, o.row);
+            } else {
+                const c = getHexCenter(o.col, o.row);
+                trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
             }
-        } else {
-            trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
         }
         trace.endFill();
     };
@@ -245,12 +246,14 @@ export function chooseToken(casterToken, options = {}) {
                 const hl = new PIXI.Graphics();
                 hl.lineStyle(4, 0x00ff00, 0.8);
                 hl.beginFill(0x00ff00, 0.2);
-                if (isHexGrid()) {
-                    const offsets = getOccupiedOffsets(t);
-                    for (const off of offsets)
+                const offsets = getOccupiedOffsets(t);
+                for (const off of offsets) {
+                    if (isHexGrid()) {
                         drawHexAt(hl, off.col, off.row);
-                } else {
-                    hl.drawRect(t.document.x, t.document.y, t.document.width * canvas.grid.size, t.document.height * canvas.grid.size);
+                    } else {
+                        const c = getHexCenter(off.col, off.row);
+                        hl.drawRect(c.x - canvas.grid.size / 2, c.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
+                    }
                 }
                 hl.endFill();
                 canvas.stage.addChild(hl);
@@ -1046,21 +1049,17 @@ export async function moveToken(token, options = {}) {
                 // Original position (yellow)
                 trace.lineStyle(2, 0xffff00, 0.8);
                 trace.beginFill(0xffff00, 0.3);
-                if (isHexGrid()) {
-                    for (const o of getOccupiedOffsets(token))
-                        drawHexAt(trace, o.col, o.row);
-                } else {
-                    trace.drawRect(token.document.x, token.document.y, token.document.width * gridSize, token.document.height * gridSize);
+                for (const o of getOccupiedOffsets(token)) {
+                    if (isHexGrid()) drawHexAt(trace, o.col, o.row);
+                    else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
                 }
                 trace.endFill();
                 // Target position (green for teleport)
                 trace.lineStyle(2, 0x00cc66, 0.8);
                 trace.beginFill(0x00cc66, 0.3);
-                if (isHexGrid()) {
-                    for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY }))
-                        drawHexAt(trace, o.col, o.row);
-                } else {
-                    trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+                for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
+                    if (isHexGrid()) drawHexAt(trace, o.col, o.row);
+                    else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
                 }
                 trace.endFill();
                 // Dashed line
@@ -1181,7 +1180,7 @@ export async function moveToken(token, options = {}) {
     const startCenter = token.getCenterPoint({ x: token.document.x, y: token.document.y });
     const endCenter = token.getCenterPoint(destTopLeft);
     const moveCost = options.cost ?? getDistanceTokenToPoint(endCenter, token);
-    const tokenSize = Math.max(token.document.width, token.document.height) * canvas.grid.size;
+    const tokenSize = Math.max(1, token.document.width, token.document.height) * canvas.grid.size;
     const weaponFx = game.modules.get("lancer-weapon-fx");
     // Sequencer VFX (teleport only): impact at origin and destination
     if (options.teleport && typeof Sequencer !== 'undefined') {
@@ -1425,25 +1424,18 @@ export function knockBackToken(tokens, distance, options = {}) {
             // Draw Original Position (Yellow)
             trace.lineStyle(2, 0xffff00, 0.8);
             trace.beginFill(0xffff00, 0.3);
-            if (isHexGrid()) {
-                const offsets = getOccupiedOffsets(token);
-                for (const o of offsets)
-                    drawHexAt(trace, o.col, o.row);
-            } else {
-                trace.drawRect(token.document.x, token.document.y, token.document.width * gridSize, token.document.height * gridSize);
+            for (const o of getOccupiedOffsets(token)) {
+                if (isHexGrid()) drawHexAt(trace, o.col, o.row);
+                else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
             }
             trace.endFill();
 
             // Draw Target Position (Orange)
             trace.lineStyle(2, 0xff6400, 0.8);
             trace.beginFill(0xff6400, 0.3);
-
-            if (isHexGrid()) {
-                const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
-                for (const o of offsets)
-                    drawHexAt(trace, o.col, o.row);
-            } else {
-                trace.drawRect(targetX, targetY, token.document.width * gridSize, token.document.height * gridSize);
+            for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
+                if (isHexGrid()) drawHexAt(trace, o.col, o.row);
+                else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
             }
             trace.endFill();
 
