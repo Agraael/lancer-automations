@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Add Reserve",
+    "type": "script",
+    "img": "systems/lancer/assets/icons/white/reserve_mech.svg",
+    "command_source": "AddReserve.js"
+}

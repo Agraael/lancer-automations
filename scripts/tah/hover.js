@@ -1,6 +1,6 @@
 /*global game, canvas, Hooks, foundry */
 
-import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus } from '../misc-tools.js';
+import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus, getWeaponProfiles_WithBonus } from '../misc-tools.js';
 
 // ── LA_range_preview aura ────────────────────────────────────────────────────────
 
@@ -227,7 +227,7 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
     return null;
 }
 
-// ── Persistent range auras (Threat / Sensors / Max Range) ─────────────────────
+// ── Persistent range auras (Threat / Sensors / Weapon Range / Custom Measure) ─
 
 const AURA_DEFS = {
     LA_max_Threat: {
@@ -250,13 +250,32 @@ const AURA_DEFS = {
         settingColor: 'tah.auraColorRange',
         settingOpacity: 'tah.auraOpacityRange',
         settingDefault: 'tah.auraDefaultRange',
-        defaultColor: '#ff7b00',
+        defaultColor: '#ff0000',
         lineDashSize: 13, lineGapSize: 13,
-        getRadius: (actor) => {
+        getRadius: (actor, token) => {
+            const overrideId = token?.document?.getFlag?.('lancer-automations', 'weaponRangeItemId');
+            if (overrideId) {
+                const item = actor?.items?.get(overrideId);
+                if (item) {
+                    const profiles = getWeaponProfiles_WithBonus(item, actor);
+                    return Math.max(0, ...profiles.flatMap(/** @type {any} */ p => (p.range ?? []).map(/** @type {any} */ r => Number(r.val) || 0)));
+                }
+            }
             const ranges = getMaxWeaponRanges_WithBonus(actor);
             return Math.max(0, ...Object.entries(ranges)
                 .filter(([t]) => t !== 'Threat')
                 .map(([, v]) => v));
+        },
+    },
+    LA_custom_measure: {
+        settingColor: 'tah.auraColorCustom',
+        settingOpacity: 'tah.auraOpacityCustom',
+        settingDefault: null,
+        defaultColor: '#ff8800',
+        lineDashSize: 8, lineGapSize: 8,
+        getRadius: (_actor, token) => {
+            const val = token?.document?.getFlag?.('lancer-automations', 'customMeasureSize');
+            return val ?? 10;
         },
     },
 };
@@ -337,6 +356,14 @@ export function isPersistentAuraActive(token, auraName) {
     return aura?.config?.enabled === true;
 }
 
+async function _persistAuraState(tokenDoc, auraName, enabled, radius) {
+    const auras = (tokenDoc.getFlag('grid-aware-auras', 'auras') ?? []).map(a => {
+        if (a.name !== auraName) return a;
+        return { ...a, enabled, radius: String(Math.max(1, radius)) };
+    });
+    await tokenDoc.setFlag('grid-aware-auras', 'auras', auras);
+}
+
 export async function togglePersistentAura(token, auraName, radius) {
     if (!hasGAA()) return;
     let aura = _getAuraFromCanvas(token, auraName);
@@ -351,6 +378,7 @@ export async function togglePersistentAura(token, auraName, radius) {
         cfg.radiusCalculated = Math.max(1, radius);
     }
     aura.update(cfg, { force: true });
+    await _persistAuraState(token.document, auraName, cfg.enabled, radius);
 }
 
 export async function setPersistentAura(token, auraName, enabled, radius) {
@@ -366,6 +394,7 @@ export async function setPersistentAura(token, auraName, enabled, radius) {
     cfg.enabled = enabled;
     cfg.radiusCalculated = Math.max(1, radius);
     aura.update(cfg, { force: true });
+    await _persistAuraState(token.document, auraName, enabled, radius);
 }
 
 export function updatePersistentAuraRadii(token) {
@@ -376,7 +405,7 @@ export function updatePersistentAuraRadii(token) {
         if (!isPersistentAuraActive(token, name)) continue;
         const aura = _getAuraFromCanvas(token, name);
         if (!aura) continue;
-        const radius = def.getRadius(actor);
+        const radius = def.getRadius(actor, token);
         if (radius > 0 && aura.config.radiusCalculated !== radius) {
             const cfg = foundry.utils.deepClone(aura.config);
             cfg.radiusCalculated = radius;
@@ -404,7 +433,7 @@ export async function applyDefaultAuras(token) {
         if (mode === 'none') continue;
         const inCombat = !!game.combat?.combatants?.find(c => c.token?.id === token.id);
         if (mode === 'combat' && !inCombat) continue;
-        const radius = def.getRadius(actor);
+        const radius = def.getRadius(actor, token);
         if (radius > 0) {
             await setPersistentAura(token, name, true, radius);
         }

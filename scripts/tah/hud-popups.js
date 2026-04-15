@@ -91,10 +91,39 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
     if (!bodyHtml)
         return;
     const popup = laDetailPopup(cssClass, title, subtitle, bodyHtml, theme);
+    const closeBtn = popup.find('.la-detail-close');
+    const headerBtns = [];
     if (item && hasAutomation(item)) {
-        const closeBtn = popup.find('.la-detail-close');
+        headerBtns.push($(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`));
+    }
+    // Disable/Destroy toggles for items that support them
+    if (item?.system && item.update) {
+        if ('disabled' in item.system) {
+            const dis = !!item.system.disabled;
+            const disBtn = $(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${dis ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dis ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`);
+            disBtn.on('click', async () => {
+                const newVal = !item.system.disabled;
+                await item.update({ 'system.disabled': newVal });
+                disBtn.css('color', newVal ? '#e8a020' : '#666');
+                disBtn.attr('title', newVal ? 'Enable' : 'Disable');
+            });
+            headerBtns.push(disBtn);
+        }
+        if ('destroyed' in item.system) {
+            const dest = !!item.system.destroyed;
+            const destBtn = $(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${dest ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dest ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`);
+            destBtn.on('click', async () => {
+                const newVal = !item.system.destroyed;
+                await item.update({ 'system.destroyed': newVal });
+                destBtn.css('color', newVal ? '#c33' : '#666');
+                destBtn.attr('title', newVal ? 'Repair' : 'Destroy');
+            });
+            headerBtns.push(destBtn);
+        }
+    }
+    if (headerBtns.length) {
         closeBtn.wrap('<div style="display:flex;align-items:center;gap:4px;"></div>');
-        closeBtn.before($(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`));
+        for (const btn of headerBtns) closeBtn.before(btn);
     }
     popup.data(dataKey, dataValue);
     if (postRender)

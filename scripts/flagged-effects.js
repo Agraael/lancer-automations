@@ -438,7 +438,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
             return true;
         if (e.getFlag('temporary-custom-statuses', 'originalName') === effectsStr)
             return true;
-        if (e.getFlag('csm-lancer-qol', 'effect') === effectsStr)
+        if (game.modules.get('csm-lancer-qol')?.active && e.getFlag('csm-lancer-qol', 'effect') === effectsStr)
             return true;
         if (e.name?.toLowerCase().includes(effectNameLower) ||
             e.statuses?.has(effectNameLower))
@@ -965,7 +965,7 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
 
     const foundEffects = actor.effects.filter(e => {
         const flagName = e.getFlag('lancer-automations', 'effect');
-        const legacyFlagName = e.getFlag('csm-lancer-qol', 'effect');
+        const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'effect') : null;
 
         return targets.some(name => {
             const lowerName = name.toLowerCase().split('.').pop();

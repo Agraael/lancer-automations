@@ -1098,6 +1098,25 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid) {
 }
 
 // ---------------------------------------------------------------------------
+// Fix: initTechAttackData overwrites custom title with "TECH ATTACK"
+// ---------------------------------------------------------------------------
+
+export function wrapInitTechAttackData(flowSteps) {
+    const orig = flowSteps.get('initTechAttackData');
+    if (!orig)
+        return;
+    flowSteps.set('initTechAttackData', async function(state, options) {
+        const savedTitle = state.data?.title;
+        const result = await orig(state, options);
+        if (savedTitle && state.data?.title === "TECH ATTACK") {
+            state.data.title = savedTitle;
+            try { state.data.acc_diff.title = savedTitle; } catch { /* */ }
+        }
+        return result;
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 

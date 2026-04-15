@@ -50,6 +50,12 @@ export function getActorActionItems(actor, activationType) {
                         activation: activationType,
                         detail: item.system?.effect ?? '',
                         tags: itemTags,
+                        tech_attack: item.system?.tech_attack ?? false,
+                        attack_bonus: item.system?.attack_bonus ?? null,
+                        accuracy: item.system?.accuracy ?? null,
+                        range: item.system?.range ?? [],
+                        damage: item.system?.damage ?? [],
+                        on_hit: item.system?.on_hit ?? '',
                     },
                     sourceItem: item,
                 });
@@ -163,10 +169,62 @@ const STAT_PATHS = {
  * Costs the standard move (not a quick/full action).
  * @param {Token} token
  */
+/**
+ * Add a virtual movement entry to both LA and Elevation Ruler history.
+ * Used for actions that cost movement without physically moving the token.
+ */
+async function addVirtualMovement(token, cost) {
+    const tokenDoc = token.document;
+    // LA movement history
+    const laHistory = tokenDoc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
+    const moves = laHistory.moves || [];
+    moves.push({
+        distanceMoved: cost,
+        movementCost: cost,
+        isDrag: true,
+        isFreeMovement: false,
+        boostSet: [],
+        startPos: { x: tokenDoc.x, y: tokenDoc.y },
+    });
+    await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } });
+    // Elevation Ruler combat history — update both in-memory trail and flag
+    if (game.modules.get('elevationruler')?.active && game.combat?.started) {
+        const canvasToken = canvas.tokens?.get(tokenDoc.id) ?? token;
+        // Token center (pixel position, not top-left document x/y)
+        const cx = tokenDoc.x + (canvasToken.w / 2);
+        const cy = tokenDoc.y + (canvasToken.h / 2);
+        const z = tokenDoc.elevation ?? 0;
+        // In-memory measurement history (visual trail)
+        canvasToken.elevationruler ??= {};
+        const mh = canvasToken.elevationruler.measurementHistory ?? [];
+        // If empty, add origin entry first (cost 0)
+        if (!mh.length) {
+            mh.push({ x: cx, y: cy, teleport: false, cost: 0, z });
+        }
+        // Add standing-up entry at same position with the movement cost
+        mh.push({ x: cx, y: cy, teleport: false, cost, z });
+        canvasToken.elevationruler.measurementHistory = mh;
+        // Flag persistence (speed color calculation)
+        const erFlag = tokenDoc.getFlag('elevationruler', 'movementHistory') ?? {};
+        const combatId = game.combat.id;
+        const combatData = erFlag.combatMoveData?.[combatId] ?? { lastMoveDistance: 0, lastRound: -1, numDiagonal: 0 };
+        if (combatData.lastRound < game.combat.round)
+            combatData.lastMoveDistance = cost;
+        else
+            combatData.lastMoveDistance += cost;
+        combatData.lastRound = game.combat.round;
+        const newFlag = {
+            ...erFlag,
+            lastMoveDistance: cost,
+            combatMoveData: { ...(erFlag.combatMoveData ?? {}), [combatId]: combatData },
+        };
+        await tokenDoc.setFlag('elevationruler', 'movementHistory', newFlag);
+    }
+}
+
 export async function executeStandingUp(token) {
-    if (!token?.actor) return;
-    const api = game.modules.get('lancer-automations')?.api;
-    if (!api) return;
+    if (!token?.actor)
+        return;
     const hasProne = !!findEffectOnToken(token, e => e.statuses?.has('prone'));
     if (!hasProne) {
         ui.notifications.info(`${token.name} is not Prone.`);
@@ -174,14 +232,19 @@ export async function executeStandingUp(token) {
     }
     await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
     const speed = token.actor.system?.speed ?? 0;
-    api.increaseMovementCap(token, speed);
-    ui.notifications.info(`${token.name} stands up. +${speed} movement.`);
+    await addVirtualMovement(token, speed);
+    ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ token: token.document }),
+        content: `<b>${token.name}</b> stands up, using their standard move (+${speed} speed).`,
+    });
 }
 
 export async function executeTeleport(token, cost) {
-    if (!token?.actor) return;
+    if (!token?.actor)
+        return;
     const api = game.modules.get('lancer-automations')?.api;
-    if (!api) return;
+    if (!api)
+        return;
     const speed = token.actor.system?.speed ?? 0;
     const moveCost = cost ?? speed;
     await api.moveToken(token, {
@@ -355,12 +418,14 @@ export async function setReaction(actorOrToken, value) {
  * @returns {Promise<void>}
  */
 export async function setItemResource(item, nb, counterIndex = 0) {
-    if (!item) return;
+    if (!item)
+        return;
 
     if (item.type === 'talent') {
         const counters = item.system?.counters ?? [];
         const counter = counters[counterIndex];
-        if (!counter) return;
+        if (!counter)
+            return;
         const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(nb))));
         await item.update({ [`system.counters.${counterIndex}.value`]: clamped });
         return;
@@ -901,6 +966,220 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
 }
 
 // ---------------------------------------------------------------------------
+// Add Reserve / Project / Organization to Pilot
+// ---------------------------------------------------------------------------
+
+function _resolvePilot(tokenOrActor) {
+    const actor = tokenOrActor?.actor ?? tokenOrActor;
+    if (!actor)
+        return null;
+    if (actor.type === 'pilot')
+        return actor;
+    if (actor.type === 'mech')
+        return actor.system?.pilot?.value ?? null;
+    return null;
+}
+
+const _ORG_TYPES = ['Military', 'Scientific', 'Academic', 'Criminal', 'Humanitarian', 'Industrial', 'Entertainment', 'Political'];
+const _PROJECT_REQS = ['Quality materials', 'Specific knowledge or techniques', 'Specialized tools', 'A good workspace'];
+
+async function _fetchReservesByType() {
+    const map = { Bonus: [], Resources: [], Tactical: [], Mech: [] };
+    const RESOURCE_NAMES = new Set([
+        'Access', 'Backing', 'Supplies', 'Disguise', 'Diversion', 'Blackmail',
+        'Reputation', 'Safe Harbor', 'Tracking', 'Knowledge', 'Golden Ticket',
+        'Stash Of Private Moonshine', "Governor's Farm Advanced Access",
+        "Fielding's Workshop Access", 'Patience Hookup', 'Causality Fragment',
+    ]);
+    const normalize = (t, name) => {
+        if (!t)
+            return null;
+        if (t === 'Resource' || RESOURCE_NAMES.has(name))
+            return 'Resources';
+        return t;
+    };
+    for (const pack of game.packs) {
+        if (pack.documentName !== 'Item')
+            continue;
+        const index = await pack.getIndex({ fields: ['system.lid', 'system.type', 'system.description', 'type'] });
+        for (const e of index) {
+            if (e.type !== 'reserve')
+                continue;
+            const rawType = e.system?.type;
+            const t = normalize(rawType, e.name);
+            if (t && map[t])
+                map[t].push({ name: e.name, lid: e.system?.lid ?? '', desc: e.system?.description ?? '', uuid: e.uuid });
+        }
+    }
+    for (const arr of Object.values(map)) {
+        arr.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return map;
+}
+
+export async function openAddReserveDialog(tokenOrActor) {
+    const pilot = _resolvePilot(tokenOrActor);
+    if (!pilot) {
+        ui.notifications.warn('Select a pilot or mech token.'); return;
+    }
+
+    const reserveMap = await _fetchReservesByType();
+
+    const TABS = [
+        { key: 'bonus',    label: 'Pilot Bonuses' },
+        { key: 'resource', label: 'Resource' },
+        { key: 'tactical', label: 'Tactical' },
+        { key: 'mech',     label: 'Mech' },
+        { key: 'custom',   label: 'Custom' },
+        { key: 'project',  label: 'Project' },
+        { key: 'org',      label: 'Organization' },
+    ];
+    const tabNav = TABS.map((t, i) =>
+        `<a class="la-rtab${i === 0 ? ' active' : ''}" data-tab="${t.key}" style="padding:4px 6px;font-size:0.78em;white-space:nowrap;cursor:pointer;text-align:center;border:1px solid #999;border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : '#eee'};color:${i === 0 ? '#fff' : '#333'};user-select:none;">${t.label}</a>`
+    ).join('');
+
+    const buildList = (items) => items.map(r => {
+        const shortDesc = r.desc.replace(/<[^>]+>/g, '').slice(0, 80);
+        return `<div class="la-reserve-row" data-uuid="${r.uuid}" style="padding:5px 8px;border-bottom:1px solid rgba(0,0,0,0.08);cursor:pointer;display:flex !important;flex-direction:row !important;align-items:center;gap:6px;">
+            <div style="flex:1;min-width:0;overflow:hidden;">
+                <div style="font-weight:bold;font-size:0.88em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
+                ${shortDesc ? `<div style="font-size:0.72em;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortDesc}</div>` : ''}
+            </div>
+            <a class="la-add-btn" data-uuid="${r.uuid}" style="flex-shrink:0;padding:2px 8px;font-size:0.78em;cursor:pointer;border:1px solid #999;border-radius:3px;background:#eee;color:#333;"><i class="fas fa-plus"></i></a>
+        </div>`;
+    }).join('') || '<div style="padding:20px;text-align:center;color:#888;">No items found.</div>';
+
+    const orgOpts = _ORG_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+    const reqCbs = _PROJECT_REQS.map(r => `<label style="display:flex;align-items:center;gap:4px;font-size:0.82em;"><input type="checkbox" class="proj-req" value="${r}"> ${r}</label>`).join('');
+    const subtypeBtns = ['Resources', 'Mech', 'Tactical'].map((t, i) => `<a class="la-subtype-btn${i === 0 ? ' active' : ''}" data-val="${t}" style="flex:1;padding:3px;font-size:0.8em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : '#eee'};color:${i === 0 ? '#fff' : '#333'};user-select:none;">${t}</a>`).join('');
+
+    const BODY = `
+        <div class="lancer-dialog-header" style="margin:-8px -8px 8px -8px;">
+            <h1 class="lancer-dialog-title" style="font-size:1em;">Reserves & Bonuses</h1>
+            <p class="lancer-dialog-subtitle" style="font-size:0.78em;">${pilot.name}</p>
+        </div>
+        <nav style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px;">${tabNav}</nav>
+        <div style="height:340px;overflow-y:auto;" id="la-reserve-body">
+            <div class="la-rtab-content" data-tab="bonus">${buildList(reserveMap.Bonus)}</div>
+            <div class="la-rtab-content" data-tab="resource" style="display:none;">${buildList(reserveMap.Resources)}</div>
+            <div class="la-rtab-content" data-tab="tactical" style="display:none;">${buildList(reserveMap.Tactical)}</div>
+            <div class="la-rtab-content" data-tab="mech" style="display:none;">${buildList(reserveMap.Mech)}</div>
+            <div class="la-rtab-content" data-tab="custom" style="display:none;">
+                <div style="display:flex;gap:2px;margin-bottom:6px;">${subtypeBtns}</div>
+                <div class="form-group"><label style="font-size:0.85em;">Resource Name</label><input type="text" id="cr-name" placeholder="Name"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="cr-desc" rows="2" style="width:100%;" placeholder="Details"></textarea></div>
+                <button type="button" id="cr-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Reserve</button>
+            </div>
+            <div class="la-rtab-content" data-tab="project" style="display:none;">
+                <div class="form-group"><label style="font-size:0.85em;">Project Name</label><input type="text" id="pj-name" placeholder="Name"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="pj-desc" rows="2" style="width:100%;" placeholder="Details"></textarea></div>
+                <div style="display:flex;gap:10px;margin:4px 0;">
+                    <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-complicated"> Complicated</label>
+                    <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-finished"> Finished</label>
+                </div>
+                <div class="form-group"><label style="font-size:0.85em;">Requirements</label>${reqCbs}</div>
+                <div class="form-group"><label style="font-size:0.85em;">Other</label><input type="text" id="pj-custom-req" placeholder="Custom requirement"></div>
+                <button type="button" id="pj-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Project</button>
+            </div>
+            <div class="la-rtab-content" data-tab="org" style="display:none;">
+                <div class="form-group"><label style="font-size:0.85em;">Name</label><input type="text" id="org-name" placeholder="Organization Name"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Type</label><select id="org-type">${orgOpts}</select></div>
+                <div class="form-group"><label style="font-size:0.85em;">Description</label><textarea id="org-desc" rows="2" style="width:100%;" placeholder="Purpose / Goal"></textarea></div>
+                <div class="form-group"><label style="font-size:0.85em;">Start with</label>
+                    <div style="display:flex;gap:3px;">
+                        <a class="la-org-start active" data-val="efficiency" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:var(--primary-color);color:#fff;user-select:none;">Efficiency (+2)</a>
+                        <a class="la-org-start" data-val="influence" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:#eee;color:#333;user-select:none;">Influence (+2)</a>
+                    </div>
+                </div>
+                <button type="button" id="org-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Organization</button>
+            </div>
+        </div>`;
+
+    new Dialog({
+        title: `Reserves — ${pilot.name}`,
+        content: BODY,
+        buttons: { close: { label: 'Close' } },
+        render: (html) => {
+            html.find('.la-rtab').on('click', function () {
+                html.find('.la-rtab').removeClass('active').css({ background: '#eee', color: '#333' });
+                $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
+                html.find('.la-rtab-content').hide();
+                html.find(`.la-rtab-content[data-tab="${$(this).data('tab')}"]`).show();
+                html.find('#la-reserve-body').scrollTop(0);
+            });
+            html.find('.la-subtype-btn').on('click', function () {
+                html.find('.la-subtype-btn').removeClass('active').css({ background: '#eee', color: '#333' });
+                $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
+            });
+            html.find('.la-org-start').on('click', function () {
+                html.find('.la-org-start').removeClass('active').css({ background: '#eee', color: '#333' });
+                $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
+            });
+
+            // Add compendium reserve
+            html.on('click', '.la-add-btn', async (ev) => {
+                ev.preventDefault(); ev.stopPropagation();
+                const uuid = $(ev.currentTarget).data('uuid');
+                const doc = await fromUuid(uuid);
+                if (!doc)
+                    return;
+                const data = doc.toObject(); delete data._id;
+                await pilot.createEmbeddedDocuments('Item', [data]);
+                ui.notifications.info(`Added "${doc.name}" to ${pilot.name}.`);
+            });
+            // Custom reserve
+            html.find('#cr-add').on('click', async () => {
+                const name = String(html.find('#cr-name').val()).trim();
+                if (!name) {
+                    ui.notifications.warn('Enter a name.'); return;
+                }
+                await pilot.createEmbeddedDocuments('Item', [{ name,
+                    type: 'reserve',
+                    img: 'systems/lancer/assets/icons/reserve_tac.svg',
+                    system: { lid: 'reserve_custom', type: html.find('.la-subtype-btn.active').data('val') || 'Resources', description: String(html.find('#cr-desc').val()), consumable: true, used: false } }]);
+                ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
+            });
+            // Project
+            html.find('#pj-add').on('click', async () => {
+                const name = String(html.find('#pj-name').val()).trim();
+                if (!name) {
+                    ui.notifications.warn('Enter a name.'); return;
+                }
+                const finished = html.find('#pj-finished').is(':checked');
+                const reqs = []; html.find('.proj-req:checked').each(function () {
+                    reqs.push($(this).val());
+                });
+                const cr = String(html.find('#pj-custom-req').val()).trim(); if (cr)
+                    reqs.push(cr);
+                let desc = String(html.find('#pj-desc').val());
+                if (html.find('#pj-complicated').is(':checked'))
+                    desc += '\n<b>Complicated</b>';
+                if (!finished && reqs.length)
+                    desc += `\nRequires: ${reqs.join(', ')}`;
+                await pilot.createEmbeddedDocuments('Item', [{ name: finished ? name : `${name} (In Progress)`,
+                    type: 'reserve',
+                    img: 'systems/lancer/assets/icons/reserve_tac.svg',
+                    system: { lid: 'reserve_project', type: 'Project', label: 'Project', description: desc, consumable: false, used: false } }]);
+                ui.notifications.info(`Added project "${name}" to ${pilot.name}.`);
+            });
+            // Organization
+            html.find('#org-add').on('click', async () => {
+                const name = String(html.find('#org-name').val()).trim();
+                if (!name) {
+                    ui.notifications.warn('Enter a name.'); return;
+                }
+                const s = html.find('.la-org-start.active').data('val') || 'efficiency';
+                await pilot.createEmbeddedDocuments('Item', [{ name,
+                    type: 'organization',
+                    img: 'systems/lancer/assets/icons/encounter.svg',
+                    system: { purpose: html.find('#org-type').val(), description: String(html.find('#org-desc').val()), efficiency: s === 'efficiency' ? 2 : 0, influence: s === 'influence' ? 2 : 0, actions: '' } }]);
+                ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
+            });
+        }
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520, height: 520, resizable: false }).render(true);
+}
+
+// ---------------------------------------------------------------------------
 // Shared item browser
 // ---------------------------------------------------------------------------
 
@@ -1163,7 +1442,8 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
     }
 
     if (weapons.length === 1) {
-        if (preTarget) game.user.updateTokenTargets([preTarget.id]);
+        if (preTarget)
+            game.user.updateTokenTargets([preTarget.id]);
         await beginWeaponAttackFlow(weapons[0]);
     } else {
         let primaryChosen = false;
@@ -1176,7 +1456,8 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
                     extraData._csmNoBonusDmg = { enabled: true };
                 }
                 primaryChosen = true;
-                if (preTarget) game.user.updateTokenTargets([preTarget.id]);
+                if (preTarget)
+                    game.user.updateTokenTargets([preTarget.id]);
                 await beginWeaponAttackFlow(weapon, {}, extraData);
             }
         }));
@@ -1290,14 +1571,16 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         const extraData = { _csmNoBonusDmg: { enabled: true } };
 
         if (weapons.length === 1) {
-            if (preTarget) game.user.updateTokenTargets([preTarget.id]);
+            if (preTarget)
+                game.user.updateTokenTargets([preTarget.id]);
             await beginWeaponAttackFlow(weapons[0], options, extraData);
         } else if (weapons.length > 1) {
             const choices = weapons.map(weapon => ({
                 text: weapon.name,
                 icon: weapon.img,
                 callback: async () => {
-                    if (preTarget) game.user.updateTokenTargets([preTarget.id]);
+                    if (preTarget)
+                        game.user.updateTokenTargets([preTarget.id]);
                     await beginWeaponAttackFlow(weapon, options, extraData);
                 }
             }));
@@ -1473,15 +1756,22 @@ export function getWeaponProfiles_WithBonus(weapon, actor) {
         if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
             mutateRangeWithBonus(mockState, bonus);
     }
-    // NPC features store damage as a tier array [[d0],[d1],[d2]] — resolve to current tier
+    // NPC features store damage/attack_bonus/accuracy as tier arrays — resolve to current tier
     let damage = weapon.system.damage;
-    if (weapon.type === 'npc_feature' && Array.isArray(damage?.[0])) {
+    let attack_bonus = weapon.system.attack_bonus;
+    let accuracy = weapon.system.accuracy;
+    if (weapon.type === 'npc_feature') {
         const tierOverride = weapon.system.tier_override ?? 0;
         const tier = tierOverride > 0 ? tierOverride : (a?.system?.tier ?? 1);
         const tierIdx = Math.max(0, Math.min(2, tier - 1));
-        damage = damage[tierIdx] ?? [];
+        if (Array.isArray(damage?.[0]))
+            damage = damage[tierIdx] ?? [];
+        if (Array.isArray(attack_bonus))
+            attack_bonus = attack_bonus[tierIdx] ?? 0;
+        if (Array.isArray(accuracy))
+            accuracy = accuracy[tierIdx] ?? 0;
     }
-    return [{ ...weapon.system, damage, range: base, base_range }];
+    return [{ ...weapon.system, damage, attack_bonus, accuracy, range: base, base_range }];
 }
 
 /**
@@ -1735,4 +2025,5 @@ export const MiscAPI = {
     executeFall,
     executeStandingUp,
     executeTeleport,
+    openAddReserveDialog,
 };

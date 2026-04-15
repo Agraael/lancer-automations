@@ -182,10 +182,20 @@ export function laRenderDeployables(deployableActors) {
  * @param {boolean} showName  Whether to show the profile name header
  * @returns {string}
  */
+function _renderAttackLine(bonus, acc) {
+    if (!bonus && !acc) return '';
+    let parts = [];
+    if (bonus) parts.push(`+${bonus} <i class="cci cci-reticule" title="Flat Attack Bonus"></i>`);
+    if (acc > 0) parts.push(`+${acc} <i class="cci cci-accuracy" title="Accuracy"></i>`);
+    else if (acc < 0) parts.push(`${acc} <i class="cci cci-difficulty" title="Difficulty"></i>`);
+    return `<div style="font-size:0.88em;color:#ccc;margin-bottom:4px;">${parts.join('&nbsp;&nbsp;')}</div>`;
+}
+
 export function laRenderWeaponProfile(p, showName) {
     const nameHdr = showName && p.name
         ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${p.name}</div>`
         : '';
+    const wpnAttackHtml = _renderAttackLine(p.attack_bonus ?? 0, p.accuracy ?? 0);
     const damageHtml = p.damage?.length
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
         : '';
@@ -211,7 +221,7 @@ export function laRenderWeaponProfile(p, showName) {
     const effectHtml = p.effect
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(p.effect)}</div></div>`
         : '';
-    return `${nameHdr}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
+    return `${nameHdr}${wpnAttackHtml}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
 }
 
 /**
@@ -421,17 +431,34 @@ export function laRenderActionDetail(action, opts = {}) {
     const sourceHtml = sourceName
         ? `<div style="font-size:0.72em;color:#777;margin-bottom:6px;">From: ${sourceName}</div>`
         : '';
+    // Attack roll info — just flat bonus and accuracy
+    let attackHtml = '';
+    if (action.attack_bonus) {
+        const tier = (opts.tier ?? 1) - 1;
+        const bonus = Array.isArray(action.attack_bonus) ? (action.attack_bonus[tier] ?? action.attack_bonus[0] ?? 0) : (action.attack_bonus || 0);
+        const acc = Array.isArray(action.accuracy) ? (action.accuracy[tier] ?? 0) : (action.accuracy || 0);
+        attackHtml = _renderAttackLine(bonus, acc);
+    }
     const rangeHtml = action.range?.length
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${action.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ')}</div></div>`
         : '';
-    const damageHtml = action.damage?.length
-        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${action.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
+    // Damage — handle both flat [{type,val}] and tiered [[{type,val}],[...],[...]]
+    let damageHtml = '';
+    if (action.damage?.length) {
+        const tier = (opts.tier ?? 1) - 1;
+        const dmgArr = Array.isArray(action.damage[0]) ? (action.damage[tier] ?? action.damage[0]) : action.damage;
+        if (dmgArr?.length) {
+            damageHtml = `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${dmgArr.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`;
+        }
+    }
+    const onHitHtml = action.on_hit
+        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('ON HIT', '#b71c1c')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.on_hit)}</div></div>`
         : '';
     const triggerHtml = action.trigger
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('TRIGGER', '#1a5c3a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.trigger)}</div></div>`
         : '';
     const actionTags = [...(action.tags ?? [])];
-    if (action.activation && !actionTags.some(t => t.lid?.includes('action') || t.lid?.includes('protocol') || t.lid?.includes('reaction')))
+    if (action.activation && !actionTags.some(t => t.lid?.includes('action') || t.lid?.includes('protocol') || t.lid?.includes('reaction') || t.lid?.includes('tech')))
         actionTags.unshift({ name: action.activation });
     if (action.recharge && !actionTags.some(t => t.lid === 'tg_recharge'))
         actionTags.push({ lid: 'tg_recharge', val: String(action.recharge), name: 'Recharge {VAL}+' });
@@ -440,7 +467,7 @@ export function laRenderActionDetail(action, opts = {}) {
     const detailHtml = detail
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${detail}</div></div>`
         : '';
-    const body = sourceHtml + rangeHtml + damageHtml + triggerHtml + tagsHtml + detailHtml;
+    const body = sourceHtml + attackHtml + rangeHtml + damageHtml + onHitHtml + triggerHtml + tagsHtml + detailHtml;
     return body || '<div style="font-size:0.82em;color:#888;">No description.</div>';
 }
 

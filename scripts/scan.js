@@ -613,9 +613,27 @@ function showSystemScanDialog(targets) {
  * Plays visual effects then shows the scan type dialog.
  */
 export async function executeScanOnActivation(reactorToken) {
-    const targets = Array.from(game.user.targets);
-    if (!targets.length)
+    const api = game.modules.get('lancer-automations')?.api;
+    let targets = Array.from(game.user.targets);
+
+    if (!targets.length && api?.chooseToken && reactorToken) {
+        const sensorRange = reactorToken.actor?.system?.sensor_range ?? 10;
+        const chosen = await api.chooseToken(reactorToken, {
+            range: sensorRange,
+            count: 1,
+            title: 'SCAN — Select Target',
+            description: `Choose a target within Sensors (${sensorRange})`,
+            filter: t => t.actor?.type !== 'deployable',
+        });
+        if (chosen?.length) {
+            targets = chosen;
+        }
+    }
+
+    if (!targets.length) {
+        ui.notifications.warn('No targets selected for Scan!');
         return;
+    }
 
     const targetNames = targets.map(t => t.name).join(', ');
 

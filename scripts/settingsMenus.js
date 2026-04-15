@@ -245,7 +245,8 @@ const TokenActionHudConfig = makeConfigForm({
         { type: 'table', label: 'Range Auras',
           tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
                       'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor',
-                      'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'],
+                      'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange',
+                      'tah.auraColorCustom', 'tah.auraOpacityCustom'],
           getTable: () => {
             const defaultChoices = (key) => {
                 const cur = game.settings.get(MODULE_ID, key);
@@ -260,7 +261,7 @@ const TokenActionHudConfig = makeConfigForm({
                 cells: [
                     { isColor: true, name: colorKey, value: game.settings.get(MODULE_ID, colorKey) },
                     { isNumber: true, name: opacityKey, value: game.settings.get(MODULE_ID, opacityKey) },
-                    { isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) },
+                    ...(defaultKey ? [{ isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) }] : [{ isEmpty: true }]),
                 ],
             });
             return {
@@ -268,7 +269,8 @@ const TokenActionHudConfig = makeConfigForm({
                 rows: [
                     makeRow('Threat', 'tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat'),
                     makeRow('Sensor', 'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor'),
-                    makeRow('Max Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
+                    makeRow('Weapon Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
+                    makeRow('Custom Measure', 'tah.auraColorCustom', 'tah.auraOpacityCustom', null),
                 ],
             };
           },

@@ -69,7 +69,7 @@ import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow } from "./lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
 import { registerSettingsMenus } from "./settingsMenus.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
@@ -3210,36 +3210,31 @@ function wrapRollDamageForNoBonusDmg(flowSteps) {
 }
 
 // Allow 0.5-size tokens instead of Lancer's Math.max(1, size).
-// Wraps the original Lancer methods so all normal behavior is preserved,
-// then fixes up sub-1 sizes after the original has run and snapped.
+// Directly replaces the Lancer _preCreate and _onRelatedUpdate methods
+// so Math.max(1, size) becomes just size, preventing any revert loop.
 function patchHalfSizeTokens() {
     const docClass = CONFIG.Token.documentClass;
     if (!docClass) return;
 
-    const origPreCreate = docClass.prototype._preCreate;
-    docClass.prototype._preCreate = async function (...args) {
-        const result = await origPreCreate.call(this, ...args);
-        const autoSize = game.settings.get(game.system.id, 'automationOptions')?.token_size;
-        if (autoSize && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const s = this.actor?.system?.size;
-            if (s !== undefined && s < 1) {
-                const gs = canvas?.grid?.size || 100;
-                const cx = this.x + (this.width * gs / 2);
-                const cy = this.y + (this.height * gs / 2);
-                this.updateSource({ width: s, height: s, x: cx - (s * gs / 2), y: cy - (s * gs / 2) });
-            }
+    docClass.prototype._preCreate = async function (...[data, options, user]) {
+        if (game.settings.get(game.system.id, 'automationOptions')?.token_size
+            && !this.getFlag(game.system.id, 'manual_token_size')) {
+            const newSize = this.actor?.system?.size ?? 1;
+            this.updateSource({ width: newSize, height: newSize });
         }
-        return result;
+        // Skip Lancer's _preCreate (which has Math.max(1)), call grandparent directly
+        return TokenDocument.prototype._preCreate.call(this, data, options, user);
     };
 
-    const origRelatedUpdate = docClass.prototype._onRelatedUpdate;
-    docClass.prototype._onRelatedUpdate = function (...args) {
-        origRelatedUpdate.call(this, ...args);
-        const autoSize = game.settings.get(game.system.id, 'automationOptions')?.token_size;
-        if (autoSize && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const s = this.actor?.system?.size;
-            if (s !== undefined && s < 1 && this.isOwner && this.id && (this.width !== s || this.height !== s)) {
-                this.update({ width: s, height: s });
+    docClass.prototype._onRelatedUpdate = function (update, options) {
+        // Call grandparent _onRelatedUpdate (skip Lancer's which has Math.max(1))
+        TokenDocument.prototype._onRelatedUpdate.call(this, update, options);
+        if (game.settings.get(game.system.id, 'automationOptions')?.token_size
+            && !this.getFlag(game.system.id, 'manual_token_size')) {
+            const newSize = this.actor ? this.actor.system.size : undefined;
+            if (this.isOwner && this.id && newSize !== undefined
+                && (this.width !== newSize || this.height !== newSize)) {
+                this.update({ width: newSize, height: newSize });
             }
         }
     };
@@ -3603,6 +3598,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Wrap applySelfHeat to honour heat immunity and resistance
     wrapApplySelfHeat(flowSteps);
 
+    // Fix tech attack title override (Fragment Signal)
+    wrapInitTechAttackData(flowSteps);
+
     // Extra-action recharge system (piggybacks on NPC recharge flow)
     wrapExtraActionRecharge(flowSteps, flows);
 
@@ -3648,6 +3646,11 @@ function openResetMovementDialog(token) {
             </div>
         `,
         buttons: {
+            revertOne: {
+                icon: '<i class="fas fa-step-backward"></i>',
+                label: "Revert Last Move",
+                callback: () => revertMovement(token)
+            },
             clear: {
                 icon: '<i class="fas fa-trash"></i>',
                 label: "Reset History",
@@ -3658,7 +3661,7 @@ function openResetMovementDialog(token) {
                 ? {
                     revert: {
                         icon: '<i class="fas fa-undo-alt"></i>',
-                        label: "Reset & Revert Movement",
+                        label: "Reset & Revert All",
                         callback: () => clearMovementHistory(token, true)
                     },
                 } : {}),
@@ -3671,7 +3674,7 @@ function openResetMovementDialog(token) {
     }, {
         classes: ["lancer-dialog-base", "lancer-no-title"],
         width: 400,
-        height: 250
+        height: 300
     }).render(true);
 }
 
@@ -3697,24 +3700,25 @@ Hooks.on('init', () => {
             if (!MovePenalty)
                 return;
             CONFIG.elevationruler.MovePenalty = MovePenalty;
-            libWrapper.register("lancer-automations",
-                "CONFIG.elevationruler.MovePenalty.prototype.movementCostForSegment",
-                function (wrapped, startCoords, endCoords, ...args) {
-                    const token = canvas.controls.ruler.token;
-                    const noClimbingMalus = token?.actor?.statuses.has("flying")
-                        || token?.actor?.statuses.has("climber")
-                        || getImmunityBonuses(token?.actor, "elevation").length > 0;
-                    const ignoreDifficultTerrain = token?.actor?.statuses.has("terrain_immunity")
-                        || getImmunityBonuses(token?.actor, "terrain").length > 0;
-                    this._noClimbingMalus = noClimbingMalus;
-                    const result = wrapped(startCoords, endCoords, ...args);
-                    this._noClimbingMalus = false;
-                    if (ignoreDifficultTerrain)
-                        return result - this.lastTerrainPenalty;
-                    return result;
-                },
-                "WRAPPER"
-            );
+
+            // Extend the climb-malus and terrain-immunity decisions with Lancer rules:
+            // climber status and elevation/terrain immunity bonuses from the effect system.
+            const baseClimbImmune = MovePenalty.isClimbingImmune.bind(MovePenalty);
+            MovePenalty.isClimbingImmune = function(token) {
+                if (baseClimbImmune(token)) return true;
+                if (token?.actor?.statuses?.has("hover")) return true;
+                if (token?.actor?.statuses?.has("climber")) return true;
+                if (getImmunityBonuses(token?.actor, "elevation").length > 0) return true;
+                return false;
+            };
+
+            const baseTerrainImmune = MovePenalty.isTerrainImmune.bind(MovePenalty);
+            MovePenalty.isTerrainImmune = function(token) {
+                if (baseTerrainImmune(token)) return true;
+                if (token?.actor?.statuses?.has("terrain_immunity")) return true;
+                if (getImmunityBonuses(token?.actor, "terrain").length > 0) return true;
+                return false;
+            };
         });
     }
 
@@ -4099,6 +4103,11 @@ Hooks.on('lancer.statusesReady', () => {
         name: "Climber",
         img: "modules/lancer-automations/icons/mountain-climbing.svg",
         description: "You ignore effect of climbing terrain"
+    }, {
+        id: "hover",
+        name: "Hover",
+        img: "modules/lancer-automations/icons/hover.svg",
+        description: "You hover above the ground: same movement rules as Flying."
     }, {
         id: "terrain_immunity",
         name: "Terrain Immunity",
@@ -4492,6 +4501,9 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
 });
 
 Hooks.on('combatTurnChange', async (combat, prior, current) => {
+    if (!game.users.activeGM?.isSelf) {
+        return;
+    }
     if (prior.combatantId) {
         const endingCombatant = combat.combatants.get(prior.combatantId);
         const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
@@ -4670,7 +4682,10 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) => {
     }
 });
 
-Hooks.on('createActiveEffect', async (effect, _options, _userId) => {
+Hooks.on('createActiveEffect', async (effect, _options, userId) => {
+    if (userId !== game.userId) {
+        return;
+    }
     const actor = effect.parent;
     if (!actor)
         return;
@@ -4682,6 +4697,9 @@ Hooks.on('createActiveEffect', async (effect, _options, _userId) => {
 });
 
 Hooks.on('deleteActiveEffect', async (effect, options, userId) => {
+    if (userId !== game.userId) {
+        return;
+    }
     const actor = effect.parent;
     if (!actor)
         return;
@@ -4704,6 +4722,9 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) => {
 });
 
 Hooks.on('updateActiveEffect', (effect, change, options, userId) => {
+    if (userId !== game.userId) {
+        return;
+    }
     if (options?.skipGroupSync)
         return;
     const newStack = change?.flags?.statuscounter?.value;
@@ -4874,6 +4895,9 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
 });
 
 Hooks.on('updateActor', async (actor, change, options, userId) => {
+    if (userId !== game.userId) {
+        return;
+    }
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     if (!token)
         return;
@@ -5000,6 +5024,9 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
     //         lancerFreeMovement: options.lancerFreeMovement
     //     });
     // }
+
+    if (options.lancerDebugMovement)
+        return true;
 
     if (options.IgnorePreMove) {
         const isDrag = 'rulerSegment' in options || options.isDrag;
@@ -5217,6 +5244,8 @@ Hooks.on('updateToken', async function(document, change, options, userId) {
         return;
     const hasPositionChange = change.x !== undefined || change.y !== undefined || change.elevation !== undefined;
     if (!hasPositionChange)
+        return;
+    if (options.lancerDebugMovement)
         return;
 
     if (options.rulerSegment && !options.lastRulerSegment)

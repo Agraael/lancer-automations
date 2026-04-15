@@ -344,7 +344,7 @@ export function getDefaultGeneralReactionRegistry() {
             effectDescription: "Flying grants immunity to Prone. Immobilized or Stunned removes Flying. Structure or Stress requires an AGILITY save or begin falling.",
             isReaction: false,
             checkReaction: false,
-            autoActivate: false,
+            autoActivate: true,
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,
@@ -370,16 +370,45 @@ export function getDefaultGeneralReactionRegistry() {
                     if (triggerData.statusId === 'prone') {
                         await api.triggerEffectImmunity(reactorToken, ["Prone"], "Flying");
                     } else {
-                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
+                        const statusName = triggerData.statusId.charAt(0).toUpperCase() + triggerData.statusId.slice(1);
+                        await api.startChoiceCard({
+                            title: `FLYING — ${statusName}`,
+                            description: `<b>${reactorToken.name}</b> is Flying and received <b>${statusName}</b>. Remove Flying?`,
+                            originToken: reactorToken,
+                            choices: [
+                                {
+                                    text: "Remove Flying",
+                                    icon: "fas fa-arrow-down",
+                                    callback: async () => {
+                                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
+                                    }
+                                },
+                                { text: "Ignore", icon: "fas fa-times" }
+                            ]
+                        });
                     }
                 }
 
                 if (triggerType === 'onStructure' || triggerType === 'onStress') {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
-                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
-                    if (result.completed && !result.passed) {
-                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
-                    }
+                    await api.startChoiceCard({
+                        title: `FLYING — ${label}`,
+                        description: `<b>${reactorToken.name}</b> took ${label} while Flying. Roll AGILITY save or lose Flying.`,
+                        originToken: reactorToken,
+                        choices: [
+                            {
+                                text: "Roll AGI Save",
+                                icon: "fas fa-dice-d20",
+                                callback: async () => {
+                                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
+                                    if (result.completed && !result.passed) {
+                                        await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
+                                    }
+                                }
+                            },
+                            { text: "Skip", icon: "fas fa-times" }
+                        ]
+                    });
                 }
             }
         },
@@ -396,10 +425,16 @@ export function getDefaultGeneralReactionRegistry() {
             autoActivate: true,
             outOfCombat: true,
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const targets = Array.from(game.user.targets);
-
-                if (targets.length === 0) {
-                    return ui.notifications.warn('No targets selected!');
+                const sensorRange = reactorToken?.actor?.system?.sensor_range ?? 10;
+                const targets = await api.chooseToken(reactorToken, {
+                    range: sensorRange,
+                    count: 1,
+                    title: 'LOCK ON — Select Target',
+                    description: `Choose a target within Sensors (${sensorRange})`,
+                    filter: t => t.actor?.type !== 'deployable',
+                });
+                if (!targets || targets.length === 0) {
+                    return;
                 }
 
                 await api.applyEffectsToTokens({

@@ -333,6 +333,7 @@ async function wreckIt(token) {
                                 hexagonalShape: token.document.hexagonalShape,
                                 lockRotation: token.document.lockRotation,
                                 rotation: token.document.rotation,
+                                disposition: token.document.disposition,
                                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 delta: {
@@ -349,12 +350,20 @@ async function wreckIt(token) {
                                     lancer: {
                                         manual_token_size: token.document.getFlag('lancer', 'manual_token_size') ?? false,
                                     },
+                                    ...(token.document.flags?.['token-factions'] ? { 'token-factions': token.document.flags['token-factions'] } : {}),
                                 }
                             };
                             const textureSrc = imgString || `modules/${MODULE_ID}/icons/tombstone.svg`;
                             tokenData.texture = { src: textureSrc, scaleX: wreckScale, scaleY: wreckScale };
                             const wreckToken = await wreckActor.getTokenDocument(tokenData);
-                            await canvas.scene.createEmbeddedDocuments('Token', [wreckToken]);
+                            if (game.user.isGM) {
+                                await canvas.scene.createEmbeddedDocuments('Token', [wreckToken]);
+                            } else {
+                                game.socket.emit(`module.${MODULE_ID}`, {
+                                    action: 'createTokens',
+                                    payload: { sceneId: canvas.scene.id, tokenDataArray: [wreckToken.toObject()] }
+                                });
+                            }
                         }
                     }
                     if (shouldSpawnTerrain) spawnDifficultTerrain(token);

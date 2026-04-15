@@ -70,9 +70,9 @@ Hooks.on('init', () => {
         scope: 'client', config: false, type: String, default: '#549eff',
     });
     game.settings.register(MODULE, 'tah.auraColorRange', {
-        name: 'Max Range Aura Color',
-        hint: 'Color of the Max Range aura.',
-        scope: 'client', config: false, type: String, default: '#ff7b00',
+        name: 'Weapon Range Aura Color',
+        hint: 'Color of the Weapon Range aura.',
+        scope: 'client', config: false, type: String, default: '#ff0000',
     });
     game.settings.register(MODULE, 'tah.auraOpacityThreat', {
         name: 'Threat Aura Opacity',
@@ -85,7 +85,7 @@ Hooks.on('init', () => {
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.auraOpacityRange', {
-        name: 'Max Range Aura Opacity',
+        name: 'Weapon Range Aura Opacity',
         scope: 'client', config: false, type: Number, default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
@@ -104,10 +104,20 @@ Hooks.on('init', () => {
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraDefaultRange', {
-        name: 'Max Range Aura Default',
-        hint: 'When to auto-enable the Max Range aura.',
+        name: 'Weapon Range Aura Default',
+        hint: 'When to auto-enable the Weapon Range aura.',
         scope: 'client', config: false, type: String, default: 'none',
         choices: auraDefaultChoices,
+    });
+    game.settings.register(MODULE, 'tah.auraColorCustom', {
+        name: 'Custom Measure Aura Color',
+        hint: 'Color of the custom measure aura.',
+        scope: 'client', config: false, type: String, default: '#ff8800',
+    });
+    game.settings.register(MODULE, 'tah.auraOpacityCustom', {
+        name: 'Custom Measure Aura Opacity',
+        scope: 'client', config: false, type: Number, default: 1,
+        range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.position', {
         scope: 'client',
@@ -248,6 +258,11 @@ Hooks.on('combatStart', (combat) => {
 
 Hooks.on('createCombatant', (combatant) => {
     const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
+    if (tok) applyDefaultAuras(tok);
+});
+
+Hooks.on('createToken', (tokenDoc) => {
+    const tok = canvas.tokens?.get(tokenDoc.id);
     if (tok) applyDefaultAuras(tok);
 });
 

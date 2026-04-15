@@ -839,12 +839,14 @@ const EFFECT_MAP = [
     { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
     { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedCracks', 'ShreddedGlow', 'ShreddedAdjust'] },
     { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedCracks', 'StrippedGlow', 'StrippedAdjust'] },
+    { name: 'Prone',      key: 'prone',     preset: slowedEffect.map(f => ({ ...f, filterId: f.filterId.replace('Slowed', 'Prone') })), filterIds: ['ProneWave', 'ProneGlow'] },
     { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedWave', 'SlowedGlow'] },
     { name: 'Throttled',  key: 'throttled', preset: throttledEffect, filterIds: ['ThrottledCracks', 'ThrottledGlow', 'ThrottledAdjust'] },
     { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
     { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
     { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
     { name: 'Flying',    key: 'flying',      preset: flyingEffect,    filterIds: ['FlyingBob'] },
+    { name: 'Hover',     key: 'flying',      preset: flyingEffect.map(f => ({ ...f, filterId: f.filterId.replace('Flying', 'Hover') })), filterIds: ['HoverBob'] },
 ];
 
 // ---------------------------------------------------------------------------

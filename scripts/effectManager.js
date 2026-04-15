@@ -711,7 +711,7 @@ export async function executeEffectManager(options = {}) {
             <div class="form-group">
                 <label>Icon:</label>
                 <div style="flex:1; display:flex; gap:5px;">
-                    <input type="text" id="cust-icon" value="icons/svg/mystery-man.svg">
+                    <input type="text" id="cust-icon" value="systems/lancer/assets/icons/d20-framed.svg">
                     <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
             </div>
@@ -1384,7 +1384,7 @@ export async function executeEffectManager(options = {}) {
                 }
 
                 effects.forEach(e => {
-                    const dur = e.getFlag('lancer-automations', 'duration') || e.getFlag('csm-lancer-qol', 'duration');
+                    const dur = e.getFlag('lancer-automations', 'duration') || (game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'duration') : null);
                     const consumption = e.getFlag('lancer-automations', 'consumption');
                     const stack = e.flags?.statuscounter?.value ||
                         e.flags?.['temporary-custom-statuses']?.stack || 0;
