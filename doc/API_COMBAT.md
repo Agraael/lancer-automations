@@ -165,7 +165,7 @@ Three distance functions at different abstraction levels. All return distance in
 | Function | Input | Size-aware | Use case |
 |:---------|:------|:---:|:---------|
 | `getTokenDistance` | Two tokens | Yes | General token-to-token distance. Wraps `getMinGridDistance`. |
-| `getMinGridDistance` | Two tokens + optional override pos | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. |
+| `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. Optional `includeElevation` adds elevation difference to the planar distance. |
 | `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
 
 <details>
@@ -194,16 +194,19 @@ Delegates to `getMinGridDistance(token1, token2)`.
 <br>
 
 ```js
-api.getMinGridDistance(token1, token2, overridePos1)
+api.getMinGridDistance(token1, token2, overridePos1, includeElevation)
 ```
 
 Minimum cell-to-cell grid distance across all occupied cell pairs.
+
+When `includeElevation` is `true`, the elevation difference (converted to grid spaces) is **added** to the planar distance — e.g. 1 horizontal + 2 vertical = 3. When `false` (default), elevation is ignored (purely 2D).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token1</kbd> | `Token` | *required* | First token |
 | <kbd>token2</kbd> | `Token` | *required* | Second token |
 | <kbd>overridePos1</kbd> | `{x, y}` | `null` | Evaluate as if token1 were at this world position |
+| <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `|elevation1 − elevation2|` (in grid spaces) to the planar result |
 
 </details>
 

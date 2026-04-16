@@ -1665,8 +1665,8 @@ export async function rechargeSystem(actorOrToken, targetName) {
  * After linking, fires the onDeploy trigger.
  * @param {TokenDocument} tokenDocument
  */
-export async function handleManualDeployLink(tokenDocument) {
-    if (!game.settings.get('lancer-automations', 'linkManualDeploy'))
+export async function handleManualDeployLink(tokenDocument, { force = false } = {}) {
+    if (!force && !game.settings.get('lancer-automations', 'linkManualDeploy'))
         return;
     if (tokenDocument.actor?.type !== 'deployable')
         return;
@@ -1679,41 +1679,55 @@ export async function handleManualDeployLink(tokenDocument) {
     if (!deployableLid)
         return;
 
-    // Find scene tokens whose actor owns an item that produces this deployable LID
     const allTokens = canvas.tokens?.placeables ?? [];
-    const candidateTokens = allTokens.filter(t => {
-        if (t.document.id === tokenDocument.id)
-            return false;
-        if (!t.actor)
-            return false;
-        return t.actor.items.some(item => getItemDeployables(item, t.actor).includes(deployableLid));
-    });
+    let ownerToken = null;
+    let ownerActor = null;
 
-    if (candidateTokens.length === 0)
-        return;
-
-    let ownerToken;
-    const needsPicker = candidateTokens.length > 1
-        || candidateTokens.some(t => !t.document.actorLink);
-
-    if (needsPicker) {
-        const deployableToken = canvas.tokens.get(tokenDocument.id);
-        const picked = await chooseToken(deployableToken ?? candidateTokens[0], {
-            count: 1,
-            includeSelf: false,
-            selection: candidateTokens,
-            title: "LINK DEPLOYABLE",
-            description: `Which token owns the deployed ${deployableActor.name}?`,
-            icon: "cci cci-deployable"
-        });
-        if (!picked || picked.length === 0)
+    // For mech/pilot deployables: use the deployable's system.owner to find the owning actor directly
+    const ownerUuidRaw = deployableActor.system?.owner;
+    const ownerUuid = typeof ownerUuidRaw === 'string'
+        ? ownerUuidRaw
+        : (typeof ownerUuidRaw?.uuid === 'string' ? ownerUuidRaw.uuid : null);
+    const directOwner = ownerUuid ? await fromUuid(ownerUuid) : null;
+    if (directOwner && (directOwner.type === 'mech' || directOwner.type === 'pilot')) {
+        ownerActor = directOwner;
+        ownerToken = allTokens.find(t => t.actor?.uuid === directOwner.uuid) ?? null;
+        if (!ownerToken) {
+            // Owner has no token on this scene — don't link
             return;
-        ownerToken = picked[0];
+        }
     } else {
-        ownerToken = candidateTokens[0];
+        // NPC path: filter scene tokens whose actor owns an item producing this LID
+        const candidateTokens = allTokens.filter(t => {
+            if (t.document.id === tokenDocument.id)
+                return false;
+            if (!t.actor)
+                return false;
+            return t.actor.items.some(item => getItemDeployables(item, t.actor).includes(deployableLid));
+        });
+
+        if (candidateTokens.length === 0)
+            return;
+
+        if (candidateTokens.length === 1) {
+            ownerToken = candidateTokens[0];
+        } else {
+            const deployableToken = canvas.tokens.get(tokenDocument.id);
+            const picked = await chooseToken(deployableToken ?? candidateTokens[0], {
+                count: 1,
+                includeSelf: false,
+                selection: candidateTokens,
+                title: "LINK DEPLOYABLE",
+                description: `Which token owns the deployed ${deployableActor.name}?`,
+                icon: "cci cci-deployable"
+            });
+            if (!picked || picked.length === 0)
+                return;
+            ownerToken = picked[0];
+        }
+        ownerActor = ownerToken.actor;
     }
 
-    const ownerActor = ownerToken.actor;
     const ownerName = ownerActor.name ?? "";
 
     // Find the item on the owner that grants this deployable (first match)

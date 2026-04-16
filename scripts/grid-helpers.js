@@ -238,7 +238,13 @@ export function getOccupiedCenters(token, overridePos = null) {
     return offsets.map(o => getHexCenter(o.col, o.row));
 }
 
-export function getMinGridDistance(token1, token2, overridePos1 = null) {
+export function getMinGridDistance(token1, token2, overridePos1 = null, includeElevation = undefined) {
+    if (includeElevation === undefined) {
+        try {
+            includeElevation = !!game.settings.get('lancer-automations', 'count3DDistance');
+        } catch { includeElevation = false; }
+    }
+    let planarDist;
     if (!isHexGrid()) {
         const centers1 = getOccupiedCenters(token1, overridePos1);
         const centers2 = getOccupiedCenters(token2);
@@ -251,27 +257,32 @@ export function getMinGridDistance(token1, token2, overridePos1 = null) {
                     minDist = dPixel;
             }
         }
-        return Math.round(minDist / canvas.scene.grid.distance);
-    }
+        planarDist = Math.round(minDist / canvas.scene.grid.distance);
+    } else {
+        const offsets1 = getOccupiedOffsets(token1, overridePos1);
+        const offsets2 = getOccupiedOffsets(token2);
 
-    const offsets1 = getOccupiedOffsets(token1, overridePos1);
-    const offsets2 = getOccupiedOffsets(token2);
-
-    let minDist = Infinity;
-
-    for (const o1 of offsets1) {
-        const cube1 = offsetToCube(o1.col, o1.row);
-        for (const o2 of offsets2) {
-            const cube2 = offsetToCube(o2.col, o2.row);
-            const dist = cubeDistance(cube1, cube2);
-            if (dist < minDist)
-                minDist = dist;
+        let minDist = Infinity;
+        for (const o1 of offsets1) {
+            const cube1 = offsetToCube(o1.col, o1.row);
+            for (const o2 of offsets2) {
+                const cube2 = offsetToCube(o2.col, o2.row);
+                const dist = cubeDistance(cube1, cube2);
+                if (dist < minDist)
+                    minDist = dist;
+            }
         }
+        planarDist = minDist;
     }
 
+    if (!includeElevation)
+        return planarDist;
 
-
-    return minDist;
+    const e1 = token1?.document?.elevation ?? 0;
+    const e2 = token2?.document?.elevation ?? 0;
+    const elevDist = Math.round(Math.abs(e1 - e2) / canvas.scene.grid.distance);
+    // Additive: 1 horizontal + 2 vertical = 3
+    return planarDist + elevDist;
 }
 
 /**

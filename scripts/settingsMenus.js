@@ -144,6 +144,7 @@ const CombatMovementConfig = makeConfigForm({
         { key: 'dragVisionMultiplier', type: 'number' },
         { key: 'enableAltStruct', type: 'boolean' },
         { key: 'enableInfectionDamageIntegration', type: 'boolean' },
+        { key: 'count3DDistance', type: 'boolean' },
     ],
 });
 

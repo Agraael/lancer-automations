@@ -564,7 +564,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationType: "code",
                 activationMode: "instead",
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    return !!api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.bolster");
+                    return !!api.findEffectOnToken(reactorToken, "bolster");
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (triggerType === 'onInitCheck') {
@@ -577,7 +577,7 @@ export function getDefaultGeneralReactionRegistry() {
                     } else if (triggerType === 'onCheck') {
                         await api.removeEffectsByNameFromTokens({
                             tokens: [reactorToken],
-                            effectNames: ["lancer.statusIconsNames.bolster"]
+                            effectNames: ["bolster"]
                         });
                     }
                 }
@@ -775,7 +775,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (elevation <= maxGroundHeight)
                         return false;
 
-                    const isFlying = !!api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.flying") || !!api.findEffectOnToken(reactorToken, "flying");
+                    const isFlying = !!api.findEffectOnToken(reactorToken, "flying");
 
                     if (!isFlying)
                         return true;
@@ -876,7 +876,7 @@ export function getDefaultGeneralReactionRegistry() {
         "Engagement": {
             category: "General",
             comments: "Stop Movement & Engagement",
-            triggers: ["onUpdate", "onPreMove"],
+            triggers: ["onUpdate", "onPreMove", "onTokenCreated", "onTokenRemoved", "onTokenVisibility"],
             triggerDescription: "When a character moves",
             effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",
             isReaction: false,
@@ -895,6 +895,10 @@ export function getDefaultGeneralReactionRegistry() {
                     return false;
                 }
 
+                if (triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility") {
+                    return true;
+                }
+
                 if (triggerType === "onPreMove") {
                     if (!game.combat?.active)
                         return false;
@@ -904,14 +908,14 @@ export function getDefaultGeneralReactionRegistry() {
                     if (moveInfo.isTeleport || moveInfo.isModified)
                         return false;
 
-                    if (api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.hidden") ||
+                    if (api.findEffectOnToken(reactorToken, "hidden") ||
                         api.findEffectOnToken(reactorToken, "disengage") ||
-                        api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.intangible") ||
+                        api.findEffectOnToken(reactorToken, "intangible") ||
                         reactorToken.actor?.effects.some(e => e.statuses?.has("hidden") || e.statuses?.has("disengage") || e.statuses?.has("intangible"))) {
                         return false;
                     }
 
-                    const isAlreadyEngaged = api.findEffectOnToken(reactorToken, "lancer.statusIconsNames.engaged") ||
+                    const isAlreadyEngaged = api.findEffectOnToken(reactorToken, "engaged") ||
                         reactorToken.actor?.effects.some(e => e.statuses?.has("engaged"));
                     if (isAlreadyEngaged)
                         return false;
@@ -923,7 +927,7 @@ export function getDefaultGeneralReactionRegistry() {
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (triggerType === "onUpdate") {
+                if (triggerType === "onUpdate" || triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility") {
                     api.updateAllEngagements();
                     return;
                 }

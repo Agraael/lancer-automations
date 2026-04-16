@@ -154,7 +154,10 @@ Fires *before* movement is finalized. Allows interception.
 - **`onStructure`**: After the structure roll. `{ triggeringToken, remainingStructure, rollResult }`.
 - **`onPreStress`**: Before the overheat roll. `{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl) }`. Can cancel the entire overheat flow.
 - **`onStress`**: After the overheat roll. `{ triggeringToken, remainingStress, rollResult }`.
-- **`onDestroyed`**: `{ triggeringToken }`.
+- **`onDestroyed`**: Fires on token delete when `structure.value <= 0 || stress.value <= 0`. `{ triggeringToken }`.
+- **`onTokenCreated`**: Fires when any token is placed on the canvas (after a 100ms delay, same timing as `onInit`). `{ triggeringToken, distanceToTrigger }`.
+- **`onTokenRemoved`**: Fires on any token deletion (unconditional, unlike `onDestroyed`). `{ triggeringToken, distanceToTrigger }`. `triggeringToken` may be a fallback `{document, id, name, actor}` object if the canvas token is already gone.
+- **`onTokenVisibility`**: Fires when a token's `hidden` flag is toggled (GM eye icon). `{ triggeringToken, isHidden, distanceToTrigger }`.
 
 </details>
 

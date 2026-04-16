@@ -568,8 +568,13 @@ async function checkReactions(triggerType, data) {
     const hasValidActionBasedReaction = actionBasedReaction &&
         actionBasedReaction.reaction.enabled !== false;
 
+    const triggeringTokenHidden = !!data.triggeringToken?.document?.hidden;
+
     for (const token of allTokens) {
         const isSelf = data.triggeringToken?.id === token.id;
+        // Hidden triggering tokens don't provoke reactions from others — only self-reactions fire.
+        if (triggeringTokenHidden && !isSelf)
+            continue;
         const isInCombat = token.inCombat;
 
         // Change 5: compute distance and enrichedData once per token, not per item/reaction
@@ -1379,6 +1384,15 @@ function registerSettings() {
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register('lancer-automations', 'count3DDistance', {
+        name: 'Count Elevation in Combat Distance',
+        hint: 'Add elevation to distance for overwatch, engagement, range checks, distanceToTrigger, and getTokenDistance / getMinGridDistance defaults.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
     });
 }
 
@@ -4784,7 +4798,16 @@ Hooks.on('createToken', (tokenDocument, options, userId) => {
     setTimeout(() => {
         checkOnInitReactions(token);
         handleManualDeployLink(tokenDocument);
+        handleTrigger('onTokenCreated', { triggeringToken: token });
     }, 100);
+});
+
+Hooks.on('deleteToken', async (tokenDocument, _options, userId) => {
+    if (userId !== game.userId)
+        return;
+    const token = canvas.tokens.get(tokenDocument.id)
+        ?? { document: tokenDocument, id: tokenDocument.id, name: tokenDocument.name, actor: tokenDocument.actor };
+    await handleTrigger('onTokenRemoved', { triggeringToken: token });
 });
 
 Hooks.on('preUpdateActor', (actor, change, options, userId) => {
@@ -5242,6 +5265,13 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 Hooks.on('updateToken', async function(document, change, options, userId) {
     if (game.user.id !== userId)
         return;
+
+    if (change.hidden !== undefined) {
+        const tok = canvas.tokens.get(document.id);
+        if (tok)
+            await handleTrigger('onTokenVisibility', { triggeringToken: tok, isHidden: !!change.hidden });
+    }
+
     const hasPositionChange = change.x !== undefined || change.y !== undefined || change.elevation !== undefined;
     if (!hasPositionChange)
         return;

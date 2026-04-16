@@ -1491,6 +1491,9 @@ export class ReactionEditor extends FormApplication {
             onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, showCard, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
             onHeatGain: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
             onDestroyed: "{ triggeringToken, distanceToTrigger }",
+            onTokenCreated: "{ triggeringToken, distanceToTrigger }",
+            onTokenRemoved: "{ triggeringToken, distanceToTrigger }",
+            onTokenVisibility: "{ triggeringToken, isHidden, distanceToTrigger }",
             onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
@@ -2423,6 +2426,7 @@ export class ReactionEditor extends FormApplication {
             { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
             { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
             { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
+            { label: "Token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
             { label: "Other", triggers: ["onUpdate"] }
         ];
         return groups.map(g => ({

@@ -77,17 +77,17 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
     if (newImmobilizedSide === "grappled") {
         await api.applyEffectsToTokens({
             tokens: [grappledToken],
-            effectNames: ['lancer.statusIconsNames.immobilized'],
+            effectNames: ['immobilized'],
             note: 'Grapple',
         }, { grappleSource: true });
-        await api.removeEffectsByNameFromTokens({ tokens: grapplerTokens, effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
+        await api.removeEffectsByNameFromTokens({ tokens: grapplerTokens, effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
     } else if (newImmobilizedSide === "grapplers") {
         await api.applyEffectsToTokens({
             tokens: grapplerTokens,
-            effectNames: ['lancer.statusIconsNames.immobilized'],
+            effectNames: ['immobilized'],
             note: 'Grapple',
         }, { grappleSource: true });
-        await api.removeEffectsByNameFromTokens({ tokens: [grappledToken], effectNames: ['lancer.statusIconsNames.immobilized'], extraFlags: { grappleSource: true } });
+        await api.removeEffectsByNameFromTokens({ tokens: [grappledToken], effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
     }
 }
 
@@ -145,7 +145,7 @@ async function releaseGrappler(api, grappler, grappledToken) {
         await setGrappleState(grappledToken, { grapplerIds: newGrapplerIds, immobilizedSide: grappledState.immobilizedSide });
         await api.removeEffectsByNameFromTokens({
             tokens: [grappler],
-            effectNames: ['grappling', 'lancer.statusIconsNames.immobilized'],
+            effectNames: ['grappling', 'immobilized'],
             extraFlags: { grappleSource: true }
         });
         await updateImmobilized(api, grappledToken);
@@ -174,13 +174,13 @@ async function cancelGrappleForToken(api, token) {
 
         await api.removeEffectsByNameFromTokens({
             tokens: [token],
-            effectNames: ['grappled', 'lancer.statusIconsNames.immobilized'],
+            effectNames: ['grappled', 'immobilized'],
             extraFlags: { grappleSource: true }
         });
         if (grapplerTokens.length > 0) {
             await api.removeEffectsByNameFromTokens({
                 tokens: grapplerTokens,
-                effectNames: ['grappling', 'lancer.statusIconsNames.immobilized'],
+                effectNames: ['grappling', 'immobilized'],
                 extraFlags: { grappleSource: true }
             });
         }

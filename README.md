@@ -465,7 +465,10 @@ flowchart LR
 | `onHeatLoss` | When a token's heat is cleared |
 | `onHpGain` | When a token regains HP |
 | `onHpLoss` | When a token loses HP |
-| `onDestroyed` | When a token is destroyed |
+| `onDestroyed` | When a token is destroyed (struct/stress hit 0) |
+| `onTokenCreated` | When any token is placed on the canvas |
+| `onTokenRemoved` | When any token is removed from the canvas |
+| `onTokenVisibility` | When a token's GM-hidden flag is toggled |
 | `onDeploy` | When a deployable is placed |
 
 ![Trigger list](doc/img/trigger-list.png)

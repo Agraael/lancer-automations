@@ -1372,6 +1372,14 @@ export class LancerHUD {
 
         const gameplayItems = [
             { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginFullRepairFlow() },
+            { label: 'Link to Token', icon: 'systems/lancer/assets/icons/white/deployable.svg', onClick: async () => {
+                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
+                if (!picked || !picked.length) return;
+                const target = picked[0];
+                await token.document.setFlag('lancer-automations', 'ownerActorUuid', target.actor.uuid);
+                await token.document.setFlag('lancer-automations', 'ownerName', target.actor.name ?? '');
+            } },
             ...(isMechOrNpc ? [
                 {
                     label: 'Structure',

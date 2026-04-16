@@ -402,7 +402,8 @@ type TriggerType =
     | "onInitCheck"
     | "onStatusApplied" | "onStatusRemoved"
     | "onPreStatusApplied" | "onPreStatusRemoved"
-    | "onDestroyed" | "onPreStructure" | "onStructure" | "onPreStress" | "onStress"
+    | "onDestroyed" | "onTokenCreated" | "onTokenRemoved" | "onTokenVisibility"
+    | "onPreStructure" | "onStructure" | "onPreStress" | "onStress"
     | "onPreHeatChange" | "onHeatGain" | "onHeatLoss"
     | "onPreHpChange" | "onHpLoss" | "onHpGain"
     | "onDeploy"
@@ -605,8 +606,8 @@ interface LancerAutomationsAPI {
     getTokenOwnerUserId(token: Token): string[];
 
     // ── Spatial & Distance ────────────────────────────────────────────────────
-    getTokenDistance(t1: Token, t2: Token): number;
-    getMinGridDistance(t1: Token, t2: Token, overridePos1?: { x: number; y: number }): number;
+    getTokenDistance(t1: Token, t2: Token, includeElevation?: boolean): number;
+    getMinGridDistance(t1: Token, t2: Token, overridePos1?: { x: number; y: number }, includeElevation?: boolean): number;
     getGridDistance(p1: { x: number; y: number }, p2: { x: number; y: number }): number;
     isHostile(t1: Token, t2: Token): boolean;
     isFriendly(t1: Token, t2: Token): boolean;

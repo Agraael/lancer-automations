@@ -317,8 +317,8 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.endFill();
 }
 
-export function getTokenDistance(token1, token2) {
-    return getMinGridDistance(token1, token2);
+export function getTokenDistance(token1, token2, includeElevation = undefined) {
+    return getMinGridDistance(token1, token2, null, includeElevation);
 }
 
 export async function drawDistanceDebug() {
@@ -472,7 +472,7 @@ export async function updateAllEngagements() {
 
     // Check who is currently flagged as engaged
     const currentlyEngaged = new Set(
-        allTokens.filter(t => !!api.findEffectOnToken(t, "lancer.statusIconsNames.engaged")).map(t => t.id)
+        allTokens.filter(t => !!api.findEffectOnToken(t, "engaged")).map(t => t.id)
     );
 
     const shouldBeEngaged = new Set();
@@ -502,13 +502,13 @@ export async function updateAllEngagements() {
         if (needsStatus && !hasStatus) {
             await api.applyEffectsToTokens({
                 tokens: [token],
-                effectNames: ["lancer.statusIconsNames.engaged"],
+                effectNames: ["engaged"],
                 notify: false
             });
         } else if (!needsStatus && hasStatus) {
             await api.removeEffectsByNameFromTokens({
                 tokens: [token],
-                effectNames: ["lancer.statusIconsNames.engaged"],
+                effectNames: ["engaged"],
                 notify: false
             });
         }

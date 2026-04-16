@@ -1449,7 +1449,7 @@ api.registerDefaultItemReactions({
                     if (targets.length) {
                         await api.applyEffectToTokens({
                             tokens: targets,
-                            effectNames: ["lancer.statusIconsNames.impaired"],
+                            effectNames: ["impaired"],
                             note: "Remote Machine Gun",
                             duration: { label: 'end', turns: 1, rounds: 0 },
                             checkEffectCallback: (token, effect) => {
