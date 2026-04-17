@@ -227,8 +227,21 @@ Hooks.on('updateCombat', () => {
 Hooks.on('updateCombatant', (combatant) => {
     if (!enabled())
         return;
+    if ((hud._tokens ?? []).some(t => t.document?.id === combatant.tokenId)) {
+        hud._updateCombatBar?.();
+    }
     if (isRelevantActor(combatant.actorId))
         hud.scheduleRefresh();
+});
+
+// ── Action tracker changes (combat bar in-place update) ─────────────────
+
+Hooks.on('updateActor', (actor, change) => {
+    if (!enabled())
+        return;
+    if (change.system?.action_tracker && isRelevantActor(actor.id)) {
+        hud._updateCombatBar?.();
+    }
 });
 
 Hooks.on('createCombat', () => {

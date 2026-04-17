@@ -10,6 +10,7 @@ import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, a
 import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS } from './hover.js';
 import { resurrect } from '../wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
+import { buildCombatBar } from './combat-bar.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
@@ -211,6 +212,30 @@ export class LancerHUD {
         if (!this._actor || !this._el)
             return;
         this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
+        this._updateCombatBar();
+    }
+
+    _updateCombatBar() {
+        if (!this._actor || !this._token || !this._el) {
+            return;
+        }
+        const existing = this._el.find('#la-combat-bar');
+        const newBar = buildCombatBar(this._actor, this._token);
+        if (existing.length && newBar) {
+            existing.replaceWith(newBar);
+        } else if (existing.length && !newBar) {
+            existing.stop(true).animate({ opacity: 0, marginTop: -existing.outerHeight() }, 150, function () {
+                $(this).remove();
+            });
+        } else if (!existing.length && newBar) {
+            const statsEl = this._el.find('#la-hud-stats');
+            if (statsEl.length) {
+                const h = 30;
+                newBar.css({ overflow: 'hidden', opacity: 0, marginTop: -h });
+                statsEl.after(newBar);
+                newBar.animate({ opacity: 1, marginTop: 0 }, 200);
+            }
+        }
     }
 
     refresh() {
@@ -273,7 +298,20 @@ export class LancerHUD {
 
         const titleEl = $(`<div style="${S_TOKEN_TITLE}"><span class="la-hud-token-name">${tokenName}</span></div>`);
 
+        // Combat toggle icon (left of token name)
+        const inCombat = this._token.inCombat;
+        const combatToggle = $(`<span class="la-combat-toggle" style="cursor:pointer;color:${inCombat ? 'var(--primary-color)' : '#555'};margin-right:4px;font-size:0.85em;flex-shrink:0;opacity:${inCombat ? 1 : 0.5};" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
+        combatToggle.on('click', async () => {
+            await /** @type {any} */ (this._token.document).toggleCombatant?.(!this._token.inCombat);
+            const nowInCombat = this._token.inCombat;
+            combatToggle.css({ color: nowInCombat ? 'var(--primary-color)' : '#555', opacity: nowInCombat ? 1 : 0.5 });
+            combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
+            this._updateCombatBar();
+        });
+        titleEl.find('.la-hud-token-name').before(combatToggle);
+
         const statsEl = buildStatsEl(actor, this._token);
+        const combatBar = buildCombatBar(actor, this._token);
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
@@ -284,6 +322,9 @@ export class LancerHUD {
         menuLabel.append(searchIcon);
         const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid var(--primary-color);font-size:0.8em;font-family:inherit;outline:none;">`);
         menuLabel.after(searchBar);
+        if (combatBar) {
+            c1.prepend(combatBar);
+        }
         c1.prepend(statsEl);
         c1.prepend(titleEl);
 
@@ -1178,7 +1219,7 @@ export class LancerHUD {
             label: 'Invades',
             colLabel: 'Invades',
             getItems: () => this._getInvadeOptions(actor).map(opt => ({
-                label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
+                label: opt.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${opt.name}</s>` : opt.name,
                 icon: 'modules/lancer-automations/icons/cpu-shot.svg',
                 ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
@@ -1372,7 +1413,7 @@ export class LancerHUD {
 
         const gameplayItems = [
             { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginFullRepairFlow() },
-            { label: 'Link to Token', icon: 'systems/lancer/assets/icons/white/deployable.svg', onClick: async () => {
+            { label: 'Link to Token', icon: 'modules/lancer-automations/icons/pin.svg', onClick: async () => {
                 const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
                 const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
                 if (!picked || !picked.length) return;
@@ -1630,7 +1671,7 @@ export class LancerHUD {
                 return systems.map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
-                    const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${item.name}</s>` : item.name;
+                    const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${item.name}</s>` : item.name;
                     return {
                         label: labelHtml,
                         badge: status.badge ?? null,
@@ -1714,7 +1755,7 @@ export class LancerHUD {
         const invadeOpts = this._getInvadeOptions(actor).filter(opt => opt.item?.id === item.id && !sysActionNames.has(opt.name));
         for (const opt of invadeOpts) {
             children.push({
-                label: opt.destroyed ? `<s style="opacity:0.55;">${opt.name}</s>` : opt.name,
+                label: opt.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${opt.name}</s>` : opt.name,
                 icon: ICON_TECH_QUICK,
                 ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
@@ -2031,7 +2072,7 @@ export class LancerHUD {
                 return /** @type {any[]} */ (features).map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
-                    const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${item.name}</s>` : item.name;
+                    const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${item.name}</s>` : item.name;
                     const actTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
                     const TYPE_TO_ACTIVATION = { Reaction: 'Reaction', System: null, Tech: 'Quick Tech', Trait: null, Weapon: null };
                     const activation = actTag
@@ -2529,7 +2570,7 @@ export class LancerHUD {
     _weaponItem(weapon, modItem, mount = null) {
         const sys    = weapon.system;
         const status = getItemStatus(weapon);
-        const labelHtml = status.destroyed ? `<s style="opacity:0.55;">${weapon.name}</s>` : weapon.name;
+        const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${weapon.name}</s>` : weapon.name;
         return {
             label: labelHtml,
             badge: status.badge ?? null,
@@ -2829,7 +2870,7 @@ export class LancerHUD {
                     status.unavailable = true;
             }
             return {
-                label: status.destroyed ? `<s style="opacity:0.55;">${action.name}</s>`
+                label: status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${action.name}</s>`
                     : (action._sourceItemId ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,

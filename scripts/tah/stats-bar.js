@@ -117,7 +117,7 @@ export function buildStatsHtml(actor, token = null) {
     const expanded = _statsExpanded ? 'display:flex;flex-direction:column' : 'display:none';
     const arrow = _statsExpanded ? '◀' : '▶';
 
-    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;">` +
+    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;position:relative;z-index:2;">` +
         `<div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
         `${hasStructure ? `${strPips}${SEP}` : ''}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
