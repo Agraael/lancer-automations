@@ -1296,6 +1296,16 @@ function registerSettings() {
         hint: 'Size 0.5 actors get 0.5 grid token dimensions instead of being forced to 1.',
         scope: 'world', config: false, type: Boolean, default: false,
     });
+    game.settings.register('lancer-automations', 'autoTokenHeight', {
+        name: 'Auto Token Height (Wall Height)',
+        hint: 'If Wall Height is active, auto-set tokenHeight to actor size + 0.1 so tokens can peek above walls of their size.',
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
+    game.settings.register('lancer-automations', 'autoTokenHeightVehicleSquad', {
+        name: 'Vehicle & Squad Height Adjustments',
+        hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.',
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
     game.settings.register('lancer-automations', 'enableWipOnDeath', {
         name: 'Remove Statuses on Death',
         hint: 'Clear all status effects when structure reaches zero.',
@@ -1764,6 +1774,9 @@ async function handleSocketEvent({ action, payload }) {
 //   lancer-automations.moveHistory  = { moves: Array<{ distanceMoved, isDrag, isFreeMovement, boostSet, startPos }> }
 //   lancer-automations.movementCap  = number
 
+// In-memory cache for move history (survives between preUpdateToken calls in multi-segment moves)
+const _moveHistoryCache = new Map();
+
 function _getMoveHistoryDoc(tokenOrId) {
     if (typeof tokenOrId === 'string')
         return canvas.tokens.get(tokenOrId)?.document ?? null;
@@ -1778,6 +1791,10 @@ function _getMoveHistoryData(tokenOrId) {
 function _writeMoveHistory(tokenDoc, data) {
     if (!tokenDoc)
         return;
+    const tid = tokenDoc.id ?? tokenDoc._id;
+    if (tid) {
+        _moveHistoryCache.set(tid, data);
+    }
     foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', data);
     if (tokenDoc.isOwner)
         tokenDoc.update({ 'flags.lancer-automations.moveHistory': data });
@@ -1795,6 +1812,10 @@ function clearMoveData(tokenOrId) {
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
+    const tid = doc.id ?? doc._id;
+    if (tid) {
+        _moveHistoryCache.delete(tid);
+    }
     foundry.utils.setProperty(doc.flags, 'lancer-automations.moveHistory', null);
     if (doc.isOwner)
         doc.update({ 'flags.lancer-automations.-=moveHistory': null });
@@ -1920,6 +1941,23 @@ function increaseMovementCap(tokenOrId, value) {
  *   distanceMoved — physical squares traveled (no terrain penalty overhead)
  *   movementCost  — squares consumed from movement cap (includes terrain penalty)
  */
+/**
+ * Move a token as if dragged with the ruler.
+ * Uses Elevation Ruler's API if available for correct cost, otherwise falls back to raw update.
+ */
+async function _rulerMove(token, destination, extraOpts = {}) {
+    const erApi = game.modules.get('elevationruler')?.active ? game.modules.get('elevationruler')?.api : null;
+    if (erApi?.moveTokenTo) {
+        await erApi.moveTokenTo(token, destination, extraOpts);
+    } else {
+        const update = { x: destination.x, y: destination.y };
+        if (destination.elevation !== undefined) {
+            update.elevation = destination.elevation;
+        }
+        await token.document.update(update, { isDrag: true, ...extraOpts });
+    }
+}
+
 function _computeMoveData(options, startPos, endPos, elevationFallback = 0) {
     const isFreeMovement = options.lancerFreeMovement
         ?? (game.modules.get('elevationruler')?.api?.Settings?.FORCE_FREE_MOVEMENT || false);
@@ -1977,7 +2015,8 @@ async function handleTokenMove(document, change, options, userId) {
     // Outside of combat, always start fresh so history reflects only the current movement.
     const tokenDoc = document.document;
     const inCombat = !!game.combat?.active;
-    const existingData = (inCombat ? tokenDoc.getFlag('lancer-automations', 'moveHistory') : null) ?? { moves: [] };
+    const tokenId = tokenDoc.id ?? tokenDoc._id;
+    const existingData = (inCombat ? (_moveHistoryCache.get(tokenId) ?? tokenDoc.getFlag('lancer-automations', 'moveHistory')) : null) ?? { moves: [] };
     const existingMoves = existingData.moves || [];
 
     // Compute prior intentional cost for boost detection (uses movementCost to count terrain correctly)
@@ -2022,10 +2061,12 @@ async function handleTokenMove(document, change, options, userId) {
         }]
     };
     if (inCombat) {
+        _moveHistoryCache.set(tokenId, newData);
         foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', newData);
         const isLastSegment = !options.rulerSegment || options.lastRulerSegment === true;
-        if (tokenDoc.isOwner && isLastSegment)
+        if (tokenDoc.isOwner && isLastSegment) {
             tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
+        }
     }
 
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
@@ -3234,7 +3275,15 @@ function patchHalfSizeTokens() {
         if (game.settings.get(game.system.id, 'automationOptions')?.token_size
             && !this.getFlag(game.system.id, 'manual_token_size')) {
             const newSize = this.actor?.system?.size ?? 1;
-            this.updateSource({ width: newSize, height: newSize });
+            const updates = { width: newSize, height: newSize };
+            // Center sub-1 tokens within their grid cell
+            if (newSize < 1 && canvas?.grid) {
+                const gs = canvas.grid.size;
+                const offset = (1 - newSize) * gs / 2;
+                updates.x = this.x + offset;
+                updates.y = this.y + offset;
+            }
+            this.updateSource(updates);
         }
         // Skip Lancer's _preCreate (which has Math.max(1)), call grandparent directly
         return TokenDocument.prototype._preCreate.call(this, data, options, user);
@@ -5108,10 +5157,11 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         const continueCallback = async () => {
             // Re-submit the original movement, carrying _cancelledBy so only the
             // reactions that already cancelled are skipped on this pass
-            const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
-            if (change.elevation !== undefined)
-                originalUpdate.elevation = change.elevation;
-            token.document.update(originalUpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
+            const dest = { x: change.x ?? token.x, y: change.y ?? token.y };
+            if (change.elevation !== undefined) {
+                dest.elevation = change.elevation;
+            }
+            await _rulerMove(token, dest, { ...options, _cancelledBy: triggerData._cancelledBy });
         };
         triggerData._cancelledBy = options._cancelledBy || [];
         let _moveTrace = null;
@@ -5148,13 +5198,12 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 
         triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
             const executeChange = () => {
-                setTimeout(() => {
-                    const updateData = { x: position.x, y: position.y };
+                setTimeout(async () => {
+                    const dest = { x: position.x, y: position.y };
                     if (extraData.elevation !== undefined) {
-                        updateData.elevation = extraData.elevation;
+                        dest.elevation = extraData.elevation;
                     }
-                    const contextData = { isDrag: true, isUndo: false, isModified: true, ...extraData };
-                    token.document.update(updateData, /** @type {any} */ (contextData));
+                    await _rulerMove(token, dest, { isUndo: false, isModified: true, ...extraData });
                 }, 50);
             };
 
@@ -5227,18 +5276,79 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             const spent = history.exists ? history.intentional.regularCost : 0;
             if (spent <= cap && spent + moveToMovementCost > cap) {
                 const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
+                const speed = token.actor?.system?.speed ?? 0;
+                const canBoost = speed > 0 && (spent + moveToMovementCost) <= (cap + speed);
                 options.ignoreMovementCap = true;
                 triggerData.cancelTriggeredMove._engineCancel = true;
-                triggerData.cancelTriggeredMove(
-                    `Not enough movement points (${spent + moveToMovementCost} > ${cap}). ` +
-                    `Increase your movement cap with Boost, or hold <b>${freeKey}</b> for free movement.`
-                );
+
+                // Always cancel first
+                triggerData.cancel();
+                cancelRulerDrag(token, moveInfo);
+
+                const finalX = change.x ?? endPos.x;
+                const finalY = change.y ?? endPos.y;
+                const finalElev = change.elevation;
+
+                if (canBoost && !options._skipBoostOffer) {
+                    const remaining = cap - spent;
+                    const totalDist = moveToMovementCost;
+                    const ratio = totalDist > 0 ? Math.max(0, remaining / totalDist) : 0;
+                    const midX = startPos.x + (endPos.x - startPos.x) * ratio;
+                    const midY = startPos.y + (endPos.y - startPos.y) * ratio;
+
+                    setTimeout(async () => {
+                        const result = await startChoiceCard({
+                            title: 'BOOST & MOVE',
+                            icon: 'modules/lancer-automations/icons/black/speedometer.svg',
+                            description: `Movement exceeds cap (${spent + moveToMovementCost}/${cap}). Boost adds +${speed}.`,
+                            originToken: token,
+                            userIdControl: getTokenOwnerUserId(token),
+                            choices: [
+                                { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/black/speedometer.svg' },
+                                { text: 'No', icon: 'fas fa-times' },
+                            ]
+                        });
+                        if (/** @type {any} */ (result)?.choiceIdx !== 0) {
+                            // Redo the original move, skip boost offer, fall back to normal cap check
+                            await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { _skipBoostOffer: true });
+                            return;
+                        }
+                        // Step 1: move to cap boundary (no triggers, just position + tracking)
+                        const snapMid = token.getSnappedPosition({ x: midX, y: midY });
+                        await _rulerMove(token, snapMid, { IgnorePreMove: true });
+                        // Step 2: boost
+                        await new Promise(r => setTimeout(r, 800));
+                        await executeSimpleActivation(token.actor, {
+                            title: 'Boost',
+                            action: { name: 'Boost', activation: 'Quick' },
+                            detail: 'Move your speed.',
+                        });
+                        // Step 3: move to final destination (no triggers, just position + tracking)
+                        await new Promise(r => setTimeout(r, 800));
+                        await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { IgnorePreMove: true });
+                    }, 100);
+                } else {
+                    // No boost possible or boost declined — redo with normal cap check
+                    setTimeout(() => {
+                        const redoUpdate = { x: finalX, y: finalY };
+                        if (finalElev !== undefined) {
+                            redoUpdate.elevation = finalElev;
+                        }
+                        triggerData.cancelTriggeredMove(
+                            `Not enough movement points (${spent + moveToMovementCost} > ${cap}). ` +
+                            `Hold <b>${freeKey}</b> for free movement.`
+                        );
+                    }, 100);
+                }
             }
         }
 
         // Call handleTrigger without await. If onPreMove reactions are synchronous,
         // cancelUpdate will be set to true before we check it on the next line.
-        handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy });
+        // Skip if already cancelled by cap/boost check (no need to trigger reactions on a cancelled move)
+        if (!cancelUpdate) {
+            handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy });
+        }
 
         if (cancelUpdate) {
             return false;

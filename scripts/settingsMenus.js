@@ -242,6 +242,7 @@ const TokenActionHudConfig = makeConfigForm({
         { key: 'tah.clickToOpen', type: 'boolean' },
         { key: 'tah.hoverCloseDelay', type: 'number' },
         { key: 'tah.rangePreview', type: 'boolean' },
+        { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
         // Aura settings table.
         { type: 'table', label: 'Range Auras',
           tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',

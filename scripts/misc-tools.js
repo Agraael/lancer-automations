@@ -13,6 +13,7 @@ export const ACTIVATION_TAG_MAP = {
     'Protocol':   'tg_protocol',
     'Reaction':   'tg_reaction',
     'Free':       'tg_free_action',
+    'Deactivate': 'tg_deactivate',
     'Invade':     'tg_invade',
 };
 
@@ -1818,6 +1819,8 @@ export function getMaxWeaponRanges_WithBonus(input) {
  */
 export function getActorMaxThreat(actor) {
     if (!actor)
+        return 0;
+    if (actor.type === 'deployable')
         return 0;
     const ranges = getMaxWeaponRanges_WithBonus(actor);
     return ranges.Threat || 1;

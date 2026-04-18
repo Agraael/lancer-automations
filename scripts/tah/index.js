@@ -58,6 +58,14 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.showDisposition', {
+        name: 'Show Team / Disposition Indicator',
+        hint: 'Colored stripe on the title bar. Shows team name if Token Factions advanced teams is active, otherwise shows disposition.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
     // Persistent aura colors + opacity
     game.settings.register(MODULE, 'tah.auraColorThreat', {
         name: 'Threat Aura Color',

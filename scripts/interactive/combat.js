@@ -112,7 +112,21 @@ export async function revertMovement(token, destination = null) {
                 return false;
             }
             const currentPos = { x: token.document.x, y: token.document.y };
-            const newLastPoint = history[history.length - 2];
+            // Find the target: skip back past any teleport snaps, then past one real move
+            let idx = history.length - 1;
+            // Skip trailing teleport snaps
+            while (idx > 0 && history[idx].teleport && (history[idx].cost ?? 0) === 0) {
+                idx--;
+            }
+            // Skip the real movement entry
+            if (idx > 0) {
+                idx--;
+            }
+            // Skip any more teleport snaps before the real move
+            while (idx > 0 && history[idx].teleport && (history[idx].cost ?? 0) === 0) {
+                idx--;
+            }
+            const newLastPoint = history[idx];
             const updates = {};
 
             const topLeft = {
@@ -124,8 +138,11 @@ export async function revertMovement(token, destination = null) {
             updates.y = snappedPos.y;
             updates.elevation = CONFIG.GeometryLib.utils.pixelsToGridUnits(newLastPoint.z);
 
+            // Trim history to target (skip ER's isUndo pop since we handle it ourselves)
+            history.length = idx + 1;
+
             const dist = getDist(currentPos, {x: updates.x, y: updates.y});
-            await token.document.update(updates, /** @type {any} */ ({ isUndo: true }));
+            await token.document.update(updates, /** @type {any} */ ({ isUndo: true, _historyTrimmed: true }));
             game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
 
             const remaining = token["elevationruler"]?.measurementHistory;

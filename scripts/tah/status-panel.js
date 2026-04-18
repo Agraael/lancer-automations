@@ -221,6 +221,11 @@ export class StatusPanel {
             return tt;
         };
 
+        // ── Search bar ─────────────────────────────────────────────────────────
+        const searchBar = $(`<input type="text" class="la-status-search" placeholder="Search statuses…" style="width:100%;box-sizing:border-box;padding:4px 8px 4px 28px;background:#1a1a1a;color:#fff;border:none;border-bottom:2px solid var(--primary-color);font-size:0.85em;font-family:inherit;outline:none;">`);
+        const searchWrap = $(`<div style="position:relative;flex-shrink:0;"><i class="fas fa-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#666;font-size:0.8em;pointer-events:none;"></i></div>`);
+        searchWrap.append(searchBar);
+
         // ── Status grid ────────────────────────────────────────────────────────
         const gridEl = $(`<div style="${S_STATUS_GRID}"></div>`);
         for (const s of allStatuses) {
@@ -498,7 +503,15 @@ export class StatusPanel {
         const panel = $(`<div style="${S_PANEL}"></div>`);
         const leftWrap = $(`<div style="display:flex;flex-direction:column;flex:1;min-width:0;"></div>`);
         const header = $(`<div style="${S_COL_LABEL}">Statuses</div>`);
-        leftWrap.append(header, gridEl);
+        searchBar.on('input', function () {
+            const q = String($(this).val()).toLowerCase().trim();
+            gridEl.find('[data-status-id]').each(function () {
+                const name = $(this).find('.la-status-name').text().toLowerCase();
+                $(this).toggle(!q || name.includes(q));
+            });
+        });
+        searchBar.on('click mousedown', (ev) => ev.stopPropagation());
+        leftWrap.append(header, searchWrap, gridEl);
         panel.append(leftWrap, rightEl);
 
         const topInHud  = anchorRow.offset().top - this._el.offset().top;

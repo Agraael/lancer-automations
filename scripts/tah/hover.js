@@ -27,7 +27,7 @@ const RANGE_PREVIEW_TEMPLATE = {
     fillOpacity: 0.05,
     fillTexture: 'modules/terrain-height-tools/textures/hatching.png',
     fillTextureOffset: { x: 0, y: 0 },
-    fillTextureScale: { x: 250, y: 250 },
+    fillTextureScale: { x: 500, y: 500 },
     ownerVisibility: {
         default: true,
         hovered: true,
@@ -46,11 +46,7 @@ const RANGE_PREVIEW_TEMPLATE = {
     },
     effects: [],
     macros: [],
-    terrainHeightTools: {
-        rulerOnDrag: 'NONE',
-        targetTokens: 'ALL',
-        onlyWhenAltPressed: false,
-    },
+    terrainHeightTools: { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true }
 };
 
 function hasGAA() {
@@ -296,14 +292,14 @@ function _buildPersistentTemplate(auraName) {
         name: auraName,
         enabled: false,
         onlyEnabledInCombat: false,
-        animation: true,
-        animationType: 'pulse',
+        animation: false,
+        animationType: 'scroll',
         pulseToMax: false,
         animationWhenSelected: true,
         animationSpeed: 0.1,
         keyPressMode: 'DISABLED',
         keyToPress: 'AltLeft',
-        lineType: 1,
+        lineType: 2,
         lineWidth: 3,
         lineColor: color,
         lineOpacity: opacity,
@@ -325,11 +321,7 @@ function _buildPersistentTemplate(auraName) {
         },
         effects: [],
         macros: [],
-        terrainHeightTools: {
-            rulerOnDrag: 'NONE',
-            targetTokens: '',
-            onlyWhenAltPressed: false,
-        },
+        terrainHeightTools: { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true }
     };
 }
 

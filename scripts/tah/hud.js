@@ -283,8 +283,41 @@ export class LancerHUD {
         const tokenName = this._tokens.length > 1
             ? `${this._tokens.length} TOKENS`
             : (this._token.name ?? actor.name ?? '');
+        // Resolve disposition / team (only if setting is on)
+        let _dispColor = null;
+        let _dispLabel = null;
+        if (game.settings.get('lancer-automations', 'tah.showDisposition')) {
+            try {
+                const tfActive = game.modules.get('token-factions')?.active;
+                const tfAdvanced = tfActive && game.settings.get('token-factions', 'color-from') === 'advanced-factions';
+                if (tfAdvanced) {
+                    const teamId = this._token.document.getFlag?.('token-factions', 'team')
+                        || this._token.actor?.prototypeToken?.flags?.['token-factions']?.team;
+                    if (teamId) {
+                        const teams = game.settings.get('token-factions', 'team-setup') || [];
+                        const team = teams.find(t => t.id === teamId);
+                        if (team) {
+                            _dispColor = team.color;
+                            _dispLabel = team.name;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+            if (!_dispColor) {
+                const disp = this._token.document.disposition;
+                const dispMap = {
+                    [CONST.TOKEN_DISPOSITIONS.HOSTILE]: { color: '#e53935', label: 'Hostile' },
+                    [CONST.TOKEN_DISPOSITIONS.NEUTRAL]: { color: '#f9a825', label: 'Neutral' },
+                    [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
+                    [CONST.TOKEN_DISPOSITIONS.SECRET]: { color: '#7e57c2', label: 'Secret' },
+                };
+                const d = dispMap[disp] ?? { color: '#888', label: 'Unknown' };
+                _dispColor = d.color;
+                _dispLabel = d.label;
+            }
+        }
+
         const S_TOKEN_TITLE = [
-            'padding:6px 12px 5px',
             'background:#1a1a1a',
             'color:#fff',
             'font-size:1em',
@@ -294,13 +327,20 @@ export class LancerHUD {
             'white-space:nowrap',
             'width:max-content',
             'cursor:context-menu',
+            'display:flex',
+            'align-items:stretch',
         ].join(';') + ';';
 
-        const titleEl = $(`<div style="${S_TOKEN_TITLE}"><span class="la-hud-token-name">${tokenName}</span></div>`);
+        const titleEl = $(`<div style="${S_TOKEN_TITLE}"><span class="la-hud-token-name" style="padding:6px 6px 5px 12px;display:flex;align-items:center;">${tokenName}</span></div>`);
 
         // Combat toggle icon (left of token name)
         const inCombat = this._token.inCombat;
-        const combatToggle = $(`<span class="la-combat-toggle" style="cursor:pointer;color:${inCombat ? 'var(--primary-color)' : '#555'};margin-right:4px;font-size:0.85em;flex-shrink:0;opacity:${inCombat ? 1 : 0.5};" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
+        const combatToggle = $(`<span class="la-combat-toggle" style="cursor:pointer;color:${inCombat ? 'var(--primary-color)' : '#555'};margin-right:4px;padding-left:8px;font-size:0.85em;flex-shrink:0;opacity:${inCombat ? 1 : 0.5};transition:color 0.15s, opacity 0.15s;display:flex;align-items:center;" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
+        combatToggle.on('mouseenter', () => combatToggle.css({ color: 'color-mix(in srgb, var(--primary-color), white 40%)', opacity: 1 }));
+        combatToggle.on('mouseleave', () => {
+            const ic = this._token.inCombat;
+            combatToggle.css({ color: ic ? 'var(--primary-color)' : '#555', opacity: ic ? 1 : 0.5 });
+        });
         combatToggle.on('click', async () => {
             await /** @type {any} */ (this._token.document).toggleCombatant?.(!this._token.inCombat);
             const nowInCombat = this._token.inCombat;
@@ -345,8 +385,56 @@ export class LancerHUD {
         let unlocked = false;
         const lockBtn = $(`<span class="la-hud-lock" title="Unlock to drag" style="cursor:pointer;font-size:0.75em;opacity:0;margin-left:auto;padding:0 2px;filter:grayscale(1) brightness(10);transition:opacity 0.15s;">🔒</span>`);
         const resetBtn = $(`<span class="la-hud-reset" title="Reset position" style="cursor:pointer;font-size:0.7em;opacity:0;margin-left:2px;padding:0 2px;color:#fff;transition:opacity 0.15s;">↺</span>`);
-        titleEl.css({ display: 'flex', alignItems: 'center' });
+        titleEl.css({ display: 'flex', alignItems: 'stretch' });
+        lockBtn.css({ display: 'flex', alignItems: 'center' });
+        resetBtn.css({ display: 'flex', alignItems: 'center' });
         titleEl.append(lockBtn).append(resetBtn);
+
+        // Disposition / team stripe + expanding detail — appended LAST so it's at the far right edge
+        if (_dispColor && _dispLabel) {
+            const _r = parseInt(_dispColor.slice(1, 3), 16) || 0;
+            const _g = parseInt(_dispColor.slice(3, 5), 16) || 0;
+            const _b = parseInt(_dispColor.slice(5, 7), 16) || 0;
+            const _textColor = (_r * 0.299 + _g * 0.587 + _b * 0.114) > 150 ? '#111' : '#fff';
+            const dispDetail = $(`<div class="la-disp-detail" style="display:none;overflow:hidden;background:${_dispColor};padding:0;white-space:nowrap;align-items:center;justify-content:center;"><span style="font-size:0.85em;letter-spacing:0.5px;color:${_textColor};font-weight:bold;margin:0 20px 0 12px;">${_dispLabel.toUpperCase()}</span></div>`);
+            const dispToggle = $(`<div class="la-disp-toggle" style="cursor:pointer;user-select:none;width:10px;background:${_dispColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-size:0.55em;color:${_textColor};font-weight:bold;line-height:1;">▶</span></div>`);
+            titleEl.append(dispToggle);
+            titleEl.append(dispDetail);
+            let _dispExpanded = false;
+            const openDisp = () => {
+                if (_dispExpanded) {
+                    return;
+                }
+                _dispExpanded = true;
+                dispDetail.stop(true).css({ display: 'flex', width: 0, opacity: 0, overflow: 'hidden' })
+                    .animate({ width: dispDetail.prop('scrollWidth'), opacity: 1 }, 150, function () {
+                        $(this).css({ width: '', overflow: '' });
+                    });
+                dispToggle.find('span').text('◀');
+            };
+            const closeDisp = () => {
+                if (!_dispExpanded) {
+                    return;
+                }
+                _dispExpanded = false;
+                dispDetail.stop(true).css('overflow', 'hidden').animate({ width: 0, opacity: 0 }, 120, function () {
+                    $(this).css({ display: 'none', width: '', opacity: '', overflow: '' });
+                });
+                dispToggle.find('span').text('▶');
+            };
+            dispToggle.on('mouseenter', openDisp);
+            dispToggle.on('mouseleave', closeDisp);
+            dispDetail.on('mouseenter', openDisp);
+            dispDetail.on('mouseleave', closeDisp);
+            dispToggle.on('click', (ev) => {
+                ev.stopPropagation();
+                if (_dispExpanded) {
+                    closeDisp();
+                } else {
+                    openDisp();
+                }
+            });
+        }
 
         // Title bar hover/click — must be after lockBtn/resetBtn creation
         const nameSpan = titleEl.find('.la-hud-token-name');
@@ -969,6 +1057,31 @@ export class LancerHUD {
                 { label: 'Reaction',      childColLabel: 'Reaction', getChildren: () => this._catReactions().getItems() },
                 { label: 'Protocol',      childColLabel: 'Protocol', getChildren: () => this._catProtocols().getItems() },
                 { label: 'Free Actions',  childColLabel: 'Free Actions',     getChildren: () => this._catFreeActions().getItems() },
+                ...(() => {
+                    const deactItems = actor.items.filter(i =>
+                        i.flags?.['lancer-automations']?.activeStateData?.active
+                        || (i.system?.tags ?? []).some(t => t.lid === 'tg_deactivate')
+                    );
+                    return [{
+                        label: 'Deactivate',
+                        childColLabel: 'Deactivate',
+                        getChildren: () => deactItems.map(item => {
+                            const asd = item.flags?.['lancer-automations']?.activeStateData;
+                            const label = `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${asd?.endActionDescription || `Deactivate ${item.name}`}`;
+                            const activation = asd?.endAction || 'Protocol';
+                            return {
+                                label,
+                                icon: getActivationIcon(activation),
+                                hoverData: { actor, item, action: { name: label, activation }, category: 'Actions' },
+                                onClick: () => {
+                                    const si = /** @type {any} */ (item);
+                                    si.beginActivationFlow?.();
+                                },
+                                onRightClick: this._actionPopup({ name: label, activation, detail: item.system?.effect || '' }, item),
+                            };
+                        })
+                    }];
+                })(),
                 { label: 'Resources', childColLabel: 'Resources', getChildren: () => (items => items.length ? items : [])(this._resourceItems()) },
                 { label: 'Ammo', childColLabel: 'Ammo', getChildren: () => this._ammoItems() },
             ],

@@ -1,7 +1,4 @@
 /*global game, Hooks, console, foundry */
-
-// Token height is now handled by main.js autoTokenHeight setting.
-
 // ── ZDA (Zone of Deadly Approach) aura ──────────────────────────────────────
 
 const ZDA_TEMPLATE = {
