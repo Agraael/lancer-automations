@@ -266,7 +266,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 |:---------|:-----|:------------|
 | <kbd>id</kbd> | `string` | Optional custom ID |
 | <kbd>name</kbd> | `string` | Display name |
-| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"` |
+| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Stack count |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
@@ -332,6 +332,17 @@ await api.addConstantBonus(actor, {
 |:---------|:-----|:------------|
 | <kbd>rangeType</kbd> | `string` | `"Range"`, `"Threat"`, `"Line"`, `"Blast"`, `"Burst"`, `"Cone"` |
 | <kbd>rangeMode</kbd> | `string` | `"add"` (default) or `"override"` |
+
+</details>
+
+<details>
+<summary>Reroll fields (type: "reroll")</summary>
+
+| Property | Type | Description |
+|:---------|:-----|:------------|
+| <kbd>rollTypes</kbd> | `Array<string>` | `"attackRoll"`, `"techAttackRoll"`, `"damageRoll"`, `"skillRoll"`, `"structureRoll"`, `"stressRoll"`. Empty = all. |
+
+Offered via a choice card before `onRoll` fires. Consumed on Use.
 
 </details>
 

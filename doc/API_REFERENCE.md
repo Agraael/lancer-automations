@@ -36,7 +36,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
 <details><summary><b>Attack Triggers</b></summary>
 
 - **`onInitAttack`**: Fires when an attack is initiated (before Attack HUD).
-    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, userIdControl) }`
+    - Data: `{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, allowConfirm, userIdControl) }`
 - **`onAttack`**: Fires when an attack roll is made.
     - Data: `{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData }`
 - **`onHit`**: Fires when an attack hits.
@@ -64,7 +64,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` (rea
 
 <details><summary><b>Tech Triggers</b></summary>
 
-- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, userIdControl) }`
+- **`onInitTechAttack`**: Before Tech HUD. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, allowConfirm, userIdControl) }`
 - **`onTechAttack`**: Tech roll made. `{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData }`
 - **`onTechHit`**: `{ triggeringToken, techItem, targets: Array<{target, roll, crit}>, ... }`
 - **`onTechMiss`**: `{ triggeringToken, techItem, targets: Array<{target, roll}>, ... }`
@@ -89,8 +89,8 @@ Fires *before* movement is finalized. Allows interception.
         pathHexes: Array<Object> // [{x, y, cx, cy, isHistory, hexes}]
     },
     cancel: Function(),
-    cancelTriggeredMove: Function(reason?, showCard?),
-    changeTriggeredMove: Function(pos, extraData?, reason?, showCard?)
+    cancelTriggeredMove: Function(reason?, allowConfirm?),
+    changeTriggeredMove: Function(pos, extraData?, reason?, allowConfirm?)
 }
 ```
 
@@ -145,18 +145,19 @@ Fires *before* movement is finalized. Allows interception.
 
 <details><summary><b>Status Effect Triggers</b></summary>
 
-- **`onPreStatusApplied`**: Before a status is applied. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
-- **`onPreStatusRemoved`**: Before a status is removed. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
+- **`onPreStatusApplied`**: Before a status is applied. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl) }`. Non-async evaluate only.
+- **`onPreStatusRemoved`**: Before a status is removed. `{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl) }`. Non-async evaluate only.
 - **`onStatusApplied`** / **`onStatusRemoved`**: `{ triggeringToken, statusId, effect }`.
 
 </details>
 
 <details><summary><b>Structure & Stress Triggers</b></summary>
 
-- **`onPreStructure`**: Before the structure roll. `{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, showCard, userIdControl) }`. Can cancel the entire structure flow.
+- **`onPreStructure`**: Before the structure roll. `{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, allowConfirm, userIdControl) }`. Can cancel the entire structure flow.
 - **`onStructure`**: After the structure roll. `{ triggeringToken, remainingStructure, rollResult }`.
-- **`onPreStress`**: Before the overheat roll. `{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl) }`. Can cancel the entire overheat flow.
+- **`onPreStress`**: Before the overheat roll. `{ triggeringToken, remainingStress, cancelStress(reasonText, title, allowConfirm, userIdControl) }`. Can cancel the entire overheat flow.
 - **`onStress`**: After the overheat roll. `{ triggeringToken, remainingStress, rollResult }`.
+- **`onRoll`**: Fires between a roll resolving and its chat card printing, for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureRoll`, `stressRoll`. Data: `{ triggeringToken, rollType, roll, total, success, targets, item, isReroll, rerollCount, reroll(reason?), changeRoll(newTotal), flowState }`. `reroll()` re-runs the Lancer flow step that produced the roll; `changeRoll(newTotal)` sets the total (and recomputes hit/crit for attack flows). Both cascade: after either call, `onRoll` re-fires so later reactions see the new state. No engine-level reroll cap; reactions that reroll should gate themselves via `flowState.la_extraData._myReactionRerolled`. `success` rule: attack/tech = any hit; skill = total >= 10; damage/structure/stress = undefined. `changeRoll` on structure/stress only updates `roll._total` (title/desc stay stale, prefer `reroll()`).
 - **`onDestroyed`**: Fires on token delete when `structure.value <= 0 || stress.value <= 0`. `{ triggeringToken }`.
 - **`onTokenCreated`**: Fires when any token is placed on the canvas (after a 100ms delay, same timing as `onInit`). `{ triggeringToken, distanceToTrigger }`.
 - **`onTokenRemoved`**: Fires on any token deletion (unconditional, unlike `onDestroyed`). `{ triggeringToken, distanceToTrigger }`. `triggeringToken` may be a fallback `{document, id, name, actor}` object if the canvas token is already gone.
@@ -166,10 +167,10 @@ Fires *before* movement is finalized. Allows interception.
 
 <details><summary><b>HP & Heat Triggers</b></summary>
 
-- **`onPreHpChange`**: Before HP changes. `{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, showCard, userIdControl), modifyHpChange(newValue) }`. Can cancel or modify the HP value.
+- **`onPreHpChange`**: Before HP changes. `{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, allowConfirm, userIdControl), modifyHpChange(newValue) }`. Can cancel or modify the HP value.
 - **`onHpGain`**: After HP increases. `{ triggeringToken, hpChange, currentHP, maxHP }`.
 - **`onHpLoss`**: After HP decreases. `{ triggeringToken, hpLost, currentHP }`.
-- **`onPreHeatChange`**: Before heat changes. `{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, showCard, userIdControl), modifyHeatChange(newValue) }`. Can cancel or modify the heat value.
+- **`onPreHeatChange`**: Before heat changes. `{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, allowConfirm, userIdControl), modifyHeatChange(newValue) }`. Can cancel or modify the heat value.
 - **`onHeatGain`**: After heat increases. `{ triggeringToken, heatChange, currentHeat, inDangerZone }`.
 - **`onHeatLoss`**: After heat decreases. `{ triggeringToken, heatCleared, currentHeat }`.
 
@@ -177,9 +178,9 @@ Fires *before* movement is finalized. Allows interception.
 
 <details><summary><b>Stat & Activation Triggers</b></summary>
 
-- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, userIdControl) }`.
+- **`onInitCheck`**: Before roll. `{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, allowConfirm, userIdControl) }`.
 - **`onCheck`**: Result. `{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal }`.
-- **`onInitActivation`**: Before item/action activates (before resource use). `{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, userIdControl) }`. Non-async evaluate only.
+- **`onInitActivation`**: Before item/action activates (before resource use). `{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, allowConfirm, userIdControl) }`. Non-async evaluate only.
 - **`onActivation`**: Item/Action fired. `{ triggeringToken, actionType, actionName, item, actionData, endActivation }`.
 - **`onUpdate`**: **WARNING**: Generic document update (High frequency).
 

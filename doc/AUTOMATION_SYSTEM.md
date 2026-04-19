@@ -74,7 +74,7 @@ flowchart TD
 
 Step by step, what the engine actually does for one trigger:
 
-1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires `startRelatedFlow` and a few helpers onto `data`.
+1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires `startRelatedFlow`, `startRelatedFlowToReactor` (launch the item's default flow, optionally on a specific user's client) and `sendMessageToReactor` (remote RPC to an `onMessage` handler) onto `data`.
 2. **Reactor sweep.** Every token currently on the scene is treated as a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
 3. **Distance enrichment.** For each reactor, `distanceToTrigger` (reactor to triggering token) is computed once and merged into a per-reactor copy of the trigger data.
 4. **Item reactions first.** For every item the reactor's actor owns whose LID matches a registered item activation, run the filter chain.
@@ -266,12 +266,12 @@ Two ways to handle this:
 
 ### Cancel functions
 
-All accept `(reasonText?, title?, showCard?, userIdControl?)`. A chat card is shown by default (suppressible via `showCard: false`).
+Signature: `(reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)`. A Cancel/Ignore card is shown by default. `cancelTriggeredMove` omits the `title` slot.
 
 | Trigger | Cancel function | Effect |
 |---|---|---|
 | `onPreMove` | `cancelTriggeredMove` | Stops the move outright |
-| `onPreMove` | `changeTriggeredMove(newPos, extraData?, ...)` | Redirects the move to a new destination |
+| `onPreMove` | `changeTriggeredMove(newPos, extraData?, reason?, allowConfirm?, ...)` | Redirects the move to a new destination |
 | `onInitAttack` | `cancelAttack` | Aborts the attack flow |
 | `onInitTechAttack` | `cancelTechAttack` | Aborts the tech attack flow |
 | `onInitCheck` | `cancelCheck` | Aborts the stat check flow |
@@ -286,13 +286,84 @@ All accept `(reasonText?, title?, showCard?, userIdControl?)`. A chat card is sh
 
 ### Modify functions
 
+Same signature as cancels, with `newValue` prepended: `(newValue, reason?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)`. They block the original update and commit the replacement value instead.
+
 | Trigger | Function | Effect |
 |---|---|---|
-| `onPreHpChange` | `modifyHpChange(newValue)` | Override the HP value being applied |
-| `onPreHeatChange` | `modifyHeatChange(newValue)` | Override the heat value being applied |
+| `onPreHpChange` | `modifyHpChange(newValue, ...)` | Override the HP value being applied |
+| `onPreHeatChange` | `modifyHeatChange(newValue, ...)` | Override the heat value being applied |
 | `onStructure` / `onStress` | `modifyRoll(newTotal)` | Override the roll total before outcome steps |
 
 `onStructure` / `onStress` also expose `triggerData.rollResult` (total) and `triggerData.rollDice` (raw die results, useful for detecting double-1s or doubles).
+
+### Why `preConfirm` / `postChoice` exist
+
+Foundry's `preUpdate*` hooks (move, actor update, etc.) are non-blocking: if your handler returns a Promise, Foundry does not wait for it. Anything after an `await` happens too late to stop the update.
+
+So the pattern is:
+1. Call the cancel/modify function **synchronously** (before any `await`). This preemptively blocks the update.
+2. Afterwards, do your async work (choice cards, remote player decisions, etc.) to decide what happens next.
+
+`preConfirm` and `postChoice` are the two async hooks that let you drive that "what happens next" phase without needing to pre-build the UI yourself.
+
+### `allowConfirm`, `preConfirm`, `postChoice`
+
+Shared across every cancel, change, modify, and reroll function.
+
+**`allowConfirm: boolean`** (default `true`). Whether to show the secondary Confirm/Ignore card to `userIdControl`.
+- `true`: show the card, user can override.
+- `false`: skip the card, auto-pick the first choice (the "no override" outcome).
+
+Does NOT gate `preConfirm`. `preConfirm` always runs if provided.
+
+**`preConfirm: () => Promise<boolean>`**. Async gate that runs after the sync cancel has stuck, before the secondary card.
+- Returns `true`: proceed to the secondary card (or auto-pick if `allowConfirm: false`).
+- Returns `false`: re-apply the original outcome. `postChoice` does NOT fire.
+
+Typical use: the reactor's player confirms Yes/No in a choice card here. Good place to call `triggerData.startRelatedFlowToReactor(...)` so the reactor's own flow fires once on commit.
+
+**`postChoice: (chose: boolean) => Promise<void>`**. Callback after the secondary card resolves (or after auto-pick).
+- `chose === true`: the replacement was committed.
+- `chose === false`: the original was re-applied (user picked Ignore).
+
+Typical use: fire a downstream effect that depends on whether the action went through.
+
+### Timing
+```
+sync:  setFlag()       -> engine blocks the original update
+async: preConfirm()    -> false: executeOriginal + return (no postChoice)
+       allowConfirm?
+         true  -> show card
+                  Confirm: executeNew + postChoice(true)
+                  Ignore:  executeOriginal + postChoice(false)
+         false -> executeNew + postChoice(true)
+```
+
+### Example: True Grit (HP=1 instead of 0)
+```js
+const preConfirm = async () => {
+    const result = await api.startChoiceCard({
+        title: "TRUE GRIT",
+        description: `<b>${ally.name}</b> would fall to 0 HP. Keep at 1 HP?`,
+        userIdControl: api.getTokenOwnerUserId(reactorToken),
+        choices: [
+            { text: "Use",  icon: "fas fa-check", callback: async () => {} },
+            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
+        ]
+    });
+    if (result?.choiceIdx === 0)
+        triggerData.startRelatedFlowToReactor(result?.responderIds?.[0]);
+    return result?.choiceIdx === 0;
+};
+triggerData.modifyHpChange(
+    1,
+    `${reactorToken.name} keeps ${ally.name} at 1 HP.`,
+    true,
+    api.getTokenOwnerUserId(ally),
+    preConfirm,
+    null
+);
+```
 
 ---
 

@@ -146,7 +146,7 @@ export async function spawnHardCover(originToken, options = {}) {
     } = options;
 
     const templateName = "Template Hard Cover";
-    const iconPath = "modules/lancer-automations/icons/stone-pile.svg";
+    const iconPath = "modules/lancer-automations/icons/black/stone-pile.svg";
 
     let templateActor = game.actors.contents.find((/** @type {any} */ a) =>
         a.name === templateName && a.type === 'deployable'

@@ -621,7 +621,7 @@ Several other triggers allow you to cancel an operation before it completes. Any
 - `triggerData.cancelHpChange(...)`: block HP change in `onPreHpChange`
 - `triggerData.cancelHeatChange(...)`: block heat change in `onPreHeatChange`
 
-All cancel functions accept `(reasonText?, title?, showCard?, userIdControl?)`.
+All cancel functions accept `(reasonText?, title?, allowConfirm?, userIdControl?)`.
 
 `onStructure` and `onStress` also expose:
 - `triggerData.rollResult`: the roll total

@@ -261,30 +261,6 @@
     font-size: 11px !important;
 }
 
-.lancer-automations-dialog.window-app .la-multi-select-trigger {
-    all: unset;
-    display: flex;
-    align-items: center;
-    box-sizing: border-box;
-    width: 100%;
-    height: 26px;
-    background-color: #f5f5f5;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 7px center;
-    background-size: 8px 5px;
-    border: 2px solid #999;
-    border-radius: 4px;
-    color: #000;
-    font-size: 0.9em;
-    font-family: inherit;
-    padding: 0 24px 0 6px;
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: border-color 0.2s ease;
-}
 
 .lancer-automations-dialog.window-app .notes {
     font-size: 10px !important;

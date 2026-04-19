@@ -1477,18 +1477,18 @@ export class ReactionEditor extends FormApplication {
             onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger }",
             onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger }",
-            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(reasonText, showCard, userIdControl), changeTriggeredMove(pos, extraData), distanceToTrigger }",
+            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(reasonText, allowConfirm, userIdControl), changeTriggeredMove(pos, extraData), distanceToTrigger }",
             onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger }",
             onTurnStart: "{ triggeringToken, distanceToTrigger }",
             onTurnEnd: "{ triggeringToken, distanceToTrigger }",
-            onPreStatusApplied: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }",
-            onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, showCard, userIdControl) }",
+            onPreStatusApplied: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl) }",
+            onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl) }",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger }",
             onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger }",
-            onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onStructure: "{ triggeringToken, remainingStructure, rollResult, rollDice, cancelStructureOutcome(reasonText, title, showCard, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
-            onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, showCard, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
+            onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, allowConfirm, userIdControl), distanceToTrigger }",
+            onStructure: "{ triggeringToken, remainingStructure, rollResult, rollDice, cancelStructureOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
+            onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, allowConfirm, userIdControl), distanceToTrigger }",
+            onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), distanceToTrigger }",
             onHeatGain: "{ triggeringToken, heatGained, currentHeat, inDangerZone, distanceToTrigger }",
             onDestroyed: "{ triggeringToken, distanceToTrigger }",
             onTokenCreated: "{ triggeringToken, distanceToTrigger }",
@@ -1498,17 +1498,18 @@ export class ReactionEditor extends FormApplication {
             onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger }",
             onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, distanceToTrigger }",
-            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, showCard, userIdControl), distanceToTrigger }",
-            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, showCard, userIdControl) }",
+            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, allowConfirm, userIdControl), distanceToTrigger }",
+            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, allowConfirm, userIdControl), distanceToTrigger }",
+            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, allowConfirm, userIdControl), distanceToTrigger }",
+            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, allowConfirm, userIdControl) }",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger, endActivation }",
-            onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, showCard, userIdControl), modifyHpChange(newValue), distanceToTrigger }",
+            onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, allowConfirm, userIdControl), modifyHpChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger }",
             onHpGain: "{ triggeringToken, hpRestored, currentHP, maxHP, distanceToTrigger }",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
-            onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, showCard, userIdControl), modifyHeatChange(newValue), distanceToTrigger }",
+            onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, allowConfirm, userIdControl), modifyHeatChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger }",
             onHeatLoss: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
             onInvoluntaryMove: "{ triggeringToken, token, distance, actionName, item, destination: {x,y}, cancel(reason), distanceToTrigger }",
+            onRoll: "{ triggeringToken, rollType: 'attackRoll'|'techAttackRoll'|'damageRoll'|'skillRoll'|'structureRoll'|'stressRoll', roll, total, success, targets, item, isReroll, rerollCount, reroll(reason), changeRoll(newTotal), flowState, distanceToTrigger }",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger }",
             onUpdate: "{ triggeringToken, document, change, options }",
             onEnterCombat: "{ triggeringToken, distanceToTrigger }",
@@ -1538,7 +1539,7 @@ export class ReactionEditor extends FormApplication {
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: this._triggerHelp,
             activationType: reaction.activationType || "flow",
-            activationMode: reaction.activationMode || "after",
+            activationMode: reaction.activationMode || "instead",
             activationMacro: reaction.activationMacro || "",
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
             reactionIndex: data.reactionIndex,
@@ -1546,7 +1547,7 @@ export class ReactionEditor extends FormApplication {
             onMessage: typeof reaction.onMessage === 'function' ? reaction.onMessage.toString() : (reaction.onMessage || ""),
             actionType: reaction.actionType || "Automation",
             checkReaction: reaction.checkReaction !== false,
-            checkUsage: reaction.checkUsage === true,
+            checkUsage: reaction.checkUsage ?? true,
             actionTypeOptions: {
                 "Automation": "Automation",
                 "Reaction": "Reaction",
@@ -1620,7 +1621,7 @@ export class ReactionEditor extends FormApplication {
                     outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
                     onlyOnSourceMatch: html.find('input[name="onlyOnSourceMatch"]').filter(':checked').length > 0,
                     activationType: String(html.find('select[name="activationType"]').val() || r.activationType || "flow"),
-                    activationMode: String(html.find('select[name="activationMode"]').val() || r.activationMode || "after"),
+                    activationMode: String(html.find('select[name="activationMode"]').val() || r.activationMode || "instead"),
                     activationMacro: String(html.find('input[name="activationMacro"]').val() || ""),
                     activationCode: this.codeEditor ? this.codeEditor.getValue() : (html.find('textarea[name="activationCode"]').val() || ""),
                     onInit: this.onInitEditor ? this.onInitEditor.getValue() : (html.find('textarea[name="onInit"]').val() || ""),
@@ -1662,7 +1663,7 @@ export class ReactionEditor extends FormApplication {
         const sourceMatchTriggers = new Set([
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
-            'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy'
+            'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
         ]);
 
         const toggleSourceMatchTriggers = () => {
@@ -1702,14 +1703,27 @@ export class ReactionEditor extends FormApplication {
         const macroFields = html.find('.activation-macro');
         const codeFields = html.find('.activation-code');
 
+        const recursionWarning = html.find('#activation-recursion-warning');
+
+        const toggleRecursionWarning = () => {
+            const type = activationTypeSelect.val();
+            const mode = activationModeSelect.val();
+            const hasActivationTrigger = html.find('input[name="trigger.onActivation"], input[name="trigger.onInitActivation"]').is(':checked');
+            const risky = hasActivationTrigger && (type === 'flow' || ((type === 'macro' || type === 'code') && mode === 'after'));
+            recursionWarning.toggle(!!risky);
+        };
+
         const toggleActivationFields = () => {
             const type = activationTypeSelect.val();
             macroFields.toggle(type === 'macro');
             codeFields.toggle(type === 'code');
             activationModeSelect.toggle(type === 'macro' || type === 'code');
+            toggleRecursionWarning();
         };
 
         activationTypeSelect.on('change', toggleActivationFields);
+        activationModeSelect.on('change', toggleRecursionWarning);
+        html.on('change', 'input[name="trigger.onActivation"], input[name="trigger.onInitActivation"]', toggleRecursionWarning);
         toggleActivationFields();
 
         html.find('.show-item-btn').on('click', async (ev) => {
@@ -2054,42 +2068,49 @@ export class ReactionEditor extends FormApplication {
                 checked.add($(this).attr('name').replace('trigger.', ''));
             });
 
-            const rows = Object.entries(triggerHelp).map(([key, help]) => {
-                const isActive = checked.has(key);
-                const inner = help.replace(/^\{\s*|\s*\}$/g, '');
-                // Split on commas but not inside parentheses
-                const fields = [];
-                let depth = 0, current = '';
-                for (const ch of inner) {
-                    if (ch === '(') depth++;
-                    else if (ch === ')') depth--;
-                    if (ch === ',' && depth === 0) {
+            const rows = Object.entries(triggerHelp)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([key, help]) => {
+                    const isActive = checked.has(key);
+                    const inner = help.replace(/^\{\s*|\s*\}$/g, '');
+                    // Split on commas, honoring (), {}, and [] nesting
+                    const fields = [];
+                    let depth = 0, current = '';
+                    for (const ch of inner) {
+                        if (ch === '(' || ch === '{' || ch === '[')
+                            depth++;
+                        else if (ch === ')' || ch === '}' || ch === ']')
+                            depth--;
+                        if (ch === ',' && depth === 0) {
+                            fields.push(current.trim());
+                            current = '';
+                        } else {
+                            current += ch;
+                        }
+                    }
+                    if (current.trim())
                         fields.push(current.trim());
-                        current = '';
-                    } else {
-                        current += ch;
-                    }
-                }
-                if (current.trim())
-                    fields.push(current.trim());
 
-                const tags = fields.map(f => {
-                    const fnMatch = f.match(/^(\w+)\((.+)\)$/);
-                    if (fnMatch) {
-                        return `<span title="${fnMatch[1]}( ${fnMatch[2]} )" style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold; cursor: help;">${fnMatch[1]}()</span>`;
-                    }
-                    // No-arg function like modifyHpChange(newValue) already caught above,
-                    // but also catch fn() with no args
-                    if (f.match(/^\w+\(\)$/)) {
-                        return `<span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold;">${f}</span>`;
-                    }
-                    return `<span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; background: #e8e8e8; color: #333;">${f}</span>`;
+                    const tagBase = "display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78em; margin: 1px 2px; max-width: 100%; white-space: normal; word-break: break-word;";
+                    const tags = fields.map(f => {
+                        const fnMatch = f.match(/^(\w+)\((.+)\)$/);
+                        if (fnMatch) {
+                            return `<span title="${fnMatch[1]}( ${fnMatch[2]} )" style="${tagBase} background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold; cursor: help;">${fnMatch[1]}()</span>`;
+                        }
+                        if (f.match(/^\w+\(\)$/)) {
+                            return `<span style="${tagBase} background: color-mix(in srgb, var(--primary-color), transparent 75%); color: var(--primary-color); font-weight: bold;">${f}</span>`;
+                        }
+                        return `<span style="${tagBase} background: #e8e8e8; color: #333;">${f}</span>`;
+                    }).join('');
+                    const expanded = isActive;
+                    return `<div class="la-trigger-ref-row" data-key="${key}" style="border-bottom: 1px solid #f0f0f0; ${isActive ? 'background: color-mix(in srgb, var(--primary-color), transparent 93%);' : ''}">
+                        <div class="la-trigger-ref-head" style="padding: 5px 8px; font-weight: bold; font-size: 0.85em; ${isActive ? 'color: var(--primary-color);' : 'color: #333;'} cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;">
+                            <span class="la-caret" style="display: inline-block; width: 0.7em; transition: transform 0.1s;">${expanded ? '\u25BC' : '\u25B6'}</span>
+                            <span>${key}</span>
+                        </div>
+                        <div class="la-trigger-ref-body" style="padding: 0 8px 6px 20px; line-height: 1.5; display: ${expanded ? 'block' : 'none'};">${tags}</div>
+                    </div>`;
                 }).join('');
-                return `<div style="padding: 5px 8px; border-bottom: 1px solid #f0f0f0; ${isActive ? 'background: color-mix(in srgb, var(--primary-color), transparent 93%);' : ''}">
-                    <div style="font-weight: bold; font-size: 0.85em; margin-bottom: 3px; ${isActive ? 'color: var(--primary-color);' : 'color: #333;'}">${key}</div>
-                    <div style="line-height: 1.5;">${tags}</div>
-                </div>`;
-            }).join('');
 
             const popup = document.createElement('div');
             popup.innerHTML = `
@@ -2126,6 +2147,17 @@ export class ReactionEditor extends FormApplication {
             popup.querySelector('#trigger-ref-close').addEventListener('click', () => {
                 popup.remove();
                 this._triggerRefPopup = null;
+            });
+
+            popup.querySelectorAll('.la-trigger-ref-head').forEach(head => {
+                head.addEventListener('click', () => {
+                    const body = head.nextElementSibling;
+                    const caret = head.querySelector('.la-caret');
+                    const open = body.style.display !== 'none';
+                    body.style.display = open ? 'none' : 'block';
+                    if (caret)
+                        caret.textContent = open ? '\u25B6' : '\u25BC';
+                });
             });
 
             document.body.appendChild(popup);
@@ -2420,6 +2452,7 @@ export class ReactionEditor extends FormApplication {
         const groups = [
             { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd"] },
             { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
+            { label: "Rolls", triggers: ["onRoll"] },
             { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onDamage"] },
             { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
             { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitCheck", "onCheck", "onDeploy"] },
@@ -2479,7 +2512,7 @@ export class ReactionEditor extends FormApplication {
                 awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
-                activationMode: formData.activationMode || "after",
+                activationMode: formData.activationMode || "instead",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 onInit: formData.onInit || "",
@@ -2512,7 +2545,7 @@ export class ReactionEditor extends FormApplication {
                 awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
                 activationType: formData.activationType || "flow",
-                activationMode: formData.activationMode || "after",
+                activationMode: formData.activationMode || "instead",
                 activationMacro: formData.activationMacro || "",
                 activationCode: formData.activationCode || "",
                 onInit: formData.onInit || "",

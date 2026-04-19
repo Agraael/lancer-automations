@@ -50,6 +50,7 @@ export function getActorActionItems(actor, activationType) {
                         name: item.name,
                         activation: activationType,
                         detail: item.system?.effect ?? '',
+                        trigger: item.system?.trigger ?? '',
                         tags: itemTags,
                         tech_attack: item.system?.tech_attack ?? false,
                         attack_bonus: item.system?.attack_bonus ?? null,

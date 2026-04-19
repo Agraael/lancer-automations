@@ -7,7 +7,7 @@ import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeploya
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
-import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS } from './hover.js';
+import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview } from './hover.js';
 import { resurrect } from '../wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { buildCombatBar } from './combat-bar.js';
@@ -164,6 +164,8 @@ export class LancerHUD {
     unbind() {
         this._bindGen++;
         const el = this._el;
+        for (const t of (this._tokens ?? []))
+            deactivateRangePreview(t);
         this._el = this._c2 = this._c3 = this._c4 = null;
         this._c4AnchorRow = null;
         this._token   = null;
@@ -1411,7 +1413,7 @@ export class LancerHUD {
                 const items = [
                     ...(isDeployable ? [] : [
                         { ...this._simpleItem('Brace',     'modules/lancer-automations/icons/brace.svg', { name: 'Brace',     activation: 'Reaction' }, 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
-                        { ...this._simpleItem('Overwatch', 'systems/lancer/assets/icons/reaction.svg',   { name: 'Overwatch', activation: 'Reaction' }, 'Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
+                        { ...this._simpleItem('Overwatch', 'systems/lancer/assets/icons/reaction.svg',   { name: 'Overwatch', activation: 'Reaction', trigger: 'A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.' }, 'Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
                     ]),
                     ...this._getActionsByActivation(actor, 'Reaction', 'Actions'),
                 ];

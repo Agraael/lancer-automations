@@ -858,6 +858,7 @@ export async function executeEffectManager(options = {}) {
                     <option value="range">Range</option>
                     <option value="immunity">Immunity</option>
                     <option value="target_modifier">Target Modifier</option>
+                    <option value="reroll">Reroll</option>
                 </select>
             </div>
             <div id="bonus-type-stat">
@@ -1007,6 +1008,22 @@ export async function executeEffectManager(options = {}) {
                         <option value="hit">Force Hit</option>
                         <option value="miss">Force Miss</option>
                     </select>
+                </div>
+            </div>
+            <div id="bonus-type-reroll" style="display:none;">
+                <div class="form-group">
+                    <label>Roll Types (empty = all):</label>
+                    <div class="la-multi-select" id="bonus-reroll-rollTypes">
+                        <button type="button" class="la-multi-select-trigger">— Select —</button>
+                        <div class="la-multi-select-panel">
+                            <label><input type="checkbox" value="attackRoll"> Attack Roll</label>
+                            <label><input type="checkbox" value="techAttackRoll"> Tech Attack Roll</label>
+                            <label><input type="checkbox" value="damageRoll"> Damage Roll</label>
+                            <label><input type="checkbox" value="skillRoll"> Skill / Check / Save Roll</label>
+                            <label><input type="checkbox" value="structureRoll"> Structure Roll</label>
+                            <label><input type="checkbox" value="stressRoll"> Stress Roll</label>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div id="bonus-items-row" style="display:none;">
@@ -1338,6 +1355,10 @@ export async function executeEffectManager(options = {}) {
                         crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
                     };
                     return `Target: ${labels[subB.subtype] || subB.subtype}`;
+                }
+                if (subB.type === 'reroll') {
+                    const rts = Array.isArray(subB.rollTypes) && subB.rollTypes.length > 0 ? subB.rollTypes.join(', ') : 'any';
+                    return `Reroll: ${rts}`;
                 }
                 return subB.type || 'Unknown';
             };
@@ -1774,6 +1795,10 @@ export async function executeEffectManager(options = {}) {
                     }
                 } else if (type === 'target_modifier') {
                     bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
+                } else if (type === 'reroll') {
+                    const list = $('#bonus-reroll-rollTypes input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+                    if (list.length > 0)
+                        bonusData.rollTypes = list;
                 } else {
                     bonusData.val = html.find('#bonus-accDiffVal').val() || "1";
                 }
@@ -1831,7 +1856,7 @@ export async function executeEffectManager(options = {}) {
             // Bonus type selector - show/hide relevant inputs
             html.find('#bonus-type').on('change', function () {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll').hide();
                 html.find(`#bonus-type-${type}`).show();
 
                 const showItems = type === 'roll' || type === 'damage' || type === 'tag' || type === 'range' || type === 'target_modifier';
@@ -1880,19 +1905,46 @@ export async function executeEffectManager(options = {}) {
                         trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
                     }
                 };
+                const panelHome = panel.parent();
+                const positionPanel = () => {
+                    const rect = trigger[0].getBoundingClientRect();
+                    const el = panel[0].style;
+                    el.setProperty('position', 'fixed', 'important');
+                    el.setProperty('top', `${rect.bottom + 2}px`, 'important');
+                    el.setProperty('left', `${rect.left}px`, 'important');
+                    el.setProperty('right', 'auto', 'important');
+                    el.setProperty('bottom', 'auto', 'important');
+                    el.setProperty('width', `${rect.width}px`, 'important');
+                    el.setProperty('min-width', '0', 'important');
+                    el.setProperty('max-width', `${rect.width}px`, 'important');
+                };
+                const closePanel = () => {
+                    panel.removeClass('open');
+                    panel[0].style.cssText = '';
+                    if (panel.parent().is('body'))
+                        panelHome.append(panel);
+                };
                 trigger.on('click', (e) => {
                     e.stopPropagation();
-                    const isOpen = panel.hasClass('open');
-                    html.find('.la-multi-select-panel.open').removeClass('open');
-                    if (!isOpen) {
+                    const wasOpen = panel.hasClass('open');
+                    $('.la-multi-select-panel.open').each(function () {
+                        $(this).removeClass('open');
+                    });
+                    if (!wasOpen) {
+                        $('body').append(panel);
+                        positionPanel();
                         panel.addClass('open');
+                    } else {
+                        closePanel();
                     }
                 });
+                panel.on('click', (e) => e.stopPropagation());
                 panel.find('input[type=checkbox]').on('change', updateTriggerLabel);
-                $(document).on('click.la-multiselect', () => panel.removeClass('open'));
+                $(document).on('click.la-multiselect', closePanel);
             };
             initMultiSelect('bonus-rollTypes-roll');
             initMultiSelect('bonus-rollTypes-damage');
+            initMultiSelect('bonus-reroll-rollTypes');
 
             html.find('#bonus-add').click(() => {
                 const type = html.find('#bonus-type').val();

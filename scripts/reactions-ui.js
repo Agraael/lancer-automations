@@ -51,7 +51,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const checkReaction = reactionEntry?.checkReaction !== false;
 
         const activationType = reactionEntry?.activationType || "flow";
-        const activationMode = reactionEntry?.activationMode || "after";
+        const activationMode = reactionEntry?.activationMode || "instead";
 
         const executeCustomActivation = () => runCustomActivation({
             activationType, source: reactionEntry, triggerType, triggerData, token, item, activationName
@@ -91,10 +91,19 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             }
         };
 
+        // Re-activating the same item that triggered us would loop via onActivation/onInitActivation.
+        const wouldRecurse = (triggerType === 'onActivation' || triggerType === 'onInitActivation')
+            && triggerData?.item?.uuid
+            && triggerData.item.uuid === item?.uuid;
+        if (wouldRecurse) {
+            console.warn(`lancer-automations | Skipping itemActivation for "${item?.name}" to avoid onActivation recursion (reaction on same item). Using macro/code activation only.`);
+        }
+
         if (activationType === "none") { /* empty */ } else if (activationType === "flow") {
+            if (wouldRecurse) return;
             return itemActivation();
         } else if (activationType === "macro" || activationType === "code") {
-            if (activationMode === "instead") {
+            if (activationMode === "instead" || wouldRecurse) {
                 return executeCustomActivation();
             } else {
                 const p1 = itemActivation();

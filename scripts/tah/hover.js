@@ -100,7 +100,7 @@ async function activateRangePreview(token, range) {
  * Disable LA_range_preview aura in-memory.
  * @param {any} token  — canvas Token object (not document)
  */
-function deactivateRangePreview(token) {
+export function deactivateRangePreview(token) {
     if (!hasGAA())
         return;
     const auraLayer = /** @type {any} */ (canvas).gaaAuraLayer;

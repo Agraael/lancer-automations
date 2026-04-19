@@ -1728,6 +1728,199 @@ api.registerDefaultItemReactions({
             }
         }]
     },
+    "npc_sergeant_AssaultCarbine": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            // ── R0: onInitAttack — offer "Move 2 before attacking" ──────────────
+            {
+                triggers: ["onInitAttack"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                awaitActivationCompletion: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const result = await api.startChoiceCard({
+                        title: "ASSAULT CARBINE",
+                        description: `${reactorToken.name} may move 2 spaces before attacking — ignores engagement, doesn't provoke reactions.`,
+                        item,
+                        originToken: reactorToken,
+                        userIdControl: api.getTokenOwnerUserId(reactorToken) ?? api.getActiveGMId(),
+                        choices: [
+                            { text: "Move 2 before", icon: "modules/lancer-automations/icons/black/push.svg" },
+                            { text: "Skip", icon: "fas fa-times" }
+                        ]
+                    });
+                    if (result?.choiceIdx !== 0)
+                        return;
+                    await api.knockBackToken([reactorToken], 2, {
+                        title: "ASSAULT CARBINE \u2014 MOVE",
+                        description: "Move 2 spaces. Ignores engagement, no reactions.",
+                        triggeringToken: reactorToken,
+                        actionName: "Assault Carbine Move",
+                        item
+                    });
+                    if (triggerData.flowState) {
+                        triggerData.flowState.la_extraData = triggerData.flowState.la_extraData || {};
+                        triggerData.flowState.la_extraData._sergeantAssaultCarbineMoveUsed = true;
+                    }
+                }
+            },
+            // ── R1: onAttack — offer "Move 2 after attacking" (only if not used before) ──
+            {
+                triggers: ["onAttack"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                awaitActivationCompletion: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return !triggerData.flowState?.la_extraData?._sergeantAssaultCarbineMoveUsed;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const result = await api.startChoiceCard({
+                        title: "ASSAULT CARBINE",
+                        description: `${reactorToken.name} may move 2 spaces after attacking — ignores engagement, doesn't provoke reactions.`,
+                        item,
+                        originToken: reactorToken,
+                        userIdControl: api.getTokenOwnerUserId(reactorToken) ?? api.getActiveGMId(),
+                        choices: [
+                            { text: "Move 2 after", icon: "modules/lancer-automations/icons/black/push.svg" },
+                            { text: "Skip", icon: "fas fa-times" }
+                        ]
+                    });
+                    if (result?.choiceIdx !== 0)
+                        return;
+                    await api.knockBackToken([reactorToken], 2, {
+                        title: "ASSAULT CARBINE \u2014 MOVE",
+                        description: "Move 2 spaces. Ignores engagement, no reactions.",
+                        triggeringToken: reactorToken,
+                        actionName: "Assault Carbine Move",
+                        item
+                    });
+                }
+            }
+        ]
+    },
+    "npcf_voice_of_authority_commander": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onRoll"],
+            actionType: "Reaction",
+            frequency: "1/Round",
+            triggerSelf: false,
+            triggerOther: true,
+            outOfCombat: false,
+            autoActivate: true,
+            awaitActivationCompletion: true,
+            checkReaction: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                if (!['attackRoll', 'techAttackRoll', 'skillRoll'].includes(triggerData.rollType))
+                    return false;
+                if (triggerData.success !== false)
+                    return false;
+                if (reactorToken.actor?.statuses?.has('jammed'))
+                    return false;
+                if (triggerData.flowState?.la_extraData?._voiceOfAuthorityUsed)
+                    return false;
+                return api.isFriendly(reactorToken, triggerData.triggeringToken);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const ally = triggerData.triggeringToken;
+                const decision = await api.startChoiceCard({
+                    title: "VOICE OF AUTHORITY",
+                    description: `Let <b>${ally?.name ?? 'the ally'}</b> reroll?`,
+                    item,
+                    originToken: reactorToken,
+                    relatedToken: ally,
+                    userIdControl: api.getTokenOwnerUserId(reactorToken) ?? api.getActiveGMId(),
+                    choices: [
+                        { text: "Use", icon: "fas fa-check" },
+                        { text: "Skip", icon: "fas fa-times" }
+                    ]
+                });
+                if (decision?.choiceIdx !== 0)
+                    return;
+
+                await triggerData.startRelatedFlowToReactor();
+
+                if (triggerData.flowState) {
+                    triggerData.flowState.la_extraData = triggerData.flowState.la_extraData || {};
+                    triggerData.flowState.la_extraData._voiceOfAuthorityUsed = true;
+                }
+                await triggerData.reroll(`${reactorToken.name} offers a reroll.`);
+            }
+        }]
+    },
+    "npc_sergeant_TrueGrit": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onPreHpChange"],
+            actionType: "Reaction",
+            frequency: "1/Round",
+            triggerSelf: false,
+            triggerOther: true,
+            outOfCombat: false,
+            autoActivate: true,
+            awaitActivationCompletion: true,
+            checkReaction: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                if (triggerData.newHP > 0)
+                    return false;
+                if (triggerData.previousHP <= 0)
+                    return false;
+                const sensors = reactorToken.actor?.system?.sensor_range ?? 0;
+                if ((triggerData.distanceToTrigger ?? Infinity) > sensors)
+                    return false;
+                return api.isFriendly(reactorToken, triggerData.triggeringToken);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const ally = triggerData.triggeringToken;
+                let preConfirmResponderIds = [];
+                const preConfirm = async () => {
+                    const result = await api.startChoiceCard({
+                        title: "TRUE GRIT",
+                        description: `<b>${ally.name}</b> would fall to 0 HP. Keep at 1 HP?`,
+                        item,
+                        originToken: ally,
+                        relatedToken: reactorToken,
+                        userIdControl: api.getTokenOwnerUserId(reactorToken),
+                        choices: [
+                            { text: "Use", icon: "fas fa-check", callback: async () => {} },
+                            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
+                        ]
+                    });
+                    preConfirmResponderIds = result?.responderIds ?? [];
+                    if (result?.choiceIdx === 0) {
+                        triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0]);
+                    }
+                    return result?.choiceIdx === 0;
+                };
+                triggerData.modifyHpChange(
+                    1,
+                    `<b>${reactorToken.name}</b> keeps <b>${ally.name}</b> alive at 1 HP via True Grit.`,
+                    false,
+                    api.getTokenOwnerUserId(ally),
+                    preConfirm,
+                    null,
+                    { item, originToken: reactorToken, relatedToken: ally }
+                );
+            }
+        }]
+    },
     "moff_triangulation_ping_sysadmin": {
         category: "NPC",
         itemType: "npc_feature",

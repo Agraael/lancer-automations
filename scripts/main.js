@@ -71,6 +71,7 @@ import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
+import { registerRerollFlowSteps } from "./reroll.js";
 import { registerSettingsMenus } from "./settingsMenus.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
 import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
@@ -721,7 +722,7 @@ async function checkReactions(triggerType, data) {
                         const reactorIdentity = { tokenId: token.id, lid, reactionPath: reaction.reactionPath || "" };
                         const defaultCancelContext = { item, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
                         for (const key of Object.keys(reactionTriggerData)) {
-                            if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function') {
+                            if ((key.startsWith('cancel') || key.startsWith('change') || key.startsWith('reroll') || key.startsWith('modify')) && typeof reactionTriggerData[key] === 'function') {
                                 reactionTriggerData[key]._reactorIdentity = reactorIdentity;
                                 reactionTriggerData[key]._defaultContext = defaultCancelContext;
                             }
@@ -765,7 +766,7 @@ async function checkReactions(triggerType, data) {
                 const reactorIdentity = { tokenId: token.id, reactionName };
                 const defaultCancelContext = { item: null, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
                 for (const key of Object.keys(reactionTriggerData)) {
-                    if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function') {
+                    if ((key.startsWith('cancel') || key.startsWith('change') || key.startsWith('reroll')) && typeof reactionTriggerData[key] === 'function') {
                         reactionTriggerData[key]._reactorIdentity = reactorIdentity;
                         reactionTriggerData[key]._defaultContext = defaultCancelContext;
                     }
@@ -804,7 +805,7 @@ async function checkReactions(triggerType, data) {
                 const reactorIdentity = { tokenId: token.id, reactionName };
                 const defaultCancelContext = { item: null, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
                 for (const key of Object.keys(reactionTriggerData)) {
-                    if ((key.startsWith('cancel') || key.startsWith('change')) && typeof reactionTriggerData[key] === 'function') {
+                    if ((key.startsWith('cancel') || key.startsWith('change') || key.startsWith('reroll')) && typeof reactionTriggerData[key] === 'function') {
                         reactionTriggerData[key]._reactorIdentity = reactorIdentity;
                         reactionTriggerData[key]._defaultContext = defaultCancelContext;
                     }
@@ -2679,14 +2680,12 @@ function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason
     let cardPending = false;
     let _promise = null;
 
-    const fn = (reasonText = defaultReason, title = defaultTitle, showCard = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+    const fn = (reasonText = defaultReason, title = defaultTitle, allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
         setFlag();
         if (!fn._reactorIdentity && !fn._engineCancel)
             console.error('lancer-automations | cancel called without _reactorIdentity');
         if (fn._reactorIdentity && cancelledBy)
             cancelledBy.push(fn._reactorIdentity);
-        if (!showCard)
-            return;
         // Fall back to reactor-dispatch context when caller omits opts
         const def = fn._defaultContext ?? {};
         const item = opts.item ?? def.item ?? null;
@@ -2697,7 +2696,7 @@ function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason
         if (preConfirm)
             preConfirms.push(preConfirm);
         if (cardPending)
-            return;
+            return _promise;
         cardPending = true;
         _promise = (async () => {
             await Promise.resolve();
@@ -2708,6 +2707,11 @@ function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason
                     await ignoreCallback();
                     return;
                 }
+            }
+            if (!allowConfirm) {
+                // Auto-pick choice1 (cancel-equivalent = keep blocked)
+                await postChoice?.(true);
+                return;
             }
             const description = cancelledReasons.length > 1
                 ? cancelledReasons.map(r => `• ${r}`).join('<br>')
@@ -3968,6 +3972,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     registerMeleeCoverFix(flowSteps, flows);
     registerUseAmmoFlow(flowSteps, flows); // Ammo flow
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
+    registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
 });
 
 Hooks.once('ready', async () => {
@@ -5001,7 +5006,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
         if (delta !== 0) {
             const _cancelledBy = options._cancelledBy || [];
             let cancelHpTriggered = false;
-            let modifiedValue = null;
+            let modifyPromise = null;
 
             const cancelHpChange = _buildCancelFn({
                 setFlag: () => {
@@ -5015,9 +5020,60 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                 defaultTitle: "HP CHANGE PREVENTED",
             });
 
-            const modifyHpChange = (newValue) => {
-                modifiedValue = newValue;
+            const modifyHpChange = (newValue, reasonText = "HP change has been modified.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
+                cancelHpTriggered = true;
+                const identity = modifyHpChange._reactorIdentity;
+                if (identity)
+                    _cancelledBy.push(identity);
+                const def = modifyHpChange._defaultContext ?? {};
+                item = item ?? def.item ?? null;
+                originToken = originToken ?? def.originToken ?? null;
+                relatedToken = relatedToken ?? def.relatedToken ?? null;
+
+                const executeModify = async () => {
+                    await actor.update({ "system.hp.value": newValue }, { ...options, _bypassPreChange: true, _cancelledBy });
+                };
+                const executeOriginal = async () => {
+                    await actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
+                };
+
+                modifyPromise = (async () => {
+                    await Promise.resolve();
+                    if (preConfirm) {
+                        const confirmed = await preConfirm();
+                        if (!confirmed) {
+                            await executeOriginal();
+                            return;
+                        }
+                    }
+                    if (!allowConfirm) {
+                        await executeModify();
+                        await postChoice?.(true);
+                        return;
+                    }
+                    await startChoiceCard({
+                        mode: "or",
+                        title: "HP MODIFIED",
+                        description: reasonText,
+                        item,
+                        originToken,
+                        relatedToken,
+                        userIdControl: userIdControl ?? getActiveGMId(),
+                        choices: [
+                            { text: "Confirm", icon: "fas fa-check", callback: async () => {
+                                await executeModify();
+                                await postChoice?.(true);
+                            } },
+                            { text: "Ignore", icon: "fas fa-times", callback: async () => {
+                                await postChoice?.(false);
+                                await executeOriginal();
+                            } }
+                        ]
+                    });
+                })();
+                return modifyPromise;
             };
+            modifyHpChange.wait = () => modifyPromise;
 
             handleTrigger('onPreHpChange', {
                 triggeringToken: token,
@@ -5031,9 +5087,8 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
 
             if (cancelHpTriggered) {
                 cancelHpChange.wait()?.catch(() => {});
+                modifyHpChange.wait()?.catch(() => {});
                 blocked = true;
-            } else if (modifiedValue !== null) {
-                change.system.hp.value = modifiedValue;
             }
         }
     }
@@ -5046,7 +5101,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
         if (delta !== 0) {
             const _cancelledBy = options._cancelledBy || [];
             let cancelHeatTriggered = false;
-            let modifiedValue = null;
+            let modifyPromise = null;
 
             const cancelHeatChange = _buildCancelFn({
                 setFlag: () => {
@@ -5060,9 +5115,60 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                 defaultTitle: "HEAT CHANGE PREVENTED",
             });
 
-            const modifyHeatChange = (newValue) => {
-                modifiedValue = newValue;
+            const modifyHeatChange = (newValue, reasonText = "Heat change has been modified.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
+                cancelHeatTriggered = true;
+                const identity = modifyHeatChange._reactorIdentity;
+                if (identity)
+                    _cancelledBy.push(identity);
+                const def = modifyHeatChange._defaultContext ?? {};
+                item = item ?? def.item ?? null;
+                originToken = originToken ?? def.originToken ?? null;
+                relatedToken = relatedToken ?? def.relatedToken ?? null;
+
+                const executeModify = async () => {
+                    await actor.update({ "system.heat.value": newValue }, { ...options, _bypassPreChange: true, _cancelledBy });
+                };
+                const executeOriginal = async () => {
+                    await actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
+                };
+
+                modifyPromise = (async () => {
+                    await Promise.resolve();
+                    if (preConfirm) {
+                        const confirmed = await preConfirm();
+                        if (!confirmed) {
+                            await executeOriginal();
+                            return;
+                        }
+                    }
+                    if (!allowConfirm) {
+                        await executeModify();
+                        await postChoice?.(true);
+                        return;
+                    }
+                    await startChoiceCard({
+                        mode: "or",
+                        title: "HEAT MODIFIED",
+                        description: reasonText,
+                        item,
+                        originToken,
+                        relatedToken,
+                        userIdControl: userIdControl ?? getActiveGMId(),
+                        choices: [
+                            { text: "Confirm", icon: "fas fa-check", callback: async () => {
+                                await executeModify();
+                                await postChoice?.(true);
+                            } },
+                            { text: "Ignore", icon: "fas fa-times", callback: async () => {
+                                await postChoice?.(false);
+                                await executeOriginal();
+                            } }
+                        ]
+                    });
+                })();
+                return modifyPromise;
             };
+            modifyHeatChange.wait = () => modifyPromise;
 
             handleTrigger('onPreHeatChange', {
                 triggeringToken: token,
@@ -5076,9 +5182,8 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
 
             if (cancelHeatTriggered) {
                 cancelHeatChange.wait()?.catch(() => {});
+                modifyHeatChange.wait()?.catch(() => {});
                 blocked = true;
-            } else if (modifiedValue !== null) {
-                change.system.heat.value = modifiedValue;
             }
         }
     }
@@ -5311,14 +5416,20 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 _moveTrace = null;
             },
         });
-        // Adapter: preserves the original signature (no title param, showCard is 2nd).
-        triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+        // Adapter: preserves the original signature (no title param, allowConfirm is 2nd).
+        triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
             _cancelMoveCard._reactorIdentity = triggerData.cancelTriggeredMove._reactorIdentity;
             _cancelMoveCard._engineCancel = triggerData.cancelTriggeredMove._engineCancel;
-            return _cancelMoveCard(reasonText, undefined, showCard, userIdControl, preConfirm, postChoice, opts);
+            return _cancelMoveCard(reasonText, undefined, allowConfirm, userIdControl, preConfirm, postChoice, opts);
         };
 
-        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", showCard = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
+        triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
+            triggerData.cancel();
+            cancelRulerDrag(token, moveInfo);
+            const identity = triggerData.changeTriggeredMove._reactorIdentity;
+            if (identity && triggerData._cancelledBy)
+                triggerData._cancelledBy.push(identity);
+
             const executeChange = () => {
                 setTimeout(async () => {
                     const dest = { x: position.x, y: position.y };
@@ -5328,64 +5439,57 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     await _rulerMove(token, dest, { isUndo: false, isModified: true, ...extraData });
                 }, 50);
             };
+            const executeOriginal = async () => {
+                const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
+                if (change.elevation !== undefined)
+                    originalUpdate.elevation = change.elevation;
+                await token.document.update(originalUpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
+            };
 
-            if (showCard) {
-                triggerData.cancel();
-                cancelRulerDrag(token, moveInfo);
-                // Record who triggered this reroute
-                const identity = triggerData.changeTriggeredMove._reactorIdentity;
-                if (identity && triggerData._cancelledBy)
-                    triggerData._cancelledBy.push(identity);
-
-                if (preConfirm) {
-                    const confirmed = await preConfirm();
-                    if (!confirmed) {
-                        executeChange();
-                        return;
-                    }
+            if (preConfirm) {
+                const confirmed = await preConfirm();
+                if (!confirmed) {
+                    await executeOriginal();
+                    return;
                 }
-
-                const trace = drawMovementTrace(token, endPos, position);
-
-                await startChoiceCard({
-                    mode: "or",
-                    title: "MOVEMENT REROUTED",
-                    description: reasonText,
-                    item,
-                    originToken,
-                    relatedToken,
-                    userIdControl: userIdControl ?? getActiveGMId(),
-                    traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
-                    choices: [
-                        { text: "Confirm",
-                            icon: "fas fa-check",
-                            callback: async () => {
-                                executeChange();
-                                await postChoice?.(true);
-                            } },
-                        { text: "Ignore",
-                            icon: "fas fa-times",
-                            callback: async () => {
-                                await postChoice?.(false);
-                                const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
-                                if (change.elevation !== undefined)
-                                    originalUpdate.elevation = change.elevation;
-                                token.document.update(originalUfpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
-                            }}
-                    ]
-                });
-
-                if (trace.parent)
-                    trace.parent.removeChild(trace);
-                trace.destroy();
-            } else {
-                triggerData.cancel();
-                cancelRulerDrag(token, moveInfo);
-                const identity = triggerData.changeTriggeredMove._reactorIdentity;
-                if (identity && triggerData._cancelledBy)
-                    triggerData._cancelledBy.push(identity);
-                executeChange();
             }
+
+            if (!allowConfirm) {
+                executeChange();
+                await postChoice?.(true);
+                return;
+            }
+
+            const trace = drawMovementTrace(token, endPos, position);
+
+            await startChoiceCard({
+                mode: "or",
+                title: "MOVEMENT REROUTED",
+                description: reasonText,
+                item,
+                originToken,
+                relatedToken,
+                userIdControl: userIdControl ?? getActiveGMId(),
+                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
+                choices: [
+                    { text: "Confirm",
+                        icon: "fas fa-check",
+                        callback: async () => {
+                            executeChange();
+                            await postChoice?.(true);
+                        } },
+                    { text: "Ignore",
+                        icon: "fas fa-times",
+                        callback: async () => {
+                            await postChoice?.(false);
+                            await executeOriginal();
+                        } }
+                ]
+            });
+
+            if (trace.parent)
+                trace.parent.removeChild(trace);
+            trace.destroy();
         };
 
         // Movement cap check: block the move if it would exceed the cap (combat only, non-free moves)

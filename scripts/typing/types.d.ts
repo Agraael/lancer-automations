@@ -7,9 +7,9 @@
 interface TriggerDataBase {
     triggeringToken?: Token;
     distanceToTrigger?: number | null;
-    /** Re-launches the flow or action that generated this trigger. For item triggers uses item.beginActivationFlow(); for general actions uses executeSimpleActivation(). Warns if action type is Automatic or Other, or if no context is available. */
+    /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
     startRelatedFlow(): Promise<void>;
-    /** Routes startRelatedFlow to the specified userId's client (or the token owner if omitted). If the target is the current user, runs locally. extraData is injected into flow.state.la_extraData and surfaced as triggerData.extraData on the triggered onActivation. If wait is true, awaits completion of the remote flow before resolving. */
+    /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
     /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). */
     sendMessageToReactor(data: any, userId?: string | null): Promise<void>;
@@ -126,8 +126,8 @@ interface TriggerDataOnPreMove extends TriggerDataBase {
     isDrag: boolean;
     moveInfo: MoveInfo;
     cancel: () => void;
-    cancelTriggeredMove: (reason?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
-    changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
+    cancelTriggeredMove: (reason?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
+    changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
 }
 
 interface TriggerDataOnInvoluntaryMove extends TriggerDataBase {
@@ -196,7 +196,7 @@ interface TriggerDataOnInitAttack extends TriggerDataBase {
     actionName: string;
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
-    cancelAttack: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelAttack: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
 }
 
@@ -241,7 +241,7 @@ interface TriggerDataOnInitTechAttack extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     isInvade: boolean;
-    cancelTechAttack: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelTechAttack: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
 }
 
@@ -261,7 +261,7 @@ interface TriggerDataOnInitCheck extends TriggerDataBase {
     statName: string;
     checkAgainstToken: Token | null;
     targetVal: number | null;
-    cancelCheck: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelCheck: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
 }
 
@@ -278,7 +278,7 @@ interface TriggerDataOnActivation extends TriggerDataBase {
 }
 
 interface TriggerDataOnInitActivation extends TriggerDataOnActivation {
-    cancelAction: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelAction: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
 }
 
 interface TriggerDataOnStatusApplied extends TriggerDataBase {
@@ -299,7 +299,7 @@ interface TriggerDataOnPreStatusApplied extends TriggerDataBase {
     triggeringToken: Token;
     statusId: string;
     effect: any;
-    cancelChange: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelChange: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
 }
 
@@ -307,7 +307,7 @@ interface TriggerDataOnPreStatusRemoved extends TriggerDataBase {
     triggeringToken: Token;
     statusId: string;
     effect: any;
-    cancelChange: (reason?: string, title?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
+    cancelChange: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
 }
 
@@ -351,6 +351,22 @@ interface TriggerDataonHpGain extends TriggerDataBase {
 
 interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
 interface TriggerDataOnStructure extends TriggerDataBase { triggeringToken: Token; remainingStructure: number; rollResult: number; rollDice: number[]; cancelStructureOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; }
+
+/** Fired after a roll resolves, before the card prints. `reroll()` re-runs the Lancer roll step; `changeRoll(newTotal)` sets the total. Both cascade — re-fires onRoll so later reactions see the new result. */
+interface TriggerDataOnRoll extends TriggerDataBase {
+    triggeringToken: Token;
+    rollType: "attackRoll" | "techAttackRoll" | "damageRoll" | "skillRoll" | "structureRoll" | "stressRoll";
+    roll: any;
+    total: number | null;
+    success: boolean | undefined;
+    targets?: Array<{ token: Token | null; total?: number | null; hit?: boolean; crit?: boolean; damage?: any }>;
+    item: any;
+    isReroll: boolean;
+    rerollCount: number;
+    reroll: (reason?: string) => Promise<void>;
+    changeRoll: (newTotal: number) => Promise<void>;
+    flowState: any;
+}
 interface TriggerDataOnStress extends TriggerDataBase { triggeringToken: Token; remainingStress: number; rollResult: number; rollDice: number[]; cancelStressOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; }
 interface TriggerDataOnTurnStart extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
 interface TriggerDataOnTurnEnd extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
@@ -385,6 +401,7 @@ type TriggerData =
     | TriggerDataonHpGain
     | TriggerDataOnDestroyed
     | TriggerDataOnStructure
+    | TriggerDataOnRoll
     | TriggerDataOnStress
     | TriggerDataOnTurnStart
     | TriggerDataOnTurnEnd
@@ -406,6 +423,7 @@ type TriggerType =
     | "onPreStatusApplied" | "onPreStatusRemoved"
     | "onDestroyed" | "onTokenCreated" | "onTokenRemoved" | "onTokenVisibility"
     | "onPreStructure" | "onStructure" | "onPreStress" | "onStress"
+    | "onRoll"
     | "onPreHeatChange" | "onHeatGain" | "onHeatLoss"
     | "onPreHpChange" | "onHpLoss" | "onHpGain"
     | "onDeploy"
