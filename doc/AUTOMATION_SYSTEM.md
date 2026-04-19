@@ -21,7 +21,6 @@ For trigger payload schemas, see [API_REFERENCE.md](API_REFERENCE.md). For API s
 - [11. Flow Data Injection](#11-flow-data-injection)
 - [12. Registration Paths](#12-registration-paths)
 - [13. Caches and Invalidation](#13-caches-and-invalidation)
-- [14. Common Pitfalls](#14-common-pitfalls)
 
 ---
 
@@ -404,17 +403,3 @@ Hooks.callAll("lancer-automations.clearCaches");
 ```
 
 This is what the UI does internally on save.
-
----
-
-## 14. Common Pitfalls
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Cancel function is silently ignored | Async `evaluate` or `activationCode` on a `onPre*` / `onInit*` trigger | Make the function synchronous, or set `awaitActivationCompletion: true`. |
-| Activation never fires for the right item | Forgot `onlyOnSourceMatch: true` on an item activation | Add it. Without it, the activation fires on any matching trigger from anyone. |
-| Activation fires on the wrong client and lacks permissions | `activationCode` running on a player client tries to modify a GM-only document | Delegate via `sendMessageToReactor(..., gmUserId, { wait: true })` or use API helpers that delegate internally. |
-| Effect bonus disappears between attack and damage steps | Used `addGlobalBonus` instead of `injectBonus` | For one-shot per-flow bonuses, prefer `flowState.injectBonus`. |
-| `onInit` doesn't fire | Put `"onInit"` in the `triggers` array | Remove it. `onInit` is a separate field on the reaction config. |
-| TAH doesn't show an extra action | Used `activation: "Quick Action"` instead of `"Quick"` | Use TAH's short forms: `Quick`, `Full`, `Protocol`, `Free`, `Reaction`, `Quick Tech`, `Full Tech`. |
-| Effect immunity doesn't block a status | Used a non-existent immunity subtype | Effect immunity uses `subtype: "effect"` with `effects: ["status_id"]`. See [API_EFFECTS.md](API_EFFECTS.md). |

@@ -270,9 +270,9 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Stack count |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
-| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean` |
+| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate — if false, the whole bonus is skipped. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
-| <kbd>applyTo</kbd> | `Array` | Token ID filters |
+| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static — set at bonus creation. For dynamic per-target filters on `target_modifier`, see `applyToCondition` below. |
 
 </details>
 
@@ -292,7 +292,25 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
+| <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
+| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` — survives reloads. Useful for dynamic filters (e.g. range, target status) that can't be pinned to a static `applyTo` array. |
+
+`"no_invisible"` forces `plugins.invisibility.data = 0` on the target, bypassing `"invisible"`.
+
+**Example — ignore invisibility only within range 3:**
+```js
+await api.addConstantBonus(actor, {
+    id: 'lesser-sight',
+    name: 'Lesser Sight',
+    type: 'target_modifier',
+    subtype: 'no_invisible',
+    applyToCondition: (target, state, reactorToken) => {
+        const api = game.modules.get('lancer-automations')?.api;
+        return api?.getTokenDistance(reactorToken, target.target) <= 3
+            && target.target?.actor?.effects?.some(e => e.statuses?.has('invisible'));
+    }
+});
+```
 
 </details>
 

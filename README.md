@@ -404,7 +404,7 @@ The Automation System exposes a matching `reactionPath` selector, for example `"
 
 This is the core of the module. Everything else can plug into it.
 
-> For a deep walkthrough of the engine (trigger lifecycle, filters, the four callbacks, activation modes, client/socket execution, cancel/modify, flow injection, registration, caches, common pitfalls), see **[doc/AUTOMATION_SYSTEM.md](doc/AUTOMATION_SYSTEM.md)**.
+> For a deep walkthrough of the engine (trigger lifecycle, filters, the four callbacks, activation modes, client/socket execution, cancel/modify, flow injection, registration, caches), see **[doc/AUTOMATION_SYSTEM.md](doc/AUTOMATION_SYSTEM.md)**.
 
 ### How It Works
 
