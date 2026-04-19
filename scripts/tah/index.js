@@ -51,10 +51,10 @@ Hooks.on('init', () => {
         range: { min: 0, max: 3, step: 0.5 },
     });
     game.settings.register(MODULE, 'tah.rangePreview', {
-        name: 'TAH: Weapon Range Preview',
+        name: 'Weapon Range Preview',
         hint: 'Show weapon range on the map when hovering items in the HUD. Requires Grid Aware Auras.',
         scope: 'client',
-        config: true,
+        config: false,
         type: Boolean,
         default: true,
     });

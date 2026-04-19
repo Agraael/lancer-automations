@@ -12,6 +12,8 @@ import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard
 } from "./cards.js";
 
+import { _rulerMove } from "../main.js";
+
 /**
  * Convert a PixiJS pointer event's global screen position to canvas world coordinates.
  * Uses the full inverse world transform so it works correctly with isometric-perspective,
@@ -893,73 +895,48 @@ export function cancelRulerDrag(token, moveInfo = null) {
  * @param {Token|null} triggeringToken
  * @param {number} distance
  */
-export async function applyKnockbackMoves(moveList, triggeringToken, distance, actionName = "", item = null) {
+export async function applyKnockbackMoves(moveList, triggeringToken, distance, actionName = "", item = null, options = {}) {
     if (!triggeringToken)
         console.warn("lancer-automations | applyKnockbackMoves called without a triggeringToken. Reactions using triggerSelf will not work correctly.");
 
-    const updates = [];
-    const pushedActors = [];
+    const asVoluntary = !!options.asVoluntary;
+    const api = game.modules.get('lancer-automations').api;
 
+    const extraOpts = {
+        lancerFreeMovement: true,
+        ignoreMovementCap: true,
+        _skipBoostOffer: true,
+        ...(asVoluntary ? {} : { forceUnintentional: true })
+    };
+
+    // Sequential — ER.moveTokenTo uses the singleton canvas.controls.ruler; parallel runs corrupt it.
     for (const { tokenId, updateData } of moveList) {
         const t = canvas.tokens.get(tokenId);
         if (!t)
             continue;
 
-        let startCenter, endCenter, cost = 0;
-
-        if (game.modules.get("elevationruler")?.active) {
-            startCenter = t.getCenterPoint({ x: t.document.x, y: t.document.y });
-            const bboxCenter = t.getCenterPoint({ x: updateData.x, y: updateData.y });
-            endCenter = canvas.grid.getCenterPoint(bboxCenter);
-            cost = getDistanceTokenToPoint(bboxCenter, t);
+        if (!asVoluntary) {
+            let cancelled = false;
+            const cancel = (reason) => {
+                cancelled = true;
+                if (reason)
+                    ui.notifications.info(reason);
+            };
+            await api.handleTrigger('onInvoluntaryMove', {
+                triggeringToken,
+                token: t,
+                distance,
+                actionName,
+                item,
+                destination: { x: updateData.x, y: updateData.y },
+                cancel
+            });
+            if (cancelled)
+                continue;
         }
 
-        updates.push(t.document.update(updateData).then(async (doc) => {
-            if (game.modules.get("elevationruler")?.active) {
-                const tokenObj = doc.object;
-                if (!tokenObj.elevationruler) {
-                    tokenObj.elevationruler = {};
-                }
-
-                if (tokenObj.elevationruler) {
-                    let history = tokenObj.elevationruler.measurementHistory;
-                    if (!history) {
-                        history = tokenObj.elevationruler.measurementHistory = [];
-                    }
-
-                    const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
-                    const elevation = t.document.elevation ?? 0;
-                    const zValue = gridUnitsToPixels(elevation);
-
-                    const last = history.at(-1);
-                    let addedNative = false;
-
-                    if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
-                        addedNative = true;
-                        last.x = endCenter.x;
-                        last.y = endCenter.y;
-                        last.freeMovement = true;
-                        last.cost = cost;
-                        if (last.z === undefined)
-                            last.z = zValue;
-                        if (last.teleport === undefined)
-                            last.teleport = false;
-                    }
-
-                    if (!addedNative) {
-                        const startPt = { ...startCenter, z: zValue, teleport: false, cost: 0 };
-                        const endPt = { ...endCenter, z: zValue, teleport: false, cost: cost, freeMovement: true };
-                        history.push(startPt, endPt);
-                    }
-                }
-            }
-            return doc;
-        }));
-        pushedActors.push(t.actor);
+        await _rulerMove(t, { x: updateData.x, y: updateData.y }, extraOpts);
     }
-
-    await Promise.all(updates);
-    await game.modules.get('lancer-automations').api.handleTrigger('onKnockback', { triggeringToken, range: distance, pushedActors, actionName, item });
 }
 
 /**
@@ -1273,7 +1250,8 @@ export function knockBackToken(tokens, distance, options = {}) {
             headerClass = "",
             triggeringToken = null,
             actionName = "",
-            item = null
+            item = null,
+            asVoluntary = false
         } = options;
 
         if (!tokens || (Array.isArray(tokens) && tokens.length === 0)) {
@@ -1336,7 +1314,7 @@ export function knockBackToken(tokens, distance, options = {}) {
                 }
 
                 if (game.user.isGM) {
-                    await applyKnockbackMoves(moveList, triggeringToken, distance, actionName, item);
+                    await applyKnockbackMoves(moveList, triggeringToken, distance, actionName, item, { asVoluntary });
                 } else {
                     game.socket.emit('module.lancer-automations', {
                         action: "moveTokens",
@@ -1345,7 +1323,8 @@ export function knockBackToken(tokens, distance, options = {}) {
                             triggeringTokenId: triggeringToken?.id || null,
                             distance,
                             actionName,
-                            itemId: item?.id || null
+                            itemId: item?.id || null,
+                            asVoluntary
                         }
                     });
                 }

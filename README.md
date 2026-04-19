@@ -111,7 +111,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 <img align="right" src="doc/img/effect-manager-hud-button.png" width="30%"/>
 
-The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API.
+The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API: see [doc/API_EFFECTS.md](doc/API_EFFECTS.md) for `applyEffectsToTokens`, `removeEffectsByNameFromTokens`, `findEffectOnToken`, and the consumption / duration options.
 
 <br clear="right"/>
 
@@ -160,6 +160,8 @@ The Bonuses tab gives you access to general bonuses (accuracy, difficulty, damag
 
 Bonuses let you attach mechanical effects to tokens that integrate directly into Lancer's roll flows. There are three persistence modes.
 
+> Full API reference (all bonus types, options, immunity queries, and flow-state injection): [doc/API_EFFECTS.md](doc/API_EFFECTS.md).
+
 ### General Bonuses
 
 General bonuses behave like standard status effects: they're visible on the token, have optional duration and stack consumption, and integrate into rolls automatically.
@@ -198,8 +200,9 @@ Damage bonuses appear in the damage roll output.
 
 ### Flow Bonuses
 
-Flow bonuses are short-lived by design. They can be injected into the current flow state using `triggerData.flowState.injectBonus(...)`. 
-They will stay in the flow up to the very end, event roll damage. With help of the flow injection system,  for exemple things like  bonus damage even  if set in the AttackRoll  will live in the damageChat Card. cf Flow Data Injection.
+Flow bonuses are short-lived by design. They can be injected into the current flow state using `triggerData.flowState.injectBonus(...)`.
+
+They stay in the flow until the very end, including the damage roll. For example, a bonus damage injected during the attack roll will still apply to the damage chat card it produces. See [Flow Data Injection](#flow-data-injection) below.
 
 ### Constant Bonuses
 
@@ -230,9 +233,11 @@ When an immunity bonus is active on a token, any incoming damage of that type tr
 
 Tag bonuses let you inject or modify tags on a weapon mid-flow. Useful for abilities that temporarily grant a property, for example adding the `Armor Penetration` tag before an attack. You can also remove existing tags.
 
+> For permanent tag changes (not flow-scoped), use `addItemTag` / `removeItemTag`, documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
+
 ### Flow Data Injection
 
-Flow data injection is a system that allows you to inject data into the current flow state. This data will be available to all subsequent steps in the flow. It is a way to pass data between steps in a flow without having to store it in a variable. Two function are available to inject data into the flow state:
+While a flow is running (attack, damage, check, activation), you can stash data on the `flowState` and read it back from any later trigger in that same flow. Two functions:
 
 - `triggerData.flowState.injectBonus(...)`: injects a bonus into the flow state
 - `triggerData.flowState.injectData(...)`: injects any data into the flow state
@@ -244,6 +249,8 @@ Flow data injection is a system that allows you to inject data into the current 
 ## Interactive Tools
 
 These are the building blocks for complex automation flows. Most are available from macros and from activation code via the API.
+
+> Full API reference for every function below (signatures, options, return values): [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
 
 ### Knockback
 
@@ -305,7 +312,7 @@ Several functions handle deploying tokens or weapons onto the scene:
 
 ### Movement History & Revert
 
-The module optionally tracks each token's movement path during their turn. This is most accurate when used with the [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork).
+The module optionally tracks each token's movement path during their turn. This is most accurate when used with [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork). Movement-tracking API (`getMovementHistory`, `getCumulativeMoveData`, `clearMoveData`, etc.) is documented in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
 
 To open the movement history dialog, press **R** (default keybinding, configurable in FoundryVTT's keybinding settings) with a token selected, or right-click the revert button in the token HUD.
 
@@ -325,6 +332,8 @@ You can also call these directly:
 
 [TemplateMacro](https://github.com/Agraael/templatemacro) is a fork of a dead module that I fixed for FoundryVTT v12. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
 
+> All three zone tools below are also available from code via `api.placeZone(...)`. See [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md) for the `placeZone` options (`statusEffects`, `dangerous`, `difficultTerrain`, `fillColor`, etc.).
+
 <img align="right" src="doc/img/templateMacro-lancer-tools.png" width="40%"/>
 
 ### Place Effect Zone
@@ -337,7 +346,7 @@ A zone that deals damage to tokens on entry or at specific trigger points (e.g. 
 
 ### Difficult Terrain
 
-A zone that imposes a movement penalty on tokens moving through it. When used with the [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork), the penalty is factored into the movement cost display in real time, so you can see exactly how much movement is consumed.
+A zone that imposes a movement penalty on tokens moving through it. When used with [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork), the penalty is factored into the movement cost display in real time, so you can see exactly how much movement is consumed.
 
 <br clear="right"/>
 
@@ -347,6 +356,8 @@ A zone that imposes a movement penalty on tokens moving through it. When used wi
 
 Beyond the bonus system, you can attach custom data directly to items. The module reads certain flags by default and uses them in macros and automation flows.
 
+> Flag-related deployment helpers (`placeDeployable`, `beginDeploymentCard`, `recallDeployable`, `pickItem`, `findItemByLid`) are documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
+
 ### Built-in Flags
 
 | Flag | Effect |
@@ -355,6 +366,8 @@ Beyond the bonus system, you can attach custom data directly to items. The modul
 | `deployCount` | Number of uses before the deployable is exhausted |
 | `activeState` | Marks the item as having an active/inactive toggle. When activated, the "End Activation" flow lets you pick this item to deactivate. You can also specify which action type is required (quick, full, free, etc.) |
 
+> Set or read these flags via `api.addItemFlags(item, flags)` and `api.getItemFlags(item, flagName?)`, documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
+
 ### Extra Deployables
 
 The module lets you attach additional deployables to any item, including NPC features. This is useful when an NPC ability should spawn something on the field but the base Lancer system doesn't natively support it on that item type.
@@ -362,6 +375,8 @@ The module lets you attach additional deployables to any item, including NPC fea
 These deployables are recognized and read by the deploy macro just like native ones.
 
 ![Deployable finder tool](doc/img/deployable-finder.png)
+
+> API: `api.addExtraDeploymentLids(item, lids)` and `api.getItemDeployables(item, actor)` (returns the merged list with NPC tier resolution). See [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
 
 ## Extra Actions
 
@@ -383,11 +398,13 @@ This is the mechanism behind features like NPC abilities that grant a temporary 
 | `getActorActions(tokenOrActor)` | Return the extra actions attached to an actor or token. |
 | `removeExtraActions(target, filter?)` | Remove extra actions. `filter` may be a predicate, an action name, an array of names, or omitted to clear all. |
 
-The Automation System exposes a matching `reactionPath` selector — for example `"extraActions.Fall Prone"` — so reactions can fire specifically when an extra action is activated. See [Trigger Reference](#trigger-reference) and the API docs in `doc/API_INTERACTIVE.md` for full details.
+The Automation System exposes a matching `reactionPath` selector, for example `"extraActions.Fall Prone"`, so reactions can fire specifically when an extra action is activated. See [Trigger Reference](#trigger-reference) and the full Extra Actions API in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
 
 ## Automation System
 
 This is the core of the module. Everything else can plug into it.
+
+> For a deep walkthrough of the engine (trigger lifecycle, filters, the four callbacks, activation modes, client/socket execution, cancel/modify, flow injection, registration, caches, common pitfalls), see **[doc/AUTOMATION_SYSTEM.md](doc/AUTOMATION_SYSTEM.md)**.
 
 ### How It Works
 
@@ -624,6 +641,8 @@ For example, reduce incoming damage by half, or cap heat gain at a certain thres
 
 ## Choice Cards
 
+> Full API for `startChoiceCard` (all modes, choice object shape, broadcast routing) and `openChoiceMenu`: [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
+
 `api.startChoiceCard(options)` shows an interactive HUD card that pauses execution and waits for a user to pick. Cards queue automatically so multiple calls never overlap.
 
 The `userIdControl` parameter routes the card to a specific user or a list of users. When an array is given, the **first to respond wins** and the card is dismissed for everyone else.
@@ -652,9 +671,11 @@ A built-in GM macro tool that opens a configuration dialog to build and send a c
 | **Flight** | `onStatusApplied` / `onStructure` / `onStress` | Handles flying immunity and fall save logic |
 | **Fall** | `onTurnEnd` | Checks if an airborne token should begin falling |
 
+> The actions these reactions trigger (`executeSkirmish`, `executeBasicAttack`, `executeFall`, `executeStandingUp`, etc.) are documented in [doc/API_COMBAT.md](doc/API_COMBAT.md).
+
 ### Startups
 
-Startups allow you to add code upon VTT Foundry initiation. This allows for mainly registering your own helper functions that you can use in your activations, or even outside in macros and stuff.
+Startups allow you to add code upon VTT Foundry initiation. This allows for mainly registering your own helper functions that you can use in your activations, or even outside in macros and stuff. Helper-registration API (`registerUserHelper` / `getUserHelper`) and registration patterns are documented in [doc/API_HOWTO.md](doc/API_HOWTO.md).
 
 ![Startup Tab](doc/img/startup-tab.png)
 
@@ -693,7 +714,7 @@ The module tracks cumulative drag movement for each token during their turn. Whe
 - `moveInfo.isBoost`: `true` if this move crossed a boost threshold
 - `moveInfo.boostSet`: array of boost numbers crossed (e.g. `[1]` for first boost)
 
-Cumulative movement resets automatically at the start of each token's turn. You can also reset it manually: `api.clearMoveData(tokenDocumentId)`.
+Cumulative movement resets automatically at the start of each token's turn. You can also reset it manually: `api.clearMoveData(tokenDocumentId)`. Full movement-tracking API in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
 
 ### Stat Roll Targeting
 
@@ -705,9 +726,13 @@ When enabled, any Stat Roll (HULL, AGI, SYS, ENG) prompts you to optionally pick
 - **Automation**: the target token is passed into the flow data for other automations to use
 - **Self-targeting**: you can target yourself if needed
 
+> To start a stat roll from code, use `api.executeStatRoll(actor, stat, title, target, extraData)`. See [doc/API_COMBAT.md](doc/API_COMBAT.md).
+
 ### Token Factions Integration
 
 When [Token Factions (my fork)](https://github.com/Agraael/token-factions) is installed, the disposition filter in activations uses the full faction matrix instead of the standard three-way friendly/neutral/hostile. This lets you have multiple teams with custom disposition relationships between them.
+
+> The disposition helpers `api.isHostile(reactor, mover)` and `api.isFriendly(token1, token2)` are Token-Factions-aware and documented in [doc/API_COMBAT.md](doc/API_COMBAT.md).
 
 ### Grid-Aware Auras Integration
 
@@ -715,6 +740,8 @@ When [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras
 
 - `api.createAura(owner, config)`: creates an aura on a token. Accepts lambda functions as macro callbacks, the module intercepts and routes them transparently with no need to create actual macro documents.
 - `api.deleteAuras(owner)`: removes all auras from a token
+
+> Full wrapper reference (config shape, lambda callback semantics): [doc/API_HOWTO.md#grid-aware-auras-wrapper](doc/API_HOWTO.md#grid-aware-auras-wrapper).
 
 ### Lancer Automations HUD (Beta)
 
@@ -797,7 +824,6 @@ For full function signatures, trigger data schemas, bonus types, and code exampl
 
 ## NPC Implementation Examples
 
-These are real examples from active sessions.
 
 ### Dispersal Shield (Priest)
 
@@ -923,7 +949,7 @@ Places a smoke zone (soft cover) that persists until the start of the Strider's 
 
 ## Lancer System Additions
 
-This module extends the Lancer system with several patches and new features that work externally, no system bundle editing required for other users.
+These features extend the Lancer system without modifying the system itself, so anyone using your world only needs to install this module.
 
 ### Melee Cover Fix
 
@@ -935,7 +961,7 @@ Items can be marked as disabled. Works similarly to destroyed, but it is used fo
 
 ### Trackable Attributes
 
-Move and Reaction are trackable attributes. This can be used for token bar things, allowing you to see if a unit has its reaction or not.
+Move and Reaction are trackable attributes. Useful for token bars: you can wire one to Reaction so you can see at a glance whether a unit still has its reaction.
 
 ### Token Tooltip Alt Config
 
@@ -991,7 +1017,7 @@ Ammo for things like Ammo Case are now listed in the sheet. The main Lancer shee
 
 ![ammo_message](doc/img/ammo_message.png)
 
-Ammo can be clicked to run the AmmoFlow and display a chat message with the details, it also consumes charges. Strangely some data gives ammo cost as nothing, so by default if there is no cost, it is 1.
+Ammo can be clicked to run the AmmoFlow and display a chat message with the details, it also consumes charges. Some LCP data leaves the ammo cost blank; in that case the cost defaults to 1.
 
 ### Infection Damage Type
 

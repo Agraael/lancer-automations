@@ -58,8 +58,8 @@ function makeConfigForm({ id, title, template, fields }) {
                     choices: (typeof f.getChoices === 'function' ? f.getChoices() : f.choices)
                         ?? (setting.choices
                             ? Object.entries(setting.choices).map(([k, v]) => ({
-                                  value: k, label: v, selected: k === value
-                              }))
+                                value: k, label: v, selected: k === value
+                            }))
                             : []),
                 };
             });
@@ -97,8 +97,10 @@ function makeConfigForm({ id, title, template, fields }) {
                     continue;
                 }
                 let val = formData[f.key];
-                if (f.type === 'number' || f.type === 'slider') val = Number(val);
-                if (f.type === 'boolean') val = !!val;
+                if (f.type === 'number' || f.type === 'slider')
+                    val = Number(val);
+                if (f.type === 'boolean')
+                    val = !!val;
                 try {
                     await game.settings.set(MODULE_ID, f.key, val);
                 } catch (e) {
@@ -143,6 +145,7 @@ const CombatMovementConfig = makeConfigForm({
         { key: 'experimentalBoostDetection', type: 'boolean' },
         { key: 'dragVisionMultiplier', type: 'number' },
         { key: 'enableAltStruct', type: 'boolean' },
+        { key: 'enableOneStructNpc', type: 'boolean' },
         { key: 'enableInfectionDamageIntegration', type: 'boolean' },
         { key: 'count3DDistance', type: 'boolean' },
     ],
@@ -164,53 +167,60 @@ const WreckConfig = makeConfigForm({
         { key: 'enableWreckAudio', type: 'boolean' },
         { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Master Volume' },
         { key: 'squadLostOnDeath', type: 'boolean' },
-        { key: 'wreckTerrainType', type: 'select', label: 'Wreck Terrain Type', getChoices: () => {
-            const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
-            const choices = [{ value: '', label: 'None (disabled)', selected: current === '' }];
-            try {
-                const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
-                for (const t of types) {
-                    choices.push({ value: t.id, label: t.name || t.id, selected: t.id === current });
-                }
-            } catch {}
-            return choices;
-        }},
+        { key: 'wreckTerrainType',
+            type: 'select',
+            label: 'Wreck Terrain Type',
+            getChoices: () => {
+                const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
+                const choices = [{ value: '', label: 'None (disabled)', selected: current === '' }];
+                try {
+                    const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
+                    for (const t of types) {
+                        choices.push({ value: t.id, label: t.name || t.id, selected: t.id === current });
+                    }
+                } catch {}
+                return choices;
+            }},
         { key: 'disableHumanDeathSound', type: 'boolean' },
-        { key: 'enableWipOnDeath', type: 'boolean' },
         // Per-category table.
-        { type: 'table', label: 'Per-Category Settings',
-          tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
-                      'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
-          getTable: () => {
-            const modeChoices = (key) => {
-                const cur = game.settings.get(MODULE_ID, key);
-                return [
-                    { value: 'token', label: 'Token', selected: cur === 'token' },
-                    { value: 'tile', label: 'Tile', selected: cur === 'tile' },
-                ];
-            };
-            return {
-                columns: ['Category', 'Mode', 'Terrain'],
-                rows: [
-                    { label: 'Mech', cells: [
-                        { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
-                        { isBoolean: true, name: 'wreckTerrain_mech', checked: game.settings.get(MODULE_ID, 'wreckTerrain_mech') },
-                    ]},
-                    { label: 'Human / Pilot / Squad', cells: [
-                        { isSelect: true, name: 'wreckMode_human', choices: modeChoices('wreckMode_human') },
-                        { isBoolean: true, name: 'wreckTerrain_human', checked: game.settings.get(MODULE_ID, 'wreckTerrain_human') },
-                    ]},
-                    { label: 'Monstrosity', cells: [
-                        { isSelect: true, name: 'wreckMode_monstrosity', choices: modeChoices('wreckMode_monstrosity') },
-                        { isBoolean: true, name: 'wreckTerrain_monstrosity', checked: game.settings.get(MODULE_ID, 'wreckTerrain_monstrosity') },
-                    ]},
-                    { label: 'Biological', cells: [
-                        { isSelect: true, name: 'wreckMode_biological', choices: modeChoices('wreckMode_biological') },
-                        { isBoolean: true, name: 'wreckTerrain_biological', checked: game.settings.get(MODULE_ID, 'wreckTerrain_biological') },
-                    ]},
-                ],
-            };
-          },
+        { type: 'table',
+            label: 'Per-Category Settings',
+            tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
+                'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
+            getTable: () => {
+                const modeChoices = (key) => {
+                    const cur = game.settings.get(MODULE_ID, key);
+                    return [
+                        { value: 'token', label: 'Token', selected: cur === 'token' },
+                        { value: 'tile', label: 'Tile', selected: cur === 'tile' },
+                    ];
+                };
+                return {
+                    columns: ['Category', 'Mode', 'Terrain'],
+                    rows: [
+                        { label: 'Mech',
+                            cells: [
+                                { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
+                                { isBoolean: true, name: 'wreckTerrain_mech', checked: game.settings.get(MODULE_ID, 'wreckTerrain_mech') },
+                            ]},
+                        { label: 'Human / Pilot / Squad',
+                            cells: [
+                                { isSelect: true, name: 'wreckMode_human', choices: modeChoices('wreckMode_human') },
+                                { isBoolean: true, name: 'wreckTerrain_human', checked: game.settings.get(MODULE_ID, 'wreckTerrain_human') },
+                            ]},
+                        { label: 'Monstrosity',
+                            cells: [
+                                { isSelect: true, name: 'wreckMode_monstrosity', choices: modeChoices('wreckMode_monstrosity') },
+                                { isBoolean: true, name: 'wreckTerrain_monstrosity', checked: game.settings.get(MODULE_ID, 'wreckTerrain_monstrosity') },
+                            ]},
+                        { label: 'Biological',
+                            cells: [
+                                { isSelect: true, name: 'wreckMode_biological', choices: modeChoices('wreckMode_biological') },
+                                { isBoolean: true, name: 'wreckTerrain_biological', checked: game.settings.get(MODULE_ID, 'wreckTerrain_biological') },
+                            ]},
+                    ],
+                };
+            },
         },
     ],
 });
@@ -244,38 +254,39 @@ const TokenActionHudConfig = makeConfigForm({
         { key: 'tah.rangePreview', type: 'boolean' },
         { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
         // Aura settings table.
-        { type: 'table', label: 'Range Auras',
-          tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
-                      'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor',
-                      'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange',
-                      'tah.auraColorCustom', 'tah.auraOpacityCustom'],
-          getTable: () => {
-            const defaultChoices = (key) => {
-                const cur = game.settings.get(MODULE_ID, key);
-                return [
-                    { value: 'none', label: 'None', selected: cur === 'none' },
-                    { value: 'combat', label: 'Combat', selected: cur === 'combat' },
-                    { value: 'all', label: 'Always', selected: cur === 'all' },
-                ];
-            };
-            const makeRow = (label, colorKey, opacityKey, defaultKey) => ({
-                label,
-                cells: [
-                    { isColor: true, name: colorKey, value: game.settings.get(MODULE_ID, colorKey) },
-                    { isNumber: true, name: opacityKey, value: game.settings.get(MODULE_ID, opacityKey) },
-                    ...(defaultKey ? [{ isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) }] : [{ isEmpty: true }]),
-                ],
-            });
-            return {
-                columns: ['Aura', 'Color', 'Opacity', 'Default'],
-                rows: [
-                    makeRow('Threat', 'tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat'),
-                    makeRow('Sensor', 'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor'),
-                    makeRow('Weapon Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
-                    makeRow('Custom Measure', 'tah.auraColorCustom', 'tah.auraOpacityCustom', null),
-                ],
-            };
-          },
+        { type: 'table',
+            label: 'Range Auras',
+            tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
+                'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor',
+                'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange',
+                'tah.auraColorCustom', 'tah.auraOpacityCustom'],
+            getTable: () => {
+                const defaultChoices = (key) => {
+                    const cur = game.settings.get(MODULE_ID, key);
+                    return [
+                        { value: 'none', label: 'None', selected: cur === 'none' },
+                        { value: 'combat', label: 'Combat', selected: cur === 'combat' },
+                        { value: 'all', label: 'Always', selected: cur === 'all' },
+                    ];
+                };
+                const makeRow = (label, colorKey, opacityKey, defaultKey) => ({
+                    label,
+                    cells: [
+                        { isColor: true, name: colorKey, value: game.settings.get(MODULE_ID, colorKey) },
+                        { isNumber: true, name: opacityKey, value: game.settings.get(MODULE_ID, opacityKey) },
+                        ...(defaultKey ? [{ isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) }] : [{ isEmpty: true }]),
+                    ],
+                });
+                return {
+                    columns: ['Aura', 'Color', 'Opacity', 'Default'],
+                    rows: [
+                        makeRow('Threat', 'tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat'),
+                        makeRow('Sensor', 'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor'),
+                        makeRow('Weapon Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
+                        makeRow('Custom Measure', 'tah.auraColorCustom', 'tah.auraOpacityCustom', null),
+                    ],
+                };
+            },
         },
     ],
 });

@@ -19,7 +19,7 @@ function getBonusDetailStr(/** @type {any} */ b) {
     }
     if (b.type === 'target_modifier') {
         const labels = {
-            invisible: 'Invisible (50% miss)', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
+            invisible: 'Invisible (50% miss)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
             ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
             crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
         };

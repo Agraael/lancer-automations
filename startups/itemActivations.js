@@ -2189,6 +2189,78 @@ api.registerDefaultItemReactions({
     }
 });
 
+// ─── Lesser Sight (Veteran / Ranger) ─────────────────────────────────────────
+/** @type {ReactionGroup} */
+const lesserSightReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [
+        // ── R0: onInit — constant target_modifier bonus bypassing invisibility within 3 ──
+        {
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                if (!api || !token.actor)
+                    return;
+                const bonusId = `lesser-sight-no-invisible-${item.id}`;
+                const bonuses = api.getConstantBonuses(token.actor);
+                if (bonuses.some(b => b.id === bonusId))
+                    return;
+                await api.addConstantBonus(token.actor, {
+                    id: bonusId,
+                    name: "Lesser Sight",
+                    type: "target_modifier",
+                    subtype: "no_invisible",
+                    applyToCondition: (target, state, reactorToken) => {
+                        if (!reactorToken || !target?.target)
+                            return false;
+                        const api = game.modules.get('lancer-automations')?.api;
+                        if (!api)
+                            return false;
+                        if (api.getTokenDistance(reactorToken, target.target) > 3)
+                            return false;
+                        return target.target.actor?.effects?.some(e => e.statuses?.has('invisible'));
+                    }
+                });
+            }
+        },
+        // ── R1: onInitActivation — block Hide for hostile within range 3 ──────
+        {
+            triggers: ["onInitActivation"],
+            triggerSelf: false,
+            triggerOther: true,
+            autoActivate: true,
+            outOfCombat: true,
+            awaitActivationCompletion: true,
+            checkReaction: false,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                if (triggerData.actionName !== 'Hide')
+                    return false;
+                const token = triggerData.triggeringToken;
+                if (!token?.actor)
+                    return false;
+                if (!api.isHostile(reactorToken, token))
+                    return false;
+                return (triggerData.distanceToTrigger ?? Infinity) <= 3;
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken) {
+                triggerData.cancelAction(`Cannot Hide — within Lesser Sight of ${reactorToken.name}.`);
+            }
+        }
+    ]
+};
+
+api.registerDefaultItemReactions({
+    "npcf_lesser_sight_veteran": lesserSightReaction,
+    "npc-rebake_npcf_lesser_sight_veteran": lesserSightReaction,
+    "npcf_lesser_sight_ranger_maxt": lesserSightReaction
+});
+
 // ─── Limitless (Ultra / Veteran) — Overcharge (NPC) extra action ─────────────
 /** @type {ReactionGroup} */
 const limitlessOverchargeReaction = {
@@ -2288,6 +2360,177 @@ api.registerDefaultItemReactions({
             }
         }]
     }
+});
+
+// ─── Architect Sealant Blend ─────────────────────────────────────────────────
+api.registerDefaultItemReactions({
+    "cap_npc_architect_sealant_blend": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            // ── R0: onHit with Slurry Cannon — Hull save, Immobilized + Break Free action on fail ──
+            {
+                triggers: ["onHit"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken) {
+                    return triggerData.weapon?.system?.lid === "cap_npc_architect_slurry_cannon"
+                        && triggerData.triggeringToken?.id === reactorToken.id;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const targets = (triggerData.targets ?? [])
+                        .map(t => t.target)
+                        .filter(Boolean);
+
+                    for (const target of targets) {
+                        const saveResult = await api.executeStatRoll(
+                            target.actor, "HULL", "Sealant Blend \u2014 Hull Save", reactorToken,
+                            { sendToOwner: true,
+                                cardTitle: "SEALANT BLEND \u2014 HULL SAVE",
+                                cardDescription: `<b>${target.name}</b> must pass a Hull save or become Immobilized until they spend a Quick Action to Break Free.` }
+                        );
+                        if (!saveResult.completed || saveResult.passed)
+                            continue;
+
+                        await api.applyEffectsToTokens({
+                            tokens: [target],
+                            effectNames: ['immobilized'],
+                            note: "Sealant Blend",
+                            duration: { label: 'unlimited' }
+                        }, { sealantBlendSourceId: reactorToken.id });
+
+                        const ACTION_NAME = "Break Free (Sealant)";
+                        const alreadyHas = /** @type {any[]} */(api.getActorActions(target))
+                            .some(a => a.name === ACTION_NAME);
+                        if (!alreadyHas) {
+                            await api.addExtraActions(target.actor, {
+                                name: ACTION_NAME,
+                                activation: "Quick",
+                                detail: "Break free from the Sealant Blend immobilization."
+                            });
+                        }
+                    }
+                }
+            },
+            // ── R1: onStatusRemoved — cleanup Break Free action when last sealant immobilized ends ──
+            {
+                triggers: ["onStatusRemoved"],
+                triggerSelf: false,
+                triggerOther: true,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    if (triggerData.statusId !== 'immobilized')
+                        return false;
+                    return !!triggerData.effect?.flags?.['lancer-automations']?.sealantBlendSourceId;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const target = triggerData.triggeringToken;
+                    if (!target?.actor)
+                        return;
+                    const stillSealed = !!api.findEffectOnToken(target, e =>
+                        (e.statuses?.first() === 'immobilized' || e.name?.toLowerCase() === 'immobilized')
+                        && e.flags?.['lancer-automations']?.sealantBlendSourceId
+                        && e.id !== triggerData.effect?.id
+                    );
+                    if (!stillSealed) {
+                        await api.removeExtraActions(target.actor, "Break Free (Sealant)");
+                    }
+                }
+            }
+        ]
+    }
+});
+
+// ─── Architect Protector ─────────────────────────────────────────────────────
+api.registerDefaultItemReactions({
+    "cap_npc_architect_protector": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                if (!api || !token.actor)
+                    return;
+
+                // Apply Terrain Immunity status (covers difficult + dangerous terrain)
+                if (!token.actor.statuses?.has('terrain_immunity')) {
+                    await api.applyEffectsToTokens({
+                        tokens: [token],
+                        effectNames: ['terrain_immunity'],
+                        note: "Architect Protector",
+                        duration: { label: 'unlimited' }
+                    }, { architectProtectorSourceId: item.id });
+                }
+
+                // Apply Guardian status — the "Guardian Aura" general reaction draws the indicator
+                if (!token.actor.statuses?.has('guardian')) {
+                    await api.applyEffectsToTokens({
+                        tokens: [token],
+                        effectNames: ['guardian'],
+                        note: "Architect Protector",
+                        duration: { label: 'unlimited' }
+                    }, { architectProtectorSourceId: item.id });
+                }
+            }
+        }]
+    }
+});
+
+// ─── Guardian trait — applies the Guardian status on init ───────────────────
+/** @type {ReactionGroup} */
+const guardianTraitReaction = {
+    category: "NPC",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api) {
+            if (!api || !token.actor)
+                return;
+            if (token.actor.statuses?.has('guardian'))
+                return;
+            await api.applyEffectsToTokens({
+                tokens: [token],
+                effectNames: ['guardian'],
+                note: item.name,
+                duration: { label: 'unlimited' }
+            }, { guardianSourceItemId: item.id });
+        }
+    }]
+};
+
+api.registerDefaultItemReactions({
+    "npc-rebake_npcf_guardian_bastion": guardianTraitReaction,
+    "npc-rebake_npcf_guardian_sentinel": guardianTraitReaction,
+    "nrfaw-npc-rebake_npcf_guardian_spite": guardianTraitReaction,
+    "npc-rebake_npcf_guardian_aegis": guardianTraitReaction,
+    "npc-rebake_npcf_guardian_defender_grunt": guardianTraitReaction,
+    "npc-rebake_npcf_guardian_goliath": guardianTraitReaction,
+    "npc-rebake-npcf_guardian_barricade_cube": guardianTraitReaction,
+    "nrfaw-npc_npcf_guardian_spite": guardianTraitReaction,
+    "npcf_guardian_aegis": guardianTraitReaction,
+    "ubrg_npcf_guardian_blitzer": guardianTraitReaction,
+    "npcf_guardian_goliath": guardianTraitReaction,
+    "moff_guardian_fusillade": guardianTraitReaction,
+    "ubrg_npcf_guardian_apc": guardianTraitReaction,
+    "npcf_guardian_bastion": guardianTraitReaction,
+    "moff_guardian_knight": guardianTraitReaction,
+    "ubrg_npcf_guardian_bridgelayer": guardianTraitReaction,
+    "npcf_guardian_sentinel": guardianTraitReaction
 });
 
 // ─── Architect Citadel Combat Terraformer ───────────────────────────────────────
@@ -2991,5 +3234,87 @@ api.registerDefaultGeneralReactions({
                 effectNames: ['prone']
             });
         }
+    }
+});
+
+// ─── Break Free (Sealant) general reaction ─────────────────────────────────────
+api.registerDefaultGeneralReactions({
+    "Break Free (Sealant)": {
+        category: "NPC",
+        triggers: ["onActivation"],
+        actionType: "Quick Action",
+        onlyOnSourceMatch: true,
+        activationType: "code",
+        activationMode: "instead",
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const immEffects = /** @type {any[]} */(reactorToken.actor?.effects?.contents ?? [])
+                .filter(e => (e.statuses?.first() === 'immobilized' || e.name?.toLowerCase() === 'immobilized')
+                    && e.flags?.['lancer-automations']?.sealantBlendSourceId);
+            if (immEffects.length === 0) {
+                ui.notifications.warn(`${reactorToken.name} has no Sealant Blend immobilization to break free from.`);
+                return;
+            }
+            for (const e of immEffects) {
+                await e.delete();
+            }
+            ui.notifications.info(`${reactorToken.name} breaks free from the Sealant Blend!`);
+        }
+    }
+});
+
+// ─── Guardian Aura — draws/removes hard-cover indicator when the Guardian status toggles ──
+api.registerDefaultGeneralReactions({
+    "Guardian Aura": {
+        category: "Automation",
+        reactions: [
+            {
+                triggers: ["onStatusApplied"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'guardian';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    if (api.findAura(reactorToken, "Guardian"))
+                        return;
+                    await api.createAura(reactorToken, {
+                        name: "Guardian",
+                        unified: false,
+                        radius: "0",
+                        lineWidth: 6,
+                        lineColor: "#000000",
+                        lineOpacity: 0.8,
+                        lineDashSize: 15,
+                        lineGapSize: 10,
+                        fillType: 0,
+                        animation: false,
+                        nonOwnerVisibility: { default: true }
+                    });
+                }
+            },
+            {
+                triggers: ["onStatusRemoved"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'guardian';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    await api.deleteAuras(reactorToken, a => a.name === "Guardian");
+                }
+            }
+        ]
     }
 });

@@ -11,6 +11,76 @@ import { stringToAsyncFunction } from "./reaction-manager.js";
  */
 const serializedConditionCache = new Map();
 
+/**
+ * Session cache for compiled `applyToCondition` lambdas on target_modifier bonuses.
+ * Per-target gate (vs `condition` which gates the whole bonus).
+ * Lambda receives `(target, state, reactorToken)` and must return a boolean synchronously.
+ * Source strings live under `@@fn:` in actor flags like regular `condition` lambdas.
+ */
+const applyToConditionCache = new Map();
+
+/**
+ * Compile a `@@fn:` lambda source into a cached Function. Shared by `condition` and `applyToCondition`.
+ * @param {string} src  the body after the `@@fn:` prefix
+ * @param {Map<string, Function>} cache
+ * @param {string[]} argNames
+ * @param {string} preamble  JS source inserted before the return; typically defines `api` / `reactorToken`
+ * @returns {Function}
+ */
+function compileCachedLambda(src, cache, argNames, preamble) {
+    let fn = cache.get(src);
+    if (!fn) {
+        fn = new Function(...argNames, `${preamble}return(${src})(${argNames.join(',')});`);
+        cache.set(src, fn);
+    }
+    return fn;
+}
+
+/**
+ * Resolve the reactor token for a bonus. Prefers `bonus.context.ownerTokenId`, falls back to
+ * `state.actor`'s first active token. Used to provide `reactorToken` inside condition lambdas.
+ */
+function resolveReactorToken(bonus, state) {
+    const ownerTokenId = bonus?.context?.ownerTokenId;
+    if (ownerTokenId) {
+        return canvas.tokens.get(ownerTokenId) ?? canvas.tokens.placeables.find(t => t.id === ownerTokenId) ?? null;
+    }
+    return state?.actor?.getActiveTokens?.()?.[0] ?? null;
+}
+
+/**
+ * Evaluate `mod.applyToCondition` against one HUD target entry. Returns true if no condition is set.
+ * Lambda must be synchronous and return a boolean.
+ */
+function evaluateApplyToCondition(mod, targetEntry, state, reactorToken) {
+    if (!mod.applyToCondition)
+        return true;
+    try {
+        let fn;
+        if (typeof mod.applyToCondition === 'function') {
+            fn = mod.applyToCondition;
+        } else if (typeof mod.applyToCondition === 'string' && mod.applyToCondition.startsWith('@@fn:')) {
+            fn = compileCachedLambda(
+                mod.applyToCondition.slice('@@fn:'.length),
+                applyToConditionCache,
+                ['target', 'state', 'reactorToken'],
+                `const api=game.modules.get('lancer-automations')?.api;`
+            );
+        } else {
+            return true;
+        }
+        const result = fn(targetEntry, state, reactorToken);
+        if (result instanceof Promise) {
+            console.error(`lancer-automations | applyToCondition for "${mod.name || mod.id}" is async. Must be synchronous.`);
+            return false;
+        }
+        return !!result;
+    } catch (e) {
+        console.warn("lancer-automations | applyToCondition evaluation failed:", e);
+        return false;
+    }
+}
+
 // Current resource stats use direct actor.update() instead of ActiveEffect changes,
 // because AE changes get re-applied on every data refresh (breaking consumable resources like overshield).
 const CURRENT_RESOURCE_STATS = new Set([
@@ -295,6 +365,7 @@ function createGenericBonusStep(flowType) {
             // Apply a single target modifier to a single target
             const applyOneModifier = (t, mod) => {
                 if (mod.subtype === 'invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 1;
+                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 0;
                 else if (mod.subtype === 'no_cover') t.cover = 0;
                 else if (mod.subtype === 'soft_cover') t.cover = Math.max(t.cover || 0, 1);
                 else if (mod.subtype === 'hard_cover') t.cover = 2;
@@ -308,9 +379,13 @@ function createGenericBonusStep(flowType) {
                         if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0) {
                             if (!mod.applyTo.includes(t.target?.id)) continue;
                         }
+                        if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
+                            continue;
                         // Attack card modifiers (acc_diff targets)
                         if (mod.subtype === 'invisible' && t.plugins?.invisibility) {
                             t.plugins.invisibility.data = 1;
+                        } else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) {
+                            t.plugins.invisibility.data = 0;
                         } else if (mod.subtype === 'no_cover') {
                             t.cover = 0;
                         } else if (mod.subtype === 'soft_cover') {
@@ -361,6 +436,7 @@ function createGenericBonusStep(flowType) {
                     for (const t of targets) {
                         for (const mod of dmgMods) {
                             if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id)) continue;
+                            if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state))) continue;
                             if (mod.subtype === 'ap') t.ap = true;
                             else if (mod.subtype === 'half_damage') t.halfDamage = true;
                             else if (mod.subtype === 'paracausal') t.paracausal = true;
@@ -448,17 +524,17 @@ function createGenericBonusStep(flowType) {
             }
 
             // Inject target modifier toggles into the attack HUD
-            const attackModSubtypes = new Set(['invisible', 'no_cover', 'soft_cover', 'hard_cover']);
+            const attackModSubtypes = new Set(['invisible', 'no_invisible', 'no_cover', 'soft_cover', 'hard_cover']);
             const attackMods = r.targetModifiers.filter(m => attackModSubtypes.has(m.subtype));
             if (attackMods.length > 0 && flowType !== 'damage') {
-                const modLabels = { invisible: 'Invisible (*)', no_cover: 'No Cover', soft_cover: 'Soft Cover (+1)', hard_cover: 'Hard Cover (+2)' };
+                const modLabels = { invisible: 'Invisible (*)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover (+1)', hard_cover: 'Hard Cover (+2)' };
                 const modEnabled = new Map(attackMods.map(m => [m.id || m.subtype, true]));
                 // Save originals per target for restore on uncheck
                 const originals = new Map();
                 for (const t of (state.data.acc_diff?.targets || [])) {
                     for (const mod of attackMods) {
                         const key = `${t.target?.id}::${mod.subtype}`;
-                        if (mod.subtype === 'invisible' && t.plugins?.invisibility) originals.set(key, t.plugins.invisibility.data);
+                        if ((mod.subtype === 'invisible' || mod.subtype === 'no_invisible') && t.plugins?.invisibility) originals.set(key, t.plugins.invisibility.data);
                         else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype)) originals.set(key, t.cover);
                     }
                 }
@@ -487,13 +563,16 @@ function createGenericBonusStep(flowType) {
                     const onToggle = (mod, on) => {
                         const mKey = mod.id || mod.subtype;
                         modEnabled.set(mKey, on);
+                        const reactorToken = resolveReactorToken(mod, state);
                         for (const t of (state.data.acc_diff?.targets || [])) {
                             if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id)) continue;
+                            if (!evaluateApplyToCondition(mod, t, state, reactorToken)) continue;
                             if (on) {
                                 applyOneModifier(t, mod);
                             } else {
                                 const oKey = `${t.target?.id}::${mod.subtype}`;
                                 if (mod.subtype === 'invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 0;
+                                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = originals.get(oKey) ?? 0;
                                 else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype)) t.cover = originals.get(oKey) ?? 0;
                             }
                         }
@@ -805,19 +884,14 @@ export function isBonusApplicable(bonus, flowTags, state) {
                 result = bonus.condition(state, state.actor, state.data, context);
             } else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
                 if (bonus.condition.startsWith('@@fn:')) {
-                    const src = bonus.condition.slice('@@fn:'.length);
-                    let fn = serializedConditionCache.get(src);
-                    if (!fn) {
-                        fn = new Function('state', 'actor', 'data', 'context',
-                            `const api=game.modules.get('lancer-automations')?.api;` +
-                            `const ownerTokenId=context?.ownerTokenId;` +
-                            `const reactorToken=ownerTokenId` +
-                            `?canvas.tokens.get(ownerTokenId)??canvas.tokens.placeables.find(t=>t.id===ownerTokenId)` +
-                            `:null;` +
-                            `return(${src})(state,actor,data,context);`
-                        );
-                        serializedConditionCache.set(src, fn);
-                    }
+                    const fn = compileCachedLambda(
+                        bonus.condition.slice('@@fn:'.length),
+                        serializedConditionCache,
+                        ['state', 'actor', 'data', 'context'],
+                        `const api=game.modules.get('lancer-automations')?.api;` +
+                        `const ownerTokenId=context?.ownerTokenId;` +
+                        `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??canvas.tokens.placeables.find(t=>t.id===ownerTokenId):null;`
+                    );
                     result = fn(state, state.actor, state.data, context);
                 } else {
                     const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
@@ -1857,15 +1931,21 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
     if (typeof bonusData.condition === 'function') {
         bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
     }
+    if (typeof bonusData.applyToCondition === 'function') {
+        bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
+    }
 
     // Also handle lambda conditions on sub-bonuses (multi type)
     if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses)) {
         bonusData = {
             ...bonusData,
             bonuses: bonusData.bonuses.map(sub => {
-                if (typeof sub.condition !== 'function')
-                    return sub;
-                return { ...sub, condition: '@@fn:' + sub.condition.toString() };
+                let out = sub;
+                if (typeof sub.condition === 'function')
+                    out = { ...out, condition: '@@fn:' + sub.condition.toString() };
+                if (typeof sub.applyToCondition === 'function')
+                    out = { ...out, applyToCondition: '@@fn:' + sub.applyToCondition.toString() };
+                return out;
             })
         };
     }
@@ -2141,6 +2221,9 @@ export async function addConstantBonus(actor, bonusData) {
     // If condition is a function, serialize its source into the condition field so it survives reloads.
     if (typeof bonusData.condition === 'function') {
         bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
+    }
+    if (typeof bonusData.applyToCondition === 'function') {
+        bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
     }
 
     const existingIndex = bonuses.findIndex(b => b.id === bonusData.id);

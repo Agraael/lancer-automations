@@ -1508,7 +1508,7 @@ export class ReactionEditor extends FormApplication {
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger }",
             onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, showCard, userIdControl), modifyHeatChange(newValue), distanceToTrigger }",
             onHeatLoss: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger }",
-            onKnockback: "{ triggeringToken, range, pushedActors: [Actor], actionName, item, distanceToTrigger }",
+            onInvoluntaryMove: "{ triggeringToken, token, distance, actionName, item, destination: {x,y}, cancel(reason), distanceToTrigger }",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger }",
             onUpdate: "{ triggeringToken, document, change, options }",
             onEnterCombat: "{ triggeringToken, distanceToTrigger }",
@@ -1662,7 +1662,7 @@ export class ReactionEditor extends FormApplication {
         const sourceMatchTriggers = new Set([
             'onAttack', 'onHit', 'onMiss', 'onDamage',
             'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
-            'onInitAttack', 'onInitTechAttack', 'onKnockback', 'onDeploy'
+            'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy'
         ]);
 
         const toggleSourceMatchTriggers = () => {
@@ -2419,7 +2419,7 @@ export class ReactionEditor extends FormApplication {
     _getTriggerOptions(selected) {
         const groups = [
             { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd"] },
-            { label: "Movement", triggers: ["onPreMove", "onMove", "onKnockback"] },
+            { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
             { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onDamage"] },
             { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
             { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitCheck", "onCheck", "onDeploy"] },

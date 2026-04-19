@@ -1,10 +1,86 @@
-/* global CONST, console, game, canvas, loadTexture, FilePicker, TokenMagic, Sequence, foundry */
+/* global CONST, Hooks, console, game, canvas, loadTexture, FilePicker, TokenMagic, Sequence, foundry */
 
 const MODULE_ID = 'lancer-automations';
 
 function log(...args) {
     console.log(`${MODULE_ID} | wreck |`, ...args);
 }
+
+// ---------------------------------------------------------------------------
+// StructureFlow tracking — deletes must wait for the flow to finish or Lancer
+// will hit "undefined id ... does not exist in the EmbeddedCollection" when
+// downstream flow steps (printStructureCard, etc.) call fromUuid on the token.
+// ---------------------------------------------------------------------------
+
+const _activeStructureFlows = new Map(); // actorUuid -> { promise, resolve }
+
+Hooks.on('lancer.preFlow.StructureFlow', (flow) => {
+    const uuid = flow?.state?.actor?.uuid;
+    if (!uuid) return;
+    let resolve;
+    const promise = new Promise(r => { resolve = r; });
+    _activeStructureFlows.set(uuid, { promise, resolve });
+});
+
+Hooks.on('lancer.postFlow.StructureFlow', (flow) => {
+    const uuid = flow?.state?.actor?.uuid;
+    if (!uuid) return;
+    const entry = _activeStructureFlows.get(uuid);
+    if (entry) {
+        entry.resolve();
+        _activeStructureFlows.delete(uuid);
+    }
+});
+
+async function waitForStructureFlow(actorUuid, timeoutMs = 3000) {
+    const entry = _activeStructureFlows.get(actorUuid);
+    if (!entry) return;
+    await Promise.race([
+        entry.promise,
+        new Promise(r => setTimeout(r, timeoutMs)),
+    ]);
+}
+
+// Stop LWFX from playing the stock mech crush sound on the killing blow,
+// our wreck FX already covers that.
+let _lwfxStructWrapped = false;
+
+function _shouldSuppressLwfxStructure(flow) {
+    if (!game.settings.get(MODULE_ID, 'enableWrecks')) return false;
+    return flow?.state?.data?.remStruct === 0;
+}
+
+function _wrapLwfxStructureHook() {
+    const hookName = 'lancer.postFlow.StructureFlow';
+    const listeners = Hooks.events?.[hookName];
+    if (!Array.isArray(listeners) || listeners.length === 0) return false;
+    const lwfxEntry = listeners.find(e => {
+        try { return /_isTriggerOnAbortedFlow/.test(e?.fn?.toString?.() ?? ''); }
+        catch { return false; }
+    });
+    if (!lwfxEntry) return false;
+    const originalFn = lwfxEntry.fn;
+    Hooks.off(hookName, lwfxEntry.id);
+    Hooks.on(hookName, async (flow, isContinue) => {
+        if (_shouldSuppressLwfxStructure(flow)) {
+            log(`Skipping LWFX structure FX, wreck is handling it (${flow?.state?.actor?.name ?? '?'})`);
+            return;
+        }
+        return originalFn(flow, isContinue);
+    });
+    log('LWFX StructureFlow hook wrapped');
+    return true;
+}
+
+Hooks.once('ready', () => {
+    if (!game.settings.get(MODULE_ID, 'enableWrecks')) return;
+    if (!game.modules.get('lancer-weapon-fx')?.active) return;
+    // Wait a tick so LWFX has finished registering its hook.
+    setTimeout(() => {
+        if (_lwfxStructWrapped) return;
+        _lwfxStructWrapped = _wrapLwfxStructureHook();
+    }, 0);
+});
 
 // Macro effect throttle
 let _macroThrottle = 0;
@@ -216,7 +292,8 @@ export async function updateStructure(token) {
     const structure = token.actor.system.structure.value;
     if (structure <= 0) {
         response = `${token.name} structure is zero or less.`;
-        if (game.settings.get(MODULE_ID, 'enableWipOnDeath')) {
+        const statusFXConfig = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+        if (statusFXConfig.removeStatusesOnDeath) {
             log(`${token.name} is dead, removing statuses.`);
             await token.actor.deleteEmbeddedDocuments('ActiveEffect', token.actor.effects.map(e => e.id));
         }
@@ -293,7 +370,7 @@ async function wreckIt(token) {
             .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
             .effect().file(effString).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
                 .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
-            .thenDo(() => {
+            .thenDo(async () => {
                 const gridSize = canvas.scene.grid.size;
                 const newWidth = token.document.width * gridSize * wreckScale;
                 const newHeight = token.document.height * gridSize * wreckScale;
@@ -307,6 +384,7 @@ async function wreckIt(token) {
                     }]);
                 }
                 if (shouldSpawnTerrain) spawnDifficultTerrain(token);
+                await waitForStructureFlow(token.actor?.uuid);
                 token.document.delete();
             })
             .play();
@@ -367,6 +445,7 @@ async function wreckIt(token) {
                         }
                     }
                     if (shouldSpawnTerrain) spawnDifficultTerrain(token);
+                    await waitForStructureFlow(token.actor?.uuid);
                     token.document.delete();
                 } catch (e) {
                     console.error(`${MODULE_ID} | wreckIt error:`, e);

@@ -81,6 +81,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerDescription: "A hostile character starts any movement inside one of your weapons' THREAT",
                 effectDescription: "Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move",
                 isReaction: true,
+                triggerOther: true,
                 actionType: "Reaction",
                 outOfCombat: true,
                 frequency: "Other",

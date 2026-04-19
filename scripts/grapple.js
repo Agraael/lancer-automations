@@ -351,9 +351,10 @@ Hooks.on('lancer-automations.ready', (api) => {
                 },
 
                 {
-                    triggers: ["onKnockback"],
-                    comments: "Knockback ends the grapple",
-                    triggerSelf: false,
+                    triggers: ["onInvoluntaryMove"],
+                    comments: "Involuntary move (e.g. knockback) ends the grapple",
+                    triggerSelf: true,
+                    triggerOther: true,
                     autoActivate: true,
                     isReaction: false,
                     checkReaction: false,
@@ -366,7 +367,7 @@ Hooks.on('lancer-automations.ready', (api) => {
                         const state = getGrappleState(reactorToken);
                         if (!state.grapplerIds?.length && !state.grappledIds?.length)
                             return false;
-                        return triggerData.pushedActors?.some(a => a.id === reactorToken.actor?.id) ?? false;
+                        return triggerData.token?.id === reactorToken.id;
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken) {
                         await cancelGrappleForToken(api, reactorToken);

@@ -4,6 +4,7 @@
 
 | File | Contents |
 |------|----------|
+| **[AUTOMATION_SYSTEM.md](AUTOMATION_SYSTEM.md)** | How the automation engine works: trigger lifecycle, filters, callbacks, activation modes, sockets, cancel/modify, flow injection, registration, caches |
 | **[API_COMBAT.md](API_COMBAT.md)** | Combat flows, spatial/distance tools, weapon/item details, resource management |
 | **[API_EFFECTS.md](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
 | **[API_INTERACTIVE.md](API_INTERACTIVE.md)** | Token picker, zones, knockback, movement, choice cards, deployment, thrown weapons, movement tracking |
@@ -113,8 +114,10 @@ Fires *before* movement is finalized. Allows interception.
         }
     }
     ```
-- **`onKnockback`**: Fires after knockback moves are applied. `{ triggeringToken, range, pushedActors: Actor[], actionName, item }`.
-  - `actionName` and `item` are set when `knockBackToken()` is called with those options — enables `onlyOnSourceMatch` matching (e.g. a reaction named `"Grapple"` with `triggers: ["onKnockback"]` and `onlyOnSourceMatch: true` will only fire for grapple-triggered knockbacks).
+- **`onInvoluntaryMove`**: Fires **before** each involuntary per-token move (e.g. knockback, forced reposition) and is **cancellable**. Data: `{ triggeringToken, token, distance, actionName, item, destination: { x, y }, cancel(reason?) }`.
+  - `cancel(reason?)` synchronously skips this specific token's move; other tokens in the batch still proceed.
+  - Does **not** fire when `knockBackToken()` is called with `{ asVoluntary: true }` — in that mode the move goes through `onPreMove`/`onMove` like a regular drag.
+  - `actionName` and `item` are passed from the caller (e.g. `"Grapple"`) — enables `onlyOnSourceMatch` matching.
 
 </details>
 

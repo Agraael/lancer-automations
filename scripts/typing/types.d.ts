@@ -130,12 +130,14 @@ interface TriggerDataOnPreMove extends TriggerDataBase {
     changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, showCard?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
 }
 
-interface TriggerDataOnKnockback extends TriggerDataBase {
+interface TriggerDataOnInvoluntaryMove extends TriggerDataBase {
     triggeringToken: Token;
-    range: number;
-    pushedActors: any[];
+    token: Token;
+    distance: number;
     actionName: string;
     item: any;
+    destination: { x: number; y: number };
+    cancel: (reason?: string) => void;
     distanceToTrigger: number | null;
 }
 
@@ -358,7 +360,7 @@ interface TriggerDataOnExitCombat extends TriggerDataBase { triggeringToken: Tok
 type TriggerData =
     | TriggerDataOnMove
     | TriggerDataOnPreMove
-    | TriggerDataOnKnockback
+    | TriggerDataOnInvoluntaryMove
     | TriggerDataOnDamage
     | TriggerDataOnAttack
     | TriggerDataOnHit
@@ -391,7 +393,7 @@ type TriggerData =
 
 type TriggerType =
     | "onMove" | "onPreMove"
-    | "onKnockback"
+    | "onInvoluntaryMove"
     | "onDamage"
     | "onHit" | "onMiss"
     | "onAttack"
@@ -509,6 +511,7 @@ interface LancerAutomationsAPI {
         condition?: string | Function;
         itemLids?: string[];
         applyTo?: string[];
+        applyToCondition?: string | Function;
         damage?: Array<{ type: string; val: any }>;
         [key: string]: any;
     }, options?: {
@@ -571,7 +574,7 @@ interface LancerAutomationsAPI {
         noCard?: boolean;
     }): Promise<any>;
     knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any }): Promise<any>;
-    applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any): Promise<void>;
+    applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any, options?: { asVoluntary?: boolean }): Promise<void>;
     startChoiceCard(options?: {
         mode?: "or" | "and" | "vote" | "vote-hidden";
         choices?: Array<{ text: string; icon?: string; callback?: (data: any) => any; data?: any;[key: string]: any }>;
@@ -681,7 +684,7 @@ interface LancerAutomationsAPI {
     removeItemTag(item: any, tagId: string): Promise<any>;
 
     // ── AurasAPI ──────────────────────────────────────────────────────────────
-    createAura(owner: Token | any, auraConfig: object): Promise<any>;
+    createAura(owner: Token | TokenDocument | Item | any, auraConfig: object): Promise<any>;
     deleteAuras(owner: Token | any, filter: string | object, options?: object): Promise<void>;
 
     // ── ScanAPI ───────────────────────────────────────────────────────────────

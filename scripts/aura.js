@@ -55,6 +55,8 @@ export class LAAuras {
     /**
      * Wrapper for Grid-Aware Auras `createAura`.
      * Intercepts `function` definitions in `macros` and converts them to virtual macro IDs.
+     * Accepts Token / TokenDocument / Item owners — for Item owners, the context actor is
+     * resolved from `item.parent` and the active token (or prototypeToken) provides name/disposition.
      */
     static async createAura(owner, auraConfig) {
         const gaa = game.modules.get("grid-aware-auras");
@@ -69,19 +71,30 @@ export class LAAuras {
 
         let configToPass = foundry.utils.deepClone(auraConfig);
 
-        const tokenDoc = owner.document ?? owner;
-        if (tokenDoc?.actor) {
-            const actor = tokenDoc.actor;
-            const hasReaction = hasReactionAvailable(actor);
+        // Resolve context actor + token-like doc (for disposition/name) regardless of owner type
+        let contextActor = null;
+        let contextTokenDoc = null;
+        if (owner instanceof Item) {
+            contextActor = owner.parent instanceof Actor ? owner.parent : null;
+            contextTokenDoc = contextActor?.getActiveTokens?.()?.[0]?.document
+                ?? contextActor?.prototypeToken
+                ?? null;
+        } else {
+            contextTokenDoc = owner.document ?? owner;
+            contextActor = contextTokenDoc?.actor ?? null;
+        }
+
+        if (contextActor && contextTokenDoc) {
+            const hasReaction = hasReactionAvailable(contextActor);
             const tokenFactionsApi = game.modules.get("token-factions")?.api;
 
             let resolvedColor = "#ffffff";
             if (tokenFactionsApi && hasReaction) {
-                const color = await tokenFactionsApi.retrieveBorderFactionsColorFromToken(tokenDoc.name);
+                const color = await tokenFactionsApi.retrieveBorderFactionsColorFromToken(contextTokenDoc.name);
                 if (color)
                     resolvedColor = color;
-            } else if (actor.folder?.color && hasReaction) {
-                resolvedColor = actor.folder.color;
+            } else if (contextActor.folder?.color && hasReaction) {
+                resolvedColor = contextActor.folder.color;
             }
 
             const fillTexture = game.modules.get("templatemacro")?.active
@@ -115,7 +128,7 @@ export class LAAuras {
                     default: true,
                 },
                 nonOwnerVisibility: {
-                    default: tokenDoc.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY,
+                    default: contextTokenDoc.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY,
                 }
             };
 

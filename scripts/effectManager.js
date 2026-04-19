@@ -996,6 +996,7 @@ export async function executeEffectManager(options = {}) {
                     <label>Target Modifier:</label>
                     <select id="bonus-target-modifier-subtype">
                         <option value="invisible">Invisible (50% miss)</option>
+                        <option value="no_invisible">Not Invisible (ignore 50% miss)</option>
                         <option value="no_cover">No Cover</option>
                         <option value="soft_cover">Soft Cover</option>
                         <option value="hard_cover">Hard Cover</option>
@@ -1332,7 +1333,7 @@ export async function executeEffectManager(options = {}) {
                 }
                 if (subB.type === 'target_modifier') {
                     const labels = {
-                        invisible: 'Invisible (50% miss)', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
+                        invisible: 'Invisible (50% miss)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
                         ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
                         crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
                     };

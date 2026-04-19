@@ -150,9 +150,10 @@ Interactive knockback tool. Shows visual movement traces and requires confirmati
 |:------|:-----|:--------|:------------|
 | <kbd>title</kbd> | `string` | `"KNOCKBACK"` | Card header |
 | <kbd>description</kbd> | `string` | `"Select destination for each token."` | Card description |
-| <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the knockback (for `onKnockback` trigger) |
+| <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
 | <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
 | <kbd>item</kbd> | `Item` | `null` | Source item |
+| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire; no `onInvoluntaryMove`). If false (default), moves are involuntary and fire `onInvoluntaryMove` before each move. |
 
 </details>
 

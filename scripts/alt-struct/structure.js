@@ -94,6 +94,8 @@ async function createDirectHitRoll(damage) {
  * from csm-lancer-qol. Injected before preStructureRollChecks in StructureFlow.
  */
 export async function npcOneStructStep(state) {
+    if (!game.settings.get("lancer-automations", "enableOneStructNpc"))
+        return true;
     const actor = state.actor;
     if (!actor?.is_npc() || actor.system.structure.max !== 1)
         return true;
