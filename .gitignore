@@ -14,3 +14,4 @@ Thumbs.db
 *.user
 
 .vtt_ignore
+release-diff.sh
