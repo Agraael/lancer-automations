@@ -58,6 +58,14 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.auraUseAltKey', {
+        name: 'Aura: THT Ruler on Alt Press & Targeted',
+        hint: "Show Terrain Height Tools rulers on auras only while Alt is held and tokens are targeted. Requires the grid-aware-auras fork (see lancer-automations README).",
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
     game.settings.register(MODULE, 'tah.showDisposition', {
         name: 'Show Team / Disposition Indicator',
         hint: 'Colored stripe on the title bar. Shows team name if Token Factions advanced teams is active, otherwise shows disposition.',

@@ -46,8 +46,31 @@ const RANGE_PREVIEW_TEMPLATE = {
     },
     effects: [],
     macros: [],
-    terrainHeightTools: { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true }
+    terrainHeightTools: getTHTConfig(),
 };
+
+function hasGAAFork() {
+    const mod = game.modules.get('grid-aware-auras');
+    if (!mod) return false;
+    const url = /** @type {any} */ (mod).url ?? '';
+    const version = /** @type {any} */ (mod).version ?? '';
+    return (typeof url === 'string' && url.includes('Agraael'))
+        || (typeof version === 'string' && version.split('.').length >= 4);
+}
+
+let _warnedMissingFork = false;
+function getTHTConfig() {
+    let useAlt = false;
+    try { useAlt = !!game.settings.get('lancer-automations', 'tah.auraUseAltKey'); } catch { /* settings not ready */ }
+    if (useAlt && !hasGAAFork()) {
+        if (!_warnedMissingFork) {
+            _warnedMissingFork = true;
+            ui.notifications.warn("TAH: 'Aura THT Ruler on Alt Press' requires the grid-aware-auras fork — THT rulers disabled.");
+        }
+        return { rulerOnDrag: "NONE", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true };
+    }
+    return { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: useAlt, onlyWhenTargeted: useAlt };
+}
 
 function hasGAA() {
     return !!game.modules.get('grid-aware-auras')?.active;
@@ -321,7 +344,7 @@ function _buildPersistentTemplate(auraName) {
         },
         effects: [],
         macros: [],
-        terrainHeightTools: { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true }
+        terrainHeightTools: getTHTConfig()
     };
 }
 

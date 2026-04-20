@@ -19,8 +19,9 @@ For trigger payload schemas, see [API_REFERENCE.md](API_REFERENCE.md). For API s
 - [9. Cancel and Modify (Timing-Sensitive Triggers)](#9-cancel-and-modify-timing-sensitive-triggers)
 - [10. Reaction Economy and Frequency](#10-reaction-economy-and-frequency)
 - [11. Flow Data Injection](#11-flow-data-injection)
-- [12. Registration Paths](#12-registration-paths)
-- [13. Caches and Invalidation](#13-caches-and-invalidation)
+- [12. Item Paths, Extra Actions, Activated Items](#12-item-paths-extra-actions-activated-items)
+- [13. Registration Paths](#13-registration-paths)
+- [14. Caches and Invalidation](#14-caches-and-invalidation)
 
 ---
 
@@ -406,7 +407,87 @@ Use this when you need a bonus to apply *exactly to this one roll/attack/damage 
 
 ---
 
-## 12. Registration Paths
+## 12. Item Paths, Extra Actions, Activated Items
+
+Three related mechanisms for binding reactions to sub-parts of an item and for tracking whether an item is currently "on".
+
+### Action path
+
+An activation config can target a specific sub-action of an item instead of the item as a whole. The field is stored as `reactionPath` on disk (legacy name from when the system only handled reactions). In the UI and in this doc it is called **action path**.
+
+Common forms:
+
+- `"system.actions.0"` - the first action on a regular item
+- `"extraActions.Fall Prone"` - an extra action stored on the item via `addExtraActions`
+- `"ranks[2]"` - rank-3 of a talent
+
+At evaluation time the engine walks the path into `item.system` (or the `extraActions` flag), pulls the `name` off the action found there, and uses it as `activationName`. If `onlyOnSourceMatch` is set, the activation only fires when the triggering action's name matches the one at the path.
+
+This is how one item can have multiple independent activations (different sub-actions, different talent ranks) without colliding.
+
+**Finding the right path.** The item finder inside the Activation Manager lists every action on the selected item next to its action path, so there is no need to guess the index or dig through the item's schema.
+
+### Extra actions
+
+API: `addExtraActions`, `getItemActions`, `getActorActions`, `removeExtraActions` (all on `InteractiveAPI`).
+
+Adds action objects (name, activation type, description, tags, etc.) onto an item, token, or actor via flags. Two storage locations:
+- Passed an item: stored in the item's `extraActions` flag. Merged into the item's action list by `getItemActions`.
+- Passed a token or actor: stored on the actor. Returned by `getActorActions`.
+
+Typical uses: Sniper's Mark adds a "Fall Prone" action; Limitless adds "Overcharge (NPC)"; Defense Net adds "Collapse the Defense Net" while it's active.
+
+`activation` field must use TAH's short form (`"Quick"`, `"Full"`, `"Protocol"`, `"Free"`, `"Reaction"`, `"Quick Tech"`, `"Full Tech"`). Not `"Quick Action"` etc. TAH filters by strict equality.
+
+**Binding an activation to an extra action.** There are two ways, picked based on where the extra action was stored:
+
+- **By general name** - when the extra action is injected onto a token or actor (not tied to a specific item), register a *general* activation whose name matches the action name. Source matching is done on the activation name directly.
+- **By action path** - when the extra action is injected onto an item, register an *item* activation with `reactionPath: "extraActions.<Name>"`. The engine resolves the sub-action through the flag lookup the same way it walks `system.actions.N`.
+
+**Access.** Extra actions are currently only surfaced through the Lancer Automations TAH. Other UIs (the native Lancer sheet, the native action bar, etc.) do not show them. If the TAH is disabled, extra actions are invisible to the user even though they still fire when triggered from code.
+
+### Activated items lifecycle
+
+For items that stay "on" after being activated (auras, persistent effects, stances), the engine tracks an activated state per token.
+
+- `setItemAsActivated(item, token, endActivation, endActionDescription)` marks the item as active. Adds an extra action (the "end action") with the given activation type and description, e.g. `"Protocol"` and `"Collapse the Defense Net"`. That action shows up in the TAH so the user can click to end.
+- `getActivatedItems(token)` returns the currently-active items on a token. Use in `evaluate` to gate other reactions behind "only while this item is on".
+- `endItemActivation(item, token)` clears the state directly from code. Also removes the end-action.
+
+### How the three combine
+
+When the end action fires, it goes through the same activation flow as any action on the item. That means `onActivation` fires **again**, but this time with `triggerData.endActivation === true`. A single reaction can handle both setup and teardown by checking that flag:
+
+```js
+activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+    if (triggerData.endActivation) {
+        await teardownEffect(reactorToken, item, api);
+        return;
+    }
+    // First activation: set everything up
+    await setupEffect(reactorToken, item, api);
+    await api.setItemAsActivated(item, reactorToken, "Protocol", "Collapse the Defense Net");
+}
+```
+
+Other triggers on the same item can gate themselves by checking `getActivatedItems`:
+
+```js
+evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+    if (!api.getActivatedItems(reactorToken)?.some(i => i.id === item.id))
+        return false;
+    // item is on, proceed
+    ...
+}
+```
+
+Forced teardown from a separate trigger (e.g. the wearer gets stunned and the field collapses) calls `endItemActivation` directly, or calls the teardown helper and then `endItemActivation` to clean up the end-action row.
+
+Defense Net in `startups/itemActivations.js` is the reference implementation (`onActivation` for setup + `endActivation` teardown, `onStatusApplied` with `getActivatedItems` to force-collapse when stunned/jammed, `onHeatGain` / `onTechMiss` reactions gated by `getActivatedItems`).
+
+---
+
+## 13. Registration Paths
 
 There are four ways to register an activation. They all end up in the same dispatcher.
 
@@ -459,7 +540,7 @@ For a given key (LID or general name), the resolution order is roughly: **user U
 
 ---
 
-## 13. Caches and Invalidation
+## 14. Caches and Invalidation
 
 The engine caches:
 
