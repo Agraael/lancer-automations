@@ -194,8 +194,8 @@ function getConflictRules() {
         {
             id: 'upstream-er-detected',
             label: 'You are not using the Elevation Ruler version required by Lancer Automations. '
-                + 'Several movement features will not work correctly. '
-                + 'Install the required version: <a href="https://github.com/Agraael/fvtt-elevation-ruler" target="_blank" rel="noopener">Agraael/fvtt-elevation-ruler</a>.',
+                + 'Auto-fix will disable Movement Cap Detection and Boost Detection. '
+                + 'Install the required version to re-enable them: <a href="https://github.com/Agraael/fvtt-elevation-ruler" target="_blank" rel="noopener">Agraael/fvtt-elevation-ruler</a>.',
             check() {
                 if (!game.modules.get('elevationruler')?.active)
                     return false;
@@ -204,14 +204,19 @@ function getConflictRules() {
                     return false;
                 try {
                     return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
-                        || game.settings.get(MODULE_ID, 'experimentalBoostDetection')
-                        || game.settings.get(MODULE_ID, 'enableKnockbackFlow');
+                        || game.settings.get(MODULE_ID, 'experimentalBoostDetection');
                 } catch {
                     return false;
                 }
             },
             async fix() {
-                console.warn(`${MODULE_ID} | Unsupported Elevation Ruler version. See https://github.com/Agraael/fvtt-elevation-ruler`);
+                for (const key of ['enableMovementCapDetection', 'experimentalBoostDetection']) {
+                    try {
+                        await game.settings.set(MODULE_ID, key, false);
+                    } catch (e) {
+                        console.warn(`${MODULE_ID} | Could not disable ${key}:`, e);
+                    }
+                }
             }
         },
 
