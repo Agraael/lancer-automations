@@ -69,9 +69,10 @@ import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData } from "./lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
 import { registerRerollFlowSteps } from "./reroll.js";
+import { LA_INLINE_ATTACK_FX } from "./actionFX.js";
 import { registerSettingsMenus } from "./settingsMenus.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
 import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
@@ -519,9 +520,35 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName) 
     };
 }
 
+// Triggers where a reactor's cancel leads to a redo. On these we fire autoActivate
+// reactions sequentially and stop as soon as one cancels: the redo re-runs the rest
+// with _cancelledBy populated, so no reactor is lost.
+const CANCELLABLE_TRIGGERS = new Set([
+    'onPreMove', 'onPreStructure', 'onPreStress',
+    'onPreStatusApplied', 'onPreStatusRemoved',
+    'onPreHpChange', 'onPreHeatChange',
+]);
+
 async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const reactionsPromises = [];
+    // For cancellable triggers, queue activation factories; they run sequentially
+    // after the eval loop so we can stop as soon as one reactor raises a cancel.
+    const deferredFactories = [];
+    const isCancellable = CANCELLABLE_TRIGGERS.has(triggerType);
+    const startCancelLen = data._cancelledBy?.length ?? 0;
+    const cancelRaisedThisPass = () => (data._cancelledBy?.length ?? 0) > startCancelLen;
+    // Re-stamps reactor identity on the shared cancel/change/reroll/modify fns right before
+    // an activation fires. Needed because those fns are shared across reactors and the last
+    // eval-loop assignment would otherwise win.
+    const applyReactorIdentity = (rtd, identity, context) => {
+        for (const key of Object.keys(rtd)) {
+            if ((key.startsWith('cancel') || key.startsWith('change') || key.startsWith('reroll') || key.startsWith('modify')) && typeof rtd[key] === 'function') {
+                rtd[key]._reactorIdentity = identity;
+                rtd[key]._defaultContext = context;
+            }
+        }
+    };
     // Change 4: hoist api lookup out of the inner loop
     const api = game.modules.get('lancer-automations').api;
 
@@ -571,7 +598,17 @@ async function checkReactions(triggerType, data) {
 
     const triggeringTokenHidden = !!data.triggeringToken?.document?.hidden;
 
-    for (const token of allTokens) {
+    // For cancellable triggers, process the mover (self-reactions) first so reroute-style
+    // reactions (Engagement) run before reactors on the original path (Overwatch).
+    const orderedTokens = isCancellable && data.triggeringToken
+        ? [...allTokens].sort((a, b) => {
+            const aSelf = a.id === data.triggeringToken.id ? 1 : 0;
+            const bSelf = b.id === data.triggeringToken.id ? 1 : 0;
+            return bSelf - aSelf;
+        })
+        : allTokens;
+
+    for (const token of orderedTokens) {
         const isSelf = data.triggeringToken?.id === token.id;
         // Hidden triggering tokens don't provoke reactions from others — only self-reactions fire.
         if (triggeringTokenHidden && !isSelf)
@@ -594,7 +631,7 @@ async function checkReactions(triggerType, data) {
                 continue;
 
             for (const reaction of registryEntry.reactions) {
-                if (!reaction.triggers.includes(triggerType))
+                if (!reaction.triggers?.includes(triggerType))
                     continue;
                 if (reaction.enabled === false)
                     continue;
@@ -728,16 +765,23 @@ async function checkReactions(triggerType, data) {
                             }
                         }
                         if (reaction.autoActivate) {
-                            try {
-                                const p = activateReaction(triggerType, reactionTriggerData, token, item, activationName, reaction, false);
-                                if (p instanceof Promise) {
-                                    p.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
-                                    if (reaction.awaitActivationCompletion !== false) {
-                                        reactionsPromises.push(p);
+                            if (isCancellable) {
+                                deferredFactories.push(() => {
+                                    applyReactorIdentity(reactionTriggerData, reactorIdentity, defaultCancelContext);
+                                    return activateReaction(triggerType, reactionTriggerData, token, item, activationName, reaction, false);
+                                });
+                            } else {
+                                try {
+                                    const p = activateReaction(triggerType, reactionTriggerData, token, item, activationName, reaction, false);
+                                    if (p instanceof Promise) {
+                                        p.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
+                                        if (reaction.awaitActivationCompletion !== false) {
+                                            reactionsPromises.push(p);
+                                        }
                                     }
+                                } catch (error) {
+                                    console.error(`lancer-automations | Error auto-activating reaction:`, error);
                                 }
-                            } catch (error) {
-                                console.error(`lancer-automations | Error auto-activating reaction:`, error);
                             }
                         } else {
                             reactionQueue.push({
@@ -772,16 +816,23 @@ async function checkReactions(triggerType, data) {
                     }
                 }
                 if (reaction.autoActivate) {
-                    try {
-                        const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
-                        if (p instanceof Promise) {
-                            p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
-                            if (reaction.awaitActivationCompletion !== false) {
-                                reactionsPromises.push(p);
+                    if (isCancellable) {
+                        deferredFactories.push(() => {
+                            applyReactorIdentity(reactionTriggerData, reactorIdentity, defaultCancelContext);
+                            return activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
+                        });
+                    } else {
+                        try {
+                            const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
+                            if (p instanceof Promise) {
+                                p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
+                                if (reaction.awaitActivationCompletion !== false) {
+                                    reactionsPromises.push(p);
+                                }
                             }
+                        } catch (error) {
+                            console.error(`lancer-automations | Error auto-activating general reaction:`, error);
                         }
-                    } catch (error) {
-                        console.error(`lancer-automations | Error auto-activating general reaction:`, error);
                     }
                 } else {
                     reactionQueue.push({
@@ -811,16 +862,23 @@ async function checkReactions(triggerType, data) {
                     }
                 }
                 if (reaction.autoActivate) {
-                    try {
-                        const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
-                        if (p instanceof Promise) {
-                            p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
-                            if (reaction.awaitActivationCompletion !== false) {
-                                reactionsPromises.push(p);
+                    if (isCancellable) {
+                        deferredFactories.push(() => {
+                            applyReactorIdentity(reactionTriggerData, reactorIdentity, defaultCancelContext);
+                            return activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
+                        });
+                    } else {
+                        try {
+                            const p = activateReaction(triggerType, reactionTriggerData, token, null, reactionName, reaction, true);
+                            if (p instanceof Promise) {
+                                p.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
+                                if (reaction.awaitActivationCompletion !== false) {
+                                    reactionsPromises.push(p);
+                                }
                             }
+                        } catch (error) {
+                            console.error(`lancer-automations | Error auto-activating general reaction:`, error);
                         }
-                    } catch (error) {
-                        console.error(`lancer-automations | Error auto-activating general reaction:`, error);
                     }
                 } else {
                     reactionQueue.push({
@@ -840,6 +898,26 @@ async function checkReactions(triggerType, data) {
 
     if (reactionsPromises.length > 0) {
         await Promise.all(reactionsPromises);
+    }
+
+    // Cancellable triggers: fire queued factories one at a time, stop on first cancel.
+    // Remaining reactors get their turn on the redo pass (which re-enters checkReactions
+    // with _cancelledBy carrying the one that cancelled, so it's skipped).
+    if (isCancellable && deferredFactories.length > 0) {
+        console.log(`[LA-DEBUG] checkReactions(${triggerType}) sequential: ${deferredFactories.length} factories, startCancelLen=${startCancelLen}`);
+        for (let i = 0; i < deferredFactories.length; i++) {
+            if (cancelRaisedThisPass()) {
+                console.log(`[LA-DEBUG] checkReactions(${triggerType}) cancel detected before factory #${i}; ${deferredFactories.length - i} skipped`);
+                return;
+            }
+            try {
+                const p = deferredFactories[i]();
+                if (p instanceof Promise)
+                    await p;
+            } catch (e) {
+                console.error('lancer-automations | reaction error:', e);
+            }
+        }
     }
 
     if (reactionDebounceTimer) {
@@ -3336,6 +3414,65 @@ async function knockbackDamageStep(state) {
     return true;
 }
 
+/**
+ * Flow step (run after printAttackCard on BasicAttackFlow): if the flow ran without a real
+ * item (standalone action like Ram) but has a custom title, expose a synthetic state.item
+ * so post-flow consumers (Lancer Weapon FX, etc.) can key effects on the action's name
+ * instead of falling straight through to the generic melee/ranged default.
+ */
+async function stubBasicAttackItemForFx(state) {
+    const title = state.data?.title;
+    const isCustom = title && title !== "BASIC ATTACK" && title !== "TECH ATTACK";
+
+    if (isCustom && !state.item) {
+        state.item = {
+            name: title,
+            system: { lid: '' },
+            uuid: null,
+            isOwner: true,
+            getTags: () => [],
+            is_weapon: () => false,
+            is_mech_weapon: () => false,
+            is_pilot_weapon: () => false,
+            is_npc_feature: () => false,
+            is_frame: () => false,
+            is_mech_system: () => false,
+            is_talent: () => false,
+            is_bond: () => false,
+            is_core_bonus: () => false,
+            is_reserve: () => false,
+            currentProfile: () => null
+        };
+    }
+
+    const fxPlayer = LA_INLINE_ATTACK_FX[title];
+    if (fxPlayer) {
+        try {
+            await fxPlayer(state);
+        } catch (e) {
+            console.error(`lancer-automations | FX "${title}" failed:`, e);
+        }
+    }
+    return true;
+}
+
+/**
+ * Flow step: for damage flows spawned from a basic attack that carried injected tags
+ * (via executeBasicAttack's `tags` option), pull those tags from ActiveFlowState into
+ * state.data.tags so downstream steps (setDamageTags, knockbackInject, etc.) see them.
+ */
+async function pullInjectedTagsFromAttack(state) {
+    const tags = ActiveFlowState.current?.injectedTags;
+    if (!Array.isArray(tags) || tags.length === 0)
+        return true;
+    if (!state.data)
+        state.data = {};
+    state.data.tags = [...(state.data.tags || []), ...tags];
+    state.la_extraData = state.la_extraData || {};
+    state.la_extraData.injectedTags = tags;
+    return true;
+}
+
 /** Flow step: injects the No Bonus Dmg checkbox into the damage HUD. */
 async function noBonusDmgInjectStep(state) {
     if (ActiveFlowState.current?._csmNoBonusDmg) {
@@ -3382,9 +3519,13 @@ function patchHalfSizeTokens() {
         return;
 
     docClass.prototype._preCreate = async function (...[data, options, user]) {
-        if (game.settings.get(game.system.id, 'automationOptions')?.token_size
+        const LANCER_ACTOR_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
+        const isLancerActor = LANCER_ACTOR_TYPES.includes(this.actor?.type);
+        if (isLancerActor
+            && game.settings.get(game.system.id, 'automationOptions')?.token_size
             && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const newSize = this.actor?.system?.size ?? 1;
+            const rawSize = this.actor?.system?.size;
+            const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : 1;
             const updates = { width: newSize, height: newSize };
             // Center sub-1 tokens within their grid cell
             if (newSize < 1 && canvas?.grid) {
@@ -3402,9 +3543,12 @@ function patchHalfSizeTokens() {
     docClass.prototype._onRelatedUpdate = function (update, options) {
         // Call grandparent _onRelatedUpdate (skip Lancer's which has Math.max(1))
         TokenDocument.prototype._onRelatedUpdate.call(this, update, options);
-        if (game.settings.get(game.system.id, 'automationOptions')?.token_size
+        const LANCER_ACTOR_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
+        if (LANCER_ACTOR_TYPES.includes(this.actor?.type)
+            && game.settings.get(game.system.id, 'automationOptions')?.token_size
             && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const newSize = this.actor ? this.actor.system.size : undefined;
+            const rawSize = this.actor?.system?.size;
+            const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : undefined;
             if (this.isOwner && this.id && newSize !== undefined
                 && (this.width !== newSize || this.height !== newSize)) {
                 this.update({ width: newSize, height: newSize });
@@ -3712,6 +3856,11 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // one fires before printAttackCard; each self-destructs after its single use)
     // Register No Bonus Dmg steps
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
+    // Pull tags injected on the source basic attack into the damage flow
+    flowSteps.set('lancer-automations:pullInjectedTagsFromAttack', pullInjectedTagsFromAttack);
+    // After printAttackCard, expose a synthetic item so Lancer Weapon FX (and similar)
+    // can identify itemless basic attacks (Ram, etc.) by name.
+    flowSteps.set('lancer-automations:stubBasicAttackItemForFx', stubBasicAttackItemForFx);
     // Register Throw steps
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
@@ -3751,12 +3900,23 @@ function insertModuleFlowSteps(flowSteps, flows) {
 
     flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
+    flows.get('BasicAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:stubBasicAttackItemForFx');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
     flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
 
-    flows.get('DamageRollFlow')?.insertStepAfter('rollNormalDamage', 'lancer-automations:onDamage');
-    flows.get('DamageRollFlow')?.insertStepAfter('lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
+    // DamageRollFlow runs either rollNormalDamage OR rollCritDamage depending on crit state;
+    // onDamage/knockbackDamage must sit after whichever one actually ran.
+    const damageFlow = flows.get('DamageRollFlow');
+    if (damageFlow?.steps) {
+        const critIdx = damageFlow.steps.indexOf('rollCritDamage');
+        const normIdx = damageFlow.steps.indexOf('rollNormalDamage');
+        const anchorIdx = Math.max(critIdx, normIdx);
+        if (anchorIdx >= 0) {
+            damageFlow.steps.splice(anchorIdx + 1, 0, 'lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
+        }
+    }
+    flows.get('DamageRollFlow')?.insertStepBefore('setDamageTags', 'lancer-automations:pullInjectedTagsFromAttack');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:noBonusDmgInject');
 
@@ -3773,6 +3933,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
 
     // Fix tech attack title override (Fragment Signal)
     wrapInitTechAttackData(flowSteps);
+    // Preserve caller-supplied title/action/effect on basic attacks (Ram, etc.)
+    wrapInitAttackData(flowSteps);
 
     // Extra-action recharge system (piggybacks on NPC recharge flow)
     wrapExtraActionRecharge(flowSteps, flows);
@@ -4509,9 +4671,108 @@ Hooks.on('ready', async () => {
         patchHalfSizeTokens();
     }
 
+    // Lancer Weapon FX integration — register LA-owned FX macros and bindings for
+    // standalone basic attacks (Ram, etc.) so they get dedicated effects instead of
+    // the module's generic default-melee fallback.
+    await ensureLancerWeaponFxBindings();
+
     // Compatibility checker — detect and offer to fix conflicts with other modules
     checkCompatibility();
 });
+
+const LA_FX_MACRO_VERSION = 4;
+const LA_FX_NOOP_COMMAND = '// Lancer Automations FX suppressor. Actual FX is played inline from actionFX.js.';
+const LA_FX_MACROS = [
+    {
+        flagKey: 'fxRamMacro',
+        name: 'L.A. FX: Ram (suppressor)',
+        img: 'modules/lancer-automations/icons/ram.svg',
+        command: LA_FX_NOOP_COMMAND,
+        binding: { itemName: 'Ram' }
+    },
+    {
+        flagKey: 'fxGrappleMacro',
+        name: 'L.A. FX: Grapple (suppressor)',
+        img: 'modules/lancer-automations/icons/grapple.svg',
+        command: LA_FX_NOOP_COMMAND,
+        binding: { itemName: 'Grapple' }
+    }
+];
+
+async function ensureLancerWeaponFxBindings() {
+    if (!game.modules.get('lancer-weapon-fx')?.active)
+        return;
+    if (!game.user.isGM)
+        return;
+
+    const macrosByFlag = new Map();
+    for (const entry of LA_FX_MACROS) {
+        let macro = game.macros.find(m => m.getFlag('lancer-automations', entry.flagKey) === true);
+        try {
+            if (!macro) {
+                macro = await Macro.create({
+                    name: entry.name,
+                    type: 'script',
+                    img: entry.img,
+                    command: entry.command,
+                    ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
+                    flags: { 'lancer-automations': { [entry.flagKey]: true, version: LA_FX_MACRO_VERSION } }
+                });
+            } else {
+                const storedVersion = macro.getFlag('lancer-automations', 'version') ?? 0;
+                if (storedVersion < LA_FX_MACRO_VERSION) {
+                    await macro.update({
+                        command: entry.command,
+                        ownership: { ...macro.ownership, default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
+                        'flags.lancer-automations.version': LA_FX_MACRO_VERSION
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn(`lancer-automations | Could not ensure FX macro "${entry.name}":`, e);
+            continue;
+        }
+        if (macro?.uuid)
+            macrosByFlag.set(entry.flagKey, macro);
+    }
+
+    let current;
+    try {
+        current = game.settings.get('lancer-weapon-fx', 'effectsManagerState') ?? { effects: {}, folders: {} };
+    } catch {
+        return;
+    }
+    const effects = { ...(current.effects || {}) };
+    let changed = false;
+    for (const entry of LA_FX_MACROS) {
+        const macro = macrosByFlag.get(entry.flagKey);
+        if (!macro)
+            continue;
+        const binding = entry.binding;
+        const alreadyBound = Object.values(effects).some(e =>
+            (binding.itemName && e.itemName === binding.itemName)
+            || (binding.itemLid && e.itemLid === binding.itemLid)
+        );
+        if (alreadyBound)
+            continue;
+        const id = foundry.utils.randomID();
+        effects[id] = {
+            macroUuid: macro.uuid,
+            folderId: null,
+            mode: binding.itemName ? 1 : 2,
+            itemName: binding.itemName ?? null,
+            itemLid: binding.itemLid ?? null
+        };
+        changed = true;
+    }
+    if (changed) {
+        try {
+            await game.settings.set('lancer-weapon-fx', 'effectsManagerState', { ...current, effects, folders: current.folders ?? {} });
+        } catch (e) {
+            console.warn('lancer-automations | Could not write FX bindings:', e);
+        }
+    }
+}
 
 // Item Disabled system – uncomment to activate
 Hooks.on('renderActorSheet', onRenderActorSheet);
@@ -5539,9 +5800,19 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                             await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { _skipBoostOffer: true });
                             return;
                         }
-                        // Step 1: move to cap boundary (no triggers, just position + tracking)
+                        // Step 1: move to cap boundary. Let onPreMove/onMove fire normally
+                        // so Overwatch and other reactions get a chance to trigger and cancel.
                         const snapMid = token.getSnappedPosition({ x: midX, y: midY });
-                        await _rulerMove(token, snapMid, { IgnorePreMove: true });
+                        await _rulerMove(token, snapMid, { _skipBoostOffer: true });
+
+                        // If leg 1 was cancelled (e.g. Overwatch), abort the boost sequence.
+                        const tol = canvas.grid.size / 2;
+                        const leg1Done = Math.abs(token.document.x - snapMid.x) < tol
+                            && Math.abs(token.document.y - snapMid.y) < tol;
+                        if (!leg1Done) {
+                            return;
+                        }
+
                         // Step 2: boost
                         await new Promise(r => setTimeout(r, 800));
                         await executeSimpleActivation(token.actor, {
@@ -5549,9 +5820,9 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                             action: { name: 'Boost', activation: 'Quick' },
                             detail: 'Move your speed.',
                         });
-                        // Step 3: move to final destination (no triggers, just position + tracking)
+                        // Step 3: move to final destination.
                         await new Promise(r => setTimeout(r, 800));
-                        await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { IgnorePreMove: true });
+                        await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { _skipBoostOffer: true });
                     }, 100);
                 } else {
                     // No boost possible or boost declined — redo with normal cap check

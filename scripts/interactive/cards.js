@@ -257,11 +257,18 @@ export function _updateInfoCard(cardEl, type, data) {
             for (const token of data.selectedTokens) {
                 const imgSrc = token.document.texture.src;
                 const name = token.name;
+                const warns = data.warnings?.[token.id] ?? [];
+                const warnHtml = warns.length > 0
+                    ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
+                           ${warns.map(w => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${w}</div>`).join('')}
+                       </div>`
+                    : '';
                 listEl.append(`
-                    <div class="la-selected-target" data-token-id="${token.id}">
+                    <div class="la-selected-target" data-token-id="${token.id}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
                         <img src="${imgSrc}" alt="${name}">
                         <span class="la-selected-target-name">${name}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
+                        ${warnHtml}
                     </div>`);
             }
 

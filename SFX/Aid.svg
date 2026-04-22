@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="311.211mm"
-   height="60.528mm"
-   viewBox="0 0 311.21099 60.528"
+   width="197.23372mm"
+   height="58.81834mm"
+   viewBox="0 0 197.23371 58.81834"
    version="1.1"
    id="svg1"
    xml:space="preserve"
@@ -28,7 +28,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="0.4642738"
      inkscape:cx="505.08988"
-     inkscape:cy="245.54476"
+     inkscape:cy="239.08306"
      inkscape:window-width="1500"
      inkscape:window-height="1094"
      inkscape:window-x="2859"
@@ -44,7 +44,7 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(42.994079,-122.0623)"><g
+     transform="translate(42.994079,-123.77196)"><g
        inkscape:label="Layer 1"
        id="layer1-1"
        transform="translate(35.714013,0.97925959)"
@@ -55,7 +55,7 @@
          style="font-weight:bold;font-size:74.1972px;line-height:0.6;font-family:Arial;-inkscape-font-specification:'Arial, Bold';font-variant-caps:small-caps;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect3);display:inline;fill:#0087ff;fill-opacity:1;stroke:#ffffff;stroke-width:0.0377953;stroke-miterlimit:3.3"><tspan
            x="398"
            y="52.719365"
-           id="tspan2">Aid</tspan></text></g><g
+           id="tspan1">Aid</tspan></text></g><g
        id="g1"
        transform="matrix(0.12600743,0,0,0.12545091,-43.792677,119.62187)"><path
          d="M 0,0 H 512 V 512 H 0 Z"

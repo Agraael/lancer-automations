@@ -1,6 +1,8 @@
 /* global console, JournalEntry, ChatMessage, Folder, Dialog, Sequence, game, ui, CONST, fromUuidSync */
 // ---------------------------------------------------------------------------
 
+import * as actionFX from './actionFX.js';
+
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -637,25 +639,9 @@ export async function executeScanOnActivation(reactorToken) {
 
     const targetNames = targets.map(t => t.name).join(', ');
 
-    if (typeof Sequencer !== 'undefined' && reactorToken) {
-        await Sequencer.Preloader.preloadForClients([
-            "modules/lancer-weapon-fx/soundfx/TechPrepare.ogg",
-            "jb2a.extras.tmfx.inpulse.circle.02.normal",
-        ]);
-
+    if (reactorToken) {
         for (const target of targets) {
-            new Sequence()
-                .sound()
-                .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
-                .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
-                .effect()
-                .file("jb2a.extras.tmfx.inpulse.circle.02.normal")
-                .atLocation(target)
-                .scaleToObject(2)
-                .filter("Glow", { color: 0xfada89 })
-                .playbackRate(1.3)
-                .waitUntilFinished(-400)
-                .play();
+            await actionFX.playScanFX(reactorToken, target);
         }
     }
 

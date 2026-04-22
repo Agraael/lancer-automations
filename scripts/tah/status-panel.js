@@ -1,6 +1,7 @@
 /* global $, game, CONFIG */
 
 import { removeGlobalBonus, removeConstantBonus } from '../genericBonuses.js';
+import { playUiSound } from './sound.js';
 
 function getBonusDetailStr(/** @type {any} */ b) {
     if (b.type === 'accuracy')   return `Accuracy +${b.val}`;
@@ -243,6 +244,7 @@ export class StatusPanel {
             let tooltipEl = /** @type {any} */ (null);
             let tooltipTimer = null;
             rowEl.on('mouseenter', function() {
+                playUiSound('hover');
                 if (!$(this).data('active'))
                     $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 const self = $(this);
@@ -256,6 +258,7 @@ export class StatusPanel {
 
             // Left-click: toggle / increment / open subtype manager
             rowEl.on('click', async () => {
+                playUiSound('toggle');
                 const effects = getEffectsForStatus(s.id);
                 if (effects.length > 1) {
                     this._openSubtypeManager(actor, s, effects, rowEl);
@@ -279,6 +282,7 @@ export class StatusPanel {
             // Right-click: decrement / delete
             rowEl.on('contextmenu', async (ev) => {
                 ev.preventDefault();
+                playUiSound('toggle');
                 const effects = getEffectsForStatus(s.id);
                 if (effects.length > 1) {
                     this._openSubtypeManager(actor, s, effects, rowEl);
@@ -326,11 +330,14 @@ export class StatusPanel {
         const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
         if (laApi?.executeEffectManager) {
             const emBtn = $(`<button style="${S_UTIL_BTN}">Effect Manager</button>`);
-            emBtn.on('click', () => laApi.executeEffectManager());
+            emBtn.on('mouseenter', () => playUiSound('hover'));
+            emBtn.on('click', () => { playUiSound('toggle'); laApi.executeEffectManager(); });
             rightEl.append(emBtn);
         }
         const clearBtn = $(`<button style="${S_UTIL_BTN}background:#444;">Clear All Effects</button>`);
+        clearBtn.on('mouseenter', () => playUiSound('hover'));
         clearBtn.on('click', async () => {
+            playUiSound('toggle');
             this._incDepth();
             try {
                 const ids = /** @type {any[]} */ ([...actor.effects]).map(/** @type {any} */ e => e.id);
@@ -375,6 +382,7 @@ export class StatusPanel {
                     <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
                 </div>`);
                 cRow.on('mouseenter', function() {
+                    playUiSound('hover');
                     if (!$(this).data('active'))
                         $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 }).on('mouseleave', function() {
@@ -391,6 +399,7 @@ export class StatusPanel {
 
                 // Left-click: same as regular — increment stack if SC+active, else add/toggle
                 cRow.on('click', async () => {
+                    playUiSound('toggle');
                     const effs = getCustomEffects(cs.name);
                     if (effs.length > 1) {
                         this._openSubtypeManager(actor, { id: cs.name, name: cs.name, icon: cs.icon }, effs, cRow);
@@ -419,6 +428,7 @@ export class StatusPanel {
                 // Right-click: same as regular — decrement/delete if active, add if inactive
                 cRow.on('contextmenu', async (ev) => {
                     ev.preventDefault();
+                    playUiSound('toggle');
                     const effs = getCustomEffects(cs.name);
                     if (effs.length > 1) {
                         this._openSubtypeManager(actor, { id: cs.name, name: cs.name, icon: cs.icon }, effs, cRow);

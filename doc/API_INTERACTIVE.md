@@ -17,15 +17,19 @@ const targets = await api.chooseToken(casterToken, options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>range</kbd> | `number` | `null` | Max range highlight |
+| <kbd>range</kbd> | `number` | `null` | Max range for advisory highlight |
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
-| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` |
+| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` — excludes tokens when returning false |
+| <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
+| <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections (old behavior). |
 | <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
 | <kbd>includeSelf</kbd> | `boolean` | `false` | Is the caster selectable? |
 | <kbd>title</kbd> | `string` | `"SELECT TARGETS"` | Card header |
 | <kbd>description</kbd> | `string` | `""` | Card description |
 | <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
 | <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
+
+Generic range failures render as `Out of range (X > Y)`; filter failures render as `filterWarning` (or `Invalid target` if omitted).
 
 </details>
 

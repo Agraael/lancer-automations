@@ -84,6 +84,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix so you can have more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
+| [Lancer Weapon FX](https://github.com/BoltsJ/lancer-weapon-fx) | Visual/audio effects on attacks and built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) |
 
 ### Recommended
 

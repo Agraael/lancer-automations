@@ -38,6 +38,16 @@
         </div>
         {{/each}}
 
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Action Effects</h2>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.1); {{#unless hasWeaponFX}}opacity: 0.4;{{/unless}}">
+            <label style="font-weight: bold;">Enable Action FX (Boost, Hide, Shut Down, Fall, Overcharge…)</label>
+            <input type="checkbox" name="actionFX" {{#if actionFX}}checked{{/if}} {{#unless hasWeaponFX}}disabled{{/unless}} />
+        </div>
+        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">
+            {{#if hasWeaponFX}}Visual/audio effects for built-in actions. Volume is tied to the <b>Lancer Weapon FX</b> volume setting. Some effects need <b>JB2A Patreon</b>; without it they are skipped.{{else}}Requires the <b>Lancer Weapon FX</b> module to be installed and enabled.{{/if}}
+        </p>
+
         <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Death</h2>
 
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">

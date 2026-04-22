@@ -223,7 +223,24 @@ export class ReactionManager {
     static getAllReactions() {
         const defaults = getDefaultItemReactionRegistry();
         const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
-        return { ...defaults, ...userSaved };
+        const merged = { ...defaults };
+        for (const [lid, userEntry] of Object.entries(userSaved)) {
+            const def = defaults[lid];
+            if (!def) {
+                merged[lid] = userEntry;
+                continue;
+            }
+            // Layer each user-saved reaction on top of its default counterpart so
+            // stubs like { enabled: false } inherit triggers/evaluate/etc.
+            merged[lid] = {
+                ...def,
+                ...userEntry,
+                reactions: Array.isArray(userEntry.reactions)
+                    ? userEntry.reactions.map((userRx, i) => ({ ...(def.reactions?.[i] ?? {}), ...(userRx ?? {}) }))
+                    : (def.reactions ?? []),
+            };
+        }
+        return merged;
     }
 
     static getReactions(lid) {

@@ -10,6 +10,7 @@ import {
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
+import { playActionFxByActivation, playDeployableFX } from "../actionFX.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
@@ -580,6 +581,14 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         }
     }
 
+    // Play per-deployable FX on each deployed token (requires a source token).
+    if (result && originToken) {
+        const deployedTokens = Array.isArray(result) ? result : [result];
+        for (const t of deployedTokens) {
+            if (t) playDeployableFX(t);
+        }
+    }
+
     // Fire onDeploy trigger
     if (result) {
         const api = game.modules.get('lancer-automations')?.api;
@@ -604,12 +613,33 @@ export async function placeDeployable(options = /** @type {any} */({})) {
  * @param {boolean} consumeUse - Whether to consume a use from parentItem
  */
 export async function deployDeployable(actor, deployableLid, parentItem, consumeUse) {
+    const depInfo = getDeployableInfoSync(deployableLid, actor);
+    const sceneId = canvas?.scene?.id;
+    const tokens = actor.getActiveTokens?.() || [];
+    const sourceToken = tokens.find(t => t?.scene?.id === sceneId) || tokens[0] || null;
+    if (sourceToken && depInfo?.activation) {
+        playActionFxByActivation(depInfo.activation, sourceToken, depInfo.name);
+    }
+    await _printDeployableCard(parentItem);
     await placeDeployable({
         deployable: deployableLid,
         ownerActor: actor,
         systemItem: parentItem,
         consumeUse: consumeUse ?? false,
     });
+}
+
+async function _printDeployableCard(parentItem) {
+    if (!parentItem)
+        return;
+    const begin = game.lancer?.beginItemChatFlow;
+    if (typeof begin !== 'function')
+        return;
+    try {
+        await begin(parentItem, {});
+    } catch (e) {
+        console.warn('lancer-automations | Could not print deployable card:', e);
+    }
 }
 
 /**

@@ -62,14 +62,15 @@ let _warnedMissingFork = false;
 function getTHTConfig() {
     let useAlt = false;
     try { useAlt = !!game.settings.get('lancer-automations', 'tah.auraUseAltKey'); } catch { /* settings not ready */ }
-    if (useAlt && !hasGAAFork()) {
-        if (!_warnedMissingFork) {
+    // Default off (or opt-in without the fork): disable THT rulers entirely to avoid always-drawn on upstream.
+    if (!useAlt || !hasGAAFork()) {
+        if (useAlt && !_warnedMissingFork) {
             _warnedMissingFork = true;
             ui.notifications.warn("TAH: 'Aura THT Ruler on Alt Press' requires the grid-aware-auras fork — THT rulers disabled.");
         }
-        return { rulerOnDrag: "NONE", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true };
+        return { rulerOnDrag: "NONE", targetTokens: "", onlyWhenAltPressed: false, onlyWhenTargeted: false };
     }
-    return { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: useAlt, onlyWhenTargeted: useAlt };
+    return { rulerOnDrag: "E2E", targetTokens: "", onlyWhenAltPressed: true, onlyWhenTargeted: true };
 }
 
 function hasGAA() {

@@ -27,6 +27,9 @@ function makeConfigForm({ id, title, template, fields }) {
                 if (f.type === 'section') {
                     return { type: 'section', label: f.label, isSection: true };
                 }
+                if (f.type === 'button') {
+                    return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '' };
+                }
                 if (f.type === 'table') {
                     const table = f.getTable();
                     return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows: table.rows };
@@ -69,6 +72,13 @@ function makeConfigForm({ id, title, template, fields }) {
         activateListeners(html) {
             super.activateListeners(html);
             _injectFCSLocks(html, fields, this);
+            const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
+            $html.find('button[data-action-key]').on('click', async (/** @type {any} */ ev) => {
+                ev.preventDefault();
+                const key = ev.currentTarget.dataset.actionKey;
+                const f = fields.find((/** @type {any} */ x) => x.key === key);
+                if (f?.onClick) await f.onClick();
+            });
         }
 
         async _updateObject(_event, formData) {
@@ -253,7 +263,30 @@ const TokenActionHudConfig = makeConfigForm({
         { key: 'tah.hoverCloseDelay', type: 'number' },
         { key: 'tah.rangePreview', type: 'boolean' },
         { key: 'tah.auraUseAltKey', type: 'boolean' },
+        { key: 'tah.uiSoundVolume', type: 'slider' },
         { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
+        { key: 'tah.resetPosition', type: 'button', label: 'Reset TAH Position', icon: 'fas fa-undo', hint: 'Reset the HUD to its default screen position.',
+            onClick: async () => {
+                await game.settings.set(MODULE_ID, 'tah.position', null);
+                ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
+            } },
+        { key: 'tah.clearAuras', type: 'button', label: 'Clear & Rebuild TAH Auras (Scene)', icon: 'fas fa-broom', hint: 'Remove all TAH-created auras from every token on the current scene, then re-apply configured defaults.',
+            onClick: async () => {
+                if (!canvas?.scene) return ui.notifications.warn('No active scene.');
+                const { applyDefaultAuras } = await import('./tah/hover.js');
+                let cleared = 0;
+                const tokens = canvas.tokens?.placeables ?? [];
+                for (const tok of tokens) {
+                    const auras = tok.document.getFlag('grid-aware-auras', 'auras') ?? [];
+                    const kept = auras.filter((/** @type {any} */ a) => !a?.name?.startsWith?.('LA_'));
+                    if (kept.length !== auras.length) {
+                        await tok.document.setFlag('grid-aware-auras', 'auras', kept);
+                        cleared++;
+                    }
+                }
+                for (const tok of tokens) await applyDefaultAuras(tok);
+                ui.notifications.info(`Cleared TAH auras from ${cleared} token(s) and rebuilt defaults.`);
+            } },
         // Aura settings table.
         { type: 'table',
             label: 'Range Auras',

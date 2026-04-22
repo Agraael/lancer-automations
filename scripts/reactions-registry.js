@@ -1,3 +1,5 @@
+import * as actionFX from './actionFX.js';
+
 const externalItemReactions = {};
 const externalGeneralReactions = {};
 
@@ -129,7 +131,7 @@ export function getDefaultGeneralReactionRegistry() {
                     const ranges = api.getMaxWeaponRanges_WithBonus(reactorToken);
                     const maxThreat = ranges.Threat || 1;
                     const distance = api.getTokenDistance(reactorToken, mover);
-                    return maxThreat > 1 && distance > 1 && maxThreat >= distance;
+                    return distance >= 1 && maxThreat >= distance;
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const mover = triggerData.triggeringToken;
@@ -719,14 +721,19 @@ export function getDefaultGeneralReactionRegistry() {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
-                        filter: (t) => t.actor.system.size <= reactorToken.actor.system.size
+                        filter: (t) => t.actor.system.size <= reactorToken.actor.system.size,
+                        filterWarning: "Target is larger than you"
                     });
                     if (!chosen || chosen.length === 0)
                         return;
                     chosen[0].setTarget(true, { releaseOthers: true, groupSelection: false });
+                    await actionFX.playRamFX(reactorToken, chosen[0]);
                     await api.executeBasicAttack(reactorToken.actor, {
                         title: "Ram",
-                        attack_type: "Melee"
+                        attack_type: "Melee",
+                        action: { name: "Ram", activation: "Quick" },
+                        effect: "Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.",
+                        tags: [{ lid: 'tg_knockback', val: 1 }]
                     });
                 }
             }, {
@@ -745,8 +752,7 @@ export function getDefaultGeneralReactionRegistry() {
                         return;
                     const targetTokens = targets.map(t => t.target);
 
-                    await api.knockBackToken(targetTokens, 1, { triggeringToken: reactorToken });
-
+                    // Knockback is now handled by the Knockback tag on the damage card.
                     await api.applyEffectsToTokens({
                         tokens: targetTokens,
                         effectNames: ["prone"],
@@ -805,27 +811,7 @@ export function getDefaultGeneralReactionRegistry() {
                                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                                         return;
 
-                                    await Sequencer.Preloader.preloadForClients([
-                                        "modules/lancer-automations/SFX/fall.mp3",
-                                        "modules/lancer-automations/SFX/falling.svg"
-                                    ]);
-                                    new Sequence()
-                                        .sound()
-                                        .file("modules/lancer-automations/SFX/fall.mp3")
-                                        .volume(weaponFx.api.getEffectVolume(0.7))
-                                        .atLocation(reactorToken)
-                                        .effect()
-                                        .file("modules/lancer-automations/SFX/falling.svg")
-                                        .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                                        .scaleIn(0.01, 500)
-                                        .scale(0.09)
-                                        .scaleOut(0.01, 900)
-                                        .filter("Glow", { distance: 2, color: 0x000000 })
-                                        .aboveInterface()
-                                        .duration(3000)
-                                        .fadeIn(400)
-                                        .fadeOut(800)
-                                        .play();
+                                    await actionFX.playFallFX(reactorToken);
                                 }
                             },
                             { text: "No", icon: "fas fa-times" }
@@ -846,31 +832,7 @@ export function getDefaultGeneralReactionRegistry() {
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
                     reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
-                    if (typeof Sequencer === 'undefined')
-                        return;
-
-                    await Sequencer.Preloader.preloadForClients([
-                        "jb2a.impact.boulder.02",
-                        "jb2a.impact.ground_crack.white.01",
-                        "modules/lancer-automations/SFX/IMPACT.mp3"
-                    ]);
-                    const scale = Math.floor(reactorToken.actor?.system?.size || 1);
-                    let sequence = new Sequence()
-                        .effect()
-                        .file("jb2a.impact.boulder.02")
-                        .atLocation(reactorToken)
-                        .scale(scale / 2)
-                        .effect()
-                        .file("jb2a.impact.ground_crack.white.01")
-                        .atLocation(reactorToken)
-                        .scale(scale / 2)
-                        .belowTokens()
-                        .sound()
-                        .file("modules/lancer-automations/SFX/IMPACT.mp3")
-                        .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
-                        .waitUntilFinished();
-
-                    await sequence.play();
+                    await actionFX.playFallImpactFX(reactorToken);
                 }
             }]
         },
@@ -989,6 +951,7 @@ export function getDefaultGeneralReactionRegistry() {
                     effectNames: ["Disengage"],
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
+                await actionFX.playDisengageFX(reactorToken);
             }
         },
         "Reactor Meltdown": {
@@ -1102,6 +1065,8 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!placed || placed.length === 0)
                     return;
 
+                await actionFX.playEjectFX(reactorToken, placed[0]);
+
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ['impaired'],
@@ -1134,40 +1099,7 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
 
-                await Sequencer.Preloader.preloadForClients([
-                    "modules/lancer-automations/SFX/shutdown.wav",
-                    "modules/lancer-automations/SFX/Shutdown.svg",
-                    "jb2a.extras.tmfx.inpulse.circle.02.normal",
-                    "jb2a.smoke.plumes.01.grey"
-                ]);
-                new Sequence()
-                    .sound()
-                    .file("modules/lancer-automations/SFX/shutdown.wav")
-                    .volume(weaponFx.api.getEffectVolume(0.7))
-                    .atLocation(reactorToken)
-                    .effect()
-                    .file("jb2a.extras.tmfx.inpulse.circle.02.normal")
-                    .atLocation(reactorToken)
-                    .scaleToObject(2)
-                    .effect()
-                    .file("jb2a.smoke.plumes.01.grey")
-                    .atLocation(reactorToken, { offset: { x: 0, y: -0.5 }, gridUnits: true })
-                    .scaleToObject(2)
-                    .opacity(0.5)
-                    .fadeIn(500)
-                    .fadeOut(1500)
-                    .effect()
-                    .file("modules/lancer-automations/SFX/Shutdown.svg")
-                    .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                    .scaleIn(0.01, 500)
-                    .scale(0.09)
-                    .scaleOut(0.01, 900)
-                    .filter("Glow", { distance: 2, color: 0x000000 })
-                    .aboveInterface()
-                    .duration(3000)
-                    .fadeIn(400)
-                    .fadeOut(800)
-                    .play();
+                await actionFX.playShutDownFX(reactorToken);
             }
         },
         "Boot Up": {
@@ -1187,6 +1119,7 @@ export function getDefaultGeneralReactionRegistry() {
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
                 });
+                await actionFX.playBootUpFX(reactorToken);
             }
         },
         "Hide": {
@@ -1208,29 +1141,7 @@ export function getDefaultGeneralReactionRegistry() {
                     duration: { label: "unlimited" }
                 });
 
-                if (typeof Sequencer === 'undefined')
-                    return;
-
-                new Sequence()
-                    .effect()
-                    .file("jb2a.smoke.puff.centered.grey")
-                    .atLocation(reactorToken)
-                    .scale(1.1)
-                    .sound()
-                    .file("modules/lancer-automations/SFX/PuffSmoke.wav")
-                    .volume(game.modules.get("lancer-weapon-fx")?.api?.getEffectVolume(0.7) || 0.7)
-                    .effect()
-                    .file("modules/lancer-automations/SFX/Hide.svg")
-                    .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                    .scaleIn(0.01, 500)
-                    .scale(0.09)
-                    .scaleOut(0.01, 900)
-                    .filter("Glow", { distance: 2, color: 0x000000 })
-                    .aboveInterface()
-                    .duration(3000)
-                    .fadeIn(400)
-                    .fadeOut(800)
-                    .play();
+                await actionFX.playHideFX(reactorToken);
             }
         },
         "Squeeze": {
@@ -1299,7 +1210,7 @@ export function getDefaultGeneralReactionRegistry() {
                 const pilotRef = mechActor.system.pilot;
                 const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
                 const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
-                await api.placeToken({
+                const placed = await api.placeToken({
                     actor: pilotActor,
                     range: 1,
                     origin: reactorToken,
@@ -1307,6 +1218,8 @@ export function getDefaultGeneralReactionRegistry() {
                     title: "Dismount — Place Pilot",
                     description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
                 });
+                if (placed && placed.length > 0)
+                    await actionFX.playDismountFX(reactorToken);
             }
         },
         "Scan": {
@@ -1345,13 +1258,19 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!targets?.length)
                     return;
                 const targetToken = targets[0];
+                await actionFX.playSearchFX(reactorToken);
                 const result = await api.executeStatRoll(
                     reactorToken.actor, "SYS", "SEARCH — SYSTEMS vs AGILITY",
                     targetToken, { targetStat: "AGI" }
                 );
-                if (result?.completed && result.passed) {
+                if (!result?.completed)
+                    return;
+                if (result.passed) {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
+                    await actionFX.playTargetSuccessFX(targetToken);
+                } else {
+                    await actionFX.playTargetFailFX(targetToken);
                 }
             }
         }
@@ -1462,36 +1381,7 @@ export function getDefaultGeneralReactionRegistry() {
             const speed = reactorToken.actor?.system?.speed ?? 0;
             api.increaseMovementCap(reactorToken, speed);
 
-            const weaponFx = game.modules.get("lancer-weapon-fx");
-            if (!weaponFx?.active || typeof Sequencer === 'undefined')
-                return;
-
-            await Sequencer.Preloader.preloadForClients([
-                "modules/lancer-automations/SFX/boost.wav",
-                "modules/lancer-automations/SFX/Boost.svg",
-                "jb2a.zoning.directional.once.bluegreen.line200.02"
-            ]);
-            new Sequence()
-                .sound()
-                .file("modules/lancer-automations/SFX/boost.wav")
-                .volume(weaponFx.api.getEffectVolume(0.3))
-                .effect()
-                .file("jb2a.zoning.directional.once.bluegreen.line200.02")
-                .scaleToObject(1.5)
-                .filter("Glow", { color: 0x00CED1 })
-                .atLocation(reactorToken)
-                .effect()
-                .file("modules/lancer-automations/SFX/Boost.svg")
-                .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                .scaleIn(0.01, 500)
-                .scale(0.09)
-                .scaleOut(0.01, 900)
-                .filter("Glow", { distance: 2, color: 0x000000 })
-                .aboveInterface()
-                .duration(3000)
-                .fadeIn(400)
-                .fadeOut(800)
-                .play();
+            await actionFX.playBoostFX(reactorToken);
         }
     };
 
@@ -1516,81 +1406,7 @@ export function getDefaultGeneralReactionRegistry() {
             const currentHeat = reactorToken.actor.system?.heat?.value ?? 0;
             await reactorToken.actor.update({ "system.heat.value": currentHeat + heatGained });
 
-            const weaponFx = game.modules.get("lancer-weapon-fx");
-            if (!weaponFx?.active || typeof Sequencer === 'undefined')
-                return;
-
-            const pivotx = reactorToken.document.flags["hex-size-support"]?.pivotx || 0;
-            const pivoty = reactorToken.document.flags["hex-size-support"]?.pivoty || 0;
-
-            const svgFile = "modules/lancer-weapon-fx/advisories/OverchargeYellow.svg";
-
-            await Sequencer.Preloader.preloadForClients([
-                "modules/lancer-weapon-fx/soundfx/Overcharge.ogg",
-                "jb2a.static_electricity.02.blue",
-                "jb2a.template_circle.out_pulse.02.burst.bluewhite",
-                "jb2a.static_electricity.03",
-                "jb2a.smoke.plumes.01.grey",
-                svgFile
-            ]);
-
-            new Sequence()
-                .effect()
-                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
-                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
-                .file(svgFile)
-                .attachTo(reactorToken, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
-                .scaleIn(0.01, 500)
-                .scale(0.09)
-                .scaleOut(0.01, 900)
-                .filter("Glow", { distance: 2, color: 0x000000 })
-                .aboveInterface()
-                .duration(4000)
-                .fadeIn(400)
-                .fadeOut(800)
-                .sound()
-                .file("modules/lancer-weapon-fx/soundfx/Overcharge.ogg")
-                .volume(weaponFx.api.getEffectVolume(0.5))
-                .waitUntilFinished(-2700)
-                .effect()
-                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
-                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
-                .file("jb2a.static_electricity.02.blue")
-                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
-                .scaleToObject(1.2)
-                .randomSpriteRotation()
-                .effect()
-                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
-                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
-                .file("jb2a.template_circle.out_pulse.02.burst.bluewhite")
-                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
-                .belowTokens()
-                .playbackRate(1.3)
-                .scaleToObject(2.0)
-                .effect()
-                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
-                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
-                .file("jb2a.static_electricity.03")
-                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
-                .scaleToObject(1)
-                .opacity(0.8)
-                .mask(reactorToken)
-                .delay(1500)
-                .effect()
-                .xray(weaponFx.api.isEffectIgnoreFogOfWar())
-                .aboveInterface(weaponFx.api.isEffectIgnoreLightingColoration())
-                .file("jb2a.smoke.plumes.01.grey")
-                .atLocation(reactorToken, { offset: { x: -pivotx, y: -pivoty } })
-                .opacity(0.29)
-                .tint(0x33ddff)
-                .filter("Glow", { color: 0x00a1e6 })
-                .filter("Blur", { blur: 5 })
-                .scaleToObject(2)
-                .fadeIn(1500)
-                .fadeOut(4700, { delay: -800 })
-                .rotate(-35)
-                .belowTokens()
-                .play();
+            await actionFX.playOverchargeNpcFX(reactorToken);
         }
     };
 

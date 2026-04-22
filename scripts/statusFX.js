@@ -34,11 +34,14 @@ const FX_DEFAULTS = {
     fx_immobilized:   true,
     fx_blinded:     true,
     fx_flying:      true,
+    fx_corePower:   true,
     // Auto-status toggles
     auto_dangerZone:  true,
     auto_burn:        true,
     auto_overshield:  true,
     auto_infection:   true,
+    // Action FX (Boost, Hide, Shut Down, Fall, Overcharge, etc.)
+    actionFX:         false,
 };
 
 function getConfig() {
@@ -47,6 +50,14 @@ function getConfig() {
         return { ...FX_DEFAULTS, ...stored };
     } catch {
         return { ...FX_DEFAULTS };
+    }
+}
+
+export function isActionFXEnabled() {
+    try {
+        return getConfig().actionFX !== false;
+    } catch {
+        return true;
     }
 }
 
@@ -91,9 +102,12 @@ class StatusFXConfig extends FormApplication {
         try {
             additionalStatuses = game.settings.get(MODULE_ID, 'additionalStatuses');
         } catch { /* setting may not be registered yet */ }
+        const hasWeaponFX = !!game.modules.get('lancer-weapon-fx')?.active;
         return {
             master: config.master,
             additionalStatuses,
+            actionFX: config.actionFX !== false,
+            hasWeaponFX,
             fxEffects: [
                 { key: 'dangerZone',  label: 'Danger Zone Glow',   enabled: config.fx_dangerZone },
                 { key: 'burn',        label: 'Burn Glow',           enabled: config.fx_burn },
@@ -115,6 +129,7 @@ class StatusFXConfig extends FormApplication {
                 { key: 'immobilized', label: 'Immobilized / Staggered Effect', enabled: config.fx_immobilized },
                 { key: 'blinded',    label: 'Blinded Effect',     enabled: config.fx_blinded },
                 { key: 'flying',     label: 'Flying Hover Bob',   enabled: config.fx_flying },
+                { key: 'corePower',  label: 'Core Power Active Bloom', enabled: config.fx_corePower },
             ],
             autoStatuses: [
                 { key: 'dangerZone',  label: 'Auto Danger Zone (heat ≥ 50%)', enabled: config.auto_dangerZone },
@@ -147,6 +162,10 @@ class StatusFXConfig extends FormApplication {
         }
 
         ui.notifications.info('StatusFX configuration saved.');
+
+        if (config.actionFX !== false && !game.modules.get('jb2a_patreon')?.active) {
+            ui.notifications.warn('Some Action FX use JB2A Patreon assets. Without it, those effects are skipped.');
+        }
 
         try {
             /** @type {any} */
@@ -186,9 +205,9 @@ export function registerStatusFXSettings() {
     });
 
     game.settings.registerMenu(MODULE_ID, 'statusFXConfigMenu', {
-        name: 'StatusFX Configuration',
+        name: 'Effects Configuration',
         label: 'Configure Effects',
-        hint: 'Open the StatusFX configuration window to toggle individual visual effects and auto-status features.',
+        hint: 'Toggle status visual effects, auto-status icons, and action FX (Boost, Hide, Shut Down, Fall, Overcharge, etc.).',
         icon: 'fas fa-magic',
         type: StatusFXConfig,
         restricted: true,
@@ -818,6 +837,29 @@ const flyingEffect = [
     }
 ];
 
+const corePowerEffect = [
+    {
+        filterType: "xbloom",
+        filterId: "CorePowerBloom",
+        threshold: 0.35,
+        bloomScale: 0,
+        brightness: 1,
+        blur: 0.1,
+        padding: 10,
+        quality: 15,
+        blendMode: 0,
+        animated: {
+            bloomScale: {
+                active: true,
+                loopDuration: 3500,
+                animType: "syncCosOscillation",
+                val1: 0,
+                val2: 2.1
+            }
+        }
+    }
+];
+
 // ---------------------------------------------------------------------------
 // Effect Map
 // ---------------------------------------------------------------------------
@@ -847,6 +889,7 @@ const EFFECT_MAP = [
     { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
     { name: 'Flying',    key: 'flying',      preset: flyingEffect,    filterIds: ['FlyingBob'] },
     { name: 'Hover',     key: 'flying',      preset: flyingEffect.map(f => ({ ...f, filterId: f.filterId.replace('Flying', 'Hover') })), filterIds: ['HoverBob'] },
+    { name: 'Core Power Active', key: 'corePower', preset: corePowerEffect, filterIds: ['CorePowerBloom'] },
 ];
 
 // ---------------------------------------------------------------------------

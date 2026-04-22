@@ -44,17 +44,20 @@ export function registerFlowStatePersistence() {
         game.lancer.flowSteps.set(stepName, async function(state, options) {
             const hookId = Hooks.on("preCreateChatMessage", (message) => {
                 const attackData = message.flags?.lancer?.attackData;
-                if (attackData && attackData.executeEffectId === state.data?.executeEffectId) {
-                    let flowState = {};
-                    if (state.la_extraData && typeof state.la_extraData === 'object') {
-                        flowState = { ...state.la_extraData };
-                    }
-
-                    if (Object.keys(flowState).length > 0) {
-                        message.updateSource({
-                            "flags.lancer-automations.flowState": flowState
-                        });
-                    }
+                if (!attackData)
+                    return;
+                const effectMatch = attackData.executeEffectId === state.data?.executeEffectId;
+                const hasInjectedTags = Array.isArray(state.la_extraData?.injectedTags) && state.la_extraData.injectedTags.length > 0;
+                if (!effectMatch && !hasInjectedTags)
+                    return;
+                let flowState = {};
+                if (state.la_extraData && typeof state.la_extraData === 'object') {
+                    flowState = { ...state.la_extraData };
+                }
+                if (Object.keys(flowState).length > 0) {
+                    message.updateSource({
+                        "flags.lancer-automations.flowState": flowState
+                    });
                 }
             });
 

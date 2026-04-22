@@ -190,6 +190,31 @@ function getConflictRules() {
             }
         },
 
+        // ── ER fork required for movement features ──
+        {
+            id: 'upstream-er-detected',
+            label: 'You are not using the Elevation Ruler version required by Lancer Automations. '
+                + 'Several movement features will not work correctly. '
+                + 'Install the required version: <a href="https://github.com/Agraael/fvtt-elevation-ruler" target="_blank" rel="noopener">Agraael/fvtt-elevation-ruler</a>.',
+            check() {
+                if (!game.modules.get('elevationruler')?.active)
+                    return false;
+                const erApi = game.modules.get('elevationruler')?.api;
+                if (erApi?.moveTokenTo)
+                    return false;
+                try {
+                    return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
+                        || game.settings.get(MODULE_ID, 'experimentalBoostDetection')
+                        || game.settings.get(MODULE_ID, 'enableKnockbackFlow');
+                } catch {
+                    return false;
+                }
+            },
+            async fix() {
+                console.warn(`${MODULE_ID} | Unsupported Elevation Ruler version. See https://github.com/Agraael/fvtt-elevation-ruler`);
+            }
+        },
+
         // ── Wreck system vs csm-lancer-qol wrecks ──
         {
             id: 'wreck-vs-qol',

@@ -58,6 +58,15 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.uiSoundVolume', {
+        name: 'UI Sound Volume',
+        hint: 'Volume of TAH hover/click sounds. Set to 0 to disable.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
     game.settings.register(MODULE, 'tah.auraUseAltKey', {
         name: 'Aura: THT Ruler on Alt Press & Targeted',
         hint: "Show Terrain Height Tools rulers on auras only while Alt is held and tokens are targeted. Requires the grid-aware-auras fork (see lancer-automations README).",
@@ -141,19 +150,6 @@ Hooks.on('init', () => {
         type: Object,
         default: null,
     });
-});
-
-// ── Reset TAH position button in settings ────────────────────────────────────
-Hooks.on('renderSettingsConfig', (app, html) => {
-    const tahField = html.find(`[name="${MODULE}.tah.hoverCloseDelay"]`).closest('.form-group');
-    if (!tahField.length) return;
-    const btn = $(`<button type="button" style="margin-top:4px;"><i class="fas fa-undo"></i> Reset TAH Position</button>`);
-    btn.on('click', async (ev) => {
-        ev.preventDefault();
-        await game.settings.set(MODULE, 'tah.position', null);
-        ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
-    });
-    tahField.after($('<div class="form-group"></div>').append(btn));
 });
 
 // ── Token selection ──────────────────────────────────────────────────────────

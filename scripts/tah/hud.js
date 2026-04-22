@@ -15,6 +15,7 @@ import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
 import { LogPanel } from './log-panel.js';
+import { playUiSound } from './sound.js';
 
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
@@ -524,6 +525,7 @@ export class LancerHUD {
             const openCat = () => {
                 this._searchActive = false;
                 _cancelCollapse();
+                playUiSound();
                 if (/** @type {any} */ (cat).isStatusPanel) {
                     if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible) {
                         if (clickToOpen) {
@@ -801,11 +803,11 @@ export class LancerHUD {
                     };
                     cell.find('.la-dec-btn').on('click', (ev) => {
                         ev.stopPropagation(); if (cur <= min)
-                            return; suppress(); cur = Math.max(min, cur - step); item.onValueChanged(cur); updateDisplay();
+                            return; playUiSound('toggle'); suppress(); cur = Math.max(min, cur - step); item.onValueChanged(cur); updateDisplay();
                     });
                     cell.find('.la-inc-btn').on('click', (ev) => {
                         ev.stopPropagation(); if (cur >= max)
-                            return; suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay();
+                            return; playUiSound('toggle'); suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay();
                     });
                     cell.data('restingBg', restingBg(cur));
                 } else if (item.subtype === 'toggle') {
@@ -816,6 +818,7 @@ export class LancerHUD {
                     cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span>${switchHtml}</div>`);
                     cell.find('.la-toggle-switch').on('click', async (ev) => {
                         ev.stopPropagation();
+                        playUiSound('toggle');
                         on = !on;
                         const sw = cell.find('.la-toggle-switch');
                         sw.css('background', on ? onColor : offColor);
@@ -831,13 +834,14 @@ export class LancerHUD {
                 } else {
                     cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><input type="number" class="la-type-val" value="${item.getValue()}" style="width:44px;text-align:center;background:#fff;border:1px solid #bbb;color:#111;font-size:0.9em;padding:2px 4px;"></div>`);
                     cell.find('.la-type-val').on('change', (ev) => {
-                        ev.stopPropagation(); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v))
+                        ev.stopPropagation(); playUiSound('toggle'); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v))
                             item.onValueChanged(v);
                     }).on('click mousedown', (ev) => ev.stopPropagation());
                     cell.data('restingBg', BG_DEFAULT);
                 }
                 cell.on('mouseenter', () => {
                     this._cancelCollapse?.(); cell.css({ background: BG_HOVER });
+                    playUiSound('hover');
                     const clip = cell.find('.la-hud-clip')[0]; const pan = cell.find('.la-hud-pan')[0];
                     if (clip && pan) {
                         const overflow = pan.scrollWidth - clip.clientWidth; if (overflow > 4)
@@ -865,6 +869,9 @@ export class LancerHUD {
                 row.data('hoverBg', brighten(item.highlightBg));
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
+
+            if (!hasChildren)
+                row.on('mouseenter', () => playUiSound('hover'));
 
             if (col !== this._c4 && !this._clickToOpen) {
                 row.on('mouseenter', () => {
@@ -899,6 +906,7 @@ export class LancerHUD {
 
             if (item.onClick) {
                 row.on('click', async () => {
+                    playUiSound('open');
                     if (!item.keepOpen) {
                         row.trigger('mouseleave');
                         closeCol(this._c2);
@@ -934,6 +942,7 @@ export class LancerHUD {
                 row.attr('title', 'Right click for details');
                 row.on('contextmenu', ev => {
                     ev.preventDefault();
+                    playUiSound('details');
                     if (item.keepOpen && item.refreshCol4) {
                         if (col === this._c3)
                             this._pendingCol3Refresh = { fn: item.refreshCol4, anchor: anchorRow };
@@ -971,6 +980,7 @@ export class LancerHUD {
                         return;
                     }
                     this._setActive(col, row);
+                    playUiSound();
                     if (col === this._c2) {
                         closeCol(this._c4, 80);
                         this._openChildCol(col, this._c3, item, rawChildren, row);
@@ -1315,10 +1325,10 @@ export class LancerHUD {
                     childColLabel: 'Quick Tech',
                     getChildren: () => [
                         { label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: ap({ name: 'Basic Tech', activation: 'Quick Tech', tech_attack: true, detail: 'Roll your TECH ATTACK against one target\'s E-DEFENSE. On a success, deal 1d3 heat to the target.' }) },
-                        { label: 'Scan',       icon: ICON_TECH_QUICK, onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) },
-                        { label: 'Lock On',    icon: ICON_TECH_QUICK, onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) },
-                        { label: 'Bolster',    icon: ICON_TECH_QUICK, onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) },
-                        { label: 'Invade',     icon: ICON_TECH_QUICK, onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, choose one of the available Invade options.' }) },
+                        { label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) },
+                        { label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) },
+                        { label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) },
+                        { label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, choose one of the available Invade options.' }) },
                     ].map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Tech' } })),
                 },
                 { label: 'Invades',    childColLabel: 'Invades',    getChildren: () => this._catInvades().getItems() },
@@ -2289,14 +2299,31 @@ export class LancerHUD {
         const passiveActions = cs?.passive_actions ?? [];
         const counters = cs?.counters ?? [];
 
+        const coreActivation = cs?.activation ?? activeAction?.activation ?? 'Protocol';
         const rows = /** @type {any[]} */ ([{
             label: coreName,
-            icon: getActivationIcon(activeAction ?? 'Protocol'),
+            icon: getActivationIcon(activeAction ?? coreActivation),
             highlightBg: coreUsed ? '#ffe5b4' : null,
             highlightBorderColor: coreUsed ? '#cc7700' : null,
             onClick: () => /** @type {any} */ (frame.beginCoreActiveFlow('system.core_system')),
-            onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `${frame.name} · Core Active`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+            onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `Core Active · ${coreActivation} · ${frame.name}`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
         }]);
+
+        rows.push({ label: 'CHARGE', isSectionLabel: true });
+        const self = this;
+        rows.push({
+            inputCell: true,
+            subtype: 'toggle',
+            name: 'Charged',
+            icon: 'systems/lancer/assets/icons/corepower.svg',
+            getValue: () => !coreUsed,
+            onToggle: async (/** @type {boolean} */ on) => {
+                await actor.update({ 'system.core_energy': on ? 1 : 0 });
+                // Rebuild visible columns in place so the Core Power highlight updates
+                // without collapsing sub-columns.
+                setTimeout(() => self._refreshColumnsInPlace(), 0);
+            },
+        });
 
         if ((passiveName && cs?.passive_effect) || passiveActions.length) {
             rows.push({ label: 'PASSIVE', isSectionLabel: true });
@@ -2974,8 +3001,12 @@ export class LancerHUD {
     }
 
     _getActionsByActivation(actor, activationType, category = null) {
+        const coreUsed = actor.system?.core_energy === 0;
         return getActorActionItems(actor, activationType).map((/** @type {any} */ { action, sourceItem, rankIdx, _coreActive }) => {
             const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };
+            // Core power spent: mark the core active entry as unavailable (orange).
+            if (_coreActive && coreUsed && !status.destroyed)
+                status.unavailable = true;
             // Extra-action recharge: overlay action-level charged state onto item status
             if (action.recharge && !status.destroyed) {
                 const charged = action.charged !== false;

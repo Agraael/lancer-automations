@@ -1,4 +1,5 @@
 /* global $ */
+import { playUiSound } from './sound.js';
 /**
  * Generic HUD item children helpers for lancer-automations.
  * Builds col4 item lists from Foundry item data.
@@ -211,6 +212,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             const loaded = s.loaded !== false;
             const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
             pip.on('click', async () => {
+                playUiSound('toggle');
                 await /** @type {any} */ (item).update({ 'system.loaded': !item.system.loaded });
                 rebuild();
             });
@@ -220,6 +222,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             const charged = s.charged !== false;
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
             pip.on('click', async () => {
+                playUiSound('toggle');
                 await /** @type {any} */ (item).update({ 'system.charged': !item.system.charged });
                 rebuild();
             });
@@ -235,6 +238,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
                     const n = i;
                     const pip = $(`<span style="${S_PIP}color:${n <= val ? '#3a9e6e' : '#444'};">${n <= val ? '⬢' : '⬡'}</span>`);
                     pip.on('click', async () => {
+                        playUiSound('toggle');
                         const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
                         await /** @type {any} */ (item).update(isObj ? { 'system.uses.value': newVal } : { 'system.uses': newVal });
                         rebuild();
@@ -261,6 +265,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             row.append($(`<span style="${S_LBL}">Charged</span>`));
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
             pip.on('click', async () => {
+                playUiSound('toggle');
                 const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];
                 const match = actions.find(a => a.name === extraAction.name);
                 if (match) {

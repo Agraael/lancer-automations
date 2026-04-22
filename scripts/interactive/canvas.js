@@ -202,6 +202,7 @@ export function getGridDistance(pos1, pos2) {
  * @param {boolean} [options.includeHidden=false] - Whether to include hidden tokens
  * @param {boolean} [options.includeSelf=false] - Whether to include the casterToken
  * @param {Function} [options.filter=null] - Optional additional filter function
+ * @param {boolean} [options.soft=true] - Range/filter are advisory (visual only) by default: invalid tokens can still be selected. Set false to hard-enforce.
  * @param {Array<Token>} [options.selection=null] - Restrict selection to these tokens
  * @param {Array<Token>} [options.preSelected=[]] - Tokens initially selected
  * @param {number} [options.count=1] - Maximum number of tokens to select
@@ -219,6 +220,8 @@ export function chooseToken(casterToken, options = {}) {
             includeHidden = false,
             includeSelf = false,
             filter = null,
+            filterWarning = null,
+            soft = true,
             selection = null,
             preSelected = [],
             count = 1,
@@ -268,10 +271,17 @@ export function chooseToken(casterToken, options = {}) {
                 return false;
             if (!includeHidden && t.document.hidden)
                 return false;
-            if (filter && !filter(t))
+            if (!soft && filter && !filter(t))
                 return false;
             return true;
         });
+        const passesAdvisory = (token) => {
+            if (filter && !filter(token))
+                return false;
+            if (range !== null && casterToken && getMinGridDistance(casterToken, token) > range)
+                return false;
+            return true;
+        };
 
         const getActiveTokens = () => {
             if (selectionOnly && selectionIds)
@@ -331,9 +341,27 @@ export function chooseToken(casterToken, options = {}) {
             resolve(null);
         };
 
+        const computeWarnings = (token) => {
+            const msgs = [];
+            if (range !== null && casterToken) {
+                const dist = getMinGridDistance(casterToken, token);
+                if (dist > range)
+                    msgs.push(`Out of range (${dist} > ${range})`);
+            }
+            if (filter && !filter(token))
+                msgs.push(filterWarning ?? 'Invalid target');
+            return msgs;
+        };
         const refreshCard = () => {
+            const warnings = {};
+            for (const t of selectedTokens) {
+                const msgs = computeWarnings(t);
+                if (msgs.length > 0)
+                    warnings[t.id] = msgs;
+            }
             _updateInfoCard(cardEl, "chooseToken", {
                 selectedTokens,
+                warnings,
                 onDeselect: (tokenId) => {
                     const token = allTokens.find(t => t.id === tokenId);
                     if (token && selectedTokens.has(token)) {
@@ -407,7 +435,7 @@ export function chooseToken(casterToken, options = {}) {
             let hoveredToken = allTokens.find(token => {
                 const bounds = token.bounds;
                 if (tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom) {
-                    if (range !== null && casterToken) {
+                    if (!soft && range !== null && casterToken) {
                         const dist = getMinGridDistance(casterToken, token);
                         return dist <= range;
                     }
@@ -417,7 +445,8 @@ export function chooseToken(casterToken, options = {}) {
             }) || null;
 
             const hoveringValid = hoveredToken !== null;
-            const color = hoveringValid ? 0x0088ff : 0xff0000;
+            const hoveringAdvisory = hoveredToken !== null && passesAdvisory(hoveredToken);
+            const color = hoveringValid ? (hoveringAdvisory ? 0x0088ff : 0xffaa00) : 0xff0000;
             const alpha = 0.4;
             const gridSize = canvas.grid.size;
 
@@ -473,8 +502,8 @@ export function chooseToken(casterToken, options = {}) {
             });
 
             if (clickedToken) {
-                // Verify the clicked token is in range
-                if (range !== null && casterToken) {
+                // Verify the clicked token is in range (hard mode only)
+                if (!soft && range !== null && casterToken) {
                     const dist = getMinGridDistance(casterToken, clickedToken);
                     if (dist > range)
                         return;

@@ -1116,6 +1116,34 @@ export function wrapInitTechAttackData(flowSteps) {
     });
 }
 
+/**
+ * Preserve caller-supplied title/action/effect through BasicAttackFlow's initAttackData,
+ * so downstream steps and hooks (LancerFX, chat templates, etc.) see the action's identity
+ * instead of the generic "BASIC ATTACK".
+ */
+export function wrapInitAttackData(flowSteps) {
+    const orig = flowSteps.get('initAttackData');
+    if (!orig)
+        return;
+    flowSteps.set('initAttackData', async function(state, options) {
+        const savedTitle = state.data?.title;
+        const savedAction = state.data?.action;
+        const savedEffect = state.data?.effect;
+        const result = await orig(state, options);
+        if (!state.data)
+            return result;
+        if (savedTitle && state.data.title === "BASIC ATTACK") {
+            state.data.title = savedTitle;
+            try { state.data.acc_diff.title = savedTitle; } catch { /* */ }
+        }
+        if (savedAction && !state.data.action)
+            state.data.action = savedAction;
+        if (savedEffect && !state.data.effect)
+            state.data.effect = savedEffect;
+        return result;
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------

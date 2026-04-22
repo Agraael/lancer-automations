@@ -2,6 +2,7 @@
 
 import { laDetailPopup, laBindPopupBehavior } from '../interactive/detail-renderers.js';
 import { ReactionManager } from '../reaction-manager.js';
+import { playUiSound } from './sound.js';
 
 function hasAutomation(itemOrName) {
     const lid = itemOrName?.system?.lid;
@@ -102,6 +103,7 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
             const dis = !!item.system.disabled;
             const disBtn = $(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${dis ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dis ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`);
             disBtn.on('click', async () => {
+                playUiSound('toggle');
                 const newVal = !item.system.disabled;
                 await item.update({ 'system.disabled': newVal });
                 disBtn.css('color', newVal ? '#e8a020' : '#666');
@@ -113,6 +115,7 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
             const dest = !!item.system.destroyed;
             const destBtn = $(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${dest ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dest ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`);
             destBtn.on('click', async () => {
+                playUiSound('toggle');
                 const newVal = !item.system.destroyed;
                 await item.update({ 'system.destroyed': newVal });
                 destBtn.css('color', newVal ? '#c33' : '#666');

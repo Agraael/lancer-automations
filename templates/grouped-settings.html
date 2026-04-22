@@ -2,6 +2,13 @@
     {{#each items}}
     {{#if this.isSection}}
     <h2 style="border-bottom: 1px solid #782e22; margin: 10px 0 6px; font-size: 1em;">{{this.label}}</h2>
+    {{else if this.isButton}}
+    <div class="form-group" style="margin: 6px 0;">
+        <button type="button" data-action-key="{{this.key}}" style="width:100%;">
+            {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}
+        </button>
+        {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
+    </div>
     {{else if this.isTable}}
     <table style="width:100%; border-collapse:collapse; margin: 6px 0;">
         <thead>

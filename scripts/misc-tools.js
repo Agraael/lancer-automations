@@ -3,6 +3,7 @@ import { getMaxGroundHeightUnderToken } from "./terrain-utils.js";
 import { chooseToken, choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId } from "./interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "./genericBonuses.js";
 import { getItemActions } from "./interactive/deployables.js";
+import { playSkirmishFX, playBarrageFX, playStandingUpFX, playTeleportFX, playSelfDestructFX } from "./actionFX.js";
 
 /** Maps activation type strings to the NPC feature tag LID that signals that activation. */
 export const ACTIVATION_TAG_MAP = {
@@ -233,6 +234,7 @@ export async function executeStandingUp(token) {
         return;
     }
     await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
+    playStandingUpFX(token);
     const speed = token.actor.system?.speed ?? 0;
     await addVirtualMovement(token, speed);
     ChatMessage.create({
@@ -256,6 +258,7 @@ export async function executeTeleport(token, cost) {
         title: "TELEPORT",
         description: `Select destination within Range ${speed}. Costs ${moveCost} movement.`
     });
+    playTeleportFX(token);
 }
 
 export async function executeFall(paramToken) {
@@ -720,7 +723,21 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     if (!BasicAttackFlow) {
         return { completed: false };
     }
-    const flow = new BasicAttackFlow(actor.uuid, options);
+    const { tags, ...flowOptions } = options;
+    const flow = new BasicAttackFlow(actor.uuid, flowOptions);
+    if (Array.isArray(tags) && tags.length > 0) {
+        flow.state.data = flow.state.data || {};
+        const normalized = tags.map(t => ({
+            id: t.id ?? t.lid ?? '',
+            lid: t.lid ?? t.id ?? '',
+            val: t.val !== undefined ? String(t.val) : '',
+            name: t.name ?? (t.lid ? t.lid.replace(/^tg_/, '').toUpperCase() : ''),
+            description: t.description ?? ''
+        }));
+        flow.state.data.tags = [...(flow.state.data.tags || []), ...normalized];
+        flow.state.la_extraData = flow.state.la_extraData || {};
+        flow.state.la_extraData.injectedTags = normalized;
+    }
     if (extraData && typeof extraData === 'object') {
         flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     }
@@ -825,6 +842,15 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null) {
     if (selectedTurns === null) {
         ui.notifications.info('Reactor Meltdown cancelled.');
         return;
+    }
+
+    const sourceToken = /** @type {Token|null} */ (
+        (/** @type {any} */ (tokenOrActor))?.actor
+            ? tokenOrActor
+            : actor.token?.object || actor.getActiveTokens()[0] || null
+    );
+    if (sourceToken) {
+        playSelfDestructFX(sourceToken);
     }
 
     await executeSimpleActivation(actor, {
@@ -1409,6 +1435,15 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
         return;
     }
 
+    const sourceToken = /** @type {Token|null} */ (
+        (/** @type {any} */ (actorOrToken))?.actor
+            ? actorOrToken
+            : actor.token?.object || actor.getActiveTokens()[0] || null
+    );
+    if (sourceToken) {
+        playSkirmishFX(sourceToken);
+    }
+
     let weapons;
     if (bypassMount) {
         weapons = (bypassMount.slots ?? [])
@@ -1510,6 +1545,15 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     if (!actor) {
         ui.notifications.error("lancer-automations | barrage requires a token.");
         return;
+    }
+
+    const sourceToken = /** @type {Token|null} */ (
+        (/** @type {any} */ (actorOrToken))?.actor
+            ? actorOrToken
+            : actor.token?.object || actor.getActiveTokens()[0] || null
+    );
+    if (sourceToken) {
+        playBarrageFX(sourceToken);
     }
 
     // Helper to check if a mount or weapon contains a Superheavy weapon

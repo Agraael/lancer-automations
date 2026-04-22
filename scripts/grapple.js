@@ -1,3 +1,5 @@
+import * as actionFX from './actionFX.js';
+
 // grapple.js — Grapple automation for Lancer via lancer-automations
 //
 // Token flags (MODULE_ID / 'grappleState'):
@@ -220,6 +222,7 @@ Hooks.on('lancer-automations.ready', (api) => {
                                     text: "Grapple (Melee Attack)",
                                     icon: "cci cci-reticule",
                                     callback: async () => {
+                                        await actionFX.playGrappleFX(reactorToken);
                                         await api.executeBasicAttack(reactorToken.actor, {
                                             title: "Grapple",
                                             attack_type: "Melee"

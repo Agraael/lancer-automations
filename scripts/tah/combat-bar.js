@@ -72,7 +72,9 @@ export function buildCombatBar(actor, token) {
             continue;
         }
 
-        const diamond = $(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:color 0.15s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`);
+        const diamond = $(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:filter 0.1s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`);
+        diamond.on('mouseenter', () => diamond.css({ filter: 'brightness(1.6)', opacity: 1 }));
+        diamond.on('mouseleave', () => diamond.css({ filter: '', opacity: filled ? 1 : 0.4 }));
         if (canClick) {
             if (filled) {
                 diamond.on('click', async () => {
@@ -102,7 +104,9 @@ export function buildCombatBar(actor, token) {
             ? `${def.label}: ${val ?? 0}`
             : `${def.label}: ${isAvailable ? 'Available' : 'Spent'}`;
 
-        const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:color 0.15s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
+        const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
+        icon.on('mouseenter', () => icon.css({ filter: 'brightness(1.6)', opacity: 1 }));
+        icon.on('mouseleave', () => icon.css({ filter: '', opacity: isAvailable ? 1 : 0.35 }));
 
         if (canClick) {
             icon.on('click', async () => {
