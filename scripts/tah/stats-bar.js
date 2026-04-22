@@ -4,6 +4,8 @@
  * Generates the inline HTML for the HP / heat / structure / pips display.
  */
 
+import { playUiSound } from './sound.js';
+
 /** Whether the secondary stats panel is expanded. Persists across in-place updates. */
 let _statsExpanded = false;
 
@@ -178,7 +180,7 @@ export function buildStatsEl(actor, token = null) {
         });
         toggle.find('span').text('▶');
     };
-    el.on('mouseenter', openDetail);
+    el.on('mouseenter', () => { playUiSound('details'); openDetail(); });
     el.on('mouseleave', closeDetail);
     toggle.on('click', (ev) => {
         ev.stopPropagation();

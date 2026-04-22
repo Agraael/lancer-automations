@@ -3460,6 +3460,7 @@ api.registerDefaultGeneralReactions({
 });
 
 // ─── Guardian Aura — draws/removes hard-cover indicator when the Guardian status toggles ──
+const _guardianAuraPending = new Set();
 api.registerDefaultGeneralReactions({
     "Guardian Aura": {
         category: "Automation",
@@ -3476,21 +3477,26 @@ api.registerDefaultGeneralReactions({
                     return triggerData.statusId === 'guardian';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    if (api.findAura(reactorToken, "Guardian"))
+                    if (api.findAura(reactorToken, "Guardian") || _guardianAuraPending.has(reactorToken.id))
                         return;
-                    await api.createAura(reactorToken, {
-                        name: "Guardian",
-                        unified: false,
-                        radius: "0",
-                        lineWidth: 6,
-                        lineColor: "#000000",
-                        lineOpacity: 0.8,
-                        lineDashSize: 15,
-                        lineGapSize: 10,
-                        fillType: 0,
-                        animation: false,
-                        nonOwnerVisibility: { default: true }
-                    });
+                    _guardianAuraPending.add(reactorToken.id);
+                    try {
+                        await api.createAura(reactorToken, {
+                            name: "Guardian",
+                            unified: false,
+                            radius: "0",
+                            lineWidth: 6,
+                            lineColor: "#000000",
+                            lineOpacity: 0.8,
+                            lineDashSize: 15,
+                            lineGapSize: 10,
+                            fillType: 0,
+                            animation: false,
+                            nonOwnerVisibility: { default: true }
+                        });
+                    } finally {
+                        _guardianAuraPending.delete(reactorToken.id);
+                    }
                 }
             },
             {

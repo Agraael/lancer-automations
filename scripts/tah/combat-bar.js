@@ -1,6 +1,7 @@
 /* global game, canvas, $ */
 
 import { revertMovement, clearMovementHistory } from '../interactive/combat.js';
+import { playUiSound } from './sound.js';
 
 const ACTION_DEFS = [
     { key: 'protocol', icon: 'cci cci-protocol',                        color: '#00e5e5', label: 'Protocol' },
@@ -59,7 +60,7 @@ export function buildCombatBar(actor, token) {
         if (!filled && isMyTurn && !endTurnPlaced) {
             endTurnPlaced = true;
             const endBtn = $(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:#c33;transition:color 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`);
-            endBtn.on('mouseenter', () => endBtn.css('color', '#ff5555'));
+            endBtn.on('mouseenter', () => { playUiSound('statusHover'); endBtn.css('color', '#ff5555'); });
             endBtn.on('mouseleave', () => endBtn.css('color', '#c33'));
             endBtn.on('click', async () => {
                 await game.combat.deactivateCombatant(combatant.id);
@@ -73,7 +74,7 @@ export function buildCombatBar(actor, token) {
         }
 
         const diamond = $(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:filter 0.1s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`);
-        diamond.on('mouseenter', () => diamond.css({ filter: 'brightness(1.6)', opacity: 1 }));
+        diamond.on('mouseenter', () => { playUiSound('statusHover'); diamond.css({ filter: 'brightness(1.6)', opacity: 1 }); });
         diamond.on('mouseleave', () => diamond.css({ filter: '', opacity: filled ? 1 : 0.4 }));
         if (canClick) {
             if (filled) {
@@ -105,7 +106,7 @@ export function buildCombatBar(actor, token) {
             : `${def.label}: ${isAvailable ? 'Available' : 'Spent'}`;
 
         const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
-        icon.on('mouseenter', () => icon.css({ filter: 'brightness(1.6)', opacity: 1 }));
+        icon.on('mouseenter', () => { playUiSound('statusHover'); icon.css({ filter: 'brightness(1.6)', opacity: 1 }); });
         icon.on('mouseleave', () => icon.css({ filter: '', opacity: isAvailable ? 1 : 0.35 }));
 
         if (canClick) {
@@ -114,9 +115,45 @@ export function buildCombatBar(actor, token) {
                     const speed = actor.system?.speed ?? 0;
                     const newVal = val > 0 ? 0 : speed;
                     await actor.update({ [`system.action_tracker.${def.key}`]: newVal });
-                } else {
-                    await actor.update({ [`system.action_tracker.${def.key}`]: !val });
+                    return;
                 }
+                // Mirror Lancer system's modAction cascade (lancer.mjs ~30727).
+                const at = /** @type {any} */ ({ ...(actor.system?.action_tracker ?? {}) });
+                const spend = !!val;
+                switch (def.key) {
+                    case 'free':
+                        at.free = !spend;
+                        break;
+                    case 'quick':
+                        if (spend) {
+                            if (at.full)
+                                at.full = false;
+                            else
+                                at.quick = false;
+                        } else {
+                            at.quick = true;
+                        }
+                        break;
+                    case 'full':
+                        if (spend) {
+                            at.full = false;
+                            at.quick = false;
+                        } else {
+                            at.full = true;
+                        }
+                        break;
+                    case 'protocol':
+                        at.protocol = !spend;
+                        break;
+                    case 'reaction':
+                        at.reaction = !spend;
+                        break;
+                    default:
+                        at[def.key] = !val;
+                }
+                if (spend)
+                    at.protocol = false;
+                await actor.update(/** @type {any} */ ({ 'system.action_tracker': at }));
             });
         }
         bar.append(icon);
@@ -126,7 +163,7 @@ export function buildCombatBar(actor, token) {
     if (canClick) {
         bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
         const resetBtn = $(`<span class="la-action-reset" style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Reset Actions"><i class="mdi mdi-restore"></i></span>`);
-        resetBtn.on('mouseenter', () => resetBtn.css('color', '#fff'));
+        resetBtn.on('mouseenter', () => { playUiSound('statusHover'); resetBtn.css('color', '#fff'); });
         resetBtn.on('mouseleave', () => resetBtn.css('color', '#888'));
         resetBtn.on('click', async () => {
             const speed = actor.system?.speed ?? 0;
@@ -144,7 +181,7 @@ export function buildCombatBar(actor, token) {
 
         // Revert last movement
         const revertBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Revert Last Move"><i class="fas fa-step-backward"></i></span>`);
-        revertBtn.on('mouseenter', () => revertBtn.css('color', '#fff'));
+        revertBtn.on('mouseenter', () => { playUiSound('statusHover'); revertBtn.css('color', '#fff'); });
         revertBtn.on('mouseleave', () => revertBtn.css('color', '#888'));
         revertBtn.on('click', async () => {
             await revertMovement(token);
@@ -153,7 +190,7 @@ export function buildCombatBar(actor, token) {
 
         // Clear movement history
         const clearBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Clear Movement History"><i class="fas fa-trash"></i></span>`);
-        clearBtn.on('mouseenter', () => clearBtn.css('color', '#fff'));
+        clearBtn.on('mouseenter', () => { playUiSound('statusHover'); clearBtn.css('color', '#fff'); });
         clearBtn.on('mouseleave', () => clearBtn.css('color', '#888'));
         clearBtn.on('click', async () => {
             await clearMovementHistory(token, false);

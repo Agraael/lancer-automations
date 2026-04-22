@@ -244,7 +244,7 @@ export class StatusPanel {
             let tooltipEl = /** @type {any} */ (null);
             let tooltipTimer = null;
             rowEl.on('mouseenter', function() {
-                playUiSound('hover');
+                playUiSound('statusHover');
                 if (!$(this).data('active'))
                     $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 const self = $(this);
@@ -330,12 +330,12 @@ export class StatusPanel {
         const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
         if (laApi?.executeEffectManager) {
             const emBtn = $(`<button style="${S_UTIL_BTN}">Effect Manager</button>`);
-            emBtn.on('mouseenter', () => playUiSound('hover'));
+            emBtn.on('mouseenter', () => playUiSound('statusHover'));
             emBtn.on('click', () => { playUiSound('toggle'); laApi.executeEffectManager(); });
             rightEl.append(emBtn);
         }
         const clearBtn = $(`<button style="${S_UTIL_BTN}background:#444;">Clear All Effects</button>`);
-        clearBtn.on('mouseenter', () => playUiSound('hover'));
+        clearBtn.on('mouseenter', () => playUiSound('statusHover'));
         clearBtn.on('click', async () => {
             playUiSound('toggle');
             this._incDepth();
@@ -382,7 +382,7 @@ export class StatusPanel {
                     <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
                 </div>`);
                 cRow.on('mouseenter', function() {
-                    playUiSound('hover');
+                    playUiSound('statusHover');
                     if (!$(this).data('active'))
                         $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 }).on('mouseleave', function() {

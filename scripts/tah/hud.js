@@ -339,7 +339,7 @@ export class LancerHUD {
         // Combat toggle icon (left of token name)
         const inCombat = this._token.inCombat;
         const combatToggle = $(`<span class="la-combat-toggle" style="cursor:pointer;color:${inCombat ? 'var(--primary-color)' : '#555'};margin-right:4px;padding-left:8px;font-size:0.85em;flex-shrink:0;opacity:${inCombat ? 1 : 0.5};transition:color 0.15s, opacity 0.15s;display:flex;align-items:center;" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
-        combatToggle.on('mouseenter', () => combatToggle.css({ color: 'color-mix(in srgb, var(--primary-color), white 40%)', opacity: 1 }));
+        combatToggle.on('mouseenter', () => { playUiSound('statusHover'); combatToggle.css({ color: 'color-mix(in srgb, var(--primary-color), white 40%)', opacity: 1 }); });
         combatToggle.on('mouseleave', () => {
             const ic = this._token.inCombat;
             combatToggle.css({ color: ic ? 'var(--primary-color)' : '#555', opacity: ic ? 1 : 0.5 });
@@ -425,7 +425,7 @@ export class LancerHUD {
                 });
                 dispToggle.find('span').text('▶');
             };
-            dispToggle.on('mouseenter', openDisp);
+            dispToggle.on('mouseenter', () => { playUiSound('statusHover'); openDisp(); });
             dispToggle.on('mouseleave', closeDisp);
             dispDetail.on('mouseenter', openDisp);
             dispDetail.on('mouseleave', closeDisp);
@@ -442,6 +442,7 @@ export class LancerHUD {
         // Title bar hover/click — must be after lockBtn/resetBtn creation
         const nameSpan = titleEl.find('.la-hud-token-name');
         nameSpan.on('mouseenter', () => {
+            playUiSound('statusHover');
             nameSpan.css({ color: 'var(--primary-color)', cursor: 'pointer' });
         });
         nameSpan.on('mouseleave', () => {
@@ -1205,7 +1206,7 @@ export class LancerHUD {
                         if (!dep)
                             return;
                         const srcType = item.system?.type ?? '';
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row });
                     },
                 });
             }
@@ -1229,7 +1230,7 @@ export class LancerHUD {
         return {
             label: 'Attacks',
             colLabel: 'Attacks',
-            getItems: () => [
+            getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
                     { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
                     { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
@@ -1245,9 +1246,7 @@ export class LancerHUD {
                 { label: 'Damage',        icon: 'systems/lancer/assets/icons/melee.svg',       onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic') },
                 { label: 'Throw Weapon',  icon: 'systems/lancer/assets/icons/thrown.svg',      onClick: () => openThrowMenu(actor),    broadcastFn: (t, a) => openThrowMenu(a) },
                 { label: 'Pickup Weapon', icon: 'modules/lancer-automations/icons/pickup.svg', onClick: () => pickupWeaponToken(token), broadcastFn: (t) => pickupWeaponToken(t), keepOpen: true },
-            ].map(it => it.isSectionLabel || !it.onClick
-                ? it
-                : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Attacks' } }),
+            ], { actor, category: 'Attacks' }),
         };
     }
 
@@ -1323,13 +1322,13 @@ export class LancerHUD {
                 {
                     label: 'Basic',
                     childColLabel: 'Quick Tech',
-                    getChildren: () => [
+                    getChildren: () => this._enrichHoverData([
                         { label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: ap({ name: 'Basic Tech', activation: 'Quick Tech', tech_attack: true, detail: 'Roll your TECH ATTACK against one target\'s E-DEFENSE. On a success, deal 1d3 heat to the target.' }) },
                         { label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) },
                         { label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) },
                         { label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) },
                         { label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, choose one of the available Invade options.' }) },
-                    ].map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Tech' } })),
+                    ], { actor, category: 'Tech' }),
                 },
                 { label: 'Invades',    childColLabel: 'Invades',    getChildren: () => this._catInvades().getItems() },
                 { label: 'Quick Tech', childColLabel: 'Quick Tech', getChildren: () => this._getActionsByActivation(actor, 'Quick Tech', 'Tech') },
@@ -1344,20 +1343,12 @@ export class LancerHUD {
             label: 'Invades',
             colLabel: 'Invades',
             getItems: () => this._getInvadeOptions(actor).map(opt => ({
-                label: opt.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${opt.name}</s>` : opt.name,
+                label: opt.destroyed ? this._destroyedLabel(opt.name) : opt.name,
                 icon: 'modules/lancer-automations/icons/cpu-shot.svg',
                 ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
-                onRightClick: (row) => {
-                    const detail = laFormatDetailHtml(opt.detail);
-                    const bodyHtml = detail ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>` : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    const isWeapon = opt.item?.type?.includes('weapon');
-                    const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
-                    const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
-                    const subtitle = (opt.isFragmentSignal ? 'Fragment Signal · Quick Tech' : 'Invade · Quick Tech') + sourceLabel;
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle, bodyHtml, item: opt.item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
-                },
+                onRightClick: (row) => this._buildInvadePopup(opt, row),
             })),
         };
     }
@@ -1381,7 +1372,7 @@ export class LancerHUD {
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
-            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
+            return this._enrichHoverData(items, { actor, category: 'Actions' });
         };
         return {
             label: 'Quick Actions',
@@ -1401,7 +1392,7 @@ export class LancerHUD {
             ];
             if (actor.type === 'mech' || actor.type === 'npc')
                 items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose ONE of these two items: \r &bull; Cool your mech (clearing all heat and ending the EXPOSED status); \r &bull; Spend ONE Repair to heal your mech to max HP. \r \n Additionally, choose ONE the following four items: \r &bull; Reload all LOADING weapons on your mech; \r &bull; Clear any burn on your mech; \r &bull; Clear ONE condition from yourself NOT caused by your own systems/talents (etc); \r &bull; Clear ONE condition from an ADJACENT ally NOT caused by their own systems/talents (etc).' }) });
-            return items.map(it => ({ ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }));
+            return this._enrichHoverData(items, { actor, category: 'Actions' });
         };
         return {
             label: 'Full Action',
@@ -1433,7 +1424,7 @@ export class LancerHUD {
                             item.highlightBg = unavailBg; item.highlightBorderColor = unavailBorder;
                         }
                     });
-                return items.map(it => /** @type {any} */ (it).hoverData || /** @type {any} */ (it).isSectionLabel || !it.onClick ? it : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } });
+                return this._enrichHoverData(items, { actor, category: 'Actions' });
             },
         };
     }
@@ -1444,9 +1435,9 @@ export class LancerHUD {
         return {
             label: 'Protocols',
             colLabel: 'Protocols',
-            getItems: () => [
+            getItems: () => this._enrichHoverData([
                 ...this._getActionsByActivation(actor, 'Protocol', 'Actions'),
-            ].map(it => /** @type {any} */ (it).hoverData || !it.onClick ? it : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }),
+            ], { actor, category: 'Actions' }),
         };
     }
 
@@ -1455,11 +1446,11 @@ export class LancerHUD {
         return {
             label: 'Free Actions',
             colLabel: 'Free Actions',
-            getItems: () => [
+            getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets at the start of your next scene.' }) }] : []),
                 ...(actor.type !== 'deployable' ? [this._simpleItem('Squeeze', 'modules/lancer-automations/icons/contract.svg', { name: 'Squeeze', activation: 'Free' }, 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.')] : []),
                 ...this._getActionsByActivation(actor, 'Free', 'Actions'),
-            ].map(it => /** @type {any} */ (it).hoverData || !it.onClick ? it : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category: 'Actions' } }),
+            ], { actor, category: 'Actions' }),
         };
     }
 
@@ -1659,7 +1650,7 @@ export class LancerHUD {
                 lines.push(`<li>No ${rangeType.toLowerCase()} weapons found</li>`);
             }
             const bodyHtml = `<ul style="list-style:none;padding:0;margin:0;">${lines.join('')}</ul>`;
-            toggleDetailPopup({
+            this._showItemPopup({
                 cssClass: 'la-hud-popup',
                 dataKey: 'range-breakdown',
                 dataValue: rangeType,
@@ -1668,7 +1659,6 @@ export class LancerHUD {
                 bodyHtml,
                 theme: 'system',
                 row,
-                showPopupAt: (p, r) => this._showPopupAt(p, r),
             });
         };
 
@@ -1796,7 +1786,7 @@ export class LancerHUD {
                 return systems.map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
-                    const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${item.name}</s>` : item.name;
+                    const labelHtml = status.destroyed ? this._destroyedLabel(item.name) : item.name;
                     return {
                         label: labelHtml,
                         badge: status.badge ?? null,
@@ -1823,8 +1813,8 @@ export class LancerHUD {
                             }).join('');
                             const ammoSection = ammoHtml ? `<div style="margin-top:4px;"><div style="font-size:0.72em;font-weight:bold;color:#888;text-transform:uppercase;margin-bottom:2px;">Ammo</div>${ammoHtml}</div>` : '';
                             const bodyHtml = this._bodyHtml(sys) + actionsHtml + deployablesHtml + ammoSection;
-                            const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(item, p) });
+                            const subtitle = this._joinSubtitle(sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null);
+                            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: item.id, title: item.name, subtitle, bodyHtml, theme: 'system', item, row, postRender: p => appendItemPips(item, p) });
                         },
                     };
                 });
@@ -1859,8 +1849,8 @@ export class LancerHUD {
                 onClick: single ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0') : () => /** @type {any} */ (item).beginSystemFlow(),
                 onRightClick: single ? ap(single)
                     : activationTag ? (/** @type {any} */ row) => {
-                        const subtitle = [sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null].filter(Boolean).join(' · ');
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'sys-activate', dataValue: item.id, title: item.name, subtitle, bodyHtml: this._bodyHtml(sys), theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: /** @type {any} */ p => appendItemPips(item, p) });
+                        const subtitle = this._joinSubtitle(sys.type, sys.license ? `${sys.manufacturer} ${sys.license_level}` : null);
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'sys-activate', dataValue: item.id, title: item.name, subtitle, bodyHtml: this._bodyHtml(sys), theme: 'system', item, row, postRender: /** @type {any} */ p => appendItemPips(item, p) });
                     }
                         : ap({ name: item.name, activation: 'Activation', detail: 'Default system activation.' }),
                 hoverData: { actor, item, action: { name: item.name, activation: actStr }, category: 'Systems' },
@@ -1880,19 +1870,12 @@ export class LancerHUD {
         const invadeOpts = this._getInvadeOptions(actor).filter(opt => opt.item?.id === item.id && !sysActionNames.has(opt.name));
         for (const opt of invadeOpts) {
             children.push({
-                label: opt.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${opt.name}</s>` : opt.name,
+                label: opt.destroyed ? this._destroyedLabel(opt.name) : opt.name,
                 icon: ICON_TECH_QUICK,
                 ...this._statusColors(opt),
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
-                onRightClick: (/** @type {any} */ row) => {
-                    const detail = laFormatDetailHtml(opt.detail);
-                    const bodyHtml = detail ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>` : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    const isWeapon = opt.item?.type?.includes('weapon');
-                    const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
-                    const sourceLabel = opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-invade-popup', dataKey: 'invade-name', dataValue: opt.name, title: opt.name, theme: 'invade', subtitle: `Invade · Quick Tech${sourceLabel}`, bodyHtml, item: opt.item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
-                },
+                onRightClick: (/** @type {any} */ row) => this._buildInvadePopup(opt, row),
             });
         }
         const lids = getItemDeployables(item, actor);
@@ -1913,7 +1896,7 @@ export class LancerHUD {
                         if (!dep)
                             return;
                         const srcType = item.system?.type ?? '';
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${item.name}${srcType ? ` (${srcType})` : ''}`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item, row });
                     },
                 });
             }
@@ -1958,7 +1941,7 @@ export class LancerHUD {
                         const typeTags = _ammoTagsHtml(ammo.allowed_types, 'Type');
                         const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
                             <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `Ammo · ${item.name}`, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `Ammo · ${item.name}`, bodyHtml, theme: 'system', item, row });
                     },
                     hoverData: { actor, item, action: { name: ammo.name, activation: 'Ammo' }, category: 'Systems' },
                 });
@@ -1978,7 +1961,7 @@ export class LancerHUD {
                     return [];
                 const sys = frame.system;
                 const as = actor.system;
-                const frameSubtitle = [sys.manufacturer, sys.license ? `LL${sys.license_level}` : null, ...(sys.mechtype ?? []), as.size != null ? `Size ${as.size}` : null].filter(Boolean).join(' · ');
+                const frameSubtitle = this._joinSubtitle(sys.manufacturer, sys.license ? `LL${sys.license_level}` : null, ...(sys.mechtype ?? []), as.size != null ? `Size ${as.size}` : null);
                 const stat = (/** @type {string} */ label, /** @type {any} */ val, /** @type {any} */ base = undefined) => {
                     const delta = (val != null && base != null && val !== base) ? (val > base ? `<span style="position:absolute;bottom:2px;right:2px;color:#3a9e6e;font-size:0.55em;line-height:1;">▲</span>` : `<span style="position:absolute;bottom:2px;right:2px;color:#c33;font-size:0.55em;line-height:1;">▼</span>`) : '';
                     return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;">${delta}<span style="font-size:0.68em;color:#666;text-transform:uppercase;letter-spacing:0.05em;">${label}</span><span style="font-size:0.95em;color:#ccc;font-weight:bold;">${val ?? '—'}</span></div>`;
@@ -2002,9 +1985,9 @@ export class LancerHUD {
                         label: frame.name,
                         icon: 'systems/lancer/assets/icons/frame.svg',
                         onClick: () => /** @type {any} */ (frame).sheet.render(true),
-                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row }),
                     },
-                    { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) },
+                    { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
                     { label: 'Core Bonus',  childColLabel: 'Core Bonus',  getChildren: () => this._coreBonusItems(actor) },
                 ];
@@ -2086,21 +2069,20 @@ export class LancerHUD {
                         label: npcClass.name,
                         icon: tierIcon,
                         onClick: () => /** @type {any} */ (npcClass).sheet.render(true),
-                        onRightClick: (/** @type {any} */ row) => toggleDetailPopup({
+                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({
                             cssClass: 'la-hud-popup la-hud-npcclass-popup',
                             dataKey: 'npcclass-id',
                             dataValue: npcClass.id,
                             title: npcClass.name,
-                            subtitle: [
+                            subtitle: this._joinSubtitle(
                                 `Tier ${tierClamped}`,
                                 npcClass.system?.role ? npcClass.system.role.charAt(0).toUpperCase() + npcClass.system.role.slice(1) : null,
                                 as.size != null ? `Size ${as.size}` : (bs.size != null ? `Size ${bs.size}` : null),
-                            ].filter(Boolean).join(' · '),
+                            ),
                             bodyHtml,
                             theme: 'frame',
                             item: npcClass,
                             row,
-                            showPopupAt: (p, r) => this._showPopupAt(p, r),
                         }),
                     },
                     { label: 'Templates', childColLabel: 'Templates', getChildren: () => this._npcTemplateItems(actor) },
@@ -2121,7 +2103,7 @@ export class LancerHUD {
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(tmpl.system.description)}</div>` : '';
                 if (!desc)
                     return;
-                toggleDetailPopup({
+                this._showItemPopup({
                     cssClass: 'la-hud-popup la-hud-npctemplate-popup',
                     dataKey: 'npctemplate-id',
                     dataValue: tmpl.id,
@@ -2131,7 +2113,6 @@ export class LancerHUD {
                     theme: 'frame',
                     item: tmpl,
                     row,
-                    showPopupAt: (p, r) => this._showPopupAt(p, r),
                 });
             },
         }));
@@ -2158,7 +2139,7 @@ export class LancerHUD {
                     if (!bodyHtml)
                         return;
                     const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
-                    toggleDetailPopup({
+                    this._showItemPopup({
                         cssClass: 'la-hud-popup la-hud-npctrait-popup',
                         dataKey: 'npctrait-id',
                         dataValue: feat.id,
@@ -2168,7 +2149,6 @@ export class LancerHUD {
                         theme: 'trait',
                         item: feat,
                         row,
-                        showPopupAt: (p, r) => this._showPopupAt(p, r),
                     });
                 },
             };
@@ -2197,7 +2177,7 @@ export class LancerHUD {
                 return /** @type {any[]} */ (features).map(item => {
                     const sys = item.system;
                     const status = getItemStatus(item);
-                    const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${item.name}</s>` : item.name;
+                    const labelHtml = status.destroyed ? this._destroyedLabel(item.name) : item.name;
                     const actTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
                     const TYPE_TO_ACTIVATION = { Reaction: 'Reaction', System: null, Tech: 'Quick Tech', Trait: null, Weapon: null };
                     const activation = actTag
@@ -2214,7 +2194,7 @@ export class LancerHUD {
                             const bodyHtml = laRenderTags(sys.tags ?? []) + trigger + effect;
                             if (!bodyHtml)
                                 return;
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: /** @type {any} */ p => appendItemPips(item, p) });
+                            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: this._joinSubtitle(actLabel ?? sys.type, origin), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row, postRender: /** @type {any} */ p => appendItemPips(item, p) });
                         };
                         // Base system activation (always present)
                         const baseRows = [];
@@ -2269,17 +2249,16 @@ export class LancerHUD {
                             const bodyHtml = tagsHtml + trigger + effect;
                             if (!bodyHtml)
                                 return;
-                            toggleDetailPopup({
+                            this._showItemPopup({
                                 cssClass: 'la-hud-popup la-hud-npcsys-popup',
                                 dataKey: 'npcsys-id',
                                 dataValue: item.id,
                                 title: item.name,
-                                subtitle: [actLabel ?? sys.type, origin].filter(Boolean).join(' · '),
+                                subtitle: this._joinSubtitle(actLabel ?? sys.type, origin),
                                 bodyHtml,
                                 theme: activation ? activationTheme(activation) : 'system',
                                 item,
                                 row,
-                                showPopupAt: (p, r) => this._showPopupAt(p, r),
                                 postRender: p => appendItemPips(item, p),
                             });
                         },
@@ -2306,7 +2285,7 @@ export class LancerHUD {
             highlightBg: coreUsed ? '#ffe5b4' : null,
             highlightBorderColor: coreUsed ? '#cc7700' : null,
             onClick: () => /** @type {any} */ (frame.beginCoreActiveFlow('system.core_system')),
-            onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `Core Active · ${coreActivation} · ${frame.name}`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+            onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `Core Active · ${coreActivation} · ${frame.name}`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row }),
         }]);
 
         rows.push({ label: 'CHARGE', isSectionLabel: true });
@@ -2331,7 +2310,7 @@ export class LancerHUD {
                 rows.push({
                     label: passiveName,
                     icon: 'systems/lancer/assets/icons/core_bonus.svg',
-                    onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.passive_effect ?? '')}</div>${laRenderActions(cs?.passive_actions ?? [])}`, theme: 'frame', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                    onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.passive_effect ?? '')}</div>${laRenderActions(cs?.passive_actions ?? [])}`, theme: 'frame', item: frame, row }),
                 });
             }
             for (const action of passiveActions) {
@@ -2387,7 +2366,7 @@ export class LancerHUD {
                             }
                             if (!dep)
                                 return;
-                            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${trait.name} (Trait)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${trait.name} (Trait)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row });
                         },
                     });
                 }
@@ -2412,7 +2391,7 @@ export class LancerHUD {
                 const bodyHtml = trait.description
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(trait.description)}</div>`
                     : '<div style="font-size:0.82em;color:#888;">No description.</div>';
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', item: frame, row });
             },
         }));
     }
@@ -2424,7 +2403,7 @@ export class LancerHUD {
             label: cb.name,
             icon: cb.img ?? null,
             onRightClick: (/** @type {any} */ row) => {
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: laRenderCoreBonusBody(cb), theme: 'core_bonus', item: cb, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-cb-popup', dataKey: 'cb-id', dataValue: cb.id, title: cb.name, subtitle: 'Core Bonus', bodyHtml: laRenderCoreBonusBody(cb), theme: 'core_bonus', item: cb, row });
             },
         }));
     }
@@ -2442,7 +2421,7 @@ export class LancerHUD {
                 childColLabel: intItem.name,
                 getChildren: () => this._systemChildren(intItem, actor),
                 onRightClick: (/** @type {any} */ row) => {
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: this._bodyHtml(intItem.system), theme: 'system', item: intItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(intItem, p) });
+                    this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'system-id', dataValue: intItem.id, title: intItem.name, subtitle: `Integrated · ${frame.name}`, bodyHtml: this._bodyHtml(intItem.system), theme: 'system', item: intItem, row, postRender: p => appendItemPips(intItem, p) });
                 },
             };
         });
@@ -2462,7 +2441,7 @@ export class LancerHUD {
                         }
                         if (!dep)
                             return;
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${frame.name} (Core)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: `Deployable · ${frame.name} (Core)`, bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: frame, row });
                     },
                 }));
             }
@@ -2526,7 +2505,7 @@ export class LancerHUD {
                             </div>`).join('')}</div>`
                         : '';
                     const bodyHtml = (descHtml + actionsHtml + countersHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                    toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, theme: 'talent', item: talent, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                    this._showItemPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${talent.name} · Rank ${roman[i] ?? i + 1}`, bodyHtml, theme: 'talent', item: talent, row });
                 },
             };
         });
@@ -2626,7 +2605,7 @@ export class LancerHUD {
                         const typeTags = _ammoTagsHtml(ammo.allowed_types);
                         const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
                             <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${sysItem.id}-${idx}`, title: ammo.name, subtitle: sysItem.name, bodyHtml, theme: 'system', item: sysItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${sysItem.id}-${idx}`, title: ammo.name, subtitle: sysItem.name, bodyHtml, theme: 'system', item: sysItem, row });
                     },
                 });
             });
@@ -2689,7 +2668,7 @@ export class LancerHUD {
                         const typeTags = _ammoTagsHtml(ammo.allowed_types);
                         const bodyHtml = `${ammo.description ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${ammo.description}</div>` : ''}
                             <div style="font-size:0.75em;color:#888;margin-top:4px;">Cost: ${cost}${sizeTags}${typeTags}</div>`;
-                        toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `${item.name}`, bodyHtml, theme: 'system', item, row, showPopupAt: (p, r) => this._showPopupAt(p, r) });
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-ammo-popup', dataKey: 'ammo-idx', dataValue: `${item.id}-${idx}`, title: ammo.name, subtitle: `${item.name}`, bodyHtml, theme: 'system', item, row });
                     },
                 });
             });
@@ -2712,7 +2691,7 @@ export class LancerHUD {
     _weaponItem(weapon, modItem, mount = null) {
         const sys    = weapon.system;
         const status = getItemStatus(weapon);
-        const labelHtml = status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${weapon.name}</s>` : weapon.name;
+        const labelHtml = status.destroyed ? this._destroyedLabel(weapon.name) : weapon.name;
         return {
             label: labelHtml,
             badge: status.badge ?? null,
@@ -2742,8 +2721,8 @@ export class LancerHUD {
                     activeProfileIndex: sys.selected_profile_index ?? 0,
                 });
                 const profileType = sys.profiles?.[sys.selected_profile_index ?? 0]?.type;
-                const subtitle = [sys.mount_type ?? sys.size, profileType ?? sys.weapon_type].filter(Boolean).join(' · ');
-                toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
+                const subtitle = this._joinSubtitle(sys.mount_type ?? sys.size, profileType ?? sys.weapon_type);
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', item: weapon, row, postRender: p => appendItemPips(weapon, p, this._depthCallbacks()) });
             },
         };
     }
@@ -2762,8 +2741,8 @@ export class LancerHUD {
             // Mod row may have no onClick — handle it first
             if (modItem && child.label === modItem.name) {
                 const ms = modItem.system;
-                const subtitle = [ms?.type, ms?.license ? `${ms.manufacturer} ${ms.license_level}` : null].filter(Boolean).join(' · ') || 'Weapon Mod';
-                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-mod-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle, bodyHtml: laRenderModBody(modItem), theme: 'mod', item: modItem, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
+                const subtitle = this._joinSubtitle(ms?.type, ms?.license ? `${ms.manufacturer} ${ms.license_level}` : null) || 'Weapon Mod';
+                return { ...child, onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-mod-popup', dataKey: 'mod-id', dataValue: modItem.id, title: modItem.name, subtitle, bodyHtml: laRenderModBody(modItem), theme: 'mod', item: modItem, row, postRender: p => appendItemPips(modItem, p, this._depthCallbacks()) }) };
             }
             if (!child.onClick)
                 return child;
@@ -2772,7 +2751,7 @@ export class LancerHUD {
                 const weaponList = mountWeapons.length ? mountWeapons.join(', ') : weapon.name;
                 const title = attackLabel === 'FIGHT' ? 'Fight' : attackLabel === 'BARRAGE' ? 'Barrage' : 'Skirmish';
                 const body = `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${title} with: <b>${weaponList}</b></div>`;
-                return { ...child, onRightClick: (/** @type {any} */ row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: attackLabel, title, subtitle: attackLabel === 'FIGHT' ? 'Full' : attackLabel === 'BARRAGE' ? 'Full' : 'Quick', bodyHtml: body, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }) };
+                return { ...child, onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: attackLabel, title, subtitle: attackLabel === 'FIGHT' ? 'Full' : attackLabel === 'BARRAGE' ? 'Full' : 'Quick', bodyHtml: body, theme: 'weapon', item: weapon, row }) };
             }
             return child;
         });
@@ -2861,7 +2840,7 @@ export class LancerHUD {
                             const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
                                 (w).beginWeaponAttackFlow();
                         },
-                        onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                        onRightClick: (row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row }),
                     },
                 ],
                 modItem,
@@ -2895,7 +2874,7 @@ export class LancerHUD {
                         const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
                             (w).beginWeaponAttackFlow();
                     },
-                    onRightClick: (row) => toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row, showPopupAt: (p, r) => this._showPopupAt(p, r) }),
+                    onRightClick: (row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: 'ATTACK', title: 'Attack', subtitle: 'Quick', bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Attack with: <b>${weapon.name}</b></div>`, theme: 'weapon', item: weapon, row }),
                 },
             ],
             modItem,
@@ -2996,7 +2975,7 @@ export class LancerHUD {
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
             const theme = themeOverride ?? activationTheme(action.activation);
             const sourceItem = typeof source === 'string' ? null : source;
-            toggleDetailPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: subtitleParts.filter(Boolean).join(' · '), bodyHtml, theme, item: sourceItem ?? action.name, row, showPopupAt: (p, r) => this._showPopupAt(p, r), postRender: sourceItem ? p => appendItemPips(sourceItem, p, { action }) : (action.recharge ? p => appendItemPips(null, p, { action }) : null) });
+            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: this._joinSubtitle(...subtitleParts), bodyHtml, theme, item: sourceItem ?? action.name, row, postRender: sourceItem ? p => appendItemPips(sourceItem, p, { action }) : (action.recharge ? p => appendItemPips(null, p, { action }) : null) });
         };
     }
 
@@ -3016,7 +2995,7 @@ export class LancerHUD {
                     status.unavailable = true;
             }
             return {
-                label: status.destroyed ? `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${action.name}</s>`
+                label: status.destroyed ? this._destroyedLabel(action.name)
                     : (action._sourceItemId ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
@@ -3095,6 +3074,60 @@ export class LancerHUD {
         showPopupAt(popup, anchorEl, {
             cancelCollapse:   () => this._cancelCollapse?.(),
             scheduleCollapse: () => this._scheduleCollapse?.(),
+        });
+    }
+
+    /** Thin wrapper around `toggleDetailPopup` that auto-wires `showPopupAt`. */
+    _showItemPopup(opts) {
+        const showFn = (p, r) => this._showPopupAt(p, r);
+        const impl = toggleDetailPopup;
+        impl({ ...opts, showPopupAt: showFn });
+    }
+
+    /** Join non-empty subtitle parts with the ` · ` separator. */
+    _joinSubtitle(...parts) {
+        return parts.filter(Boolean).join(' · ');
+    }
+
+    /**
+     * Enrich HUD items with `hoverData` of the shape `{ actor, item: null, action: { name: it.label }, category }`.
+     * Leaves section labels, non-clickable rows, and rows that already carry hoverData untouched.
+     * @param {any[]} items
+     * @param {{ actor: any, category: string }} ctx
+     */
+    _enrichHoverData(items, { actor, category }) {
+        return items.map(/** @type {any} */ (it) =>
+            it.hoverData || it.isSectionLabel || !it.onClick
+                ? it
+                : { ...it, hoverData: { actor, item: null, action: { name: it.label }, category } }
+        );
+    }
+
+    /** Red-strike HTML for an item/action whose source item is destroyed. */
+    _destroyedLabel(name) {
+        return `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${name}</s>`;
+    }
+
+    /** Build the invade popup body + subtitle and open it. */
+    _buildInvadePopup(opt, row) {
+        const detail = laFormatDetailHtml(opt.detail);
+        const bodyHtml = detail
+            ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>`
+            : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
+        const isWeapon    = opt.item?.type?.includes('weapon');
+        const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
+        const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
+        const subtitle    = (opt.isFragmentSignal ? 'Fragment Signal · Quick Tech' : 'Invade · Quick Tech') + sourceLabel;
+        this._showItemPopup({
+            cssClass: 'la-hud-popup la-hud-invade-popup',
+            dataKey: 'invade-name',
+            dataValue: opt.name,
+            title: opt.name,
+            theme: 'invade',
+            subtitle,
+            bodyHtml,
+            item: opt.item,
+            row,
         });
     }
 
