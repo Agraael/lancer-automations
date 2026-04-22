@@ -1662,6 +1662,7 @@ const _TITLES_WITH_SPECIFIC_FX = new Set([
     'Disengage', 'Dismount', 'Eject', 'Boot Up', 'Shut Down', 'Standing Up',
     'Fall', 'Teleport', 'Reactor Meltdown', 'Fight', 'Fragment Signal',
     'Overcharge', 'Stabilize', 'Full Repair', 'Mount', 'Jockey',
+    'Lock On', 'Bolster', 'Aid', 'Brace',
 ]);
 
 /** Dispatch a tech-tier or generic-tier action FX based on activation + title. */

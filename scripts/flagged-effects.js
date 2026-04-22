@@ -612,7 +612,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         for (const effect of effectsToApplyToToken) {
             if (canApplyDirectly) {
                 // GM or owner applies directly
-                setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
+                await setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
             } else {
                 // Non-owner uses socket
                 game.socket.emit('module.lancer-automations', {

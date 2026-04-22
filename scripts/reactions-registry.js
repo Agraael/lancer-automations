@@ -446,13 +446,6 @@ export function getDefaultGeneralReactionRegistry() {
                     note: "Lock On"
                 });
 
-                const targetsWithLockOn = targets.filter(target =>
-                    api.findEffectOnToken(target, "lockon")
-                );
-
-                if (targetsWithLockOn.length === 0)
-                    return;
-
                 const weaponFx = game.modules.get("lancer-weapon-fx");
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
@@ -463,7 +456,7 @@ export function getDefaultGeneralReactionRegistry() {
                 ]);
 
 
-                for (const target of targetsWithLockOn) {
+                for (const target of targets) {
                     let sequence = new Sequence()
                         .sound()
                         .file("modules/lancer-weapon-fx/soundfx/LockOn.ogg")
