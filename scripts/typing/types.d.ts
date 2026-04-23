@@ -7,6 +7,7 @@
 interface TriggerDataBase {
     triggeringToken?: Token;
     distanceToTrigger?: number | null;
+    canTriggerReaction?: boolean;
     /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
@@ -114,6 +115,7 @@ interface TriggerDataOnMove extends TriggerDataBase {
     isDrag: boolean;
     moveInfo: MoveInfo;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 /** Fires before move. NOTE: uses `token` not `triggeringToken`. Supports cancelTriggeredMove. */
@@ -139,6 +141,7 @@ interface TriggerDataOnInvoluntaryMove extends TriggerDataBase {
     destination: { x: number; y: number };
     cancel: (reason?: string) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnDamage extends TriggerDataBase {
@@ -154,6 +157,7 @@ interface TriggerDataOnDamage extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnAttack extends TriggerDataBase {
@@ -165,6 +169,7 @@ interface TriggerDataOnAttack extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnHit extends TriggerDataBase {
@@ -176,6 +181,7 @@ interface TriggerDataOnHit extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnMiss extends TriggerDataBase {
@@ -187,6 +193,7 @@ interface TriggerDataOnMiss extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnInitAttack extends TriggerDataBase {
@@ -198,6 +205,7 @@ interface TriggerDataOnInitAttack extends TriggerDataBase {
     actionData: ActionData;
     cancelAttack: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnTechAttack extends TriggerDataBase {
@@ -209,6 +217,7 @@ interface TriggerDataOnTechAttack extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnTechHit extends TriggerDataBase {
@@ -220,6 +229,7 @@ interface TriggerDataOnTechHit extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnTechMiss extends TriggerDataBase {
@@ -231,6 +241,7 @@ interface TriggerDataOnTechMiss extends TriggerDataBase {
     tags: Array<{ lid: string;[key: string]: any }>;
     actionData: ActionData;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnInitTechAttack extends TriggerDataBase {
@@ -243,6 +254,7 @@ interface TriggerDataOnInitTechAttack extends TriggerDataBase {
     isInvade: boolean;
     cancelTechAttack: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnCheck extends TriggerDataBase {
@@ -254,6 +266,7 @@ interface TriggerDataOnCheck extends TriggerDataBase {
     checkAgainstToken: Token | null;
     targetVal: number | null;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnInitCheck extends TriggerDataBase {
@@ -263,6 +276,7 @@ interface TriggerDataOnInitCheck extends TriggerDataBase {
     targetVal: number | null;
     cancelCheck: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnActivation extends TriggerDataBase {
@@ -275,6 +289,7 @@ interface TriggerDataOnActivation extends TriggerDataBase {
     /** Extra data injected via startRelatedFlowToReactor(userId, extraData), sourced from flow.state.la_extraData. */
     extraData: Record<string, any>;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnInitActivation extends TriggerDataOnActivation {
@@ -286,6 +301,7 @@ interface TriggerDataOnStatusApplied extends TriggerDataBase {
     statusId: string;
     effect: any;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnStatusRemoved extends TriggerDataBase {
@@ -293,6 +309,7 @@ interface TriggerDataOnStatusRemoved extends TriggerDataBase {
     statusId: string;
     effect: any;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnPreStatusApplied extends TriggerDataBase {
@@ -301,6 +318,7 @@ interface TriggerDataOnPreStatusApplied extends TriggerDataBase {
     effect: any;
     cancelChange: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnPreStatusRemoved extends TriggerDataBase {
@@ -309,6 +327,7 @@ interface TriggerDataOnPreStatusRemoved extends TriggerDataBase {
     effect: any;
     cancelChange: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnDeploy extends TriggerDataBase {
@@ -317,6 +336,7 @@ interface TriggerDataOnDeploy extends TriggerDataBase {
     deployedTokens: any[];
     deployType: "deployable" | "throw";
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataonHeatGain extends TriggerDataBase {
@@ -325,6 +345,7 @@ interface TriggerDataonHeatGain extends TriggerDataBase {
     currentHeat: number;
     inDangerZone: boolean;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataonHeatLoss extends TriggerDataBase {
@@ -332,6 +353,7 @@ interface TriggerDataonHeatLoss extends TriggerDataBase {
     heatCleared: number;
     currentHeat: number;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataOnHpLoss extends TriggerDataBase {
@@ -339,6 +361,7 @@ interface TriggerDataOnHpLoss extends TriggerDataBase {
     hpLost: number;
     currentHP: number;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
 interface TriggerDataonHpGain extends TriggerDataBase {
@@ -347,10 +370,11 @@ interface TriggerDataonHpGain extends TriggerDataBase {
     currentHP: number;
     maxHP: number;
     distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
 }
 
-interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
-interface TriggerDataOnStructure extends TriggerDataBase { triggeringToken: Token; remainingStructure: number; rollResult: number; rollDice: number[]; cancelStructureOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; }
+interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnStructure extends TriggerDataBase { triggeringToken: Token; remainingStructure: number; rollResult: number; rollDice: number[]; cancelStructureOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; canTriggerReaction?: boolean; }
 
 /** Fired after a roll resolves, before the card prints. `reroll()` re-runs the Lancer roll step; `changeRoll(newTotal)` sets the total. Both cascade — re-fires onRoll so later reactions see the new result. */
 interface TriggerDataOnRoll extends TriggerDataBase {
@@ -366,12 +390,13 @@ interface TriggerDataOnRoll extends TriggerDataBase {
     reroll: (reason?: string) => Promise<void>;
     changeRoll: (newTotal: number) => Promise<void>;
     flowState: any;
+    canTriggerReaction?: boolean;
 }
-interface TriggerDataOnStress extends TriggerDataBase { triggeringToken: Token; remainingStress: number; rollResult: number; rollDice: number[]; cancelStressOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; }
-interface TriggerDataOnTurnStart extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
-interface TriggerDataOnTurnEnd extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
-interface TriggerDataOnEnterCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
-interface TriggerDataOnExitCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; }
+interface TriggerDataOnStress extends TriggerDataBase { triggeringToken: Token; remainingStress: number; rollResult: number; rollDice: number[]; cancelStressOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; canTriggerReaction?: boolean; }
+interface TriggerDataOnTurnStart extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnTurnEnd extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnEnterCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnExitCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 
 type TriggerData =
     | TriggerDataOnMove
@@ -554,12 +579,17 @@ interface LancerAutomationsAPI {
         range?: number;
         count?: number;
         filter?: (token: Token) => boolean;
+        filterWarning?: string;
+        soft?: boolean;
         includeHidden?: boolean;
         includeSelf?: boolean;
         title?: string;
         description?: string;
         icon?: string;
         headerClass?: string;
+        item?: any;
+        originToken?: Token | null;
+        relatedToken?: Token | null;
     }): Promise<Token[] | null>;
     placeZone(casterToken: Token, options?: {
         x?: number;

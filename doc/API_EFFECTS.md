@@ -281,9 +281,11 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <kbd>subtype</kbd> | `string` | `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"` |
+| <kbd>subtype</kbd> | `string` | `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`, `"elevation"`, `"terrain"`, `"provoke"` |
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
+
+`"provoke"` acts like permanent DISENGAGE: the actor cannot be engaged and its movement does not provoke reactions from others. No extra fields required.
 
 </details>
 
@@ -476,7 +478,7 @@ api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 
 | Function | Description |
 |:---------|:------------|
-| `getImmunityBonuses` | Returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`) for the actor. |
+| `getImmunityBonuses` | Returns all immunity bonuses of the specified subtype (`"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`, `"elevation"`, `"terrain"`, `"provoke"`) for the actor. |
 | `checkDamageResistances` | Returns all "resistance" subtype immunity bonuses matching the given damage type. |
 | `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out. |
 

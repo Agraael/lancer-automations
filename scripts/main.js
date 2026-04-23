@@ -349,7 +349,10 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         const api = game.modules.get('lancer-automations').api;
         const sourceToken = data.triggeringToken;
         const distanceToTrigger = (sourceToken && token) ? getTokenDistance(token, sourceToken) : null;
-        const enrichedData = { ...data, distanceToTrigger };
+        const canTriggerReaction = api.canProvokeReaction(sourceToken, token);
+        if (reaction.requireCanProvoke && !canTriggerReaction)
+            return null;
+        const enrichedData = { ...data, distanceToTrigger, canTriggerReaction };
 
         let shouldTrigger = false;
         if (typeof reaction.evaluate === 'function') {
@@ -536,8 +539,6 @@ async function checkReactions(triggerType, data) {
     // after the eval loop so we can stop as soon as one reactor raises a cancel.
     const deferredFactories = [];
     const isCancellable = CANCELLABLE_TRIGGERS.has(triggerType);
-    const startCancelLen = data._cancelledBy?.length ?? 0;
-    const cancelRaisedThisPass = () => (data._cancelledBy?.length ?? 0) > startCancelLen;
     // Re-stamps reactor identity on the shared cancel/change/reroll/modify fns right before
     // an activation fires. Needed because those fns are shared across reactors and the last
     // eval-loop assignment would otherwise win.
@@ -618,7 +619,8 @@ async function checkReactions(triggerType, data) {
         // Change 5: compute distance and enrichedData once per token, not per item/reaction
         const sourceToken = data.triggeringToken;
         const distanceToTrigger = sourceToken ? getTokenDistance(token, sourceToken) : null;
-        const enrichedData = { ...data, distanceToTrigger };
+        const canTriggerReaction = api.canProvokeReaction(sourceToken, token);
+        const enrichedData = { ...data, distanceToTrigger, canTriggerReaction };
 
         const items = getReactionItems(token);
         for (const item of items) {
@@ -659,6 +661,9 @@ async function checkReactions(triggerType, data) {
                 }
 
                 if (reaction.checkReaction && !hasReactionAvailable(token))
+                    continue;
+
+                if (reaction.requireCanProvoke && !canTriggerReaction)
                     continue;
 
                 const reactionPath = reaction.reactionPath || "";
@@ -896,28 +901,29 @@ async function checkReactions(triggerType, data) {
         }
     }
 
-    if (reactionsPromises.length > 0) {
-        await Promise.all(reactionsPromises);
-    }
-
-    // Cancellable triggers: fire queued factories one at a time, stop on first cancel.
-    // Remaining reactors get their turn on the redo pass (which re-enters checkReactions
-    // with _cancelledBy carrying the one that cancelled, so it's skipped).
+    // Cancellable triggers must run BEFORE awaiting other reactionsPromises so the
+    // first factory's synchronous setFlag() fires in the same tick as the caller
+    // (e.g. preUpdateToken's `if (cancelUpdate) return false` check).
     if (isCancellable && deferredFactories.length > 0) {
-        console.log(`[LA-DEBUG] checkReactions(${triggerType}) sequential: ${deferredFactories.length} factories, startCancelLen=${startCancelLen}`);
-        for (let i = 0; i < deferredFactories.length; i++) {
-            if (cancelRaisedThisPass()) {
-                console.log(`[LA-DEBUG] checkReactions(${triggerType}) cancel detected before factory #${i}; ${deferredFactories.length - i} skipped`);
-                return;
-            }
+        // Sequential sync dispatch; do not await. First sync-cancel wins, remaining
+        // reactors fire on the redo pass via _cancelledBy.
+        const startLen = data._cancelledBy?.length ?? 0;
+        const cancelRaised = () => (data._cancelledBy?.length ?? 0) > startLen;
+        for (const factory of deferredFactories) {
             try {
-                const p = deferredFactories[i]();
+                const p = factory();
                 if (p instanceof Promise)
-                    await p;
+                    p.catch(e => console.error('lancer-automations | async reaction error:', e));
+                if (cancelRaised())
+                    break;
             } catch (e) {
                 console.error('lancer-automations | reaction error:', e);
             }
         }
+    }
+
+    if (reactionsPromises.length > 0) {
+        await Promise.all(reactionsPromises);
     }
 
     if (reactionDebounceTimer) {
@@ -4036,13 +4042,29 @@ Hooks.on('init', () => {
                 return;
             CONFIG.elevationruler.MovePenalty = MovePenalty;
 
-            // Extend the climb-malus and terrain-immunity decisions with Lancer rules:
-            // climber status and elevation/terrain immunity bonuses from the effect system.
+            // Flying: flying + hover statuses (same movement rules per Lancer core).
+            const baseFlying = MovePenalty.isFlying.bind(MovePenalty);
+            MovePenalty.isFlying = function(token) {
+                if (baseFlying(token))
+                    return true;
+                if (token?.actor?.statuses?.has("flying"))
+                    return true;
+                if (token?.actor?.statuses?.has("hover"))
+                    return true;
+                return false;
+            };
+
+            MovePenalty.getFlyingStep = function(token) {
+                const speed = token?.actor?.system?.speed ?? 0;
+                if (speed <= 0)
+                    return 0;
+                const perCell = canvas?.grid?.distance ?? 1;
+                return speed * perCell;
+            };
+
             const baseClimbImmune = MovePenalty.isClimbingImmune.bind(MovePenalty);
             MovePenalty.isClimbingImmune = function(token) {
                 if (baseClimbImmune(token))
-                    return true;
-                if (token?.actor?.statuses?.has("hover"))
                     return true;
                 if (token?.actor?.statuses?.has("climber"))
                     return true;
@@ -5239,12 +5261,14 @@ Hooks.on('createToken', (tokenDocument, options, userId) => {
     }, 100);
 });
 
-Hooks.on('deleteToken', async (tokenDocument, _options, userId) => {
+Hooks.on('preDeleteToken', (tokenDocument, _options, userId) => {
     if (userId !== game.userId)
         return;
-    const token = canvas.tokens.get(tokenDocument.id)
-        ?? { document: tokenDocument, id: tokenDocument.id, name: tokenDocument.name, actor: tokenDocument.actor };
-    await handleTrigger('onTokenRemoved', { triggeringToken: token });
+    const token = canvas.tokens.get(tokenDocument.id);
+    if (!token)
+        return;
+    // Fire before the token leaves canvas.tokens so self-reactors can still act.
+    handleTrigger('onTokenRemoved', { triggeringToken: token });
 });
 
 Hooks.on('preUpdateActor', (actor, change, options, userId) => {

@@ -87,6 +87,7 @@ export function getDefaultGeneralReactionRegistry() {
                 actionType: "Reaction",
                 outOfCombat: true,
                 frequency: "Other",
+                requireCanProvoke: true,
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const mover = triggerData.triggeringToken;
                     if (!mover)
@@ -116,6 +117,7 @@ export function getDefaultGeneralReactionRegistry() {
                 frequency: "Other",
                 isReaction: true,
                 checkReaction: true,
+                requireCanProvoke: true,
                 autoActivate: true,
                 awaitActivationCompletion: true,
                 activationType: "code",
@@ -780,7 +782,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (!isFlying)
                         return true;
 
-                    const movedDistance = api.getCumulativeMoveData(reactorToken.document.id);
+                    const movedDistance = api.getCumulativeMoveData(reactorToken.document.id)?.moved ?? 0;
                     return movedDistance < 1;
                 },
                 activationType: "code",
@@ -884,7 +886,8 @@ export function getDefaultGeneralReactionRegistry() {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 if (triggerType === "onUpdate" || triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility") {
-                    api.updateAllEngagements();
+                    const excludeTokenId = triggerType === "onTokenRemoved" ? triggerData.triggeringToken?.id : undefined;
+                    api.updateAllEngagements({ excludeTokenId });
                     return;
                 }
 
@@ -893,19 +896,83 @@ export function getDefaultGeneralReactionRegistry() {
                     const allTokens = canvas.tokens.placeables;
                     const mover = reactorToken;
 
-
                     const historyStart = Math.max(1, moveInfo.pathHexes.historyStartIndex);
                     let stoppedBy = null;
                     let interceptIndex = -1;
 
-                    for (let i = historyStart; i < historyStart + triggerData.distanceToMove; i++) {
+                    // Mover Z per step: flying/hover uses end elevation; walking uses terrain
+                    // top at the hex (via THT) so engagement tracks ground height changes.
+                    // Falls back to current token elevation when THT is absent.
+                    const is3D = (() => {
+                        try {
+                            return !!game.settings.get('lancer-automations', 'count3DDistance');
+                        } catch {
+                            return false;
+                        }
+                    })();
+                    const terrainAPI = globalThis.terrainHeightTools;
+                    const sceneGridDist = canvas.scene?.grid?.distance ?? 1;
+                    const fallbackZ = mover.document.elevation ?? 0;
+                    const isFlying = !!api.findEffectOnToken(mover, "flying")
+                        || !!mover.actor?.effects?.some(e => e.statuses?.has("flying") && !e.disabled);
+                    const endZ = triggerData.elevationToMove ?? fallbackZ;
+                    let solidTypeIds = null;
+                    const getSolidTypeIds = () => {
+                        if (solidTypeIds)
+                            return solidTypeIds;
+                        solidTypeIds = new Set();
+                        for (const t of terrainAPI?.getTerrainTypes?.() || []) {
+                            if (t.usesHeight && t.isSolid)
+                                solidTypeIds.add(t.id);
+                        }
+                        return solidTypeIds;
+                    };
+                    const terrainTopAt = (cx, cy) => {
+                        try {
+                            const off = canvas.grid.getOffset({ x: cx, y: cy });
+                            const cell = terrainAPI.getCell(off.j, off.i) || [];
+                            const solids = getSolidTypeIds();
+                            let top = 0;
+                            for (const t of cell) {
+                                if (solids.has(t.terrainTypeId)) {
+                                    const v = (t.elevation || 0) + (t.height || 0);
+                                    if (v > top)
+                                        top = v;
+                                }
+                            }
+                            return top;
+                        } catch {
+                            return null;
+                        }
+                    };
+                    const moverZAt = (step) => {
+                        if (isFlying)
+                            return endZ;
+                        if (!terrainAPI)
+                            return fallbackZ;
+                        const top = terrainTopAt(step.cx, step.cy);
+                        return (top == null) ? fallbackZ : top;
+                    };
+
+                    const scanEnd = Math.min(moveInfo.pathHexes.length, historyStart + triggerData.distanceToMove);
+                    for (let i = historyStart; i < scanEnd; i++) {
                         const stepPos = moveInfo.pathHexes[i];
+                        if (!stepPos)
+                            continue;
+                        const moverZ = is3D ? moverZAt(stepPos) : null;
 
                         for (const other of allTokens) {
                             if (!api.canEngage(mover, other))
                                 continue;
 
-                            if (api.getMinGridDistance(mover, other, stepPos) <= 1) {
+                            const planar = api.getMinGridDistance(mover, other, stepPos, false);
+                            let total = planar;
+                            if (moverZ !== null) {
+                                const otherZ = other.document.elevation ?? 0;
+                                total += Math.round(Math.abs(moverZ - otherZ) / sceneGridDist);
+                            }
+
+                            if (total <= 1) {
                                 if (other.actor?.system?.size >= mover.actor?.system?.size) {
                                     stoppedBy = other;
                                     interceptIndex = i;

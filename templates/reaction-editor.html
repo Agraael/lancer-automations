@@ -179,6 +179,13 @@
                         <span>Check Reaction</span>
                     </label>
 
+                    <!-- Require Provokable -->
+                    <label class="checkbox"
+                        title="Skip activation if the triggering token cannot provoke a reaction from this reactor. Blocks reactions when the triggering token is HIDDEN or has DISENGAGE, or is INTANGIBLE while the reactor is not also intangible (different planes). Self-reactions always pass.">
+                        <input type="checkbox" name="requireCanProvoke" {{#if requireCanProvoke}}checked{{/if}}>
+                        <span>Require Provokable</span>
+                    </label>
+
                     <!-- Check Usage (item-based only) -->
                     <label class="checkbox item-only"
                         title="Block activation if the item is unloaded, out of uses, or uncharged."
@@ -277,18 +284,24 @@
     </div>
 
     <div style="margin-bottom: 6px; text-align: right;">
-        <a id="open-trigger-ref" style="font-size: 0.8em; cursor: pointer; color: var(--primary-color); text-decoration: none;"><i class="fas fa-book"></i> Trigger Data Reference</a>
+        <a id="open-trigger-ref"
+            style="font-size: 0.8em; cursor: pointer; color: var(--primary-color); text-decoration: none;"><i
+                class="fas fa-book"></i> Trigger Data Reference</a>
     </div>
 
     <!-- Evaluate Function -->
     <details class="code-section" open>
-        <summary class="code-section-header">Evaluate Function <a class="expand-editor" data-target="evaluate" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <summary class="code-section-header">Evaluate Function <a class="expand-editor" data-target="evaluate"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked" style="margin-top: 4px;">
             <div class="form-fields">
-                <textarea name="evaluate" rows="8" style="font-family: monospace; white-space: pre;">{{evaluate}}</textarea>
+                <textarea name="evaluate" rows="8"
+                    style="font-family: monospace; white-space: pre;">{{evaluate}}</textarea>
             </div>
             <p class="notes">
-                Must return <code>true</code> or <code>false</code>. Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code>.
+                Must return <code>true</code> or <code>false</code>. Variables: <code>triggerType</code>,
+                <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>,
+                <code>api</code>.
             </p>
         </div>
     </details>
@@ -308,9 +321,12 @@
                 <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>After Flow</option>
             </select>
         </div>
-        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run after or instead of flow.</p>
+        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run
+            after or instead of flow.</p>
         <p id="activation-recursion-warning" class="notes" style="display:none; color:#c00; margin-top:4px;">
-            <i class="fas fa-exclamation-triangle"></i> With trigger <code>onActivation</code> / <code>onInitActivation</code> and this setting, re-activating the same item would loop. Lancer Automations will skip the item re-activation (console warning). Prefer <b>Instead of Flow</b> for clearer behavior.
+            <i class="fas fa-exclamation-triangle"></i> With trigger <code>onActivation</code> /
+            <code>onInitActivation</code> and this setting, re-activating the same item would loop. Lancer Automations
+            will skip the item re-activation (console warning). Prefer <b>Instead of Flow</b> for clearer behavior.
         </p>
     </div>
 
@@ -320,39 +336,49 @@
         <div class="form-fields">
             <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
         </div>
-        <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
+        <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
+            <code>item</code>, <code>activationName</code>, <code>api</code></p>
     </div>
 
     <!-- Activation Code (shown when activationType = code) -->
     <details class="code-section activation-code" style="display:none;">
-        <summary class="code-section-header">Activation Code <a class="expand-editor" data-target="activationCode" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <summary class="code-section-header">Activation Code <a class="expand-editor" data-target="activationCode"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked" style="margin-top: 4px;">
             <div class="form-fields">
-                <textarea name="activationCode" rows="6" style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
+                <textarea name="activationCode" rows="6"
+                    style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
             </div>
-            <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
+            <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
+                <code>item</code>, <code>activationName</code>, <code>api</code></p>
         </div>
     </details>
 
     <!-- onInit Code -->
     <details class="code-section">
-        <summary class="code-section-header">onInit Code <a class="expand-editor" data-target="onInit" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <summary class="code-section-header">onInit Code <a class="expand-editor" data-target="onInit"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked" style="margin-top: 4px;">
             <div class="form-fields">
                 <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
             </div>
-            <p class="notes">Runs when a token enters the scene. Variables: <code>token</code>, <code>item</code>, <code>api</code></p>
+            <p class="notes">Runs when a token enters the scene. Variables: <code>token</code>, <code>item</code>,
+                <code>api</code></p>
         </div>
     </details>
 
     <!-- onMessage Code -->
     <details class="code-section">
-        <summary class="code-section-header">onMessage Code <a class="expand-editor" data-target="onMessage" title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
+        <summary class="code-section-header">onMessage Code <a class="expand-editor" data-target="onMessage"
+                title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked" style="margin-top: 4px;">
             <div class="form-fields">
-                <textarea name="onMessage" rows="6" style="font-family: monospace; white-space: pre;">{{onMessage}}</textarea>
+                <textarea name="onMessage" rows="6"
+                    style="font-family: monospace; white-space: pre;">{{onMessage}}</textarea>
             </div>
-            <p class="notes">Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables: <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code></p>
+            <p class="notes">Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables:
+                <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>,
+                <code>activationName</code>, <code>api</code></p>
         </div>
     </details>
 
@@ -410,7 +436,7 @@
         width: 10px;
     }
 
-    .code-section[open] > .code-section-header::before {
+    .code-section[open]>.code-section-header::before {
         transform: rotate(90deg);
     }
 
@@ -418,7 +444,7 @@
         background: color-mix(in srgb, var(--primary-color), transparent 95%);
     }
 
-    .code-section > .form-group {
+    .code-section>.form-group {
         padding: 0 8px 6px;
     }
 

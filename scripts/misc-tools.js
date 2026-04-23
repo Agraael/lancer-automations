@@ -993,6 +993,50 @@ export async function executeSimpleActivation(actor, options = {}, extraData = {
     return { completed, flow };
 }
 
+/**
+ * Run an item activation flow, matching the dispatch rules of triggerData.startRelatedFlow.
+ * @param {any} item      - LancerItem to activate.
+ * @param {Object} [options] - { path?: string, flowName?: string } — `path` sets action_path; `flowName` forces a specific flow class.
+ * @param {Object} [extraData] - Merged onto flow.state.la_extraData before begin().
+ * @returns {Promise<{completed: boolean, flow?: any}>}
+ */
+export async function executeItemActivation(item, options = {}, extraData = {}) {
+    if (!item) {
+        ui.notifications.error("lancer-automations | executeActivation requires an item.");
+        return { completed: false };
+    }
+    const flows = /** @type {any} */ (game.lancer)?.flows;
+    if (!flows)
+        return { completed: false };
+
+    const { path = null, flowName = null } = options;
+    let flow;
+    if (flowName) {
+        const FlowClass = flows.get(flowName);
+        if (!FlowClass) {
+            ui.notifications.error(`lancer-automations | flow "${flowName}" not found.`);
+            return { completed: false };
+        }
+        flow = new FlowClass(item.uuid ?? item, path ? { action_path: path } : {});
+    } else if (item.is_frame?.() && path === "system.core_system") {
+        flow = new (flows.get("CoreActiveFlow"))(item.uuid ?? item, { action_path: path });
+    } else if (path || item.system?.actions?.length > 0) {
+        flow = new (flows.get("ActivationFlow"))(item.uuid ?? item, { action_path: path ?? "system.actions.0" });
+    } else if (item.is_mech_system?.() || item.is_weapon_mod?.() || (item.is_npc_feature?.() && !item.is_weapon?.())) {
+        flow = new (flows.get("SystemFlow"))(item.uuid ?? item, {});
+    } else if (item.is_weapon?.()) {
+        flow = new (flows.get("WeaponAttackFlow"))(item.uuid ?? item, {});
+    } else {
+        ui.notifications.error("lancer-automations | executeActivation: cannot determine flow for item.");
+        return { completed: false };
+    }
+    if (extraData && typeof extraData === 'object') {
+        flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
+    }
+    const completed = await flow.begin();
+    return { completed, flow };
+}
+
 // ---------------------------------------------------------------------------
 // Add Reserve / Project / Organization to Pilot
 // ---------------------------------------------------------------------------
@@ -1441,7 +1485,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
     if (sourceToken) {
-        playSkirmishFX(sourceToken);
+        await playSkirmishFX(sourceToken);
     }
 
     let weapons;
@@ -2048,6 +2092,7 @@ export const MiscAPI = {
     executeBasicAttack,
     executeTechAttack,
     executeSimpleActivation,
+    executeItemActivation,
     executeReactorMeltdown,
     executeReactorExplosion,
     setReaction,

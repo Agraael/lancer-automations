@@ -55,7 +55,7 @@ The engine pumps every trigger through this pipeline for every reactor candidate
 flowchart TD
     A["Game event<br/>(move, hit, damage, status, turn...)"] --> B["handleTrigger(triggerType, data)"]
     B --> C["Iterate all tokens on the scene"]
-    C --> D["Compute distanceToTrigger<br/>and merge into data"]
+    C --> D["Compute distanceToTrigger, canTriggerReaction<br/>and merge into data"]
     D --> E{"Item reactions<br/>matched by LID?"}
     E -- No --> G
     E -- Yes --> F["Run filters + evaluate()"]
@@ -77,7 +77,7 @@ Step by step, what the engine actually does for one trigger:
 
 1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires `startRelatedFlow`, `startRelatedFlowToReactor` (launch the item's default flow, optionally on a specific user's client) and `sendMessageToReactor` (remote RPC to an `onMessage` handler) onto `data`.
 2. **Reactor sweep.** Every token currently on the scene is treated as a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
-3. **Distance enrichment.** For each reactor, `distanceToTrigger` (reactor to triggering token) is computed once and merged into a per-reactor copy of the trigger data.
+3. **Distance enrichment.** For each reactor, `distanceToTrigger` (reactor to triggering token) and `canTriggerReaction` (true if the trigger is allowed to trigger a reaction — false when the mover has `hidden`, `disengage`, the `provoke` immunity, or is `intangible` while the reactor is not also intangible) are computed once and merged into a per-reactor copy of the trigger data.
 4. **Item reactions first.** For every item the reactor's actor owns whose LID matches a registered item activation, run the filter chain.
 5. **General reactions second.** Walk the flat list of general activations that listen to this trigger; run the filter chain.
 6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
@@ -131,7 +131,8 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 | 4 | Reaction availability | If the reaction config consumes a reaction (`consumeReaction`/`consumesReaction`), skip if the reactor has no reaction left. |
 | 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed; otherwise `CONST.TOKEN_DISPOSITIONS`. |
 | 6 | `distanceFilter` | Compares the precomputed `distanceToTrigger` against the configured max range. |
-| 7 | `evaluate()` | Your custom predicate. Last gate. |
+| 7 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
+| 8 | `evaluate()` | Your custom predicate. Last gate. |
 
 Fail any: that activation is silently skipped for that reactor. No popup, no log entry.
 

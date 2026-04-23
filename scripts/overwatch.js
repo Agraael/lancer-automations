@@ -412,6 +412,37 @@ export async function drawDistanceDebug() {
     return distance;
 }
 
+/**
+ * Can the triggering token provoke a reaction from the reactor token?
+ * Returns false when the mover has hidden/disengage, has a "provoke"
+ * immunity bonus, or is intangible while the reactor is not also intangible
+ * (different planes). Same-token pairs always return true (self-reactions
+ * bypass this check).
+ */
+export function canProvokeReaction(triggering, reactor) {
+    if (!triggering || !reactor)
+        return true;
+    if (triggering.id === reactor.id)
+        return true;
+    const api = game.modules.get('lancer-automations')?.api;
+    const has = (tok, statusId) => {
+        if (api?.findEffectOnToken && api.findEffectOnToken(tok, statusId))
+            return true;
+        return !!tok.actor?.effects?.some(e => e.statuses?.has(statusId) && !e.disabled);
+    };
+    const hasProvokeImmunity = (tok) =>
+        !!api?.getImmunityBonuses && api.getImmunityBonuses(tok.actor, "provoke").length > 0;
+    if (has(triggering, "hidden"))
+        return false;
+    if (has(triggering, "disengage"))
+        return false;
+    if (hasProvokeImmunity(triggering))
+        return false;
+    if (has(triggering, "intangible") && !has(reactor, "intangible"))
+        return false;
+    return true;
+}
+
 export function canEngage(token1, token2) {
     if (!token1 || !token2)
         return false;
@@ -449,6 +480,11 @@ export function canEngage(token1, token2) {
         return token.actor.effects.some(e => e.statuses?.has(statusName) && !e.disabled);
     };
 
+    const hasProvokeImmunity = (tok) =>
+        !!api?.getImmunityBonuses && api.getImmunityBonuses(tok.actor, "provoke").length > 0;
+    if (hasProvokeImmunity(token1) || hasProvokeImmunity(token2))
+        return false;
+
     const invalidStatuses = ["hidden", "disengage", "intangible"];
 
     for (const status of invalidStatuses) {
@@ -459,7 +495,7 @@ export function canEngage(token1, token2) {
     return true;
 }
 
-export async function updateAllEngagements() {
+export async function updateAllEngagements(options = {}) {
     if (!game.user.isGM)
         return;
 
@@ -468,7 +504,10 @@ export async function updateAllEngagements() {
     if (!api)
         return;
 
-    const allTokens = canvas.tokens.placeables;
+    const excludeId = options.excludeTokenId;
+    const allTokens = excludeId
+        ? canvas.tokens.placeables.filter(t => t.id !== excludeId)
+        : canvas.tokens.placeables;
 
     // Check who is currently flagged as engaged
     const currentlyEngaged = new Set(
@@ -525,5 +564,6 @@ export const OverwatchAPI = {
     getActorMaxThreat,
     getMinGridDistance,
     canEngage,
+    canProvokeReaction,
     updateAllEngagements
 };

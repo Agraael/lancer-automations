@@ -31,7 +31,7 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 ### Trigger Types & Data
 
-Every trigger passes a data object. All objects receive `distanceToTrigger` (reactor to triggering token).
+Every trigger passes a data object. All objects receive `distanceToTrigger` and `canTriggerReaction` (reactor to triggering token).
 
 <details><summary><b>Attack Triggers</b></summary>
 
@@ -130,7 +130,8 @@ Fires *before* movement is finalized. Allows interception.
         item: Item,
         deployedTokens: Array<TokenDocument>,
         deployType: string, // "deployable" | "throw"
-        distanceToTrigger: number
+        distanceToTrigger: number,
+        canTriggerReaction?: boolean
     }
     ```
 
@@ -159,9 +160,9 @@ Fires *before* movement is finalized. Allows interception.
 - **`onStress`**: After the overheat roll. `{ triggeringToken, remainingStress, rollResult }`.
 - **`onRoll`**: Fires between a roll resolving and its chat card printing, for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureRoll`, `stressRoll`. Data: `{ triggeringToken, rollType, roll, total, success, targets, item, isReroll, rerollCount, reroll(reason?), changeRoll(newTotal), flowState }`. `reroll()` re-runs the Lancer flow step that produced the roll; `changeRoll(newTotal)` sets the total (and recomputes hit/crit for attack flows). Both cascade: after either call, `onRoll` re-fires so later reactions see the new state. No engine-level reroll cap; reactions that reroll should gate themselves via `flowState.la_extraData._myReactionRerolled`. `success` rule: attack/tech = any hit; skill = total >= 10; damage/structure/stress = undefined. `changeRoll` on structure/stress only updates `roll._total` (title/desc stay stale, prefer `reroll()`).
 - **`onDestroyed`**: Fires on token delete when `structure.value <= 0 || stress.value <= 0`. `{ triggeringToken }`.
-- **`onTokenCreated`**: Fires when any token is placed on the canvas (after a 100ms delay, same timing as `onInit`). `{ triggeringToken, distanceToTrigger }`.
-- **`onTokenRemoved`**: Fires on any token deletion (unconditional, unlike `onDestroyed`). `{ triggeringToken, distanceToTrigger }`. `triggeringToken` may be a fallback `{document, id, name, actor}` object if the canvas token is already gone.
-- **`onTokenVisibility`**: Fires when a token's `hidden` flag is toggled (GM eye icon). `{ triggeringToken, isHidden, distanceToTrigger }`.
+- **`onTokenCreated`**: Fires when any token is placed on the canvas (after a 100ms delay, same timing as `onInit`). `{ triggeringToken, distanceToTrigger, canTriggerReaction }`.
+- **`onTokenRemoved`**: Fires on any token deletion (unconditional, unlike `onDestroyed`). `{ triggeringToken, distanceToTrigger, canTriggerReaction }`. `triggeringToken` may be a fallback `{document, id, name, actor}` object if the canvas token is already gone.
+- **`onTokenVisibility`**: Fires when a token's `hidden` flag is toggled (GM eye icon). `{ triggeringToken, isHidden, distanceToTrigger, canTriggerReaction }`.
 
 </details>
 

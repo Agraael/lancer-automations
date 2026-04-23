@@ -977,6 +977,7 @@ export async function executeEffectManager(options = {}) {
                         <option value="miss">Miss</option>
                         <option value="elevation">Elevation</option>
                         <option value="terrain">Terrain</option>
+                        <option value="provoke">Provoke (Engagement &amp; Reactions)</option>
                     </select>
                 </div>
                 <div id="bonus-immunity-effects-row">
@@ -1346,6 +1347,8 @@ export async function executeEffectManager(options = {}) {
                         return 'Immunity: Elevation';
                     if (subB.subtype === 'terrain')
                         return 'Immunity: Terrain';
+                    if (subB.subtype === 'provoke')
+                        return 'Immunity: Provoke (Engagement & Reactions)';
                     return subB.subtype;
                 }
                 if (subB.type === 'target_modifier') {

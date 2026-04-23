@@ -143,6 +143,7 @@ const movingTargetSniperReaction = {
         frequency: "1/Round",
         autoActivate: true,
         awaitActivationCompletion: true,
+        requireCanProvoke: true,
         checkReaction: true,
         activationType: "code",
         activationMode: "instead",
@@ -251,6 +252,7 @@ const movingTargetArcherReaction = {
         frequency: "1/Round",
         autoActivate: true,
         awaitActivationCompletion: true,
+        requireCanProvoke: true,
         checkReaction: true,
         activationType: "code",
         activationMode: "instead",
@@ -1918,6 +1920,97 @@ api.registerDefaultItemReactions({
                     null,
                     { item, originToken: reactorToken, relatedToken: ally }
                 );
+            }
+        }]
+    },
+    "npc_sergeant_5RR": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            awaitActivationCompletion: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const sensors = reactorToken.actor?.system?.sensor_range ?? 0;
+                const chosen = await api.chooseToken(reactorToken, {
+                    count: 2,
+                    range: sensors,
+                    filter: (t) => {
+                        if (!api.isFriendly(reactorToken, t) || t.id === reactorToken.id)
+                            return false;
+                        const combatant = game.combat?.combatants?.find(c => c.tokenId === t.id);
+                        if (!combatant)
+                            return false;
+                        const acts = /** @type {any} */ (combatant).activations ?? { value: 1, max: 1 };
+                        return acts.value >= acts.max;
+                    },
+                    filterWarning: "Ally has already acted this round",
+                    title: "5RR",
+                    description: "Pick up to 2 unspent allies in Sensors. Sergeant + allies each Skirmish; allies then count as having acted.",
+                    item,
+                    originToken: reactorToken
+                });
+                if (!chosen || chosen.length === 0)
+                    return;
+                const skirmishers = [reactorToken, ...chosen];
+                for (const t of skirmishers) {
+                    try {
+                        await api.executeSkirmish(t.actor);
+                    } catch (e) {
+                        console.warn(`lancer-automations | 5RR skirmish for ${t.name} failed:`, e);
+                    }
+                }
+                for (const ally of chosen) {
+                    const combatant = /** @type {any} */ (game.combat?.combatants?.find(c => c.tokenId === ally.id));
+                    const remaining = combatant?.activations?.value ?? 0;
+                    if (combatant && remaining > 0)
+                        await combatant.modifyCurrentActivations(-remaining);
+                }
+            }
+        }]
+    },
+    "npc_sergeant_CoordinatedManeuvers": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            outOfCombat: true,
+            awaitActivationCompletion: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const sensors = reactorToken.actor?.system?.sensor_range ?? 0;
+                const chosen = await api.chooseToken(reactorToken, {
+                    count: 2,
+                    range: sensors,
+                    filter: (t) => api.isFriendly(reactorToken, t) && t.id !== reactorToken.id,
+                    filterWarning: "Target is not a friendly ally",
+                    title: "COORDINATED MANEUVERS",
+                    description: "Pick up to 2 allied characters within Sensors. Each moves up to 3 spaces, ignoring engagement and reactions.",
+                    item,
+                    originToken: reactorToken
+                });
+                if (!chosen || chosen.length === 0)
+                    return;
+                for (const ally of chosen) {
+                    await api.knockBackToken([ally], 3, {
+                        title: `COORDINATED MANEUVERS \u2014 ${ally.name}`,
+                        description: "Move up to 3 spaces in any direction. Ignores engagement, no reactions.",
+                        triggeringToken: reactorToken,
+                        actionName: "Coordinated Maneuvers",
+                        item
+                    });
+                }
             }
         }]
     },
