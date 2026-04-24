@@ -1,6 +1,7 @@
-/* global Hooks, game */
+/* global Hooks, game, canvas, libWrapper, Token, document */
 
 import { LancerHUD } from './hud.js';
+import { playUiSound } from './sound.js';
 
 const MODULE = 'lancer-automations';
 const SETTING = 'tahEnabled';
@@ -61,6 +62,15 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.uiSoundVolume', {
         name: 'UI Sound Volume',
         hint: 'Volume of TAH hover/click sounds. Set to 0 to disable.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
+    game.settings.register(MODULE, 'tah.tokenFeedbackVolume', {
+        name: 'Token Feedback Volume',
+        hint: 'Volume of canvas token feedback sounds (hover, select, target, drag, move, elevation key). Set to 0 to disable.',
         scope: 'client',
         config: false,
         type: Number,
@@ -154,7 +164,106 @@ Hooks.on('init', () => {
 
 // ── Token selection ──────────────────────────────────────────────────────────
 
-Hooks.on('controlToken', () => {
+Hooks.on('hoverToken', (token, hovered) => {
+    if (hovered && !token?.controlled)
+        playUiSound('tokenHover');
+});
+
+Hooks.on('targetToken', (_user, _token, targeted) => {
+    playUiSound(targeted ? 'tokenTarget' : 'tokenUntarget');
+});
+
+Hooks.on('updateToken', (_doc, change) => {
+    if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
+        playUiSound('tokenMove');
+});
+
+Hooks.once('ready', () => {
+    if (!game.modules.get('elevationruler')?.active)
+        return;
+    const actionIds = [
+        'incrementElevation', 'decrementElevation',
+        'addWaypoint', 'removeWaypoint',
+        'addWaypointTokenRuler', 'removeWaypointTokenRuler',
+        'togglePathfinding', 'forceToGround', 'teleport',
+        'freeMovement', 'debugMovement'
+    ];
+    const getBoundKeys = () => {
+        const set = new Set();
+        const bindings = /** @type {any} */ (game.keybindings)?.bindings;
+        if (!bindings?.get)
+            return set;
+        for (const id of actionIds) {
+            const list = bindings.get(`elevationruler.${id}`) ?? [];
+            for (const b of list) {
+                if (b?.key)
+                    set.add(b.key);
+            }
+        }
+        return set;
+    };
+    let boundKeys = getBoundKeys();
+    Hooks.on('renderKeybindingsConfig', () => { boundKeys = getBoundKeys(); });
+    document.addEventListener('keydown', (ev) => {
+        if (ev.repeat)
+            return;
+        if (!boundKeys.has(ev.code))
+            return;
+        const tag = /** @type {any} */ (ev.target)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || /** @type {any} */ (ev.target)?.isContentEditable)
+            return;
+        const ruler = /** @type {any} */ (canvas?.controls?.ruler);
+        if (!ruler?.active)
+            return;
+        playUiSound('elevationKey');
+    });
+});
+
+// Per-grid-cell drag tick: uses libWrapper on _onDragLeftMove so we get every
+// mousemove during drag, then deduplicates by the preview clone's grid offset.
+const _dragLastCell = new WeakMap();
+Hooks.once('ready', () => {
+    if (!game.modules.get('lib-wrapper')?.active)
+        return;
+    libWrapper.register('lancer-automations', 'Token.prototype._onDragLeftMove', function (wrapped, event) {
+        const result = wrapped.call(this, event);
+        try {
+            const clones = event?.interactionData?.clones ?? [];
+            const gridSize = canvas.grid.size;
+            for (const clone of clones) {
+                const doc = clone.document;
+                const cx = doc.x + (doc.width * gridSize / 2);
+                const cy = doc.y + (doc.height * gridSize / 2);
+                const off = canvas.grid.getOffset({ x: cx, y: cy });
+                const key = `${off.i},${off.j}`;
+                const prev = _dragLastCell.get(clone);
+                if (prev !== key) {
+                    _dragLastCell.set(clone, key);
+                    if (prev !== undefined)
+                        playUiSound('tokenDrag');
+                }
+            }
+        } catch { /* ignore */ }
+        return result;
+    }, 'WRAPPER');
+});
+
+let _pendingDeselect = null;
+Hooks.on('controlToken', (_token, controlled) => {
+    if (controlled) {
+        if (_pendingDeselect) {
+            clearTimeout(_pendingDeselect);
+            _pendingDeselect = null;
+        }
+        playUiSound('tokenSelect');
+    } else {
+        if (_pendingDeselect)
+            clearTimeout(_pendingDeselect);
+        _pendingDeselect = setTimeout(() => {
+            _pendingDeselect = null;
+            playUiSound('tokenDeselect');
+        }, 50);
+    }
     if (!enabled())
         return;
     const all = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(t =>
