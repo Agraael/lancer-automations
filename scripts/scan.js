@@ -526,7 +526,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
             }
         },
         default: "submit"
-    }, { classes: ["lancer-dialog-base"], width: 500 }).render(true);
+    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 500 }).render(true);
 }
 
 function showSystemScanDialog(targets) {
@@ -603,7 +603,7 @@ function showSystemScanDialog(targets) {
                 }
             });
         }
-    }, { classes: ["lancer-dialog-base"], width: 450 }).render(true);
+    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 450 }).render(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -697,7 +697,7 @@ export async function executeScanOnActivation(reactorToken) {
             }
         },
         default: "scan"
-    }, { classes: ["lancer-dialog-base"], width: 500 }).render(true);
+    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 500 }).render(true);
 }
 
 export const ScanAPI = {

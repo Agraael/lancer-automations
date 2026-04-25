@@ -20,15 +20,15 @@ function getGrappleState(token) {
 async function setGrappleState(token, state) {
     if (!token)
         return;
-    await token.document.setFlag(MODULE_ID, 'grappleState', state);
+    const api = game.modules.get(MODULE_ID)?.api;
+    await api?.setTokenFlag?.(token.document, MODULE_ID, 'grappleState', state);
 }
 
 async function clearGrappleState(token) {
     if (!token)
         return;
-    try {
-        await token.document.unsetFlag(MODULE_ID, 'grappleState');
-    } catch (_) { /* flag may not exist */ }
+    const api = game.modules.get(MODULE_ID)?.api;
+    await api?.unsetTokenFlag?.(token.document, MODULE_ID, 'grappleState');
 }
 
 function getTokenSize(token) {

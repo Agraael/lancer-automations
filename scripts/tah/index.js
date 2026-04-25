@@ -77,6 +77,15 @@ Hooks.on('init', () => {
         default: 0,
         range: { min: 0, max: 1, step: 0.05 },
     });
+    game.settings.register(MODULE, 'tah.damageSoundVolume', {
+        name: 'Damage / Stat Sound Volume',
+        hint: 'Volume of damage, HP/heat/burn/overshield/infection feedback sounds. Set to 0 to disable.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
     game.settings.register(MODULE, 'tah.auraUseAltKey', {
         name: 'Aura: THT Ruler on Alt Press & Targeted',
         hint: "Show Terrain Height Tools rulers on auras only while Alt is held and tokens are targeted. Requires the grid-aware-auras fork (see lancer-automations README).",

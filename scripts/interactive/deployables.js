@@ -108,7 +108,6 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         }
     });
 
-    // Fire onDeploy trigger
     if (result) {
         const api = game.modules.get('lancer-automations')?.api;
         if (api?.handleTrigger) {
@@ -211,7 +210,7 @@ export async function spawnHardCover(originToken, options = {}) {
         };
     }
 
-    return placeToken({
+    const result = await placeToken({
         actor: /** @type {Actor} */ (templateActor),
         range,
         count,
@@ -221,6 +220,9 @@ export async function spawnHardCover(originToken, options = {}) {
         icon: "fas fa-cube",
         extraData
     });
+    if (result)
+        await _applyProvokeImmunity(result);
+    return result;
 }
 
 /**

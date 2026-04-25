@@ -110,7 +110,7 @@ function showUpdateDialog(module, newVersion, releaseNotes = "") {
         },
         default: "dismiss"
     }, {
-        classes: ["lancer-dialog-base"],
+        classes: ["lancer-dialog-base", "lancer-no-title"],
         width: 500
     }).render(true);
 }

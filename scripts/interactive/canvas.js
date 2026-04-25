@@ -325,6 +325,7 @@ export function chooseToken(casterToken, options = {}) {
 
             canvas.tokens.interactiveChildren = prevInteractive;
             _removeInfoCard(cardEl);
+            closeStackPopup();
         };
 
         const doConfirm = () => {
@@ -491,58 +492,118 @@ export function chooseToken(casterToken, options = {}) {
             drawCursorHighlight(tx, ty);
         };
 
-        const clickHandler = (event) => {
-            const { x: tx, y: ty } = pointerToWorld(event);
+        let stackPopupEl = null;
+        let stackOutsideHandler = null;
+        const closeStackPopup = () => {
+            if (stackPopupEl) {
+                stackPopupEl.remove();
+                stackPopupEl = null;
+            }
+            if (stackOutsideHandler) {
+                document.removeEventListener('pointerdown', stackOutsideHandler, true);
+                stackOutsideHandler = null;
+            }
+        };
 
-            // Find clicked token
-            const clickedToken = allTokens.find(token => {
-                const bounds = token.bounds;
-                return tx >= bounds.left && tx <= bounds.right &&
-                    ty >= bounds.top && ty <= bounds.bottom;
-            });
-
-            if (clickedToken) {
-                // Verify the clicked token is in range (hard mode only)
-                if (!soft && range !== null && casterToken) {
-                    const dist = getMinGridDistance(casterToken, clickedToken);
-                    if (dist > range)
-                        return;
-                }
-
-                if (selectedTokens.has(clickedToken)) {
-                    // Deselect
-                    selectedTokens.delete(clickedToken);
-                    removeSelectionHighlight(clickedToken);
-                    refreshCard();
+        const toggleTokenSelection = (token) => {
+            if (!soft && range !== null && casterToken) {
+                const dist = getMinGridDistance(casterToken, token);
+                if (dist > range)
+                    return;
+            }
+            if (selectedTokens.has(token)) {
+                selectedTokens.delete(token);
+                removeSelectionHighlight(token);
+                refreshCard();
+                return;
+            }
+            if (count !== -1 && selectedTokens.size >= count) {
+                if (count === 1) {
+                    const oldToken = selectedTokens.values().next().value;
+                    selectedTokens.delete(oldToken);
+                    removeSelectionHighlight(oldToken);
                 } else {
-                    // Select — block if at max (unless count=1, swap instead)
-                    if (count !== -1 && selectedTokens.size >= count) {
-                        if (count === 1) {
-                            // Swap: deselect old, select new
-                            const oldToken = selectedTokens.values().next().value;
-                            selectedTokens.delete(oldToken);
-                            removeSelectionHighlight(oldToken);
-                        } else {
-                            ui.notifications.warn(`Maximum of ${count} targets already selected.`);
-                            return;
-                        }
-                    }
-
-                    selectedTokens.add(clickedToken);
-                    drawSelectionHighlight(clickedToken);
-                    refreshCard();
+                    ui.notifications.warn(`Maximum of ${count} targets already selected.`);
+                    return;
                 }
             }
+            selectedTokens.add(token);
+            drawSelectionHighlight(token);
+            refreshCard();
+        };
+
+        const showStackPicker = (tokens, screenX, screenY) => {
+            closeStackPopup();
+            const el = document.createElement('div');
+            el.className = 'la-stack-picker';
+            el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
+            for (const token of tokens) {
+                const isSelected = selectedTokens.has(token);
+                const row = document.createElement('div');
+                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${isSelected ? 'background:rgba(255,100,0,0.25);' : ''}`;
+                row.innerHTML = `
+                    <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
+                    <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
+                    ${isSelected ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
+                row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,100,0,0.4)'; });
+                row.addEventListener('mouseleave', () => { row.style.background = isSelected ? 'rgba(255,100,0,0.25)' : 'transparent'; });
+                row.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleTokenSelection(token);
+                    closeStackPopup();
+                });
+                el.appendChild(row);
+            }
+            document.body.appendChild(el);
+            stackPopupEl = el;
+            // Clamp on-screen
+            const r = el.getBoundingClientRect();
+            if (r.right > window.innerWidth)
+                el.style.left = `${Math.max(0, window.innerWidth - r.width - 4)}px`;
+            if (r.bottom > window.innerHeight)
+                el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
+            // Outside-click closes
+            stackOutsideHandler = (e) => {
+                if (stackPopupEl && !stackPopupEl.contains(/** @type {Node} */ (e.target)))
+                    closeStackPopup();
+            };
+            setTimeout(() => document.addEventListener('pointerdown', stackOutsideHandler, true), 0);
+        };
+
+        const clickHandler = (event) => {
+            const { x: tx, y: ty } = pointerToWorld(event);
+            const tokensHere = allTokens.filter(token => {
+                const b = token.bounds;
+                return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
+            });
+            if (tokensHere.length === 0)
+                return;
+            if (tokensHere.length === 1) {
+                toggleTokenSelection(tokensHere[0]);
+                return;
+            }
+            const oe = event?.data?.originalEvent;
+            const sx = oe?.clientX ?? 0;
+            const sy = oe?.clientY ?? 0;
+            showStackPicker(tokensHere, sx + 10, sy + 10);
         };
 
         const abortHandler = (event) => {
             if (event.data.button === 2) { // Right click
+                if (stackPopupEl) {
+                    closeStackPopup();
+                    return;
+                }
                 doConfirm();
             }
         };
 
         const keyHandler = (event) => {
             if (event.key === "Escape") {
+                if (stackPopupEl) {
+                    closeStackPopup();
+                    return;
+                }
                 doCancel();
             }
         };
@@ -1192,7 +1253,7 @@ export async function moveToken(token, options = {}) {
     if (options.teleport && typeof Sequencer !== 'undefined') {
         // @ts-ignore
         new Sequence()
-            .sound("modules/lancer-automations/SFX/laser_shot_mark_02_10052025.wav")
+            .sound("modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav")
             .volume(weaponFx.api.getEffectVolume(0.7))
             .effect("jb2a.impact.003.yellow")
             .atLocation(startCenter)
@@ -1863,11 +1924,17 @@ export function placeToken(options = {}) {
         const refreshCard = () => {
             if (!cardEl)
                 return;
+            const warnings = {};
+            placements.forEach((p, idx) => {
+                if (p.warning)
+                    warnings[idx] = [p.warning];
+            });
             _updateInfoCard(cardEl, "placeToken", {
                 placements,
                 actorEntries,
                 activeActorIndex,
                 isMultiActor,
+                warnings,
                 onSelectActor: (idx) => {
                     activeActorIndex = idx;
                     refreshCard();
@@ -2010,16 +2077,14 @@ export function placeToken(options = {}) {
 
             const cursorOffset = snapCursor(tx, ty);
 
-            if (!checkInRange(cursorOffset.col, cursorOffset.row))
-                ui.notifications.warn("Target is out of range!");
-
             if (count !== -1 && placements.length >= count) {
                 ui.notifications.warn(`Maximum of ${count} tokens already placed.`);
                 return;
             }
 
+            const warning = !checkInRange(cursorOffset.col, cursorOffset.row) ? 'Out of range' : null;
             const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row);
-            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics, actorIndex: activeActorIndex });
+            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics, actorIndex: activeActorIndex, warning });
             refreshCard();
 
             if (noCard && (count === -1 || placements.length >= count)) {

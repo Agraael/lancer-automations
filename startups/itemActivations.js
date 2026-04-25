@@ -3570,12 +3570,12 @@ api.registerDefaultGeneralReactions({
                     return triggerData.statusId === 'guardian';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    if (api.findAura(reactorToken, "Guardian") || _guardianAuraPending.has(reactorToken.id))
+                    if (api.findAura(reactorToken, "LA_Guardian") || _guardianAuraPending.has(reactorToken.id))
                         return;
                     _guardianAuraPending.add(reactorToken.id);
                     try {
                         await api.createAura(reactorToken, {
-                            name: "Guardian",
+                            name: "LA_Guardian",
                             unified: false,
                             radius: "0",
                             lineWidth: 6,
@@ -3604,7 +3604,12 @@ api.registerDefaultGeneralReactions({
                     return triggerData.statusId === 'guardian';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    await api.deleteAuras(reactorToken, a => a.name === "Guardian");
+                    _guardianAuraPending.delete(reactorToken.id);
+                    for (let i = 0; i < 10; i++) {
+                        await api.deleteAuras(reactorToken, { name: "LA_Guardian" });
+                        if (!api.findAura(reactorToken, "LA_Guardian"))
+                            break;
+                    }
                 }
             }
         ]

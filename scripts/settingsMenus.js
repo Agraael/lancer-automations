@@ -265,6 +265,7 @@ const TokenActionHudConfig = makeConfigForm({
         { key: 'tah.auraUseAltKey', type: 'boolean' },
         { key: 'tah.uiSoundVolume', type: 'slider' },
         { key: 'tah.tokenFeedbackVolume', type: 'slider' },
+        { key: 'tah.damageSoundVolume', type: 'slider' },
         { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
         { key: 'tah.resetPosition', type: 'button', label: 'Reset TAH Position', icon: 'fas fa-undo', hint: 'Reset the HUD to its default screen position.',
             onClick: async () => {

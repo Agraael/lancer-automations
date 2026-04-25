@@ -275,7 +275,7 @@ export function getDefaultGeneralReactionRegistry() {
                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                         return;
 
-                    await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg", "jb2a.shield.01.intro.blue", "modules/lancer-automations/SFX/Brace.svg"]);
+                    await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg", "jb2a.shield.01.intro.blue", "modules/lancer-automations/FX/svg/Brace.svg"]);
                     validTokens.forEach(token => {
                         let sequence = new Sequence()
                             .sound()
@@ -289,7 +289,7 @@ export function getDefaultGeneralReactionRegistry() {
                             .atLocation(token)
                             .waitUntilFinished(-400)
                             .effect()
-                            .file("modules/lancer-automations/SFX/Brace.svg")
+                            .file("modules/lancer-automations/FX/svg/Brace.svg")
                             .attachTo(token, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)
@@ -464,7 +464,7 @@ export function getDefaultGeneralReactionRegistry() {
                         .file("modules/lancer-weapon-fx/soundfx/LockOn.ogg")
                         .volume(weaponFx.api.getEffectVolume(0.8))
                         .effect()
-                        .file("modules/lancer-automations/SFX/Lockon.svg")
+                        .file("modules/lancer-automations/FX/svg/Lockon.svg")
                         .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                         .scaleIn(0.01, 500)
                         .scale(0.09)
@@ -531,7 +531,7 @@ export function getDefaultGeneralReactionRegistry() {
                             .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
-                            .file("modules/lancer-automations/SFX/Bolster.svg")
+                            .file("modules/lancer-automations/FX/svg/Bolster.svg")
                             .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)
@@ -617,17 +617,17 @@ export function getDefaultGeneralReactionRegistry() {
                         return;
 
                     await Sequencer.Preloader.preloadForClients([
-                        "modules/lancer-automations/SFX/activation-sound-effect.wav",
+                        "modules/lancer-automations/FX/audio/activation-sound-effect.wav",
                         "jb2a.healing_generic.400px.blue",
                     ]);
 
                     validTargets.forEach(target => {
                         let sequence = new Sequence()
                             .sound()
-                            .file("modules/lancer-automations/SFX/activation-sound-effect.wav")
+                            .file("modules/lancer-automations/FX/audio/activation-sound-effect.wav")
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
-                            .file("modules/lancer-automations/SFX/Aid.svg")
+                            .file("modules/lancer-automations/FX/svg/Aid.svg")
                             .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)

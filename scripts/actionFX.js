@@ -1,6 +1,7 @@
 /* global game, Sequence, Sequencer, Hooks, canvas, foundry */
 
 import { isActionFXEnabled } from './statusFX.js';
+import { playStatsSound } from './tah/sound.js';
 
 /**
  * Action FX sequences for built-in general reactions.
@@ -44,10 +45,10 @@ export async function playSkirmishFX(token) {
     const fx = _weaponFx();
     if (!fx || !_canPlay())
         return;
-    const soundFile = `modules/lancer-automations/SFX/Skirmish${1 + Math.floor(Math.random() * 3)}.wav`;
+    const soundFile = `modules/lancer-automations/FX/audio/Skirmish${1 + Math.floor(Math.random() * 3)}.wav`;
     await Sequencer.Preloader.preloadForClients([
         soundFile,
-        'modules/lancer-automations/SFX/Skirmish.svg',
+        'modules/lancer-automations/FX/svg/Skirmish.svg',
         'jb2a.ui.heartbeat.01.red',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
     ]);
@@ -58,7 +59,7 @@ export async function playSkirmishFX(token) {
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/Skirmish.svg')
+        .file('modules/lancer-automations/FX/svg/Skirmish.svg')
         .attachTo(token, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -108,16 +109,16 @@ export async function playEjectFX(source, dest) {
     const ipivotx = -pivotx;
     const ipivoty = -pivoty;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/jetpack_unpack_1.wav',
-        'modules/lancer-automations/SFX/smokeimpact.wav',
-        'modules/lancer-automations/SFX/Eject.svg',
+        'modules/lancer-automations/FX/audio/jetpack_unpack_1.wav',
+        'modules/lancer-automations/FX/audio/smokeimpact.wav',
+        'modules/lancer-automations/FX/svg/Eject.svg',
         'jb2a.pack_hound_missile',
         'jb2a.smoke.puff.ring.01.white',
         'jb2a.smoke.plumes.01.grey',
     ]);
     const sourceSeq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/jetpack_unpack_1.wav')
+        .file('modules/lancer-automations/FX/audio/jetpack_unpack_1.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -132,11 +133,11 @@ export async function playEjectFX(source, dest) {
         .fadeOut(3500, { delay: -800 })
         .rotate(-35)
         .belowTokens();
-    _appendActionBadge(sourceSeq, source, 'modules/lancer-automations/SFX/Eject.svg');
+    _appendActionBadge(sourceSeq, source, 'modules/lancer-automations/FX/svg/Eject.svg');
     sourceSeq.play();
 
     if (dest) {
-       await new Sequence()
+        await new Sequence()
             .effect()
             .xray(fx.isEffectIgnoreFogOfWar())
             .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -154,7 +155,7 @@ export async function playEjectFX(source, dest) {
             .atLocation(dest)
             .scaleToObject(5)
             .sound()
-            .file('modules/lancer-automations/SFX/smokeimpact.wav')
+            .file('modules/lancer-automations/FX/audio/smokeimpact.wav')
             .volume(fx.getEffectVolume(0.5))
             .play();
     }
@@ -172,7 +173,7 @@ export async function playSelfDestructFX(token) {
         'modules/lancer-weapon-fx/soundfx/dramaticSparkles.ogg',
         'modules/lancer-weapon-fx/soundfx/ReactorWarning.ogg',
         'modules/lancer-weapon-fx/soundfx/Annihilator.ogg',
-        'modules/lancer-automations/SFX/Selfdead.svg',
+        'modules/lancer-automations/FX/svg/Selfdead.svg',
         'jb2a.static_electricity.03',
         'jb2a.smoke.plumes.01.grey',
         'jb2a.breath_weapons02.burst.line.fire.orange.01',
@@ -201,7 +202,7 @@ export async function playSelfDestructFX(token) {
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/Selfdead.svg')
+        .file('modules/lancer-automations/FX/svg/Selfdead.svg')
         .attachTo(token, { align: 'bottom-left', edge: 'inner', offset: { y: 0.1 }, gridUnits: true })
         .animateProperty('sprite', 'position.y', { from: 0, to: 1, duration: 3500, gridUnits: true, fromEnd: true })
         .scaleIn(0.01, 500)
@@ -278,9 +279,9 @@ export async function playTeleportFX(caster) {
     if (!_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/Teleport.svg',
+        'modules/lancer-automations/FX/svg/Teleport.svg',
     ]);
-    await _appendActionBadge(new Sequence(), caster, 'modules/lancer-automations/SFX/Teleport.svg').play();
+    await _appendActionBadge(new Sequence(), caster, 'modules/lancer-automations/FX/svg/Teleport.svg').play();
 }
 
 export async function playBootUpFX(caster) {
@@ -288,20 +289,20 @@ export async function playBootUpFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/bootup.wav',
-        'modules/lancer-automations/SFX/BootUp.svg',
+        'modules/lancer-automations/FX/audio/bootup.wav',
+        'modules/lancer-automations/FX/svg/BootUp.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.energy_strands.in.yellow',
         'jb2a.ui.heartbeat.01.yellow',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/bootup.wav')
+        .file('modules/lancer-automations/FX/audio/bootup.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/BootUp.svg')
+        .file('modules/lancer-automations/FX/svg/BootUp.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -355,14 +356,14 @@ export async function playDismountFX(caster) {
     const ipivotx = -pivotx;
     const ipivoty = -pivoty;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/liftoff.wav',
-        'modules/lancer-automations/SFX/Dismount.svg',
+        'modules/lancer-automations/FX/audio/liftoff.wav',
+        'modules/lancer-automations/FX/svg/Dismount.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.smoke.plumes.01.grey',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/liftoff.wav')
+        .file('modules/lancer-automations/FX/audio/liftoff.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -383,7 +384,7 @@ export async function playDismountFX(caster) {
         .fadeOut(3500, { delay: -800 })
         .rotate(-35)
         .belowTokens();
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Dismount.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Dismount.svg').play();
 }
 
 export async function playDisengageFX(caster) {
@@ -391,13 +392,13 @@ export async function playDisengageFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/742717__artix0__dash-sound-effect.wav',
-        'modules/lancer-automations/SFX/Disengage.svg',
+        'modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav',
+        'modules/lancer-automations/FX/svg/Disengage.svg',
         'jb2a.extras.tmfx.outpulse.line.02.normal',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/742717__artix0__dash-sound-effect.wav')
+        .file('modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -405,7 +406,7 @@ export async function playDisengageFX(caster) {
         .file('jb2a.extras.tmfx.outpulse.line.02.normal')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Disengage.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Disengage.svg').play();
 }
 
 export async function playDeployableFX(deployedToken) {
@@ -413,19 +414,19 @@ export async function playDeployableFX(deployedToken) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/deploy.wav',
-        'modules/lancer-automations/SFX/Deployable.svg',
+        'modules/lancer-automations/FX/audio/deploy.wav',
+        'modules/lancer-automations/FX/svg/Deployable.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.ui.heartbeat.01.blue',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/deploy.wav')
+        .file('modules/lancer-automations/FX/audio/deploy.wav')
         .volume(fx.getEffectVolume(0.35))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/Deployable.svg')
+        .file('modules/lancer-automations/FX/svg/Deployable.svg')
         .attachTo(deployedToken, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -464,19 +465,19 @@ export async function playDeployableFX(deployedToken) {
         .play();
 }
 
-export async function playFreeActionFX(caster, svg = 'modules/lancer-automations/SFX/FreeAction.svg') {
+export async function playFreeActionFX(caster, svg = 'modules/lancer-automations/FX/svg/FreeAction.svg') {
     const fx = _weaponFx();
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/free.wav',
+        'modules/lancer-automations/FX/audio/free.wav',
         svg,
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
         'jb2a.ui.heartbeat.01.green',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/free.wav')
+        .file('modules/lancer-automations/FX/audio/free.wav')
         .volume(fx.getEffectVolume(0.35))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -527,8 +528,8 @@ export async function playCorePowerFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/corepower.wav',
-        'modules/lancer-automations/SFX/CorePower.svg',
+        'modules/lancer-automations/FX/audio/corepower.wav',
+        'modules/lancer-automations/FX/svg/CorePower.svg',
         'jb2a.on_token_buff.002.002.orangeyellow',
         'jb2a.template_circle.out_pulse.02.burst.greenorange',
         'jb2a.static_electricity.01.yellow',
@@ -536,12 +537,12 @@ export async function playCorePowerFX(caster) {
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/corepower.wav')
+        .file('modules/lancer-automations/FX/audio/corepower.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/CorePower.svg')
+        .file('modules/lancer-automations/FX/svg/CorePower.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -601,19 +602,19 @@ export async function playProtocolFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/protocol.wav',
-        'modules/lancer-automations/SFX/Protocol.svg',
+        'modules/lancer-automations/FX/audio/protocol.wav',
+        'modules/lancer-automations/FX/svg/Protocol.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
         'jb2a.ui.heartbeat.01.green',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/protocol.wav')
+        .file('modules/lancer-automations/FX/audio/protocol.wav')
         .volume(fx.getEffectVolume(0.35))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/Protocol.svg')
+        .file('modules/lancer-automations/FX/svg/Protocol.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -654,19 +655,19 @@ export async function playProtocolFX(caster) {
         .play();
 }
 
-export async function playReactionFX(caster, svg = 'modules/lancer-automations/SFX/Reaction.svg') {
+export async function playReactionFX(caster, svg = 'modules/lancer-automations/FX/svg/Reaction.svg') {
     const fx = _weaponFx();
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/reaction.wav',
+        'modules/lancer-automations/FX/audio/reaction.wav',
         svg,
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
         'jb2a.ui.heartbeat.01.purple',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/reaction.wav')
+        .file('modules/lancer-automations/FX/audio/reaction.wav')
         .volume(fx.getEffectVolume(0.35))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -715,19 +716,19 @@ export async function playFullActionFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/fullaction.wav',
-        'modules/lancer-automations/SFX/FullAction.svg',
+        'modules/lancer-automations/FX/audio/fullaction.wav',
+        'modules/lancer-automations/FX/svg/FullAction.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
         'jb2a.ui.heartbeat.01.blue',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/fullaction.wav')
+        .file('modules/lancer-automations/FX/audio/fullaction.wav')
         .volume(fx.getEffectVolume(0.60))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/FullAction.svg')
+        .file('modules/lancer-automations/FX/svg/FullAction.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -771,19 +772,19 @@ export async function playQuickActionFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/quickaction.wav',
-        'modules/lancer-automations/SFX/QuickAction.svg',
+        'modules/lancer-automations/FX/audio/quickaction.wav',
+        'modules/lancer-automations/FX/svg/QuickAction.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
         'jb2a.ui.heartbeat.01.blue',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/quickaction.wav')
+        .file('modules/lancer-automations/FX/audio/quickaction.wav')
         .volume(fx.getEffectVolume(0.60))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/QuickAction.svg')
+        .file('modules/lancer-automations/FX/svg/QuickAction.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -827,13 +828,13 @@ export async function playStandingUpFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/standingup.mp3',
-        'modules/lancer-automations/SFX/Standing.svg',
+        'modules/lancer-automations/FX/audio/standingup.mp3',
+        'modules/lancer-automations/FX/svg/Standing.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/standingup.mp3')
+        .file('modules/lancer-automations/FX/audio/standingup.mp3')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -841,7 +842,7 @@ export async function playStandingUpFX(caster) {
         .file('jb2a.extras.tmfx.inpulse.circle.01.fast')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Standing.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Standing.svg').play();
 }
 
 export async function playPrepareFX(caster) {
@@ -849,13 +850,13 @@ export async function playPrepareFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/prepare.wav',
-        'modules/lancer-automations/SFX/Prepare.svg',
+        'modules/lancer-automations/FX/audio/prepare.wav',
+        'modules/lancer-automations/FX/svg/Prepare.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/prepare.wav')
+        .file('modules/lancer-automations/FX/audio/prepare.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -863,7 +864,7 @@ export async function playPrepareFX(caster) {
         .file('jb2a.extras.tmfx.inpulse.circle.01.fast')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Prepare.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Prepare.svg').play();
 }
 
 export async function playInteractFX(caster) {
@@ -871,13 +872,13 @@ export async function playInteractFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/interact.wav',
-        'modules/lancer-automations/SFX/Interact.svg',
+        'modules/lancer-automations/FX/audio/interact.wav',
+        'modules/lancer-automations/FX/svg/Interact.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/interact.wav')
+        .file('modules/lancer-automations/FX/audio/interact.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -885,7 +886,7 @@ export async function playInteractFX(caster) {
         .file('jb2a.extras.tmfx.inpulse.circle.01.fast')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Interact.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Interact.svg').play();
 }
 
 export async function playHandleFX(caster) {
@@ -893,13 +894,13 @@ export async function playHandleFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/handle.wav',
-        'modules/lancer-automations/SFX/Handle.svg',
+        'modules/lancer-automations/FX/audio/handle.wav',
+        'modules/lancer-automations/FX/svg/Handle.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/handle.wav')
+        .file('modules/lancer-automations/FX/audio/handle.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -907,7 +908,7 @@ export async function playHandleFX(caster) {
         .file('jb2a.extras.tmfx.inpulse.circle.01.fast')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Handle.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Handle.svg').play();
 }
 
 export async function playFullTechFX(caster) {
@@ -915,20 +916,20 @@ export async function playFullTechFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/fulltech.wav',
-        'modules/lancer-automations/SFX/FullTech.svg',
+        'modules/lancer-automations/FX/audio/fulltech.wav',
+        'modules/lancer-automations/FX/svg/FullTech.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.static_electricity.03.blue02',
         'jb2a.ui.heartbeat.01.green',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/fulltech.wav')
+        .file('modules/lancer-automations/FX/audio/fulltech.wav')
         .volume(fx.getEffectVolume(0.3))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/FullTech.svg')
+        .file('modules/lancer-automations/FX/svg/FullTech.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -981,20 +982,20 @@ export async function playQuickTechFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/quicktech.wav',
-        'modules/lancer-automations/SFX/QuickTech.svg',
+        'modules/lancer-automations/FX/audio/quicktech.wav',
+        'modules/lancer-automations/FX/svg/QuickTech.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.static_electricity.03.blue02',
         'jb2a.ui.heartbeat.01.green',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/quicktech.wav')
+        .file('modules/lancer-automations/FX/audio/quicktech.wav')
         .volume(fx.getEffectVolume(0.3))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/QuickTech.svg')
+        .file('modules/lancer-automations/FX/svg/QuickTech.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -1047,20 +1048,20 @@ export async function playInvadeFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/invade.wav',
-        'modules/lancer-automations/SFX/invade.svg',
+        'modules/lancer-automations/FX/audio/invade.wav',
+        'modules/lancer-automations/FX/svg/Invade.svg',
         'jb2a.extras.tmfx.inpulse.circle.01.fast',
         'jb2a.static_electricity.03.green02',
         'jb2a.ui.heartbeat.01.green',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/invade.wav')
+        .file('modules/lancer-automations/FX/audio/invade.wav')
         .volume(fx.getEffectVolume(0.3))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/invade.svg')
+        .file('modules/lancer-automations/FX/svg/Invade.svg')
         .attachTo(caster, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -1113,13 +1114,13 @@ export async function playGrappleFX(caster) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/harpoon-deploy-swoosh.wav',
-        'modules/lancer-automations/SFX/grapple.svg',
+        'modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav',
+        'modules/lancer-automations/FX/svg/grapple.svg',
         'jb2a.extras.tmfx.inpulse.circle.04.normal',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/harpoon-deploy-swoosh.wav')
+        .file('modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav')
         .volume(fx.getEffectVolume(0.5))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -1127,7 +1128,7 @@ export async function playGrappleFX(caster) {
         .file('jb2a.extras.tmfx.inpulse.circle.04.normal')
         .atLocation(caster)
         .scaleToObject(2);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/grapple.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/grapple.svg').play();
 }
 
 export async function playRamFX(caster, target) {
@@ -1135,13 +1136,13 @@ export async function playRamFX(caster, target) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/ram.wav',
-        'modules/lancer-automations/SFX/Ram.svg',
+        'modules/lancer-automations/FX/audio/ram.wav',
+        'modules/lancer-automations/FX/svg/Ram.svg',
         'jb2a.zoning.directional.once.redyellow.line200.01',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/ram.wav')
+        .file('modules/lancer-automations/FX/audio/ram.wav')
         .volume(fx.getEffectVolume(0.5));
     if (target) {
         seq.effect()
@@ -1153,7 +1154,7 @@ export async function playRamFX(caster, target) {
             .scaleToObject(1.5)
             .playbackRate(1.5);
     }
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Ram.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Ram.svg').play();
 }
 
 export async function playBarrageFX(token) {
@@ -1161,19 +1162,19 @@ export async function playBarrageFX(token) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/barrage.wav',
-        'modules/lancer-automations/SFX/Barrage.svg',
+        'modules/lancer-automations/FX/audio/barrage.wav',
+        'modules/lancer-automations/FX/svg/Barrage.svg',
         'jb2a.ui.heartbeat.01.red',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/barrage.wav')
+        .file('modules/lancer-automations/FX/audio/barrage.wav')
         .volume(fx.getEffectVolume(0.35))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
-        .file('modules/lancer-automations/SFX/Barrage.svg')
+        .file('modules/lancer-automations/FX/svg/Barrage.svg')
         .attachTo(token, { align: 'bottom', edge: 'outer', offset: { y: -0.2 }, gridUnits: true })
         .scale(0.09)
         .filter('Glow', { distance: 2, color: 0x000000 })
@@ -1219,20 +1220,20 @@ export async function playBoostFX(token) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/boost.wav',
-        'modules/lancer-automations/SFX/Boost.svg',
+        'modules/lancer-automations/FX/audio/boost.wav',
+        'modules/lancer-automations/FX/svg/Boost.svg',
         'jb2a.zoning.directional.once.bluegreen.line200.02',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/boost.wav')
+        .file('modules/lancer-automations/FX/audio/boost.wav')
         .volume(fx.getEffectVolume(0.3))
         .effect()
         .file('jb2a.zoning.directional.once.bluegreen.line200.02')
         .scaleToObject(1.5)
         .filter('Glow', { color: 0x00CED1 })
         .atLocation(token);
-    await _appendActionBadge(seq, token, 'modules/lancer-automations/SFX/Boost.svg').play();
+    await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Boost.svg').play();
 }
 
 export async function playOverchargeNpcFX(token) {
@@ -1318,9 +1319,9 @@ export async function playHideFX(token) {
         .atLocation(token)
         .scale(1.1)
         .sound()
-        .file('modules/lancer-automations/SFX/PuffSmoke.wav')
+        .file('modules/lancer-automations/FX/audio/PuffSmoke.wav')
         .volume(_weaponFx()?.getEffectVolume(0.7) ?? 0.7);
-    await _appendActionBadge(seq, token, 'modules/lancer-automations/SFX/Hide.svg').play();
+    await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Hide.svg').play();
 }
 
 export async function playShutDownFX(token) {
@@ -1328,14 +1329,14 @@ export async function playShutDownFX(token) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/shutdown.wav',
-        'modules/lancer-automations/SFX/Shutdown.svg',
+        'modules/lancer-automations/FX/audio/shutdown.wav',
+        'modules/lancer-automations/FX/svg/Shutdown.svg',
         'jb2a.extras.tmfx.inpulse.circle.02.normal',
         'jb2a.smoke.plumes.01.grey',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/shutdown.wav')
+        .file('modules/lancer-automations/FX/audio/shutdown.wav')
         .volume(fx.getEffectVolume(0.7))
         .atLocation(token)
         .effect()
@@ -1349,7 +1350,7 @@ export async function playShutDownFX(token) {
         .opacity(0.5)
         .fadeIn(500)
         .fadeOut(1500);
-    await _appendActionBadge(seq, token, 'modules/lancer-automations/SFX/Shutdown.svg').play();
+    await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Shutdown.svg').play();
 }
 
 export async function playFallFX(token) {
@@ -1357,15 +1358,15 @@ export async function playFallFX(token) {
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/fall.mp3',
-        'modules/lancer-automations/SFX/falling.svg',
+        'modules/lancer-automations/FX/audio/fall.mp3',
+        'modules/lancer-automations/FX/svg/falling.svg',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/fall.mp3')
+        .file('modules/lancer-automations/FX/audio/fall.mp3')
         .volume(fx.getEffectVolume(0.7))
         .atLocation(token);
-    await _appendActionBadge(seq, token, 'modules/lancer-automations/SFX/falling.svg').play();
+    await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/falling.svg').play();
 }
 
 export async function playFallImpactFX(token) {
@@ -1374,7 +1375,7 @@ export async function playFallImpactFX(token) {
     await Sequencer.Preloader.preloadForClients([
         'jb2a.impact.boulder.02',
         'jb2a.impact.ground_crack.white.01',
-        'modules/lancer-automations/SFX/IMPACT.mp3',
+        'modules/lancer-automations/FX/audio/IMPACT.mp3',
     ]);
     const scale = Math.floor(token.actor?.system?.size || 1);
     await new Sequence()
@@ -1388,7 +1389,7 @@ export async function playFallImpactFX(token) {
         .scale(scale / 2)
         .belowTokens()
         .sound()
-        .file('modules/lancer-automations/SFX/IMPACT.mp3')
+        .file('modules/lancer-automations/FX/audio/IMPACT.mp3')
         .volume(_weaponFx()?.getEffectVolume(0.7) ?? 0.7)
         .waitUntilFinished()
         .play();
@@ -1398,33 +1399,33 @@ export async function playSearchFX(token) {
     if (!_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/radar-4.wav',
-        'modules/lancer-automations/SFX/Search.svg',
+        'modules/lancer-automations/FX/audio/radar-4.wav',
+        'modules/lancer-automations/FX/svg/Search.svg',
         'jb2a.soundwave.01.blue',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/radar-4.wav')
+        .file('modules/lancer-automations/FX/audio/radar-4.wav')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
         .effect()
         .file('jb2a.soundwave.01.blue')
         .atLocation(token)
         .scaleToObject(3);
-    await _appendActionBadge(seq, token, 'modules/lancer-automations/SFX/Search.svg').play();
+    await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Search.svg').play();
 }
 
 export async function playScanFX(caster, target) {
     if (!_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/SFX/scan.mp3',
-        'modules/lancer-automations/SFX/Scan.svg',
+        'modules/lancer-automations/FX/audio/scan.mp3',
+        'modules/lancer-automations/FX/svg/Scan.svg',
         'jb2a.markers_scifi.001.complete.003.white',
         'jb2a.zoning.outward.cone.once.bluegreen.01.02',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/SFX/scan.mp3')
+        .file('modules/lancer-automations/FX/audio/scan.mp3')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6);
     if (target) {
         seq.effect()
@@ -1437,7 +1438,7 @@ export async function playScanFX(caster, target) {
             .atLocation(target)
             .scaleToObject(2.5);
     }
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/SFX/Scan.svg').play();
+    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Scan.svg').play();
 }
 
 /** Success ping on a target — blue circle inpulse + confirm sound. */
@@ -1446,7 +1447,7 @@ export async function playTargetSuccessFX(token) {
         return;
     await Sequencer.Preloader.preloadForClients([
         'jb2a.extras.tmfx.inpulse.circle.03.fast',
-        'modules/lancer-automations/SFX/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3',
+        'modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3',
     ]);
     await new Sequence()
         .effect()
@@ -1455,7 +1456,7 @@ export async function playTargetSuccessFX(token) {
         .scaleToObject(2)
         .tint(0x4a9eff)
         .sound()
-        .file('modules/lancer-automations/SFX/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3')
+        .file('modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
         .play();
 }
@@ -1479,6 +1480,54 @@ function _buildAttackContext(state) {
     return { sourceToken, targetTokens, targetsMissed, targetsCrit };
 }
 
+export async function playDefaultThrowFX(state) {
+    if (!_canPlay())
+        return;
+    const { sourceToken, targetTokens, targetsMissed } = _buildAttackContext(state);
+    if (!sourceToken || targetTokens.length === 0)
+        return;
+    const fx = _weaponFx();
+    await Sequencer.Preloader.preloadForClients([
+        "modules/lancer-weapon-fx/soundfx/bladeswing.ogg",
+        "modules/lancer-weapon-fx/soundfx/bladehit.ogg",
+        "jb2a.greatsword.throw",
+        "jb2a.impact.001.blue",
+    ]);
+    const volume = fx?.getEffectVolume(0.2) ?? 0.2;
+    const launchDelay = 500;
+    let i = 0;
+    for (const target of targetTokens) {
+        const seq = new Sequence();
+        const isFacingLeft = target.x < sourceToken.x;
+        seq.sound()
+            .file("modules/lancer-weapon-fx/soundfx/bladeswing.ogg")
+            .volume(volume)
+            .delay(750);
+        seq.effect()
+            .xray(fx?.isEffectIgnoreFogOfWar() ?? false)
+            .aboveInterface(fx?.isEffectIgnoreLightingColoration() ?? false)
+            .file("jb2a.greatsword.throw")
+            .atLocation(sourceToken)
+            .mirrorY(isFacingLeft)
+            .stretchTo(target)
+            .missed(targetsMissed.has(target.id))
+            .waitUntilFinished(-700);
+        if (!targetsMissed.has(target.id)) {
+            seq.effect()
+                .xray(fx?.isEffectIgnoreFogOfWar() ?? false)
+                .aboveInterface(fx?.isEffectIgnoreLightingColoration() ?? false)
+                .file("jb2a.impact.001.blue")
+                .atLocation(target)
+                .scale(0.5);
+            seq.sound()
+                .file("modules/lancer-weapon-fx/soundfx/bladehit.ogg")
+                .volume(volume);
+        }
+        const delayMs = launchDelay * i++;
+        setTimeout(() => seq.play(), delayMs);
+    }
+}
+
 /**
  * Inline attack FX keyed by BasicAttackFlow state.data.title. main.js dispatches
  * into this map after printAttackCard for LA-owned standalone basic attacks.
@@ -1496,7 +1545,7 @@ export const LA_INLINE_ATTACK_FX = {
         const seq = new Sequence();
         for (const target of targetTokens) {
             seq.sound()
-                .file('modules/lancer-automations/SFX/ram_impact.wav')
+                .file('modules/lancer-automations/FX/audio/ram_impact.wav')
                 .playIf(!targetsMissed.has(target.id))
                 .volume(volume);
             seq.effect()
@@ -1526,7 +1575,7 @@ export const LA_INLINE_ATTACK_FX = {
         fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         seq.sound()
-            .file('modules/lancer-automations/SFX/grapple_gun.wav')
+            .file('modules/lancer-automations/FX/audio/grapple_gun.wav')
             .volume(volume);
         for (const target of targetTokens) {
             if (sourceToken) {
@@ -1538,7 +1587,7 @@ export const LA_INLINE_ATTACK_FX = {
                     .stretchTo(target);
             }
             seq.sound()
-                .file('modules/lancer-automations/SFX/rope-swinging.wav')
+                .file('modules/lancer-automations/FX/audio/rope-swinging.wav')
                 .playIf(!targetsMissed.has(target.id))
                 .volume(volume);
             seq.effect()
@@ -1683,13 +1732,13 @@ function _playActionFxForActivation(activation, token, title) {
             playProtocolFX(token);
         else if (activation === 'Free') {
             const svg = title === 'Squeeze'
-                ? 'modules/lancer-automations/SFX/Squeeze.svg'
-                : 'modules/lancer-automations/SFX/FreeAction.svg';
+                ? 'modules/lancer-automations/FX/svg/Squeeze.svg'
+                : 'modules/lancer-automations/FX/svg/FreeAction.svg';
             playFreeActionFX(token, svg);
         } else if (activation === 'Reaction') {
             const svg = title === 'Overwatch'
-                ? 'modules/lancer-automations/SFX/Overwatch.svg'
-                : 'modules/lancer-automations/SFX/Reaction.svg';
+                ? 'modules/lancer-automations/FX/svg/Overwatch.svg'
+                : 'modules/lancer-automations/FX/svg/Reaction.svg';
             playReactionFX(token, svg);
         }
     }
@@ -1742,6 +1791,44 @@ Hooks.on('lancer.preFlow.SimpleActivationFlow', (flow) => {
         _playActionFxForActivation(_flowTechActivation(flow), token, title);
 });
 
+/** Per-damage-type JB2A impact sprite played on the damaged target token. */
+const DAMAGE_IMPACT_FX = {
+    kinetic:   'jb2a.impact.009.white',
+    energy:    'jb2a.impact.003.blue',
+    explosive: 'jb2a.impact.005.orange',
+    variable:  'jb2a.impact.007.purple',
+    infection: 'jb2a.impact.012.green02',
+    heat:      'jb2a.impact.004.orange',
+    burn:      'jb2a.impact.014.002.orangeyellow',
+    armor:     'jb2a.impact.008.orange',
+    hit_overshield: 'jb2a.impact.010',
+};
+
+/** Play a single damage-type impact effect at the target token. */
+export async function playDamageImpactFX(type, target) {
+    if (!_canPlay() || !target)
+        return;
+    const key = String(type ?? '').toLowerCase().trim();
+    const file = DAMAGE_IMPACT_FX[key];
+    if (!file)
+        return;
+    // Random offset within the token's radius, like a splash pattern.
+    const tokenSize = Number(target?.document?.width ?? target?.w ?? 1);
+    const gridSize = canvas?.grid?.size ?? 100;
+    const radius = (tokenSize * gridSize) / 2;
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * radius;
+    const offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
+    await Sequencer.Preloader.preloadForClients([file]);
+    new Sequence()
+        .effect()
+        .file(file)
+        .atLocation(target, { offset })
+        .scaleToObject(2.5)
+        .playbackRate(0.8)
+        .play();
+}
+
 /** Failure ping on a target — red miss + border inpulse + deny sound. */
 export async function playTargetFailFX(token) {
     if (!_canPlay())
@@ -1749,7 +1836,7 @@ export async function playTargetFailFX(token) {
     await Sequencer.Preloader.preloadForClients([
         'jb2a.extras.tmfx.border.circle.inpulse.01',
         'jb2a.ui.miss.red',
-        'modules/lancer-automations/SFX/denyerror-sound.wav',
+        'modules/lancer-automations/FX/audio/denyerror-sound.wav',
     ]);
     await new Sequence()
         .effect()
@@ -1761,7 +1848,95 @@ export async function playTargetFailFX(token) {
         .atLocation(token)
         .scaleToObject(1.5)
         .sound()
-        .file('modules/lancer-automations/SFX/denyerror-sound.wav')
+        .file('modules/lancer-automations/FX/audio/denyerror-sound.wav')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
         .play();
 }
+
+const _activeSeqBySource = new Map();
+const _effectIdToSource = new Map();
+const _sourceKey = (src) => src?.id ?? src?.uuid ?? (typeof src === 'string' ? src : null);
+const _bumpSource = (key, delta) => {
+    if (!key)
+        return;
+    const count = (_activeSeqBySource.get(key) ?? 0) + delta;
+    if (count <= 0)
+        _activeSeqBySource.delete(key);
+    else
+        _activeSeqBySource.set(key, count);
+};
+Hooks.on('createSequencerEffect', data => {
+    const key = _sourceKey(data?.source);
+    if (!key)
+        return;
+    const eid = data?.id ?? data?.effectData?.id;
+    if (eid)
+        _effectIdToSource.set(eid, key);
+    _bumpSource(key, +1);
+});
+Hooks.on('endedSequencerEffect', data => {
+    const eid = data?.id ?? data?.effectData?.id;
+    if (eid && _effectIdToSource.has(eid)) {
+        const key = _effectIdToSource.get(eid);
+        _effectIdToSource.delete(eid);
+        _bumpSource(key, -1);
+        return;
+    }
+    _bumpSource(_sourceKey(data?.source), -1);
+});
+
+async function _waitForSourceEffectsToEnd(sourceToken, { initialMs = 200, pollMs = 100, timeoutMs = 10000 } = {}) {
+    if (!sourceToken)
+        return;
+    const id = sourceToken.id ?? sourceToken.uuid;
+    const baseline = _activeSeqBySource.get(id) ?? 0;
+    await new Promise(r => setTimeout(r, initialMs));
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        if ((_activeSeqBySource.get(id) ?? 0) <= baseline)
+            return;
+        await new Promise(r => setTimeout(r, pollMs));
+    }
+}
+
+const _missCritOverlayHandler = async (flow) => {
+    if (!isActionFXEnabled() || typeof Sequencer === 'undefined')
+        return;
+    try {
+        const hitResults = flow?.state?.data?.hit_results ?? [];
+        if (!hitResults.length || !hitResults.some(hr => hr.crit || !hr.hit))
+            return;
+        await Sequencer.Preloader.preloadForClients([
+            'jb2a.ui.miss.red',
+            'jb2a.ui.critical.yellow',
+        ]);
+        const sourceToken = flow?.state?.actor?.getActiveTokens?.()?.[0];
+        await _waitForSourceEffectsToEnd(sourceToken);
+        const seq = new Sequence();
+        let i = 0;
+        for (const hr of hitResults) {
+            const tokenObj = hr?.target?.object ?? hr?.target;
+            if (!tokenObj)
+                continue;
+            const file = hr.crit ? 'jb2a.ui.critical.yellow'
+                : !hr.hit ? 'jb2a.ui.miss.red'
+                    : null;
+            if (!file)
+                continue;
+            const delay = i++ * 250;
+            seq.effect()
+                .file(file)
+                .attachTo(tokenObj)
+                .scale(0.5)
+                .delay(delay);
+            const soundKey = hr.crit ? 'crit' : 'miss';
+            setTimeout(() => playStatsSound(soundKey), delay);
+        }
+        seq.play();
+    } catch (e) {
+        console.error('lancer-automations | miss/crit overlay failed:', e);
+    }
+};
+Hooks.on('lancer.postFlow.BasicAttackFlow', _missCritOverlayHandler);
+Hooks.on('lancer.postFlow.WeaponAttackFlow', _missCritOverlayHandler);
+Hooks.on('lancer.postFlow.TechAttackFlow', _missCritOverlayHandler);

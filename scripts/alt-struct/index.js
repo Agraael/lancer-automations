@@ -3,14 +3,30 @@
 import { altRollStress, insertEngheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
 import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow } from "./structure.js";
 
-// Captured during registerAltStructFlowSteps, used in initAltStructReady
 let _flowSteps = null;
 let _flows = null;
+const _preInstallSnapshot = new Map();
+const _preRegisterCollisions = { steps: [], flows: [] };
 
-// Saved originals so we can restore if the setting is disabled at ready time
-const _savedFlowSteps = {};
-const _savedFlowStepArrays = {};  // for flows whose .steps arrays were spliced
-const _addedFlowKeys = [];        // new flow keys we added
+const OVERRIDE_STEP_KEYS = [
+    "rollStructureTable", "checkStructureMultipleOnes",
+    "structureInsertHullCheckButton", "structureInsertSecondaryRollButton",
+    "rollOverheatTable", "checkOverheatMultipleOnes", "overheatInsertEngCheckButton"
+];
+const NEW_STEP_KEYS = [
+    "npcOneStructStep", "applyStructureEffects", "selectDestructionTargetDirectHitFallback",
+    "selectDestructionTargetCrushingHitFallback", "handleDirectHitHullCheckResult",
+    "handleCrushingHitHullCheckResult", "tearOffCrushingHitFlow", "tearOffDirectHitFlow",
+    "initSecondaryStructureCrushingHit", "applyStressEffects",
+    "handleStressEngineeringCheckResult", "rollMeltdownCountdown",
+    "executeMeltdown", "executeCriticalMeltdown"
+];
+const ALL_STEP_KEYS = [...OVERRIDE_STEP_KEYS, ...NEW_STEP_KEYS];
+const NEW_FLOW_KEYS = [
+    "secondaryStructureCrushingHit", "TearOffDirectHitFlow", "TearOffCrushingHitFlow",
+    "DirectHitHullCheckFlow", "CrushingHitHullCheckFlow", "SimulatedStructureFlow",
+    "StressEngineeringCheckFlow", "MeltdownFlow", "CriticalMeltdownFlow"
+];
 
 async function initSecondaryStructureCrushingHit(state) {
     state.data = {
@@ -22,52 +38,19 @@ async function initSecondaryStructureCrushingHit(state) {
     return true;
 }
 
-/**
- * Called from main.js inside the lancer.registerFlows hook.
- * Registers alternative structure/stress flow steps.
- * Only checks conflict here (game.settings not yet available at this point).
- * The setting check is deferred to initAltStructReady().
- */
+// Snapshot only — install is deferred to ready so we can read the setting and
+// avoid stomping on other modules when the feature is off.
 export function registerAltStructFlowSteps(flowSteps, flows) {
     _flowSteps = flowSteps;
     _flows = flows;
+    _preInstallSnapshot.clear();
+    for (const key of ALL_STEP_KEYS)
+        _preInstallSnapshot.set(key, flowSteps.get(key) ?? null);
+    _preRegisterCollisions.steps = NEW_STEP_KEYS.filter(k => flowSteps.get(k) != null);
+    _preRegisterCollisions.flows = NEW_FLOW_KEYS.filter(k => flows.get(k) != null);
+}
 
-    // Conflict check uses game.modules which is always available
-    if (game.modules.get('lancer-alt-structure')?.active)
-        return;
-
-    // ── Save originals for potential rollback in initAltStructReady ──
-    const structureStepKeys = [
-        "npcOneStructStep", "rollStructureTable", "checkStructureMultipleOnes",
-        "structureInsertHullCheckButton", "structureInsertSecondaryRollButton",
-        "applyStructureEffects", "selectDestructionTargetDirectHitFallback",
-        "selectDestructionTargetCrushingHitFallback", "handleDirectHitHullCheckResult",
-        "handleCrushingHitHullCheckResult", "tearOffCrushingHitFlow", "tearOffDirectHitFlow",
-        "initSecondaryStructureCrushingHit"
-    ];
-    const stressStepKeys = [
-        "rollOverheatTable", "checkOverheatMultipleOnes", "overheatInsertEngCheckButton",
-        "applyStressEffects", "handleStressEngineeringCheckResult",
-        "rollMeltdownCountdown", "executeMeltdown", "executeCriticalMeltdown"
-    ];
-    for (const key of [...structureStepKeys, ...stressStepKeys]) {
-        _savedFlowSteps[key] = flowSteps.get(key) ?? null;
-    }
-
-    const flowsToSplice = ["StructureFlow", "SecondaryStructureFlow", "OverheatFlow"];
-    for (const key of flowsToSplice) {
-        const f = flows.get(key);
-        _savedFlowStepArrays[key] = f?.steps ? [...f.steps] : null;
-    }
-
-    const newFlowKeys = [
-        "secondaryStructureCrushingHit", "TearOffDirectHitFlow", "TearOffCrushingHitFlow",
-        "DirectHitHullCheckFlow", "CrushingHitHullCheckFlow", "SimulatedStructureFlow",
-        "StressEngineeringCheckFlow", "MeltdownFlow", "CriticalMeltdownFlow"
-    ];
-    _addedFlowKeys.push(...newFlowKeys);
-
-    // ── Structure flow steps ──
+function setupHooks(flowSteps, flows) {
     flowSteps.set("npcOneStructStep", npcOneStructStep);
     flowSteps.set("rollStructureTable", altRollStructure);
     flowSteps.set("checkStructureMultipleOnes", structCheckMultipleOnes);
@@ -104,7 +87,6 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
     flows.set("CrushingHitHullCheckFlow", { name: "Crushing Hit HULL Check", steps: ["initStatRollData", "showStatRollHUD", "rollCheck", "handleCrushingHitHullCheckResult", "printStatRollCard"] });
     flows.set("SimulatedStructureFlow", { name: "Simulated Structure Hit", steps: ["rollStructureTable", "noStructureRemaining", "checkStructureMultipleOnes", "structureInsertDismembermentButton", "structureInsertHullCheckButton", "structureInsertSecondaryRollButton", "structureInsertCascadeRollButton", "applyStructureEffects", "printStructureCard"] });
 
-    // ── Stress flow steps ──
     flowSteps.set("rollOverheatTable", altRollStress);
     flowSteps.set("checkOverheatMultipleOnes", stressCheckMultipleOnes);
     flowSteps.set("overheatInsertEngCheckButton", insertEngheckButton);
@@ -124,35 +106,74 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
     flows.set("StressEngineeringCheckFlow", { name: "Stress Engineering Check", steps: ["initStatRollData", "showStatRollHUD", "rollCheck", "handleStressEngineeringCheckResult", "printStatRollCard"] });
     flows.set("MeltdownFlow", { name: "Reactor Meltdown", steps: ["rollMeltdownCountdown", "executeMeltdown", "printGenericCard"] });
     flows.set("CriticalMeltdownFlow", { name: "Critical Reactor Meltdown", steps: ["executeCriticalMeltdown", "printGenericCard"] });
-
-    console.log("lancer-automations (alt-struct): flow steps registered (pending setting check at ready)");
 }
 
-/**
- * Called from main.js inside the ready hook (after registerSettings has run).
- * Checks the setting — restores originals if disabled, finishes init if enabled.
- */
+// Catches modules that hook AFTER us — snapshot vs current at ready.
+function _detectPostRegisterConflicts(flowSteps) {
+    const conflicts = [];
+    for (const key of ALL_STEP_KEYS) {
+        const snapshot = _preInstallSnapshot.get(key);
+        const current = flowSteps.get(key) ?? null;
+        if (snapshot !== current)
+            conflicts.push(key);
+    }
+    return conflicts;
+}
+
+// Catches modules that hook BEFORE us. Stock Lancer step fns are named to match
+// their key; if the snapshot fn has a different name, someone replaced it.
+function _detectPreRegisterOverrideHijacks() {
+    const hijacked = [];
+    for (const key of OVERRIDE_STEP_KEYS) {
+        const fn = _preInstallSnapshot.get(key);
+        if (typeof fn !== 'function')
+            continue;
+        if (fn.name && fn.name !== key)
+            hijacked.push({ key, byFunctionName: fn.name });
+    }
+    return hijacked;
+}
+
 export function initAltStructReady() {
     const hasConflict = game.modules.get('lancer-alt-structure')?.active;
     const isEnabled = game.settings.get('lancer-automations', 'enableAltStruct');
 
+    if (!isEnabled)
+        return;
+
     if (hasConflict) {
-        if (isEnabled) {
-            ui.notifications.warn(
-                "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active — integrated version will not load. Disable one of them."
-            );
-        }
-        // Restore originals (they were overridden in registerAltStructFlowSteps before conflict check could use settings)
-        _restoreOriginals();
+        ui.notifications.warn(
+            "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active - integrated version will not load. Disable one of them."
+        );
         return;
     }
 
-    if (!isEnabled) {
-        _restoreOriginals();
-        return;
+    const preSteps = _preRegisterCollisions.steps;
+    const preFlows = _preRegisterCollisions.flows;
+    const postConflicts = _detectPostRegisterConflicts(_flowSteps);
+    const preHijacks = _detectPreRegisterOverrideHijacks();
+
+    const totalConflicts = preSteps.length + preFlows.length + postConflicts.length + preHijacks.length;
+    if (totalConflicts > 0) {
+        const parts = [];
+        if (preSteps.length)
+            parts.push(`new flow step(s) already claimed: ${preSteps.join(", ")}`);
+        if (preFlows.length)
+            parts.push(`new flow(s) already claimed: ${preFlows.join(", ")}`);
+        if (postConflicts.length)
+            parts.push(`override step(s) modified after us: ${postConflicts.join(", ")}`);
+        if (preHijacks.length)
+            parts.push(`override step(s) already replaced before us: ${preHijacks.map(h => `${h.key} (by ${h.byFunctionName})`).join(", ")}`);
+        ui.notifications.warn(
+            `Lancer Automations (Alt Structure): flow conflict detected. The other module's changes will be overwritten. ${parts.join(" | ")}. See console.`,
+            { permanent: true }
+        );
+        console.warn("lancer-automations (alt-struct): flow conflicts", { preSteps, preFlows, postConflicts, preHijacks });
     }
 
-    // ── Wrap noStressRemaining ──
+    setupHooks(_flowSteps, _flows);
+
+    // Chain our handler in front of the original noStressRemaining.
     const originalNoStressRemaining = _flowSteps?.get("noStressRemaining");
     if (!originalNoStressRemaining) {
         console.warn("lancer-automations (alt-struct): noStressRemaining flow step not found");
@@ -163,43 +184,9 @@ export function initAltStructReady() {
         });
     }
 
-    // ── Expose on module API ──
     const mod = game.modules.get('lancer-automations');
-    if (mod?.api) {
+    if (mod?.api)
         mod.api.manualSystemTrauma = manualSystemTrauma;
-    }
 
     console.log("lancer-automations (alt-struct): initialized");
-}
-
-function _restoreOriginals() {
-    if (!_flowSteps)
-        return;
-
-    // Restore overridden flow steps
-    for (const [key, fn] of Object.entries(_savedFlowSteps)) {
-        if (fn !== undefined) {
-            if (fn === null)
-                _flowSteps.delete(key);
-            else
-                _flowSteps.set(key, fn);
-        }
-    }
-
-    // Restore spliced steps arrays
-    if (_flows) {
-        for (const [key, steps] of Object.entries(_savedFlowStepArrays)) {
-            if (steps !== null) {
-                const flow = _flows.get(key);
-                if (flow)
-                    flow.steps = steps;
-            }
-        }
-        // Remove added flows
-        for (const key of _addedFlowKeys) {
-            _flows.delete(key);
-        }
-    }
-
-    console.log("lancer-automations (alt-struct): alt structure disabled, originals restored");
 }

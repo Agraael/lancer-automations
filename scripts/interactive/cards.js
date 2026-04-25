@@ -344,11 +344,18 @@ export function _updateInfoCard(cardEl, type, data) {
                 const imgHtml = imgSrc
                     ? `<img src="${imgSrc}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
                     : `<i class="fas fa-user" style="color:#ff6400; font-size:16px; margin-right:8px;"></i>`;
+                const warns = data.warnings?.[idx] ?? [];
+                const warnHtml = warns.length > 0
+                    ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
+                           ${warns.map(w => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${w}</div>`).join('')}
+                       </div>`
+                    : '';
                 listEl.append(`
-                    <div class="la-selected-target" data-placement-index="${idx}">
+                    <div class="la-selected-target" data-placement-index="${idx}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
                         ${imgHtml}
                         <span class="la-selected-target-name">${tokenName} #${idx + 1}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
+                        ${warnHtml}
                     </div>`);
             });
 

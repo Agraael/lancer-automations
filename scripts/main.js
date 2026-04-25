@@ -72,7 +72,7 @@ import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/ind
 import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
 import { registerRerollFlowSteps } from "./reroll.js";
-import { LA_INLINE_ATTACK_FX } from "./actionFX.js";
+import { LA_INLINE_ATTACK_FX, playDefaultThrowFX } from "./actionFX.js";
 import { registerSettingsMenus } from "./settingsMenus.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
 import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
@@ -1613,6 +1613,36 @@ function deserializeTriggerData(data) {
     return deserialize(data);
 }
 
+/**
+ * setFlag on a token, falling back to GM-delegated socket call when the user
+ * lacks write perms on the token. `value === undefined` unsets the flag.
+ */
+export async function setTokenFlag(tokenDoc, ns, key, value) {
+    if (!tokenDoc) return;
+    const td = tokenDoc.document ?? tokenDoc;
+    if (game.user.isGM || td?.isOwner) {
+        if (value === undefined)
+            await td.unsetFlag(ns, key).catch(() => {});
+        else
+            await td.setFlag(ns, key, value);
+        return;
+    }
+    game.socket.emit('module.lancer-automations', {
+        action: 'setTokenFlag',
+        payload: {
+            sceneId: td.parent?.id ?? canvas?.scene?.id,
+            tokenId: td.id,
+            ns,
+            key,
+            value,
+        },
+    });
+}
+
+export async function unsetTokenFlag(tokenDoc, ns, key) {
+    return setTokenFlag(tokenDoc, ns, key, undefined);
+}
+
 async function handleSocketEvent({ action, payload }) {
     if (action === 'showReactionPopup') {
         if (payload.targetUserId && payload.targetUserId !== game.userId)
@@ -1650,6 +1680,17 @@ async function handleSocketEvent({ action, payload }) {
         const actor = game.actors.get(payload.actorId);
         if (actor)
             await actor.setFlag(payload.ns, payload.key, payload.value);
+    } else if (action === 'setTokenFlag') {
+        if (!game.user.isGM)
+            return;
+        const scene = game.scenes.get(payload.sceneId) ?? canvas.scene;
+        const tokenDoc = scene?.tokens.get(payload.tokenId);
+        if (tokenDoc) {
+            if (payload.value === undefined)
+                await tokenDoc.unsetFlag(payload.ns, payload.key);
+            else
+                await tokenDoc.setFlag(payload.ns, payload.key, payload.value);
+        }
     } else if (action === 'setEffect' || action === 'setFlaggedEffect') {
         setEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
     } else if (action === 'removeEffect' || action === 'removeFlaggedEffect') {
@@ -2085,18 +2126,20 @@ function increaseMovementCap(tokenOrId, value) {
  *   movementCost  — squares consumed from movement cap (includes terrain penalty)
  */
 /**
- * Move a token as if dragged with the ruler.
- * Uses Elevation Ruler's API if available for correct cost, otherwise falls back to raw update.
+ * Programmatic token move. Uses raw `tokenDoc.update` so placement matches the
+ * caller's snapped destination exactly — ER's `moveTokenTo` simulates a drag
+ * whose internal snap misplaces non-size-1 tokens. Pass `useElevationRuler: true`
+ * to opt into the ER pipeline (only safe for size-1 tokens needing cost tracking).
  */
 export async function _rulerMove(token, destination, extraOpts = {}) {
-    const erApi = game.modules.get('elevationruler')?.active ? game.modules.get('elevationruler')?.api : null;
+    const { useElevationRuler, ...passthroughOpts } = extraOpts;
+    const erApi = useElevationRuler && game.modules.get('elevationruler')?.active
+        ? game.modules.get('elevationruler')?.api
+        : null;
     if (erApi?.moveTokenTo) {
-        // ER's simulated drag requires the token to be controlled; restore selection after.
-        // ER's segment measurement reads FORCE_FREE_MOVEMENT at measure time (not from extraOpts),
-        // so toggle it on for lancerFreeMovement callers and restore after.
         const Settings = erApi.Settings;
         const prevForceFree = Settings?.FORCE_FREE_MOVEMENT;
-        const wantFree = !!extraOpts.lancerFreeMovement;
+        const wantFree = !!passthroughOpts.lancerFreeMovement;
         const previouslyControlled = canvas.tokens.controlled.map(t => t.id);
         const needsTempControl = !token.controlled;
         try {
@@ -2104,7 +2147,7 @@ export async function _rulerMove(token, destination, extraOpts = {}) {
                 Settings.FORCE_FREE_MOVEMENT = true;
             if (needsTempControl)
                 token.control({ releaseOthers: true });
-            await erApi.moveTokenTo(token, destination, extraOpts);
+            await erApi.moveTokenTo(token, destination, passthroughOpts);
         } finally {
             if (wantFree && Settings)
                 Settings.FORCE_FREE_MOVEMENT = prevForceFree;
@@ -2120,7 +2163,7 @@ export async function _rulerMove(token, destination, extraOpts = {}) {
         if (destination.elevation !== undefined) {
             update.elevation = destination.elevation;
         }
-        await token.document.update(update, { isDrag: true, ...extraOpts });
+        await token.document.update(update, { isDrag: true, ...passthroughOpts });
     }
 }
 
@@ -3420,44 +3463,40 @@ async function knockbackDamageStep(state) {
     return true;
 }
 
-/**
- * Flow step (run after printAttackCard on BasicAttackFlow): if the flow ran without a real
- * item (standalone action like Ram) but has a custom title, expose a synthetic state.item
- * so post-flow consumers (Lancer Weapon FX, etc.) can key effects on the action's name
- * instead of falling straight through to the generic melee/ranged default.
- */
-async function stubBasicAttackItemForFx(state) {
+const _lwfxSuppressActors = new Set();
+function _actorSuppressId(x) {
+    return x?.actor?.uuid ?? x?.uuid ?? x?.actor?.id ?? x?.id ?? null;
+}
+function _suppressNextLwfxFor(actorOrToken) {
+    const id = _actorSuppressId(actorOrToken);
+    if (!id)
+        return;
+    _lwfxSuppressActors.add(id);
+    setTimeout(() => _lwfxSuppressActors.delete(id), 3000);
+}
+
+async function playInlineAttackFX(state) {
     const title = state.data?.title;
-    const isCustom = title && title !== "BASIC ATTACK" && title !== "TECH ATTACK";
-
-    if (isCustom && !state.item) {
-        state.item = {
-            name: title,
-            system: { lid: '' },
-            uuid: null,
-            isOwner: true,
-            getTags: () => [],
-            is_weapon: () => false,
-            is_mech_weapon: () => false,
-            is_pilot_weapon: () => false,
-            is_npc_feature: () => false,
-            is_frame: () => false,
-            is_mech_system: () => false,
-            is_talent: () => false,
-            is_bond: () => false,
-            is_core_bonus: () => false,
-            is_reserve: () => false,
-            currentProfile: () => null
-        };
-    }
-
     const fxPlayer = LA_INLINE_ATTACK_FX[title];
-    if (fxPlayer) {
-        try {
-            await fxPlayer(state);
-        } catch (e) {
-            console.error(`lancer-automations | FX "${title}" failed:`, e);
-        }
+    if (!fxPlayer)
+        return true;
+    _suppressNextLwfxFor(state.actor);
+    try {
+        await fxPlayer(state);
+    } catch (e) {
+        console.error(`lancer-automations | FX "${title}" failed:`, e);
+    }
+    return true;
+}
+
+async function playThrowFXIfNeeded(state) {
+    if (!state.la_extraData?.is_throw)
+        return true;
+    _suppressNextLwfxFor(state.actor);
+    try {
+        await playDefaultThrowFX(state);
+    } catch (e) {
+        console.error('lancer-automations | throw FX failed:', e);
     }
     return true;
 }
@@ -3533,12 +3572,21 @@ function patchHalfSizeTokens() {
             const rawSize = this.actor?.system?.size;
             const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : 1;
             const updates = { width: newSize, height: newSize };
-            // Center sub-1 tokens within their grid cell
+            // Center sub-1 tokens within their grid cell (hex-aware: hex bbox is taller
+            // or wider than gs depending on orientation, so the offset isn't symmetric).
             if (newSize < 1 && canvas?.grid) {
                 const gs = canvas.grid.size;
-                const offset = (1 - newSize) * gs / 2;
-                updates.x = this.x + offset;
-                updates.y = this.y + offset;
+                const gt = canvas.grid.type;
+                const HEX = 2 / Math.sqrt(3);
+                const isPointy = (gt === 2 || gt === 3);
+                const isFlat = (gt === 4 || gt === 5);
+                const bbW = isFlat ? gs * HEX : gs;
+                const bbH = isPointy ? gs * HEX : gs;
+                const cc = canvas.grid.getCenterPoint
+                    ? canvas.grid.getCenterPoint({ x: this.x + bbW / 2, y: this.y + bbH / 2 })
+                    : { x: this.x + gs / 2, y: this.y + gs / 2 };
+                updates.x = cc.x - (newSize * bbW) / 2;
+                updates.y = cc.y - (newSize * bbH) / 2;
             }
             this.updateSource(updates);
         }
@@ -3866,7 +3914,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flowSteps.set('lancer-automations:pullInjectedTagsFromAttack', pullInjectedTagsFromAttack);
     // After printAttackCard, expose a synthetic item so Lancer Weapon FX (and similar)
     // can identify itemless basic attacks (Ram, etc.) by name.
-    flowSteps.set('lancer-automations:stubBasicAttackItemForFx', stubBasicAttackItemForFx);
+    flowSteps.set('lancer-automations:stubBasicAttackItemForFx', playInlineAttackFX);
+    flowSteps.set('lancer-automations:playThrowFXIfNeeded', playThrowFXIfNeeded);
     // Register Throw steps
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
@@ -3907,6 +3956,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
     flows.get('BasicAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:stubBasicAttackItemForFx');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:stubBasicAttackItemForFx', 'lancer-automations:playThrowFXIfNeeded');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:playThrowFXIfNeeded');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
     flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
@@ -4266,6 +4317,24 @@ Hooks.once('ready', async () => {
                 }
                 return data;
             }, 'WRAPPER');
+
+        // Suppress lwfx's default per-weapon FX when LA already played an inline
+        // one for this attack (Ram / Grapple / throw).
+        libWrapper.register('lancer-automations', 'Macro.prototype.execute',
+            function (wrapped, ...args) {
+                try {
+                    const flowInfo = this.getFlag?.('lancer-weapon-fx', 'flowInfo');
+                    if (flowInfo) {
+                        const id = _actorSuppressId(flowInfo.sourceToken)
+                            ?? _actorSuppressId(flowInfo.sourceToken?.document);
+                        if (id && _lwfxSuppressActors.has(id)) {
+                            _lwfxSuppressActors.delete(id);
+                            return;
+                        }
+                    }
+                } catch { /* fall through */ }
+                return wrapped.call(this, ...args);
+            }, 'MIXED');
     }
 });
 
@@ -4642,6 +4711,8 @@ Hooks.on('ready', async () => {
         applyInfection,
         repairLCPData,
         TriggerUseAmmoFlow,
+        setTokenFlag,
+        unsetTokenFlag,
         // Internal main.js functions
         clearMoveData,
         undoMoveData,
@@ -4693,108 +4764,9 @@ Hooks.on('ready', async () => {
         patchHalfSizeTokens();
     }
 
-    // Lancer Weapon FX integration — register LA-owned FX macros and bindings for
-    // standalone basic attacks (Ram, etc.) so they get dedicated effects instead of
-    // the module's generic default-melee fallback.
-    await ensureLancerWeaponFxBindings();
-
     // Compatibility checker — detect and offer to fix conflicts with other modules
     checkCompatibility();
 });
-
-const LA_FX_MACRO_VERSION = 4;
-const LA_FX_NOOP_COMMAND = '// Lancer Automations FX suppressor. Actual FX is played inline from actionFX.js.';
-const LA_FX_MACROS = [
-    {
-        flagKey: 'fxRamMacro',
-        name: 'L.A. FX: Ram (suppressor)',
-        img: 'modules/lancer-automations/icons/ram.svg',
-        command: LA_FX_NOOP_COMMAND,
-        binding: { itemName: 'Ram' }
-    },
-    {
-        flagKey: 'fxGrappleMacro',
-        name: 'L.A. FX: Grapple (suppressor)',
-        img: 'modules/lancer-automations/icons/grapple.svg',
-        command: LA_FX_NOOP_COMMAND,
-        binding: { itemName: 'Grapple' }
-    }
-];
-
-async function ensureLancerWeaponFxBindings() {
-    if (!game.modules.get('lancer-weapon-fx')?.active)
-        return;
-    if (!game.user.isGM)
-        return;
-
-    const macrosByFlag = new Map();
-    for (const entry of LA_FX_MACROS) {
-        let macro = game.macros.find(m => m.getFlag('lancer-automations', entry.flagKey) === true);
-        try {
-            if (!macro) {
-                macro = await Macro.create({
-                    name: entry.name,
-                    type: 'script',
-                    img: entry.img,
-                    command: entry.command,
-                    ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
-                    flags: { 'lancer-automations': { [entry.flagKey]: true, version: LA_FX_MACRO_VERSION } }
-                });
-            } else {
-                const storedVersion = macro.getFlag('lancer-automations', 'version') ?? 0;
-                if (storedVersion < LA_FX_MACRO_VERSION) {
-                    await macro.update({
-                        command: entry.command,
-                        ownership: { ...macro.ownership, default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
-                        'flags.lancer-automations.version': LA_FX_MACRO_VERSION
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn(`lancer-automations | Could not ensure FX macro "${entry.name}":`, e);
-            continue;
-        }
-        if (macro?.uuid)
-            macrosByFlag.set(entry.flagKey, macro);
-    }
-
-    let current;
-    try {
-        current = game.settings.get('lancer-weapon-fx', 'effectsManagerState') ?? { effects: {}, folders: {} };
-    } catch {
-        return;
-    }
-    const effects = { ...(current.effects || {}) };
-    let changed = false;
-    for (const entry of LA_FX_MACROS) {
-        const macro = macrosByFlag.get(entry.flagKey);
-        if (!macro)
-            continue;
-        const binding = entry.binding;
-        const alreadyBound = Object.values(effects).some(e =>
-            (binding.itemName && e.itemName === binding.itemName)
-            || (binding.itemLid && e.itemLid === binding.itemLid)
-        );
-        if (alreadyBound)
-            continue;
-        const id = foundry.utils.randomID();
-        effects[id] = {
-            macroUuid: macro.uuid,
-            folderId: null,
-            mode: binding.itemName ? 1 : 2,
-            itemName: binding.itemName ?? null,
-            itemLid: binding.itemLid ?? null
-        };
-        changed = true;
-    }
-    if (changed) {
-        try {
-            await game.settings.set('lancer-weapon-fx', 'effectsManagerState', { ...current, effects, folders: current.folders ?? {} });
-        } catch (e) {
-            console.warn('lancer-automations | Could not write FX bindings:', e);
-        }
-    }
-}
 
 // Item Disabled system – uncomment to activate
 Hooks.on('renderActorSheet', onRenderActorSheet);
@@ -5554,6 +5526,33 @@ Hooks.on('createToken', (tokenDoc, options, userId) => {
         preWreck(tokenDoc, options, userId);
     }
 });
+
+const TEMPLATE_NO_PROVOKE_NAMES = new Set([
+    'Template Throw',
+    'Template Hard Cover',
+    'Template Wreck',
+]);
+Hooks.on('createToken', async (tokenDoc, _options, userId) => {
+    if (userId !== game.userId)
+        return;
+    const baseName = tokenDoc?.baseActor?.name ?? tokenDoc?.actor?.name ?? '';
+    if (!TEMPLATE_NO_PROVOKE_NAMES.has(baseName))
+        return;
+    const actor = tokenDoc.actor;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!actor || !api?.addConstantBonus)
+        return;
+    try {
+        await api.addConstantBonus(actor, {
+            id: 'la-deployable-no-provoke',
+            name: 'No Provoke',
+            type: 'immunity',
+            subtype: 'provoke'
+        });
+    } catch (e) {
+        console.warn('lancer-automations | could not add provoke immunity to template token:', e);
+    }
+});
 Hooks.on('renderTileHUD', (app, html, context) => {
     if (game.settings.get('lancer-automations', 'enableWrecks')) {
         tileHUDButton(app, html, context);
@@ -5676,7 +5675,6 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             await _rulerMove(token, dest, { ...options, _cancelledBy: triggerData._cancelledBy });
         };
         triggerData._cancelledBy = options._cancelledBy || [];
-        let _moveTrace = null;
         const _cancelMoveCard = _buildCancelFn({
             setFlag: () => {
                 triggerData.cancel();
@@ -5691,21 +5689,21 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             getExtraCardOptions: (uc) => ({
                 traceData: (uc ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: null } : null
             }),
-            onBefore: async () => {
-                _moveTrace = drawMovementTrace(token, endPos);
-            },
-            onAfter: async () => {
-                if (_moveTrace?.parent)
-                    _moveTrace.parent.removeChild(_moveTrace);
-                _moveTrace.destroy();
-                _moveTrace = null;
-            },
         });
         // Adapter: preserves the original signature (no title param, allowConfirm is 2nd).
+        // Trace is drawn here (not in _cancelMoveCard onBefore) so it shows during preConfirm too.
         triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
             _cancelMoveCard._reactorIdentity = triggerData.cancelTriggeredMove._reactorIdentity;
             _cancelMoveCard._engineCancel = triggerData.cancelTriggeredMove._engineCancel;
-            return _cancelMoveCard(reasonText, undefined, allowConfirm, userIdControl, preConfirm, postChoice, opts);
+            const trace = drawMovementTrace(token, endPos);
+            const cleanup = () => {
+                if (trace?.parent)
+                    trace.parent.removeChild(trace);
+                trace?.destroy();
+            };
+            const result = _cancelMoveCard(reasonText, undefined, allowConfirm, userIdControl, preConfirm, postChoice, opts);
+            Promise.resolve(result).finally(cleanup);
+            return result;
         };
 
         triggerData.changeTriggeredMove = async (position, extraData = {}, reasonText = "This movement has been rerouted.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {

@@ -397,6 +397,41 @@ export function initInfectionHooks() {
 
     Hooks.on('updateCombat', onUpdateCombatInfection);
 
+    if (typeof libWrapper !== 'undefined') {
+        libWrapper.register(MODULE_ID, 'CONFIG.Actor.documentClass.prototype.statChangeScrollingText',
+            async function (wrapped, data) {
+                await wrapped(data);
+                const newVal = data?.system?.infection;
+                if (newVal === undefined)
+                    return;
+                const val = (this.system?.infection ?? 0) - newVal;
+                if (!val)
+                    return;
+                const tokenId = this.token?.id
+                    ?? canvas?.scene?.tokens?.find(t => t.actor?.id === this.id)?.id;
+                if (!tokenId)
+                    return;
+                const token = canvas?.tokens?.get(tokenId);
+                if (!token || !canvas?.interface?.createScrollingText)
+                    return;
+                let showScroll = true;
+                try {
+                    showScroll = !!game.settings.get('lancer', 'floatingNumbers');
+                } catch { /* ignore */ }
+                if (!showScroll)
+                    return;
+                await canvas.interface.createScrollingText(token.center, `${val < 0 ? '+' : '-'}${Math.abs(val)} Infection`, {
+                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                    direction: val < 0 ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                    fontSize: 28,
+                    fill: '0x006400',
+                    stroke: 0,
+                    strokeThickness: 4,
+                    jitter: 0.25,
+                });
+            }, 'WRAPPER');
+    }
+
     // Modify "took X damage" messages to show infection
     Hooks.on('preCreateChatMessage', (msg) => {
         if (!_pendingInfection)
