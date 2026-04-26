@@ -15,10 +15,14 @@ const TOKEN_FEEDBACK_VARIANTS = new Set([
  * TAH HUD sounds use `tah.uiSoundVolume`. 0 = silent.
  * @param {'hover'|'open'|'details'|'toggle'|'statusHover'|'tokenHover'|'tokenSelect'|'tokenDeselect'|'tokenTarget'|'tokenUntarget'|'tokenDrag'|'tokenMove'|'elevationKey'} [variant='open']
  */
-export function playUiSound(variant = 'open') {
+export function playUiSound(variant = 'open', { force = false } = {}) {
     let vol = 0;
-    const settingKey = TOKEN_FEEDBACK_VARIANTS.has(variant) ? 'tah.tokenFeedbackVolume' : 'tah.uiSoundVolume';
+    const isTokenFeedback = TOKEN_FEEDBACK_VARIANTS.has(variant);
+    const settingKey = isTokenFeedback ? 'tah.tokenFeedbackVolume' : 'tah.uiSoundVolume';
+    const muteKey = isTokenFeedback ? `tah.tokenSound.${variant}` : `tah.uiSound.${variant}`;
     try {
+        if (!force && game.settings.get('lancer-automations', muteKey) === false)
+            return;
         vol = Number(game.settings.get('lancer-automations', settingKey)) || 0;
     } catch {
         /* not ready */
@@ -36,7 +40,7 @@ export function playUiSound(variant = 'open') {
         open:          { src: 'modules/lancer-automations/FX/audio/hover.wav',         scale: 0.3 },
         statusHover:   { src: 'modules/lancer-automations/FX/audio/statusHover.wav',   scale: 0.1 },
         details:       { src: 'modules/lancer-automations/FX/audio/details.wav',       scale: 2 },
-        toggle:        { src: 'modules/lancer-automations/FX/audio/toggle.wav',        scale: 2 },
+        toggle:        { src: 'modules/lancer-automations/FX/audio/toggle.wav',        scale: 1.5 },
         tokenHover:    { src: 'modules/lancer-automations/FX/audio/tokenHover.mp3',    scale: 0.4 },
         tokenSelect:   { src: 'modules/lancer-automations/FX/audio/tokenSelect.wav',   scale: 0.4 },
         tokenDeselect: { src: 'modules/lancer-automations/FX/audio/tokenDeselect.wav', scale: 0.3 },
@@ -129,14 +133,20 @@ async function _listFolderFiles(folder) {
     }
 }
 
-/** Play a random sound from the folder for a damage type. */
-export async function playDamageSound(type) {
+/** Random file from the damage type's folder. */
+export async function playDamageSound(type, { force = false } = {}) {
     const key = String(type ?? '').toLowerCase();
     const cfg = DAMAGE_SOUNDS[key];
     if (!cfg)
         return;
     if (_damageVolume() <= 0)
         return;
+    if (!force) {
+        try {
+            if (game.settings.get('lancer-automations', `tah.damageSound.${key}`) === false)
+                return;
+        } catch { /* not ready */ }
+    }
     const files = await _listFolderFiles(cfg.folder);
     if (!files.length)
         return;
@@ -144,11 +154,17 @@ export async function playDamageSound(type) {
     _playDamageAudio(src, cfg.scale);
 }
 
-/** Play a single-file stat sound (hp_loss | hp_heal | heat_clean). */
-export function playStatsSound(key) {
+export function playStatsSound(key, { force = false } = {}) {
     const cfg = STAT_SOUNDS[key];
-    if (cfg)
-        _playDamageAudio(cfg.src, cfg.scale);
+    if (!cfg)
+        return;
+    if (!force) {
+        try {
+            if (game.settings.get('lancer-automations', `tah.statSound.${key}`) === false)
+                return;
+        } catch { /* not ready */ }
+    }
+    _playDamageAudio(cfg.src, cfg.scale);
 }
 
 function _markDamageApplied(actorId) {

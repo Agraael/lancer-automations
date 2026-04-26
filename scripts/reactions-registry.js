@@ -47,8 +47,8 @@ export function getDefaultItemReactionRegistry() {
                         speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
                         flavor: `<b>Custom Paint Job</b>`
                     });
-                    await item.update({ "system.disabled": true });
                     if (roll.total >= 6) {
+                        await item.update({ "system.disabled": true });
                         await reactorToken.actor.update({ "system.hp.value": 1 });
                         ChatMessage.create({
                             speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),

@@ -3,8 +3,6 @@
 import { OverwatchAPI, getTokenDistance } from "./overwatch.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./reaction-manager.js";
 import { CompendiumToolsAPI } from "./compendium-tools.js";
-import { ReactionReset } from "./reaction-reset.js";
-import { ReactionExport, ReactionImport } from "./reaction-export-import.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { ReactionsAPI } from "./reactions-registry.js";
 import { cancelRulerDrag ,
@@ -73,7 +71,9 @@ import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorShee
 import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
 import { registerRerollFlowSteps } from "./reroll.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX } from "./actionFX.js";
-import { registerSettingsMenus } from "./settingsMenus.js";
+import { registerSettingsMenus, LancerAutomationsConfig } from "./settingsMenus.js";
+import { installJb2aHooks } from "./jb2a-fallback.js";
+import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./tour.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
 import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
 import './filters/customFilters.js';
@@ -1457,7 +1457,7 @@ function registerSettings() {
         name: 'Debug: Boost Detection',
         hint: 'Show UI notifications when boost detection triggers.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1466,7 +1466,7 @@ function registerSettings() {
         name: 'Debug: Path Hex Calculation',
         hint: 'Draw temporary circles on the map highlighting the calculated path hex steps.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
     });
@@ -1475,50 +1475,9 @@ function registerSettings() {
         name: 'Debug: Out of Combat Warnings',
         hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
         scope: 'world',
-        config: true,
+        config: false,
         type: Boolean,
         default: false
-    });
-
-    // ── Data Management ──
-    game.settings.registerMenu('lancer-automations', 'repairLCPDataMenu', {
-        name: 'Lancer System Patches & Fixes',
-        label: 'Apply Fixes',
-        hint: 'Rebuild all compendium and actor item data with Lancer Automations patches applied.',
-        icon: 'fas fa-wrench',
-        type: class extends FormApplication {
-            render() {
-                repairLCPData(); return this;
-            }
-        },
-        restricted: true
-    });
-
-    game.settings.registerMenu('lancer-automations', 'resetSettings', {
-        name: 'Reset Module',
-        label: 'Reset to Defaults',
-        hint: 'Reset all module settings and activations to their default values.',
-        icon: 'fas fa-undo',
-        type: ReactionReset,
-        restricted: true
-    });
-
-    game.settings.registerMenu('lancer-automations', 'exportActivations', {
-        name: 'Export Activations',
-        label: 'Export to JSON',
-        hint: 'Export all custom activations to a JSON file.',
-        icon: 'fas fa-file-export',
-        type: ReactionExport,
-        restricted: true
-    });
-
-    game.settings.registerMenu('lancer-automations', 'importActivations', {
-        name: 'Import Activations',
-        label: 'Import from JSON',
-        hint: 'Import activations from a JSON file.',
-        icon: 'fas fa-file-import',
-        type: ReactionImport,
-        restricted: true
     });
 
     game.settings.register('lancer-automations', 'lastNotifiedVersion', {
@@ -4075,6 +4034,7 @@ Hooks.on('init', () => {
     registerSettings();
     registerStatusFXSettings(); // StatusFX settings + config menu
     registerSettingsMenus(); // Grouped Activations / Combat / Deployables menus
+    registerTourBootstrap();
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
     registerFlowStatePersistence();
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
@@ -4093,47 +4053,56 @@ Hooks.on('init', () => {
                 return;
             CONFIG.elevationruler.MovePenalty = MovePenalty;
 
-            // Flying: flying + hover statuses (same movement rules per Lancer core).
-            const baseFlying = MovePenalty.isFlying.bind(MovePenalty);
-            MovePenalty.isFlying = function(token) {
-                if (baseFlying(token))
+            /**
+             * @param {string} name
+             * @param {(base: (token: any) => boolean) => (token: any) => boolean} build
+             */
+            const wrap = (name, build) => {
+                if (typeof MovePenalty[name] !== "function")
+                    return;
+                const base = MovePenalty[name].bind(MovePenalty);
+                MovePenalty[name] = build(base);
+            };
+
+            wrap("isFlying", base => function(token) {
+                if (base(token))
                     return true;
                 if (token?.actor?.statuses?.has("flying"))
                     return true;
                 if (token?.actor?.statuses?.has("hover"))
                     return true;
                 return false;
-            };
+            });
 
-            MovePenalty.getFlyingStep = function(token) {
-                const speed = token?.actor?.system?.speed ?? 0;
-                if (speed <= 0)
-                    return 0;
-                const perCell = canvas?.grid?.distance ?? 1;
-                return speed * perCell;
-            };
+            if (typeof MovePenalty.getFlyingStep === "function") {
+                MovePenalty.getFlyingStep = function(token) {
+                    const speed = token?.actor?.system?.speed ?? 0;
+                    if (speed <= 0)
+                        return 0;
+                    const perCell = canvas?.grid?.distance ?? 1;
+                    return speed * perCell;
+                };
+            }
 
-            const baseClimbImmune = MovePenalty.isClimbingImmune.bind(MovePenalty);
-            MovePenalty.isClimbingImmune = function(token) {
-                if (baseClimbImmune(token))
+            wrap("isClimbingImmune", base => function(token) {
+                if (base(token))
                     return true;
                 if (token?.actor?.statuses?.has("climber"))
                     return true;
                 if (getImmunityBonuses(token?.actor, "elevation").length > 0)
                     return true;
                 return false;
-            };
+            });
 
-            const baseTerrainImmune = MovePenalty.isTerrainImmune.bind(MovePenalty);
-            MovePenalty.isTerrainImmune = function(token) {
-                if (baseTerrainImmune(token))
+            wrap("isTerrainImmune", base => function(token) {
+                if (base(token))
                     return true;
                 if (token?.actor?.statuses?.has("terrain_immunity"))
                     return true;
                 if (getImmunityBonuses(token?.actor, "terrain").length > 0)
                     return true;
                 return false;
-            };
+            });
         });
     }
 
@@ -4211,6 +4180,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
 });
 
 Hooks.once('ready', async () => {
+    installJb2aHooks();
     initAltStructReady();
 
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
@@ -4713,6 +4683,8 @@ Hooks.on('ready', async () => {
         TriggerUseAmmoFlow,
         setTokenFlag,
         unsetTokenFlag,
+        startConfigTour,
+        startActivationManagerTour,
         // Internal main.js functions
         clearMoveData,
         undoMoveData,
@@ -5583,9 +5555,7 @@ Hooks.on('renderSettings', (app, html) => {
 
     overviewButton.on('click', (ev) => {
         ev.preventDefault();
-        const sheet = game.settings.sheet;
-        sheet.render(true);
-        setTimeout(() => sheet.activateTab?.('lancer-automations'), 100);
+        new LancerAutomationsConfig().render(true);
     });
 
     managerButton.on('click', async (ev) => {

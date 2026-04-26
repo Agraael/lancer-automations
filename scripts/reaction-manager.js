@@ -145,7 +145,7 @@ export class ReactionManager {
             name: "LaSossis's Items",
             hint: "Those are the item activations i made for myself, it wil create a startup script that registers them as default item activations.",
             scope: "world",
-            config: true,
+            config: false,
             type: Boolean,
             default: false,
             requiresReload: true
@@ -155,7 +155,7 @@ export class ReactionManager {
             name: "LaSossis's Personal Stuff",
             hint: "My personal bag of tweaks, might not be useful to anyone else.",
             scope: "world",
-            config: true,
+            config: false,
             type: Boolean,
             default: false,
             requiresReload: true

@@ -72,6 +72,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Socketlib](https://foundryvtt.com/packages/socketlib) | Required for API hooks |
 | [Tokenmagic](https://foundryvtt.com/packages/tokenmagic) | Required for API hooks |
 | [Sequencer](https://foundryvtt.com/packages/sequencer) | Required for API hooks |
+| [JB2A — Patreon](https://www.patreon.com/JB2A) **or** [JB2A — Free](https://foundryvtt.com/packages/JB2A_DnD5e) | Source of most action FX visuals. Patreon is preferred since it has the full library. The free pack works too: missing assets are auto-swapped to free equivalents, sometimes recolored, so a few effects look a bit rougher. |
 
 ### Optional
 

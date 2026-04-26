@@ -2,6 +2,148 @@
 /* Uses native Lancer classes for container, header, and buttons. */
 /* Only adds styles for card-specific elements that Lancer doesn't provide. */
 
+.la-compact-bool:hover {
+    background: rgba(120, 46, 34, 0.08);
+}
+
+.la-preview-btn {
+    opacity: 0.4;
+    transition: opacity 0.15s;
+}
+
+.la-compact-bool:hover .la-preview-btn,
+.la-preview-btn:hover {
+    opacity: 1;
+}
+
+h2.la-collapsible:hover {
+    background: rgba(120, 46, 34, 0.06);
+}
+
+.la-config-form {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.la-config-form > header,
+.la-config-form > nav.tabs {
+    flex: 0 0 auto;
+}
+
+/* Shared look between Activation Manager and Lancer Automations Configuration. */
+#reaction-manager-config,
+#lancer-automations-config {
+    background: var(--primary-color);
+}
+
+#reaction-manager-config .window-content,
+#lancer-automations-config .window-content {
+    background: #f5f5f5;
+    color: #000;
+    padding: 8px;
+}
+
+#reaction-manager-config .sheet-tabs,
+#lancer-automations-config .sheet-tabs {
+    margin-top: 10px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+#reaction-manager-config .sheet-tabs .item,
+#lancer-automations-config .sheet-tabs .item {
+    padding: 6px 14px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    color: #444;
+    font-weight: 500;
+    border-radius: 4px 4px 0 0;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+#reaction-manager-config .sheet-tabs .item:hover,
+#lancer-automations-config .sheet-tabs .item:hover {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color), transparent 95%);
+}
+
+#reaction-manager-config .sheet-tabs .item.active,
+#lancer-automations-config .sheet-tabs .item.active {
+    border: 2px solid var(--primary-color);
+    border-bottom: 2px solid #f5f5f5;
+    background: #f5f5f5;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.la-config-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: stretch;
+    padding: 2px 6px;
+    gap: 2px;
+}
+
+.la-config-tabs .item {
+    padding: 4px 6px;
+    font-size: 0.85em;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.la-config-tabs .item i {
+    margin-right: 3px;
+}
+
+.la-config-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-gutter: stable;
+}
+
+.la-config-footer {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid #782e22;
+    background: rgba(120, 46, 34, 0.04);
+    margin: 0;
+}
+
+.la-config-save {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 4px 18px;
+    height: auto;
+    line-height: 1.4;
+    font-size: 0.95em;
+    font-weight: 600;
+    background: #782e22;
+    color: #fff;
+    border: 1px solid #5a221a;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+}
+
+.la-config-save:hover {
+    background: #8b3528;
+}
+
+.la-config-save:active {
+    transform: translateY(1px);
+}
+
+.la-config-save i {
+    margin-right: 4px;
+}
+
 
 /* --- Queue pending badge (floats above the card when more cards are waiting) --- */
 .la-queue-badge {

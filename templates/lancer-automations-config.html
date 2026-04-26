@@ -1,0 +1,133 @@
+<form class="lancer-dialog-base la-config-form" autocomplete="off">
+    <header class="lancer-dialog-header" style="margin-bottom: 0;">
+        <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
+        <div class="lancer-dialog-subtitle">Module configuration</div>
+    </header>
+
+    <nav class="sheet-tabs tabs" data-group="primary" style="flex-wrap: wrap;">
+        {{#each tabs}}
+        <a class="item {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
+            <i class="{{this.icon}}"></i> {{this.label}}
+        </a>
+        {{/each}}
+    </nav>
+
+    <div class="content la-config-content" style="padding: 6px 12px;">
+        {{#each tabs}}
+        <div class="tab {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
+            {{#each this.items}}
+            {{#if this.isSection}}
+            {{#if this.collapsible}}
+            <h2 class="la-section la-collapsible" data-collapsed="{{#if this.collapsed}}true{{else}}false{{/if}}" style="border-bottom: 1px solid #782e22; margin: 12px 0 6px; font-size: 1em; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;">
+                <i class="fas fa-chevron-down la-chevron" style="font-size: 0.75em; transition: transform 0.15s;"></i>{{this.label}}
+            </h2>
+            {{else}}
+            <h2 class="la-section" data-collapsed="false" style="border-bottom: 1px solid #782e22; margin: 12px 0 6px; font-size: 1em;">{{this.label}}</h2>
+            {{/if}}
+            {{else if this.isCompactBooleans}}
+            <div class="la-compact-bools la-section-body" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 6px;">
+                {{#each this.items}}
+                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px;">
+                    <label style="display: flex; align-items: center; gap: 6px; flex: 1; cursor: pointer; min-width: 0;">
+                        <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} style="margin: 0; flex-shrink: 0;" />
+                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{this.label}}</span>
+                    </label>
+                    {{#if this.preview}}
+                    <button type="button" class="la-preview-btn" data-preview-key="{{this.key}}" title="Preview" style="flex-shrink: 0; width: 22px; height: 20px; padding: 0; line-height: 1; font-size: 0.7em; cursor: pointer;">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                    {{/if}}
+                </div>
+                {{/each}}
+            </div>
+            {{else if this.isButton}}
+            <div class="form-group" style="margin: 6px 0;">
+                <button type="button" data-action-key="{{this.key}}" style="width:100%;">
+                    {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}
+                </button>
+                {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
+            </div>
+            {{else if this.isTable}}
+            <table style="width:100%; border-collapse:collapse; margin: 6px 0;">
+                <thead>
+                    <tr>
+                        {{#each this.columns}}
+                        <th style="text-align:left; padding:3px 6px; border-bottom:1px solid #782e22; font-size:0.85em; font-weight:bold;">{{this}}</th>
+                        {{/each}}
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each this.rows}}
+                    <tr style="border-bottom:1px solid rgba(0,0,0,0.08);">
+                        <td style="padding:3px 6px; font-weight:bold;">{{this.label}}</td>
+                        {{#each this.cells}}
+                        <td style="padding:3px 6px;">
+                            {{#if this.isSelect}}
+                            <select name="{{this.name}}" style="width:100%;">
+                                {{#each this.choices}}
+                                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                                {{/each}}
+                            </select>
+                            {{/if}}
+                            {{#if this.isBoolean}}
+                            <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} />
+                            {{/if}}
+                            {{#if this.isColor}}
+                            <input type="color" name="{{this.name}}" value="{{this.value}}" style="width:36px;height:24px;padding:1px;cursor:pointer;" />
+                            {{/if}}
+                            {{#if this.isNumber}}
+                            <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" style="width:50px;" />
+                            {{/if}}
+                        </td>
+                        {{/each}}
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+            {{else}}
+            <div class="form-group" style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="font-weight: bold; flex: 1;">{{this.label}}</label>
+                    <div style="flex-shrink: 0; margin-left: 8px;">
+                        {{#if this.isBoolean}}
+                            <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} />
+                        {{/if}}
+                        {{#if this.isNumber}}
+                            <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" style="width: 80px;" />
+                        {{/if}}
+                        {{#if this.isString}}
+                            <input type="text" name="{{this.key}}" value="{{this.value}}" style="width: 200px;" />
+                        {{/if}}
+                        {{#if this.isFolder}}
+                            <file-picker name="{{this.key}}" type="folder" value="{{this.value}}"></file-picker>
+                        {{/if}}
+                        {{#if this.isColor}}
+                            <input type="color" name="{{this.key}}" value="{{this.value}}" style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
+                        {{/if}}
+                        {{#if this.isSlider}}
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" style="width:120px;" oninput="this.nextElementSibling.textContent=this.value" />
+                                <span style="min-width:28px;text-align:center;font-size:0.9em;">{{this.value}}</span>
+                            </div>
+                        {{/if}}
+                        {{#if this.isSelect}}
+                            <select name="{{this.key}}">
+                                {{#each this.choices}}
+                                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                                {{/each}}
+                            </select>
+                        {{/if}}
+                    </div>
+                </div>
+                {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.82em; opacity: 0.75;">{{this.hint}}</p>{{/if}}
+            </div>
+            {{/if}}
+            {{/each}}
+        </div>
+        {{/each}}
+    </div>
+
+    <footer class="la-config-footer">
+        <button type="submit" class="la-config-save"><i class="fas fa-save"></i> Save</button>
+    </footer>
+</form>

@@ -85,7 +85,7 @@ function isAutoEnabled(key) {
 // Config Window (FormApplication)
 // ---------------------------------------------------------------------------
 
-class StatusFXConfig extends FormApplication {
+export class StatusFXConfig extends FormApplication {
     static get defaultOptions() {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'la-statusfx-config',
@@ -204,14 +204,6 @@ export function registerStatusFXSettings() {
         requiresReload: true,
     });
 
-    game.settings.registerMenu(MODULE_ID, 'statusFXConfigMenu', {
-        name: 'Effects Configuration',
-        label: 'Configure Effects',
-        hint: 'Toggle status visual effects, auto-status icons, and action FX (Boost, Hide, Shut Down, Fall, Overcharge, etc.).',
-        icon: 'fas fa-magic',
-        type: StatusFXConfig,
-        restricted: true,
-    });
 }
 
 // ---------------------------------------------------------------------------

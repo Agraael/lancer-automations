@@ -436,46 +436,8 @@
 </form>
 
 <style>
-    /* ===== Window Background ===== */
-    #reaction-manager-config {
-        background: var(--primary-color);
-    }
-
-    #reaction-manager-config .window-content {
-        background: #f5f5f5;
-        color: #000;
-        padding: 8px;
-    }
-
-    /* ===== Tabs ===== */
-    .sheet-tabs {
-        margin-bottom: 8px;
-        border-bottom: 2px solid var(--primary-color);
-    }
-
-    .sheet-tabs .item {
-        padding: 6px 14px;
-        border: 2px solid transparent;
-        border-bottom: none;
-        cursor: pointer;
-        color: #444;
-        font-weight: 500;
-        border-radius: 4px 4px 0 0;
-        transition: all 0.15s ease;
-    }
-
-    .sheet-tabs .item:hover {
-        color: var(--primary-color);
-        background: color-mix(in srgb, var(--primary-color), transparent 95%);
-    }
-
-    .sheet-tabs .item.active {
-        border: 2px solid var(--primary-color);
-        border-bottom: 2px solid #f5f5f5;
-        background: #f5f5f5;
-        color: var(--primary-color);
-        font-weight: bold;
-    }
+    /* Window background, window-content and tab styles are shared with
+       #lancer-automations-config — see styles/interactive-tools.css. */
 
     /* ===== Column Header ===== */
     .reaction-list .reaction-header {

@@ -86,6 +86,49 @@ Hooks.on('init', () => {
         default: 0,
         range: { min: 0, max: 1, step: 0.05 },
     });
+    game.settings.register(MODULE, 'tah.actionFxVolume', {
+        name: 'Action FX Volume',
+        hint: 'Master multiplier for all action FX audio (skirmish, barrage, ram, ...). 0 = silent, 1 = full.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
+
+    for (const v of ['hover', 'open', 'details', 'toggle', 'statusHover']) {
+        game.settings.register(MODULE, `tah.uiSound.${v}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const v of ['tokenHover', 'tokenSelect', 'tokenDeselect', 'tokenTarget',
+        'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey']) {
+        game.settings.register(MODULE, `tah.tokenSound.${v}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const t of ['kinetic', 'energy', 'explosive', 'variable', 'heat', 'burn',
+        'infection', 'armor', 'hit_overshield', 'overshield']) {
+        game.settings.register(MODULE, `tah.damageSound.${t}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'crit']) {
+        game.settings.register(MODULE, `tah.statSound.${e}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const a of ['skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
+        'dismount', 'disengage', 'deployable', 'freeAction', 'corePower',
+        'protocol', 'reaction', 'fullAction', 'quickAction', 'standingUp',
+        'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
+        'grapple', 'ram', 'barrage', 'boost', 'overchargeNpc', 'hide',
+        'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
+        'defaultThrow', 'targetFail']) {
+        game.settings.register(MODULE, `tah.actionFxSound.${a}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
     game.settings.register(MODULE, 'tah.auraUseAltKey', {
         name: 'Aura: THT Ruler on Alt Press & Targeted',
         hint: "Show Terrain Height Tools rulers on auras only while Alt is held and tokens are targeted. Requires the grid-aware-auras fork (see lancer-automations README).",

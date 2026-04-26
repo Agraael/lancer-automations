@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.11.1",
+    "version": "2.12.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -113,6 +113,14 @@
                 "id": "lancer-weapon-fx",
                 "type": "module",
                 "url": "https://github.com/BoltsJ/lancer-weapon-fx"
+            },
+            {
+                "id": "jb2a_patreon",
+                "type": "module"
+            },
+            {
+                "id": "JB2A_DnD5e",
+                "type": "module"
             }
         ]
     },

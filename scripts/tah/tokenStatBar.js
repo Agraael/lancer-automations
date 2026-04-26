@@ -1387,15 +1387,9 @@ export function registerTokenStatBarSettings() {
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
 
-    game.settings.registerMenu(MODULE_ID, 'tokenStatBarConfigMenu', {
-        name: 'Custom Token Stat Bars',
-        label: 'Configure Stat Bars',
-        hint: 'Per-token defaults, visibility modes (in/out of combat)',
-        icon: 'fas fa-heart-pulse',
-        type: TokenStatBarConfig,
-        restricted: true,
-    });
 }
+
+export { TokenStatBarConfig };
 
 // ---------------------------------------------------------------------------
 // Settings menu form
