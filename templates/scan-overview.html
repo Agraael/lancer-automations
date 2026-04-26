@@ -1,0 +1,307 @@
+<div class="la-scan-page">
+    <div class="la-scan-banner">
+        <div class="la-scan-banner-text">
+            <div class="la-scan-banner-title">{{name}}</div>
+            <div class="la-scan-banner-subtitle">{{{tierIcon}}}{{subtitle}}</div>
+        </div>
+        {{#if img}}
+        <img class="la-scan-portrait" src="{{img}}" alt="">
+        {{/if}}
+    </div>
+
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.trait}}">HASE</span>
+    </div>
+    <div class="la-scan-row">
+        {{#each haseList}}
+        <div class="la-scan-stat-cell la-scan-hase">
+            <div class="la-scan-stat-label">{{label}}</div>
+            <div class="la-scan-stat-value-row">
+                <span class="la-scan-stat-value">{{value}}</span>
+                <span class="la-scan-stat-icon-slot">{{{icon}}}</span>
+            </div>
+        </div>
+        {{/each}}
+    </div>
+
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.weapon}}">STATS</span>
+    </div>
+    <div class="la-scan-row la-scan-journal-stats-grid">
+        {{#each journalStats}}
+        <div class="la-scan-stat-cell">
+            <div class="la-scan-stat-label">{{label}}</div>
+            <div class="la-scan-stat-value-row">
+                <span class="la-scan-stat-value">{{value}}</span>
+                <span class="la-scan-stat-icon-slot">{{{icon}}}</span>
+            </div>
+        </div>
+        {{/each}}
+    </div>
+
+    {{#if traits.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.trait}}">FRAME TRAITS</span>
+    </div>
+    {{#each traits}}
+    <div class="la-scan-card" style="border-left-color:{{../section.trait}};">
+        <div class="la-scan-card-title">{{name}}</div>
+        {{#if description}}<div class="la-scan-card-body">{{{description}}}</div>{{/if}}
+        {{#if actions.length}}
+        <div class="la-scan-card-body" style="margin-top:4px;">
+            {{#each actions}}
+            <div><strong>{{name}}</strong> ({{activation}}){{#if detail}}: {{{detail}}}{{/if}}</div>
+            {{/each}}
+        </div>
+        {{/if}}
+    </div>
+    {{/each}}
+    {{/if}}
+
+    {{#if templates.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.template}}">NPC TEMPLATES</span>
+    </div>
+    {{#each templates}}
+    <div class="la-scan-card" style="border-left-color:{{../section.template}};">
+        <div class="la-scan-card-title">{{name}}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+
+    {{#if coreBonuses.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.core}}">CORE BONUSES</span>
+    </div>
+    {{#each coreBonuses}}
+    <div class="la-scan-card" style="border-left-color:{{../section.core}};">
+        <div class="la-scan-card-title">{{name}}</div>
+        {{#if effect}}<div class="la-scan-card-body">{{{effect}}}</div>{{/if}}
+    </div>
+    {{/each}}
+    {{/if}}
+
+    {{#if isMech}}
+    {{#if weapons.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.weapon}}">WEAPONS</span>
+    </div>
+    {{#each weapons}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.weapon}};">
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}{{#if unloaded}} <span style="font-size:0.78em;color:#b71c1c;">UNLOADED</span>{{/if}}</div>
+            {{#if subtitle}}<div class="la-scan-card-subtitle">{{subtitle}}</div>{{/if}}
+            {{#if ranges.length}}
+            <div style="margin:2px 0;">
+                <span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span>
+                {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            </div>
+            {{/if}}
+            {{#if damages.length}}
+            <div style="margin:2px 0;">
+                <span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span>
+                {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            </div>
+            {{/if}}
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        <div class="la-scan-card-body la-scan-card-details">
+            {{#if onHit}}
+            <div style="margin-top:4px;">
+                <span class="la-scan-row-label" style="background:{{../section.onHit}};">ON HIT</span>
+                {{{onHit}}}
+            </div>
+            {{/if}}
+            {{#if effect}}
+            <div style="margin-top:4px;">
+                <span class="la-scan-row-label" style="background:{{../section.effect}};">EFFECT</span>
+                {{{effect}}}
+            </div>
+            {{/if}}
+            {{#if mod}}
+            <div class="la-scan-mod">
+                <div class="la-scan-mod-name">MOD: {{mod.name}}</div>
+                {{#if mod.effect}}<div>{{{mod.effect}}}</div>{{/if}}
+                {{#if mod.addedTags.length}}
+                <div style="margin-top:3px;">
+                    {{#each mod.addedTags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+        </div>
+    </details>
+    {{/each}}
+    {{/if}}
+
+    {{#if techSystems.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.tech}}">TECH</span>
+    </div>
+    {{#each techSystems}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.tech}};">
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}</div>
+            {{#if subtitle}}<div class="la-scan-card-subtitle">{{subtitle}}</div>{{/if}}
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        <div class="la-scan-card-body la-scan-card-details">
+            {{#if effect}}<div>{{{effect}}}</div>{{/if}}
+            {{#if actions.length}}
+            <div style="margin-top:4px;">
+                {{#each actions}}
+                <div><strong>{{name}}</strong> ({{activation}}){{#if trigger}} - <em>{{{trigger}}}</em>{{/if}}{{#if detail}}: {{{detail}}}{{/if}}</div>
+                {{/each}}
+            </div>
+            {{/if}}
+        </div>
+    </details>
+    {{/each}}
+    {{/if}}
+
+    {{#if systems.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.system}}">SYSTEMS</span>
+    </div>
+    {{#each systems}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.system}};">
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}</div>
+            {{#if subtitle}}<div class="la-scan-card-subtitle">{{subtitle}}</div>{{/if}}
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        <div class="la-scan-card-body la-scan-card-details">
+            {{#if effect}}<div>{{{effect}}}</div>{{/if}}
+            {{#if actions.length}}
+            <div style="margin-top:4px;">
+                {{#each actions}}
+                <div><strong>{{name}}</strong> ({{activation}}){{#if trigger}} - <em>{{{trigger}}}</em>{{/if}}{{#if detail}}: {{{detail}}}{{/if}}</div>
+                {{/each}}
+            </div>
+            {{/if}}
+        </div>
+    </details>
+    {{/each}}
+    {{/if}}
+    {{/if}}
+
+    {{#if isNpc}}
+    {{#each npcFeatureGroups}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{../section.feature}};">{{origin}}</span>
+    </div>
+
+    {{#each weapons}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.weapon}};">
+        {{#if isExoticUnknown}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title" style="color:{{../../section.weapon}};">{{name}}</div>
+            <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
+        </summary>
+        {{else}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}</div>
+            <div class="la-scan-card-subtitle">WEAPON{{#if attackBonus}} · ATK {{attackBonus}}{{/if}}{{#if accuracyText}} · {{accuracyText}}{{/if}}</div>
+            {{#if ranges.length}}
+            <div style="margin:2px 0;">
+                <span class="la-scan-row-label" style="background:{{../../section.range}};">RANGE</span>
+                {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            </div>
+            {{/if}}
+            {{#if damages.length}}
+            <div style="margin:2px 0;">
+                <span class="la-scan-row-label" style="background:{{../../section.damage}};">DAMAGE</span>
+                {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            </div>
+            {{/if}}
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        <div class="la-scan-card-body la-scan-card-details">
+            {{#if trigger}}
+            <div style="margin-top:4px;">
+                <span class="la-scan-row-label" style="background:{{../../section.trigger}};">TRIGGER</span>
+                {{{trigger}}}
+            </div>
+            {{/if}}
+            {{#if onHit}}
+            <div style="margin-top:4px;">
+                <span class="la-scan-row-label" style="background:{{../../section.onHit}};">ON HIT</span>
+                {{{onHit}}}
+            </div>
+            {{/if}}
+            {{#if effect}}
+            <div style="margin-top:4px;">
+                <span class="la-scan-row-label" style="background:{{../../section.effect}};">EFFECT</span>
+                {{{effect}}}
+            </div>
+            {{/if}}
+        </div>
+        {{/if}}
+    </details>
+    {{/each}}
+
+    {{#each tech}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.tech}};">
+        {{#if isExoticUnknown}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title" style="color:{{../../section.tech}};">{{name}}</div>
+            <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
+        </summary>
+        {{else}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}</div>
+            <div class="la-scan-card-subtitle">TECH</div>
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        {{#if description}}<div class="la-scan-card-body la-scan-card-details">{{{description}}}</div>{{/if}}
+        {{/if}}
+    </details>
+    {{/each}}
+
+    {{#each features}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.feature}};">
+        {{#if isExoticUnknown}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title" style="color:{{../../section.feature}};">{{name}}</div>
+            <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
+        </summary>
+        {{else}}
+        <summary class="la-scan-card-summary">
+            <div class="la-scan-card-title">{{name}}</div>
+            {{#if tags.length}}
+            <div style="margin:4px 0;">
+                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
+            </div>
+            {{/if}}
+        </summary>
+        {{#if description}}<div class="la-scan-card-body la-scan-card-details">{{{description}}}</div>{{/if}}
+        {{/if}}
+    </details>
+    {{/each}}
+    {{/each}}
+    {{/if}}
+
+    <div class="la-scan-footer">
+        Scanned by {{scanner}} on {{scanTimestamp}}.
+    </div>
+</div>

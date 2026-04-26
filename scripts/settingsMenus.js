@@ -90,25 +90,45 @@ const WRECKS_FIELDS = [
     },
 ];
 
+/** @param {string} key */
+function _statBarVisChoices(key) {
+    let cur = 'all';
+    try {
+        cur = game.settings.get(MODULE_ID, key);
+    } catch { /* not ready */ }
+    return [
+        { value: 'all',   label: 'All (default behaviour)', selected: cur === 'all' },
+        { value: 'owner', label: 'Owners only',             selected: cur === 'owner' },
+        { value: 'none',  label: 'None (hidden)',           selected: cur === 'none' },
+    ];
+}
+
 const TOKENS_DISPLAY_FIELDS = [
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
     { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
-    { key: 'tokenStatBar', type: 'boolean', label: 'Custom Token Stat Bars', hint: 'Replaces default token bars with my custom token bar, very similar to Bar Brawl but with my own personal tweaks. Disabled when Bar Brawl is active. Requires reload.' },
+
+    { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
+    { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
+    { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
+    { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
+    { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
+    { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
+    { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
     { type: 'button',
-        key: 'openStatBarConfig',
-        label: 'Configure Stat Bars',
-        icon: 'fas fa-heart-pulse',
-        hint: 'Per-token defaults, visibility modes (in/out of combat).',
+        key: 'statBarApplyDefaults',
+        label: 'Apply Defaults to Current Scene',
+        icon: 'fas fa-clone',
+        hint: 'Overwrites per-token settings on every Lancer token in the active scene.',
         onClick: async () => {
             const mod = await import('./tah/tokenStatBar.js');
-            const Cls = /** @type {any} */ (mod).TokenStatBarConfig;
-            if (Cls)
-                new Cls().render(true);
+            const fn = /** @type {any} */ (mod).applyDefaultsToCurrentScene;
+            if (typeof fn === 'function')
+                await fn();
             else
-                ui.notifications.warn('TokenStatBarConfig is not exported.');
+                ui.notifications.warn('applyDefaultsToCurrentScene is not exported.');
         },
     },
 ];

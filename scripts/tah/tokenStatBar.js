@@ -1463,7 +1463,7 @@ class TokenStatBarConfig extends FormApplication {
     }
 }
 
-async function applyDefaultsToCurrentScene() {
+export async function applyDefaultsToCurrentScene() {
     if (!canvas?.scene) {
         ui.notifications?.warn('No active scene.');
         return;

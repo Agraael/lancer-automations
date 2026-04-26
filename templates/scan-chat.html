@@ -1,0 +1,85 @@
+<div class="la-scan-chat">
+    <div class="la-scan-banner">
+        <div class="la-scan-banner-text">
+            <div class="la-scan-banner-title">{{name}}</div>
+            <div class="la-scan-banner-subtitle">{{{tierIcon}}}{{subtitle}}</div>
+        </div>
+        {{#if img}}
+        <img class="la-scan-portrait" src="{{img}}" alt="" style="width:64px;height:64px;">
+        {{/if}}
+    </div>
+
+    {{#if isGmInput}}
+    {{#if gmInputBody}}
+    <div class="la-scan-card" style="border-left-color:{{section.trait}};">
+        <div class="la-scan-card-body" style="white-space:pre-wrap;">{{gmInputBody}}</div>
+    </div>
+    {{else}}
+    <div class="la-scan-card" style="opacity:0.7;font-style:italic;text-align:center;">
+        No information provided.
+    </div>
+    {{/if}}
+    {{else}}
+
+    <div class="la-scan-row la-scan-hase-row" style="margin-bottom:4px;">
+        {{#each haseList}}
+        <div class="la-scan-stat-cell la-scan-hase">
+            <div class="la-scan-stat-label">{{label}}</div>
+            <div class="la-scan-stat-value">{{value}}</div>
+        </div>
+        {{/each}}
+    </div>
+
+    {{#if chatStats.length}}
+    <div class="la-scan-row la-scan-stats-row" style="margin-bottom:4px;">
+        {{#each chatStats}}
+        <div class="la-scan-stat-cell">
+            <div class="la-scan-stat-label">{{label}}</div>
+            <div class="la-scan-stat-value">{{value}}{{#if max}}<span style="font-size:0.7em;opacity:0.6;">/{{max}}</span>{{/if}}</div>
+        </div>
+        {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if chatStats2.length}}
+    <div class="la-scan-row la-scan-stats2-row" style="margin-bottom:6px;">
+        {{#each chatStats2}}
+        <div class="la-scan-stat-cell">
+            <div class="la-scan-stat-label">{{label}}</div>
+            <div class="la-scan-stat-value">{{value}}{{#if max}}<span style="font-size:0.7em;opacity:0.6;">/{{max}}</span>{{/if}}</div>
+        </div>
+        {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if weapons.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.weapon}};">WPN</span>
+        {{#each weapons}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if systems.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.system}};">SYS</span>
+        {{#each systems}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if npcFeatureGroups.length}}
+    {{#each npcFeatureGroups}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{../section.feature}};">{{origin}}</span>
+        {{#each features}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+        {{#each weapons}}<span class="la-scan-tag" style="background:rgba(183,28,28,0.12);border-color:#b71c1c;">{{name}}</span>{{/each}}
+    </div>
+    {{/each}}
+    {{/if}}
+    {{/if}}
+
+    {{#if journalUuid}}
+    <a class="la-scan-open-btn" data-journal-uuid="{{journalUuid}}">
+        <i class="fas fa-book-open"></i> Open Scan Journal
+    </a>
+    {{/if}}
+</div>

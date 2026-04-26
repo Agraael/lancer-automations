@@ -1,5 +1,7 @@
 /* global CONFIG, canvas, game, ChatMessage, ui */
 
+import { socketRequestWithAck } from './main.js';
+
 function log(...args) {
     console.log("lancer-automations |", ...args);
 }
@@ -106,7 +108,7 @@ async function dispatchNotifications() {
     }
 }
 
-export function pushEffect(targetID, effect, duration, note, originID) {
+export async function pushEffect(targetID, effect, duration, note, originID) {
     const target = canvas.tokens.get(targetID);
     const canActDirectly = game.user.isGM || target?.document?.isOwner;
     if (!canActDirectly && game.users.filter(x => x.role === 4 && x.active).length < 1) {
@@ -115,10 +117,10 @@ export function pushEffect(targetID, effect, duration, note, originID) {
     }
     if (canActDirectly) {
         log(`Local setFlaggedEffect ${effect}`);
-        setEffect(targetID, effect, duration, note, originID);
+        await setEffect(targetID, effect, duration, note, originID);
     } else {
         log(`Pushing setFlaggedEffect ${effect}`);
-        game.socket.emit('module.lancer-automations', { action: "setEffect", payload: { targetID, effect, duration, note, originID } });
+        await socketRequestWithAck('setEffect', { targetID, effect, duration, note, originID });
     }
 }
 
@@ -611,14 +613,9 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         const canApplyDirectly = game.user.isGM || token.document?.isOwner;
         for (const effect of effectsToApplyToToken) {
             if (canApplyDirectly) {
-                // GM or owner applies directly
                 await setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
             } else {
-                // Non-owner uses socket
-                game.socket.emit('module.lancer-automations', {
-                    action: "setEffect",
-                    payload: { targetID: tokenID, effect: effect, duration: adjustedDuration, note, originID, extraOptions }
-                });
+                await socketRequestWithAck('setEffect', { targetID: tokenID, effect, duration: adjustedDuration, note, originID, extraOptions });
             }
 
             if (notify) {
@@ -697,12 +694,9 @@ export async function removeEffectsByNameFromTokens(options = {}) {
             }
 
             if (game.user.isGM || (/** @type {Token} */ (token)).document?.isOwner) {
-                removeEffectsByName(tokenID, effectNameVal, originId, extraFlags);
+                await removeEffectsByName(tokenID, effectNameVal, originId, extraFlags);
             } else {
-                game.socket.emit('module.lancer-automations', {
-                    action: "removeEffect",
-                    payload: { targetID: tokenID, effect: effectNameVal, originID: originId, extraFlags }
-                });
+                await socketRequestWithAck('removeEffect', { targetID: tokenID, effect: effectNameVal, originID: originId, extraFlags });
             }
 
             if (notify) {
@@ -1231,19 +1225,16 @@ export function getAllEffects(target) {
  * @param {Token|TokenDocument|string} token - The token (or its ID) that owns the effect
  * @param {ActiveEffect|string} effect - The effect (or its ID) to delete
  */
-export function deleteEffect(token, effect) {
+export async function deleteEffect(token, effect) {
     const tokenID = /** @type {any} */ (token)?.id ?? token;
     const effectID = /** @type {any} */ (effect)?.id ?? effect;
     const target = canvas.tokens.get(tokenID);
     if (game.user.isGM || target?.document?.isOwner) {
         if (target?.actor) {
-            target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
+            await target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
         }
     } else {
-        game.socket.emit('module.lancer-automations', {
-            action: "removeEffect",
-            payload: { targetID: tokenID, effectID }
-        });
+        await socketRequestWithAck('removeEffectById', { targetID: tokenID, effectID });
     }
 }
 

@@ -1,0 +1,22 @@
+<div class="lancer-dialog-base">
+    <div class="lancer-dialog-header">
+        <div class="lancer-dialog-title">{{scanTitle}}</div>
+        <div class="lancer-dialog-subtitle">Target: {{targetNames}}{{#if requestingUserName}} · Requested by {{requestingUserName}}{{/if}}</div>
+    </div>
+
+    <div class="lancer-info-box">
+        <i class="fas fa-info-circle"></i>
+        <span>
+            {{#if isHidden}}
+            <b>Hidden Information</b> is whispered to the requesting user only. Use it for things players have to actively scan to learn (system identities, vulnerabilities, secret triggers).
+            {{else}}
+            <b>Public Information</b> is broadcast to everyone. Use it for common knowledge or rumors any character might know.
+            {{/if}}
+        </span>
+    </div>
+
+    <div style="margin-top:12px;">
+        <label style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Information to share</label>
+        <textarea name="scan-info" rows="6" placeholder="Type what the scan reveals..." style="width:100%;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#fff;color:#222;font-family:inherit;font-size:0.9em;resize:vertical;"></textarea>
+    </div>
+</div>

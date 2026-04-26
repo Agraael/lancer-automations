@@ -1,0 +1,25 @@
+<div class="lancer-dialog-base">
+    <div class="lancer-dialog-header">
+        <div class="lancer-dialog-title">SCAN ACTION</div>
+        <div class="lancer-dialog-subtitle">{{#if isMulti}}Targets{{else}}Target{{/if}}: {{targetNames}}</div>
+    </div>
+
+    <div class="lancer-section-title" style="margin-top:8px;">Choose scan type:</div>
+    <div class="lancer-scaling-cards" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="lancer-scaling-card" data-scan-type="system">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-radar"></i></div>
+            <div class="lancer-scaling-card-name">FULL SYSTEMS SCAN</div>
+            <div class="lancer-scaling-card-desc">Stats, weapons, systems, traits.</div>
+        </div>
+        <div class="lancer-scaling-card" data-scan-type="hidden">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-eye-slash"></i></div>
+            <div class="lancer-scaling-card-name">HIDDEN INFO</div>
+            <div class="lancer-scaling-card-desc">GM-only knowledge whispered to scanner.</div>
+        </div>
+        <div class="lancer-scaling-card" data-scan-type="generic">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-eye"></i></div>
+            <div class="lancer-scaling-card-name">PUBLIC INFO</div>
+            <div class="lancer-scaling-card-desc">Common knowledge revealed to all.</div>
+        </div>
+    </div>
+</div>

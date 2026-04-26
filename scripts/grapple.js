@@ -96,20 +96,12 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
 async function establishGrapples(api, grappler, grappledTokens) {
     const grapplerState = getGrappleState(grappler);
     const existingIds = grapplerState.grappledIds || [];
-    const newIdSet = new Set(grappledTokens.map(t => t.id));
-
-    for (const oldId of [...existingIds]) {
-        if (!newIdSet.has(oldId)) {
-            const oldTarget = canvas.tokens.get(oldId);
-            if (oldTarget)
-                await releaseGrappler(api, grappler, oldTarget);
-        }
-    }
 
     for (const grappledToken of grappledTokens) {
         const existingState = getGrappleState(grappledToken);
+        const wasFresh = !(existingState.grapplerIds?.length > 0);
 
-        if (existingState.grapplerIds?.length > 0) {
+        if (!wasFresh) {
             if (existingState.grapplerIds.includes(grappler.id))
                 continue;
             await setGrappleState(grappledToken, {
@@ -131,10 +123,11 @@ async function establishGrapples(api, grappler, grappledTokens) {
             note: `Grappling ${grappledToken.name}`,
         }, { grappleSource: true });
 
-        await updateImmobilized(api, grappledToken, true);
+        await updateImmobilized(api, grappledToken, wasFresh);
     }
 
-    await setGrappleState(grappler, { grappledIds: grappledTokens.map(t => t.id) });
+    const merged = Array.from(new Set([...existingIds, ...grappledTokens.map(t => t.id)]));
+    await setGrappleState(grappler, { grappledIds: merged });
 }
 
 async function releaseGrappler(api, grappler, grappledToken) {
@@ -145,20 +138,21 @@ async function releaseGrappler(api, grappler, grappledToken) {
         await cancelGrappleForToken(api, grappledToken);
     } else {
         await setGrappleState(grappledToken, { grapplerIds: newGrapplerIds, immobilizedSide: grappledState.immobilizedSide });
-        await api.removeEffectsByNameFromTokens({
-            tokens: [grappler],
-            effectNames: ['grappling', 'immobilized'],
-            extraFlags: { grappleSource: true }
-        });
         await updateImmobilized(api, grappledToken);
     }
 
     const grapplerState = getGrappleState(grappler);
     const newGrappledIds = (grapplerState.grappledIds || []).filter(id => id !== grappledToken.id);
-    if (newGrappledIds.length === 0)
+    if (newGrappledIds.length === 0) {
         await clearGrappleState(grappler);
-    else
+        await api.removeEffectsByNameFromTokens({
+            tokens: [grappler],
+            effectNames: ['grappling', 'immobilized'],
+            extraFlags: { grappleSource: true }
+        });
+    } else {
         await setGrappleState(grappler, { grappledIds: newGrappledIds });
+    }
 }
 
 async function cancelGrappleForToken(api, token) {
@@ -538,10 +532,10 @@ Hooks.on('lancer-automations.ready', (api) => {
                     return;
 
                 if (myRoll.passed) {
-                    await cancelGrappleForToken(api, reactorToken);
-                    ui.notifications.info(`${reactorToken.name} breaks free from the grapple!`);
+                    await releaseGrappler(api, primaryGrappler, reactorToken);
+                    ui.notifications.info(`${reactorToken.name} breaks free from ${primaryGrappler.name}!`);
                 } else {
-                    ui.notifications.info(`${reactorToken.name} fails to break free.`);
+                    ui.notifications.info(`${reactorToken.name} fails to break free from ${primaryGrappler.name}.`);
                 }
             }
         }

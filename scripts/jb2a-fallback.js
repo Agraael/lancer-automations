@@ -50,7 +50,15 @@ function _hasPatreon() {
 
 function _existsInDatabase(id) {
     try {
-        return /** @type {any} */ (Sequencer)?.Database?.entryExists?.(id) === true;
+        const db = /** @type {any} */ (Sequencer)?.Database;
+        if (!db)
+            return false;
+        if (db.entryExists?.(id) === true)
+            return true;
+        const entry = db.getEntry?.(id);
+        if (entry === false || entry == null || entry === "")
+            return false;
+        return true;
     } catch {
         return false;
     }

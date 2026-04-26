@@ -1,619 +1,597 @@
-/* global console, JournalEntry, ChatMessage, Folder, Dialog, Sequence, game, ui, CONST, fromUuidSync */
-// ---------------------------------------------------------------------------
+/* global console, JournalEntry, ChatMessage, Folder, Dialog, game, ui, CONST, fromUuidSync, fromUuid, renderTemplate, Hooks, $ */
 
 import * as actionFX from './actionFX.js';
+import { getStatIcon, getTierIcon } from './scan-icons.js';
 
-// Internal helpers
-// ---------------------------------------------------------------------------
+const TPL = {
+    overview:  'modules/lancer-automations/templates/scan-overview.html',
+    chat:      'modules/lancer-automations/templates/scan-chat.html',
+    chooser:   'modules/lancer-automations/templates/scan-chooser.html',
+    sysOpts:   'modules/lancer-automations/templates/scan-system-options.html',
+    gmInput:   'modules/lancer-automations/templates/scan-gm-input.html',
+};
 
-function sort_features(a, b) {
-    return b.system.origin.base - a.system.origin.base;
+const SECTION_COLORS = {
+    weapon:   '#b71c1c',
+    system:   '#1a5c3a',
+    tech:     '#0d6e6e',
+    trait:    '#1565c0',
+    template: '#105a5a',
+    core:     '#7a2070',
+    feature:  '#1a5c3a',
+    range:    '#1565c0',
+    damage:   '#b71c1c',
+    onHit:    '#6a1b9a',
+    effect:   '#e65100',
+    trigger:  '#3a105c',
+};
+
+const FOLDER_NAME = 'SCAN Database';
+const NAME_PREFIX = 'SCAN: ';
+const NUMBER_PADDING = 3;
+
+function _fmtTags(tags) {
+    if (!tags?.length) return [];
+    return tags.map((t) => {
+        const baseName = t.name ?? t.lid?.replace(/^tg_/, '') ?? '';
+        return t.val !== undefined && t.val !== null && String(t.val).length
+            ? baseName.replace('{VAL}', t.val)
+            : baseName;
+    }).filter(Boolean);
 }
 
-function construct_features(items, origin) {
-    let sc_list = ``;
-    sc_list += `<p>${origin}</p>`;
-    let sc_features = items.filter(f => f.system.origin && f.system.origin.name === origin).sort(sort_features);
-    sc_features.forEach(i => {
-        let sc_name = ``;
-        let sc_desc = ``;
-        if (i.system.origin.name === "EXOTIC" && !i.system.origin.base) {
-            sc_name = '<code class="horus--subtle">UNKNOWN EXOTIC SYSTEM</code>';
-            sc_desc = "???";
-        } else {
-            sc_name = i.name;
-            if (i.system.effect) {
-                sc_desc = i.system.effect;
-            } else {
-                sc_desc = "No description given.";
-            }
-            if (i.system.trigger) {
-                sc_desc = `Trigger: ${i.system.trigger}<br>${sc_desc}`;
-            }
-        }
-        if (!sc_desc.startsWith("<p>") && !sc_desc.startsWith("<P>"))
-            sc_desc = `<p>${sc_desc}</p>`;
-        let sc_entry = `<details><summary>${sc_name}</summary>${sc_desc}</details>`;
-        sc_list += sc_entry;
-    });
-    return sc_list;
+function _fmtRanges(ranges) {
+    if (!ranges?.length) return [];
+    return ranges.map((r) => ({ type: r.type, val: r.val }));
 }
 
-function construct_weapons(items, origin, tier) {
-    let sc_weapons = ``;
-    let sc_features = items
-        .filter(i => i.system.origin && i.system.origin.name === origin && i.system.type === "Weapon")
-        .sort(sort_features);
-    sc_features.forEach(i => {
-        let sc_name = ``;
-        let sc_desc = ``;
-        let sc_entry = ``;
-        let sc_range = ``;
-        let sc_damage = ``;
-        let sc_accuracy = ``;
-        if (!i.type) {
-            return sc_weapons;
-        }
-        sc_weapons += `<table>`;
-        if (i.system.origin.name === "EXOTIC" && !i.system.origin.base) {
-            sc_name = '<tr><th><code class="horus--subtle">UNKNOWN EXOTIC WEAPON</code></th></tr>';
-            sc_desc = "<tr><td>???</td></tr>";
-            sc_entry = sc_name + sc_desc;
-        } else {
-            sc_name = `<tr><th colspan="4">${i.name}</th></tr>`;
-            sc_entry += sc_name;
-            sc_desc = `<tr>`;
-            sc_desc += `<td>+${i.system.attack_bonus[tier - 1]} ATTACK</td>`;
-            if (i.system.accuracy[tier - 1]) {
-                let acc = i.system.accuracy[tier - 1];
-                sc_accuracy = `${acc > 0 ? "+" : ""}${acc} ${acc > 0 ? "ACCURACY" : "DIFFICULTY"}`;
-            }
-            sc_desc += `<td>${sc_accuracy}</td>`;
-            if (i.system.range.length > 0) {
-                i.system.range.forEach(r => (sc_range += r.type + " " + r.val + "&nbsp&nbsp&nbsp"));
-            }
-            sc_desc += `<td>${sc_range}</td>`;
-            if (i.system.damage.length > 0) {
-                i.system.damage[tier - 1].forEach(d => (sc_damage += d.val + " " + d.type + "&nbsp&nbsp&nbsp"));
-            }
-            sc_desc += `<td>${sc_damage}</td>`;
-            if (i.system.tags.some(t => t.is_loading)) {
-                if (i.system.loaded) {
-                    sc_desc += `<td>LOADED</td>`;
-                } else {
-                    sc_desc += `<td>UNLOADED</td>`;
-                }
-            } else {
-                sc_desc += `<td></td>`;
-            }
-            if (i.system.uses.max > 0) {
-                sc_desc += `<td>USES: ${i.system.uses.value}/${i.system.uses.max}</td>`;
-            }
-            sc_desc += `<tr>`;
-            if (i.system.trigger) {
-                sc_desc += `<tr><td colspan="6"><details><summary>Trigger</summary><p>${i.system.trigger}</p></details></td></tr>`;
-            }
-            if (i.system.on_hit) {
-                sc_desc += `<tr><td colspan="6"><details><summary>On Hit</summary><p>${i.system.on_hit}</p></details></td></tr>`;
-            }
-            if (i.system.effect) {
-                sc_desc += `<tr><td colspan="6">${i.system.effect}</td></tr>`;
-            }
-            if (i.system.tags.length > 0) {
-                sc_desc += `<tr><td colspan="6">Tags: `;
-                sc_desc += i.system.tags.map(t => `${t.name.replace("{VAL}", t.val)}`).join(", ");
-                sc_desc += `</td></tr>`;
-            }
-            sc_entry += sc_desc;
-        }
-        sc_weapons += sc_entry;
-        sc_weapons += `</table>`;
-    });
-    return sc_weapons;
+function _fmtDamages(damages) {
+    if (!damages?.length) return [];
+    return damages.map((d) => ({ type: d.type, val: d.val }));
 }
 
-function construct_templates(items) {
-    let sc_templates = ``;
-    if (!items || items.length === 0) {
-        sc_templates += "<p>NONE</p>";
-    } else {
-        items.forEach(i => {
-            sc_templates += `<p>${i.name}</p>`;
-        });
+function _formatActions(actions) {
+    if (!actions?.length) return [];
+    return actions.map((a) => ({
+        name: a.name,
+        activation: a.activation,
+        trigger: a.trigger,
+        detail: a.detail,
+    }));
+}
+
+function _buildMechWeapon(slot) {
+    const weaponData = slot.weapon?.value;
+    if (!weaponData) return null;
+    const profile = weaponData.system.profiles?.[weaponData.system.selected_profile_index || 0];
+    if (!profile) return null;
+    const w = {
+        name: weaponData.name,
+        subtitle: [weaponData.system.size, profile.type].filter(Boolean).join(' · '),
+        ranges: _fmtRanges(profile.range),
+        damages: _fmtDamages(profile.damage),
+        tags: _fmtTags(profile.tags),
+        onHit: profile.on_hit || '',
+        effect: profile.effect || '',
+        trigger: '',
+        unloaded: weaponData.system.tags?.some((t) => t.is_loading) && !weaponData.system.loaded,
+        uses: weaponData.system.uses?.max > 0 ? `${weaponData.system.uses.value}/${weaponData.system.uses.max}` : null,
+    };
+    if (slot.mod?.value) {
+        const m = slot.mod.value;
+        w.mod = {
+            name: m.name,
+            effect: m.system.effect || '',
+            addedTags: _fmtTags(m.system.added_tags),
+            actions: _formatActions(m.system.actions),
+        };
     }
-    sc_templates += "<br>";
-    return sc_templates;
+    return w;
 }
 
-function zeroPad(num, places) {
-    return String(num).padStart(places, "0");
+function _buildMechSystem(sysObj) {
+    const sysData = sysObj.value;
+    if (!sysData) return null;
+    return {
+        name: sysData.name,
+        subtitle: [sysData.system.type, sysData.system.sp ? `${sysData.system.sp} SP` : null].filter(Boolean).join(' · '),
+        effect: sysData.system.effect || '',
+        actions: _formatActions(sysData.system.actions),
+        tags: _fmtTags(sysData.system.tags),
+        isTech: sysData.system.type === 'Tech',
+    };
 }
 
-function getAllJournalsInFolder(folder) {
-    let journals = [...folder.contents];
-    const subfolders = game.folders.filter(f => f.type === "JournalEntry" && f.folder?.id === folder.id);
-    subfolders.forEach(subfolder => {
-        journals = journals.concat(getAllJournalsInFolder(subfolder));
+function _buildMechTrait(trait) {
+    return {
+        name: trait.name,
+        description: trait.description || '',
+        actions: _formatActions(trait.actions),
+    };
+}
+
+function _buildCoreBonus(cb) {
+    return {
+        name: cb.name,
+        effect: cb.system.effect || '',
+        description: cb.system.description || '',
+    };
+}
+
+function _buildNpcFeature(item, tier) {
+    const isExoticUnknown = item.system.origin?.name === 'EXOTIC' && !item.system.origin.base;
+    if (isExoticUnknown) {
+        return { isExoticUnknown: true, name: 'UNKNOWN EXOTIC SYSTEM', description: '???' };
+    }
+    let desc = item.system.effect || 'No description given.';
+    if (item.system.trigger) desc = `<strong>Trigger:</strong> ${item.system.trigger}<br>${desc}`;
+    return {
+        isExoticUnknown: false,
+        name: item.name,
+        description: desc,
+        tags: _fmtTags(item.system.tags),
+    };
+}
+
+function _buildNpcWeapon(item, tier) {
+    const isExoticUnknown = item.system.origin?.name === 'EXOTIC' && !item.system.origin.base;
+    if (isExoticUnknown) {
+        return { isExoticUnknown: true, name: 'UNKNOWN EXOTIC WEAPON' };
+    }
+    const tIdx = (tier || 1) - 1;
+    const attackBonus = item.system.attack_bonus?.[tIdx];
+    const acc = item.system.accuracy?.[tIdx];
+    return {
+        isExoticUnknown: false,
+        name: item.name,
+        attackBonus: attackBonus !== undefined ? `+${attackBonus}` : '',
+        accuracyText: acc ? `${acc > 0 ? '+' : ''}${acc} ${acc > 0 ? 'ACC' : 'DIFF'}` : '',
+        ranges: _fmtRanges(item.system.range),
+        damages: _fmtDamages(item.system.damage?.[tIdx]),
+        tags: _fmtTags(item.system.tags),
+        unloaded: item.system.tags?.some((t) => t.is_loading) && !item.system.loaded,
+        uses: item.system.uses?.max > 0 ? `${item.system.uses.value}/${item.system.uses.max}` : null,
+        trigger: item.system.trigger || '',
+        onHit: item.system.on_hit || '',
+        effect: item.system.effect || '',
+    };
+}
+
+function _zeroPad(n, places) {
+    return String(n).padStart(places, '0');
+}
+
+function _getOwnerRows() {
+    const rows = [
+        { kind: 'all', id: 'default', key: 'default', name: 'All Players', isAll: true },
+    ];
+    if (game.modules.get('player-groups')?.active) {
+        const groups = game.settings.get('player-groups', 'groups') ?? {};
+        for (const g of Object.values(groups)) {
+            if (g?.id) rows.push({ kind: 'group', id: g.id, key: `g-${g.id}`, name: g.name || 'Unnamed Group', isGroup: true });
+        }
+    }
+    for (const u of game.users.filter((u) => !u.isGM))
+        rows.push({ kind: 'user', id: u.id, key: `u-${u.id}`, name: u.name });
+    return rows;
+}
+
+function _buildOwnershipFromForm(html) {
+    const ownership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE };
+    const groupPicks = [];
+    const userPicks = {};
+    html.find('.la-scan-owner-select').each(function () {
+        const raw = String(this.value ?? '');
+        if (raw === '') return;
+        const lvl = Number(raw);
+        const kind = this.dataset.kind;
+        const id = this.dataset.id;
+        if (kind === 'all') ownership.default = lvl;
+        else if (kind === 'group') groupPicks.push({ id, lvl });
+        else if (kind === 'user') userPicks[id] = lvl;
     });
+    if (groupPicks.length) {
+        const groups = game.settings.get('player-groups', 'groups') ?? {};
+        for (const { id, lvl } of groupPicks) {
+            for (const uid of groups[id]?.members ?? []) {
+                if (userPicks[uid] === undefined) ownership[uid] = lvl;
+            }
+        }
+    }
+    for (const [uid, lvl] of Object.entries(userPicks)) ownership[uid] = lvl;
+    return ownership;
+}
+
+function _getAllJournalsInFolder(folder) {
+    let journals = [...folder.contents];
+    const subfolders = game.folders.filter((f) => f.type === 'JournalEntry' && f.folder?.id === folder.id);
+    for (const sub of subfolders) journals = journals.concat(_getAllJournalsInFolder(sub));
     return journals;
 }
 
-export async function performSystemScan(target, createJournal = false, customName = '') {
-    const actor = target.actor;
+/** @param {Token|TokenDocument} target @param {string} customName @param {string} scanIndex */
+function _buildScanData(target, customName = '', scanIndex = '') {
+    const actor = target.actor ?? target.document?.actor;
     const items = actor.items;
+    const isMech = actor.type === 'mech' && actor.system.loadout;
+    const isNpc = actor.type === 'npc';
 
-    const isPlayerMech = actor.type === 'mech' && actor.system.loadout;
-    const isNPC = actor.type === 'npc';
+    const data = {
+        name: customName?.trim() || actor.name,
+        img: actor.img,
+        actorType: actor.type,
+        isMech,
+        isNpc,
+        scanIndex,
+        scanTimestamp: new Date().toLocaleString(),
+        scanner: game.user.name,
+        section: SECTION_COLORS,
+    };
 
-    let hase_table_html = `
-<table>
-  <tr>
-    <th>HULL</th><th>AGI</th><th>SYS</th><th>ENG</th>
-  </tr>
-  <tr>
-    <td>${actor.system.hull || 0}</td>
-    <td>${actor.system.agi || 0}</td>
-    <td>${actor.system.sys || 0}</td>
-    <td>${actor.system.eng || 0}</td>
-  </tr>
-</table>`;
+    let classOrFrame = '';
+    let levelOrTier = '';
 
-    let stat_table_html = `
-<table>
-  <tr>
-    <th>Armor</th><th>HP</th><th>Heat</th><th>Speed</th>
-  </tr>
-  <tr>
-    <td>${actor.system.armor}</td>
-    <td>${actor.system.hp.value}/${actor.system.hp.max}</td>
-    <td>${actor.system.heat.value || 0}/${actor.system.heat.max || 0}</td>
-    <td>${actor.system.speed}</td>
-  </tr>
-  <tr>
-    <th>Evasion</th><th>E-Def</th><th>Save</th><th>Sensors</th>
-  </tr>
-  <tr>
-    <td>${actor.system.evasion}</td>
-    <td>${actor.system.edef}</td>
-    <td>${actor.system.save}</td>
-    <td>${actor.system.sensor_range || 10}</td>
-  </tr>
-  <tr>
-    <th>Size</th><th>Activ</th><th>Struct</th><th>Stress</th>
-  </tr>
-  <tr>
-    <td>${actor.system.size}</td>
-    <td>${actor.system.activations || 1}</td>
-    <td>${actor.system.structure.value || 0}/${actor.system.structure.max || 0}</td>
-    <td>${actor.system.stress.value || 0}/${actor.system.stress.max || 0}</td>
-  </tr>
-</table>`;
-
-    console.log("lancer-automations | Scanning", target);
-
-    let sc_class = "";
-    let sc_tier = "";
-    let sc_templates = "";
-    let sc_list = "";
-    let sc_weapons = "";
-    let sc_traits = "";
-    let sc_core_bonuses = "";
-
-    if (isPlayerMech) {
+    if (isMech) {
         const frameData = actor.system.loadout?.frame?.value;
-        sc_class = frameData ? frameData.name : "UNKNOWN FRAME";
-
-        /** @type {Actor} */
+        classOrFrame = frameData?.name ?? 'UNKNOWN FRAME';
         let pilotActor = null;
-        if (actor.system.pilot?.id) {
-            pilotActor = /** @type {Actor} */ (fromUuidSync(actor.system.pilot.id));
-        }
-        sc_tier = pilotActor ? `LL${pilotActor.system.level || 0}` : "LL?";
+        if (actor.system.pilot?.id)
+            pilotActor = /** @type {any} */ (fromUuidSync(actor.system.pilot.id));
+        levelOrTier = pilotActor ? `LL${pilotActor.system.level || 0}` : 'LL?';
 
-        if (pilotActor && pilotActor.items) {
-            const coreBonuses = pilotActor.items.filter(i => i.type === 'core_bonus');
-            if (coreBonuses.length > 0) {
-                coreBonuses.forEach(cb => {
-                    let cb_name = cb.name;
-                    let cb_desc = "";
-                    if (cb.system.effect)
-                        cb_desc += `<strong>Effect:</strong> ${cb.system.effect}<br>`;
-                    if (cb.system.description)
-                        cb_desc += cb.system.description;
-                    if (!cb_desc.startsWith("<p>") && !cb_desc.startsWith("<P>"))
-                        cb_desc = `<p>${cb_desc}</p>`;
-                    sc_core_bonuses += `<details><summary>${cb_name}</summary>${cb_desc}</details>`;
-                });
+        data.coreBonuses = [];
+        if (pilotActor?.items) {
+            for (const cb of pilotActor.items.filter((i) => i.type === 'core_bonus'))
+                data.coreBonuses.push(_buildCoreBonus(cb));
+        }
+
+        data.traits = (frameData?.system?.traits ?? []).map(_buildMechTrait);
+
+        data.weapons = [];
+        for (const mount of actor.system.loadout.weapon_mounts ?? []) {
+            for (const slot of mount.slots ?? []) {
+                const w = _buildMechWeapon(slot);
+                if (w) data.weapons.push(w);
             }
         }
-        if (!sc_core_bonuses)
-            sc_core_bonuses = "<p>NONE</p>";
 
-        if (frameData && frameData.system.traits && frameData.system.traits.length > 0) {
-            frameData.system.traits.forEach(trait => {
-                let trait_name = trait.name;
-                let trait_desc = trait.description || "";
-                if (trait.actions && trait.actions.length > 0) {
-                    trait.actions.forEach(action => {
-                        trait_desc += `<br><br><strong>${action.name}</strong>`;
-                        if (action.activation)
-                            trait_desc += ` (${action.activation})`;
-                        if (action.trigger)
-                            trait_desc += `<br><em>Trigger:</em> ${action.trigger}`;
-                        if (action.detail)
-                            trait_desc += `<br>${action.detail}`;
-                    });
-                }
-                if (!trait_desc.startsWith("<p>") && !trait_desc.startsWith("<P>"))
-                    trait_desc = `<p>${trait_desc}</p>`;
-                sc_traits += `<details><summary>${trait_name}</summary>${trait_desc}</details>`;
-            });
+        const allSystems = [];
+        for (const s of actor.system.loadout.systems ?? []) {
+            const sys = _buildMechSystem(s);
+            if (sys) allSystems.push(sys);
         }
-        if (!sc_traits)
-            sc_traits = "<p>NONE</p>";
+        data.systems = allSystems.filter((s) => !s.isTech);
+        data.techSystems = allSystems.filter((s) => s.isTech);
 
-        if (actor.system.loadout.weapon_mounts && actor.system.loadout.weapon_mounts.length > 0) {
-            actor.system.loadout.weapon_mounts.forEach(mount => {
-                mount.slots.forEach(slot => {
-                    if (slot.weapon && slot.weapon.value) {
-                        const weaponData = slot.weapon.value;
-                        const profile = weaponData.system.profiles?.[weaponData.system.selected_profile_index || 0];
-                        if (profile) {
-                            let wpn_name = weaponData.name;
-                            let wpn_details = "";
-                            let ranges = "";
-                            if (profile.range && profile.range.length > 0)
-                                ranges = profile.range.map(r => `${r.type} ${r.val}`).join(", ");
-                            if (ranges)
-                                wpn_details += `<strong>Range:</strong> ${ranges}<br>`;
-                            let damages = "";
-                            if (profile.damage && profile.damage.length > 0)
-                                damages = profile.damage.map(d => `${d.val} ${d.type}`).join(", ");
-                            if (damages)
-                                wpn_details += `<strong>Damage:</strong> ${damages}<br>`;
-                            if (profile.tags && profile.tags.length > 0) {
-                                const tagStr = profile.tags.map(t => t.val ? `${t.lid.replace('tg_', '')} ${t.val}` : t.lid.replace('tg_', '')).join(", ");
-                                wpn_details += `<strong>Tags:</strong> ${tagStr}<br>`;
-                            }
-                            if (profile.effect)
-                                wpn_details += `<strong>Effect:</strong> ${profile.effect}`;
-                            if (!wpn_details.startsWith("<p>") && !wpn_details.startsWith("<P>"))
-                                wpn_details = `<p>${wpn_details}</p>`;
-                            sc_weapons += `<details><summary>${wpn_name}</summary>${wpn_details}</details>`;
+        data.templates = [];
+        data.npcFeatureGroups = [];
+    } else if (isNpc) {
+        const classes = items.filter((i) => i.is_npc_class());
+        classOrFrame = classes.length ? classes[0].name : 'UNKNOWN';
+        levelOrTier = `Tier ${actor.system.tier ?? '?'}`;
+        data.tierIcon = getTierIcon(actor.system.tier);
 
-                            if (slot.mod && slot.mod.value) {
-                                const modData = slot.mod.value;
-                                let mod_details = "";
-                                if (modData.system.effect)
-                                    mod_details += `${modData.system.effect}<br>`;
-                                if (modData.system.added_tags && modData.system.added_tags.length > 0) {
-                                    const addedTagStr = modData.system.added_tags.map(t => t.val ? `${t.lid.replace('tg_', '')} ${t.val}` : t.lid.replace('tg_', '')).join(", ");
-                                    mod_details += `<strong>Added Tags:</strong> ${addedTagStr}<br>`;
-                                }
-                                if (modData.system.actions && modData.system.actions.length > 0) {
-                                    modData.system.actions.forEach(action => {
-                                        mod_details += `<strong>${action.name}</strong> (${action.activation})`;
-                                        if (action.detail)
-                                            mod_details += `: ${action.detail}`;
-                                        mod_details += `<br>`;
-                                    });
-                                }
-                                if (!mod_details.startsWith("<p>") && !mod_details.startsWith("<P>"))
-                                    mod_details = `<p>${mod_details}</p>`;
-                                sc_weapons += `<details><summary>↳ MOD: ${modData.name}</summary>${mod_details}</details>`;
-                            }
-                        }
-                    }
-                });
-            });
+        data.templates = items.filter((i) => i.is_npc_template()).map((t) => ({ name: t.name }));
+
+        const features = items.filter((i) => i.is_npc_feature());
+        const tier = actor.system.tier;
+        const origins = [];
+        for (const f of features) {
+            const o = f.system.origin?.name;
+            if (o && !origins.includes(o)) origins.push(o);
         }
-        if (!sc_weapons)
-            sc_weapons = "<p>NONE</p>";
-
-        if (actor.system.loadout.systems && actor.system.loadout.systems.length > 0) {
-            actor.system.loadout.systems.forEach(sysObj => {
-                if (sysObj.value) {
-                    const sysData = sysObj.value;
-                    let sys_name = sysData.name;
-                    let sys_desc = sysData.system.effect || "No description given.";
-                    if (sysData.system.actions && sysData.system.actions.length > 0) {
-                        sysData.system.actions.forEach(action => {
-                            if (action.detail)
-                                sys_desc += `<br><strong>${action.name}:</strong> ${action.detail}`;
-                        });
-                    }
-                    if (!sys_desc.startsWith("<p>") && !sys_desc.startsWith("<P>"))
-                        sys_desc = `<p>${sys_desc}</p>`;
-                    sc_list += `<details><summary>${sys_name}</summary>${sys_desc}</details>`;
-                }
-            });
-        } else {
-            sc_list = "<p>NONE</p>";
-        }
-
-        sc_templates = "";
-
-    } else if (isNPC) {
-        const classes = items.filter(i => i.is_npc_class());
-        sc_class = !classes || classes.length === 0 ? "NONE" : classes[0].name;
-        sc_tier = actor.system.tier;
-        const templates = items.filter(i => i.is_npc_template());
-        sc_templates = construct_templates(templates);
-
-        const features = items.filter(i => i.is_npc_feature());
-        if (!features || features.length === 0) {
-            sc_list += "<p>NONE</p>";
-            sc_weapons += "<p>NONE</p>";
-        } else {
-            let sc_origins = [];
-            features.forEach(f => {
-                let origin = f.system.origin.name;
-                if (!sc_origins.includes(origin))
-                    sc_origins.push(origin);
-            });
-            sc_origins.forEach(origin => {
-                sc_list += construct_features(features, origin);
-                sc_weapons += construct_weapons(items, origin, sc_tier);
-            });
-        }
-    }
-
-    if (createJournal) {
-        await createScanJournalEntry(target, actor, hase_table_html, stat_table_html, sc_class, sc_tier, sc_templates,
-            sc_weapons, sc_list, sc_traits, sc_core_bonuses, isPlayerMech, customName);
-    } else {
-        const displayName = customName && customName.trim().length > 0 ? customName.trim() : actor.name;
-        let content = `<h2>Scan results: ${displayName}</h2>`;
-        if (isPlayerMech) {
-            content += `<h3>Frame: ${sc_class} | ${sc_tier}</h3>`;
-        } else {
-            content += `<h3>Class: ${sc_class}, Tier ${sc_tier}</h3>`;
-        }
-        content += hase_table_html + stat_table_html;
-        if (sc_templates)
-            content += `<h3>Templates:</h3>` + sc_templates;
-        if (sc_traits)
-            content += `<h3>Frame Traits:</h3>` + sc_traits;
-        if (sc_core_bonuses)
-            content += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
-        content += `<h3>Weapons:</h3>` + sc_weapons;
-        content += `<h3>Systems:</h3>` + sc_list;
-
-        ChatMessage.create({
-            author: game.user.id,
-            content: content,
-            flags: {
-                core: {
-                    canPopout: true
-                }
-            }
+        data.npcFeatureGroups = origins.map((origin) => {
+            const inOrigin = features.filter((f) => f.system.origin?.name === origin);
+            return {
+                origin,
+                weapons: inOrigin.filter((f) => f.system.type === 'Weapon').map((f) => _buildNpcWeapon(f, tier)),
+                tech: inOrigin.filter((f) => f.system.type === 'Tech').map((f) => _buildNpcFeature(f, tier)),
+                features: inOrigin.filter((f) => f.system.type !== 'Weapon' && f.system.type !== 'Tech').map((f) => _buildNpcFeature(f, tier)),
+            };
         });
+
+        data.weapons = [];
+        data.systems = [];
+        data.techSystems = [];
+        data.traits = [];
+        data.coreBonuses = [];
     }
+
+    data.classOrFrame = classOrFrame;
+    data.levelOrTier = levelOrTier;
+    data.subtitle = `${classOrFrame}${levelOrTier ? ` · ${levelOrTier}` : ''}${scanIndex ? ` · SCAN ${scanIndex}` : ''}`;
+
+    data.hase = {
+        hull: actor.system.hull || 0,
+        agi:  actor.system.agi  || 0,
+        sys:  actor.system.sys  || 0,
+        eng:  actor.system.eng  || 0,
+    };
+    data.haseList = [
+        { label: 'Hull', value: data.hase.hull, icon: getStatIcon('Hull') },
+        { label: 'Agi',  value: data.hase.agi,  icon: getStatIcon('Agi')  },
+        { label: 'Sys',  value: data.hase.sys,  icon: getStatIcon('Sys')  },
+        { label: 'Eng',  value: data.hase.eng,  icon: getStatIcon('Eng')  },
+    ];
+
+    /** @param {string} label @param {any} value @param {{max?: number, isHeat?: boolean}} [opts] */
+    const cell = (label, value, opts = {}) => ({
+        label,
+        value: value ?? 0,
+        max: opts.max,
+        hasBar: opts.max !== undefined,
+        isHeat: !!opts.isHeat,
+        pct: opts.max ? Math.max(0, Math.min(100, ((Number(value) || 0) / opts.max) * 100)) : 0,
+        icon: getStatIcon(label),
+    });
+    // Lancer stores caps as either .max or .value depending on the field; take whichever is larger.
+    const cap = (f) => Math.max(Number(f?.max) || 0, Number(f?.value) || 0);
+    data.journalStats = [
+        cell('HP', cap(actor.system.hp)),
+        cell('Structure', cap(actor.system.structure)),
+        cell('Armor', actor.system.armor),
+        cell('Evasion', actor.system.evasion),
+        cell('Heat Cap', cap(actor.system.heat)),
+        cell('Stress', cap(actor.system.stress)),
+        cell('E-Def', actor.system.edef),
+        cell('Sensors', actor.system.sensor_range || 10),
+        cell('Speed', actor.system.speed),
+        cell('Save', actor.system.save),
+        cell('Size', actor.system.size),
+        cell('Activations', actor.system.activations || 1),
+    ];
+
+    data.chatStats = [
+        cell('HP', actor.system.hp?.value, { max: cap(actor.system.hp) }),
+        cell('Heat', actor.system.heat?.value, { max: cap(actor.system.heat), isHeat: true }),
+        cell('Armor', actor.system.armor),
+        cell('Speed', actor.system.speed),
+        cell('E-Def', actor.system.edef),
+    ];
+    data.chatStats2 = [
+        cell('Structure', actor.system.structure?.value, { max: cap(actor.system.structure) }),
+        cell('Stress', actor.system.stress?.value, { max: cap(actor.system.stress) }),
+    ];
+
+    return data;
 }
 
-async function createScanJournalEntry(target, actor, hase_table_html, stat_table_html, sc_class, sc_tier, sc_templates, sc_weapons, sc_list, sc_traits, sc_core_bonuses, isPlayerMech = false, customName = '') {
+export async function performSystemScan(target, createJournal = false, customName = '', ownership = null) {
+    const actor = target.actor;
+    if (!actor) return;
+    console.log('lancer-automations | Scanning', target);
+
+    let scanIndex = '';
+    let journalUuid = null;
+    if (createJournal) {
+        const result = await createScanJournalEntry(target, customName, ownership);
+        if (result) {
+            scanIndex = result.scanIndex;
+            journalUuid = result.uuid;
+        }
+    }
+    if (!scanIndex)
+        scanIndex = '—';
+
+    const data = _buildScanData(target, customName, scanIndex);
+    data.journalUuid = journalUuid;
+
+    const content = await renderTemplate(TPL.chat, data);
+    ChatMessage.create({
+        author: game.user.id,
+        content,
+        flags: { core: { canPopout: true } },
+    });
+}
+
+async function createScanJournalEntry(target, customName = '', ownership = null) {
     if (!JournalEntry.canUserCreate(game.user)) {
         ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
-        return;
+        return null;
     }
 
-    const journalFolderName = "SCAN Database";
-    const nameTemplate = "SCAN: ";
-    const numberLength = 3;
-    const startingNumber = 1;
-    const permissionLevel = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
-    const updateExisting = true;
-
-    let journalFolder = game.folders.getName(journalFolderName);
-    if (!journalFolder && journalFolderName.length > 0) {
+    let folder = game.folders.getName(FOLDER_NAME);
+    if (!folder) {
         try {
-            journalFolder = await Folder.create({ name: journalFolderName, type: "JournalEntry" });
-        } catch (error) {
-            ui.notifications.error(`${journalFolderName} does not exist and must be created manually by a user with permissions to do so.`);
-            return;
+            folder = await Folder.create({ name: FOLDER_NAME, type: 'JournalEntry' });
+        } catch {
+            ui.notifications.error(`${FOLDER_NAME} does not exist and must be created manually by a user with permissions to do so.`);
+            return null;
         }
     }
 
-    let hase_table_with_image = `
-<p><img style="border: 3px dashed #000000; float: left; margin-right: 5px; margin-left: 5px;" src="${target.document.actor.img}" width="30%" height="30%" /></p>
-<div style="color: #000000; width: 65%; float: right; text-align: left;">
-<table>
-  <tr>
-    <th>HULL</th><th>AGI</th><th>SYS</th><th>ENG</th>
-  </tr>
-  <tr>
-    <td>${actor.system.hull || 0}</td>
-    <td>${actor.system.agi || 0}</td>
-    <td>${actor.system.sys || 0}</td>
-    <td>${actor.system.eng || 0}</td>
-  </tr>
-</table>`;
+    const allJournals = _getAllJournalsInFolder(folder);
+    const actor = target.actor;
+    const matching = allJournals.filter((e) => e.name.includes(actor.name));
 
-    const displayName = customName && customName.trim().length > 0 ? customName.trim() : actor.name;
+    let scanIndex;
+    let entry;
+    let entryName;
 
-    let scanContent = `<h2>Scan results: ${displayName}</h2>`;
-    if (isPlayerMech) {
-        scanContent += `<h3>Frame: ${sc_class} | ${sc_tier}</h3>`;
+    if (matching.length === 1) {
+        entry = matching[0];
+        entryName = entry.name;
+        const m = entryName.match(/SCAN:\s*(\d+)/i);
+        scanIndex = m ? m[1] : _zeroPad(allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1, NUMBER_PADDING);
     } else {
-        scanContent += `<h3>Class: ${sc_class}, Tier ${sc_tier}</h3>`;
+        const count = allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1;
+        scanIndex = _zeroPad(count, NUMBER_PADDING);
+        const labelName = customName?.trim()?.length ? customName.trim() : actor.name;
+        entryName = `${NAME_PREFIX}${scanIndex} - ${labelName}`;
     }
-    scanContent += hase_table_with_image + stat_table_html;
-    scanContent += `</div><div style="color: #000000; width: 100%; float: right; text-align: left;">`;
-    if (sc_templates)
-        scanContent += `<h3>Templates:</h3>` + sc_templates;
-    if (sc_traits)
-        scanContent += `<h3>Frame Traits:</h3>` + sc_traits;
-    if (sc_core_bonuses)
-        scanContent += `<h3>Core Bonuses:</h3>` + sc_core_bonuses;
-    scanContent += `<h3>Weapons:</h3>` + sc_weapons;
-    scanContent += `<h3>Systems:</h3>` + sc_list;
-    scanContent += `</div>`;
 
-    let scanEntry;
-    let allJournals = getAllJournalsInFolder(journalFolder);
-    let matchingJournalEntries = allJournals.filter(e => e.name.includes(actor.name));
+    const data = _buildScanData(target, customName, scanIndex);
+    const html = await renderTemplate(TPL.overview, data);
 
-    if (matchingJournalEntries.length === 1 && updateExisting === true) {
-        console.log("lancer-automations | Updating an existing scan");
-        const scanName = matchingJournalEntries[0].name;
-        scanEntry = game.journal.getName(scanName);
-        let scanPage = scanEntry.pages.getName(scanName);
-        await scanPage.update({ _id: matchingJournalEntries[0]._id, text: { content: scanContent } });
-    } else {
-        console.log("lancer-automations | Creating a new scan");
-        let scanCount = zeroPad(allJournals.filter(e => e.name.startsWith(nameTemplate)).length + startingNumber, numberLength);
-        let scanName;
-        if (customName && customName.trim().length > 0) {
-            scanName = nameTemplate + scanCount + ` - ` + customName.trim();
+    if (matching.length === 1) {
+        const pages = entry.pages.contents;
+        if (pages.length === 0) {
+            await entry.createEmbeddedDocuments('JournalEntryPage', [{ name: entryName, type: 'text', text: { content: html }, sort: 0 }]);
         } else {
-            scanName = nameTemplate + scanCount + ` - ` + actor.name;
+            await pages[0].update({ name: entryName, text: { content: html } });
+            if (pages.length > 1)
+                await entry.deleteEmbeddedDocuments('JournalEntryPage', pages.slice(1).map((p) => p.id));
         }
-        let scanPage = /** @type {any} */ ({ name: scanName, type: "text", text: { content: scanContent } });
-        scanEntry = await JournalEntry.create({ folder: journalFolder.id, name: scanName });
-        await scanEntry.createEmbeddedDocuments("JournalEntryPage", [scanPage]);
+    } else {
+        entry = await JournalEntry.create({ folder: folder.id, name: entryName });
+        await entry.createEmbeddedDocuments('JournalEntryPage', [
+            { name: entryName, type: 'text', text: { content: html }, sort: 0 },
+        ]);
     }
 
-    await scanEntry.update({ ownership: { default: permissionLevel } });
-    scanEntry.sheet.render(false);
+    const finalOwnership = ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
+    await entry.update({ ownership: finalOwnership });
+    entry.sheet.render(false);
+    return { scanIndex, uuid: entry.uuid };
 }
 
 export async function performGMInputScan(targets, scanTitle, requestingUserName = null) {
     const targetArray = Array.isArray(targets) ? targets : [targets];
-    const targetNames = targetArray.map(t => t.name).join(', ');
+    const targetNames = targetArray.map((t) => t.name).join(', ');
+
+    const content = await renderTemplate(TPL.gmInput, {
+        scanTitle,
+        targetNames,
+        targetCount: targetArray.length,
+        requestingUserName,
+        isHidden: scanTitle === 'Hidden Information',
+    });
 
     new Dialog({
         title: `${scanTitle} - ${targetNames}`,
-        content: `
-            <div class="lancer-dialog-header">
-                <h2 class="lancer-dialog-title">${scanTitle}</h2>
-                <p class="lancer-dialog-subtitle">Target${targetArray.length > 1 ? 's' : ''}: ${targetNames}${requestingUserName ? ` | Requested by: ${requestingUserName}` : ''}</p>
-            </div>
-            <form>
-                <div class="form-group">
-                    <label style="font-weight: bold; margin-bottom: 8px; display: block;">Enter information discovered (leave empty if providing orally):</label>
-                    <textarea id="scan-info" name="scan-info" rows="5" style="width: 100%; resize: vertical; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px; font-family: inherit;"></textarea>
-                </div>
-            </form>
-        `,
+        content,
         buttons: {
             submit: {
                 icon: '<i class="fas fa-check"></i>',
-                label: "Send to Chat",
+                label: 'Send to Chat',
                 callback: async (html) => {
                     const info = String(html.find('[name="scan-info"]').val()).trim();
-                    let content = `<h2>Scan results: ${targetNames}</h2>`;
-                    content += `<h3>${scanTitle}</h3>`;
-                    if (info) {
-                        content += `<p>${info}</p>`;
-                    } else {
-                        content += `<p><em>Information provided orally by GM</em></p>`;
-                    }
+                    const chat = await renderTemplate(TPL.chat, {
+                        name: targetNames,
+                        subtitle: scanTitle,
+                        gmInputBody: info || null,
+                        isGmInput: true,
+                        section: SECTION_COLORS,
+                    });
                     ChatMessage.create({
                         author: game.user.id,
-                        content: content,
+                        content: chat,
                         whisper: game.user.isGM ? [] : [game.user.id],
-                        flags: {
-                            core: {
-                                canPopout: true
-                            }
-                        }
+                        flags: { core: { canPopout: true } },
                     });
-                }
+                },
             },
-            cancel: {
-                icon: '<i class="fas fa-times"></i>',
-                label: "Cancel"
-            }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
         },
-        default: "submit"
-    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 500 }).render(true);
+        default: 'submit',
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520 }).render(true);
 }
 
-function showSystemScanDialog(targets) {
+async function showSystemScanDialog(targets) {
     const targetArray = Array.isArray(targets) ? targets : [targets];
-    const targetNames = targetArray.map(t => t.name).join(', ');
+    const targetNames = targetArray.map((t) => t.name).join(', ');
 
-    new Dialog({
-        title: "System Scan Options",
-        content: `
-            <div class="lancer-dialog-header">
-                <h2 class="lancer-dialog-title">System Scan Options</h2>
-                <p class="lancer-dialog-subtitle">Target${targetArray.length > 1 ? 's' : ''}: ${targetNames}</p>
-            </div>
-            <form>
-                <div class="lancer-toggle-card" data-create-journal="false">
-                    <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
-                    <div class="lancer-toggle-card-text">Create Journal Entry</div>
-                </div>
-                <div id="custom-name-field" style="display: none; margin-top: 12px;">
-                    <label style="font-weight: bold; margin-bottom: 8px; display: block;">Custom Journal Name (optional):</label>
-                    <input type="text" id="custom-journal-name" name="custom-journal-name" placeholder="Leave empty for auto-generated name" style="width: 100%; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px;" />
-                </div>
-            </form>
-        `,
+    const content = await renderTemplate(TPL.sysOpts, {
+        targetNames,
+        targetCount: targetArray.length,
+        isMulti: targetArray.length > 1,
+        ownerRows: _getOwnerRows(),
+    });
+
+    const dlg = new Dialog({
+        title: 'System Scan Options',
+        content,
         buttons: {
             scan: {
                 icon: '<i class="fas fa-radar"></i>',
-                label: "Execute Scan",
+                label: 'Execute Scan',
                 callback: async (html) => {
-                    const createJournal = html.find('.lancer-toggle-card').data('create-journal') === true;
+                    const $card = html.find('.lancer-toggle-card');
+                    const createJournal = $card.data('create-journal') === true;
                     const customName = String(html.find('[name="custom-journal-name"]').val()).trim();
+                    const ownership = _buildOwnershipFromForm(html);
 
                     if (createJournal && !game.user.isGM) {
-                        targetArray.forEach(target => {
-                            game.socket.emit("module.lancer-automations", {
-                                action: "scanSystemJournalRequest",
+                        for (const target of targetArray) {
+                            game.socket.emit('module.lancer-automations', {
+                                action: 'scanSystemJournalRequest',
                                 payload: {
                                     targetId: target.id,
                                     targetName: target.name,
-                                    customName: customName,
+                                    customName,
+                                    ownership,
                                     requestingUserId: game.user.id,
-                                    requestingUserName: game.user.name
-                                }
+                                    requestingUserName: game.user.name,
+                                },
                             });
-                        });
+                        }
                         ui.notifications.info(`Journal creation request sent to GM for ${targetArray.length} target${targetArray.length > 1 ? 's' : ''}`);
                     }
 
-                    for (const target of targetArray) {
-                        await performSystemScan(target, createJournal && game.user.isGM, customName);
-                    }
-                }
+                    for (const target of targetArray)
+                        await performSystemScan(target, createJournal && game.user.isGM, customName, ownership);
+                },
             },
-            cancel: {
-                icon: '<i class="fas fa-times"></i>',
-                label: "Cancel"
+            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+        },
+        default: 'scan',
+        render: (html) => {
+            html.find('.lancer-toggle-card').on('click', function () {
+                const $card = $(this);
+                const next = !$card.data('create-journal');
+                $card.data('create-journal', next);
+                $card.toggleClass('active', next);
+                $card.find('.lancer-toggle-card-icon i')
+                    .toggleClass('far fa-square', !next)
+                    .toggleClass('fas fa-check-square', next);
+                html.find('.la-scan-custom-name').toggle(next);
+                dlg.setPosition({ height: 'auto' });
+            });
+
+            const root = html[0];
+            const groupSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="group"]'));
+            const userSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="user"]'));
+            const groups = game.modules.get('player-groups')?.active
+                ? (game.settings.get('player-groups', 'groups') ?? {})
+                : {};
+            const membersByGroup = new Map(groupSels.map((s) => [s.dataset.id, groups[s.dataset.id]?.members ?? []]));
+
+            const refreshGroup = (gid) => {
+                const gSel = groupSels.find((s) => s.dataset.id === gid);
+                if (!gSel) return;
+                const members = membersByGroup.get(gid) ?? [];
+                let shared;
+                for (const uid of members) {
+                    const uSel = userSels.find((s) => s.dataset.id === uid);
+                    if (!uSel) continue;
+                    if (shared === undefined) shared = uSel.value;
+                    else if (shared !== uSel.value) { shared = null; break; }
+                }
+                gSel.value = shared == null ? '' : shared;
+            };
+
+            for (const gSel of groupSels) {
+                gSel.addEventListener('change', () => {
+                    if (gSel.value === '') return;
+                    for (const uid of membersByGroup.get(gSel.dataset.id) ?? []) {
+                        const uSel = userSels.find((s) => s.dataset.id === uid);
+                        if (uSel) uSel.value = gSel.value;
+                    }
+                });
+            }
+            for (const uSel of userSels) {
+                uSel.addEventListener('change', () => {
+                    const uid = uSel.dataset.id;
+                    for (const [gid, members] of membersByGroup) {
+                        if (members.includes(uid)) refreshGroup(gid);
+                    }
+                });
             }
         },
-        default: "scan",
-        render: (html) => {
-            html.find('.lancer-toggle-card').click(function () {
-                const $card = $(this);
-                const currentState = $card.data('create-journal');
-                const newState = !currentState;
-                $card.data('create-journal', newState);
-                if (newState) {
-                    $card.addClass('active');
-                    $card.find('.lancer-toggle-card-icon i').removeClass('far fa-square').addClass('fas fa-check-square');
-                    html.find('#custom-name-field').show();
-                } else {
-                    $card.removeClass('active');
-                    $card.find('.lancer-toggle-card-icon i').removeClass('fas fa-check-square').addClass('far fa-square');
-                    html.find('#custom-name-field').hide();
-                }
-            });
-        }
-    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 450 }).render(true);
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 480 });
+    dlg.render(true);
 }
 
-// ---------------------------------------------------------------------------
-// Exported
-// ---------------------------------------------------------------------------
-
-/**
- * Called by the "Scan" reaction's activationCode.
- * Plays visual effects then shows the scan type dialog.
- */
 export async function executeScanOnActivation(reactorToken) {
     const api = game.modules.get('lancer-automations')?.api;
     let targets = Array.from(game.user.targets);
@@ -625,11 +603,10 @@ export async function executeScanOnActivation(reactorToken) {
             count: 1,
             title: 'SCAN — Select Target',
             description: `Choose a target within Sensors (${sensorRange})`,
-            filter: t => t.actor?.type !== 'deployable',
+            filter: (t) => t.actor?.type !== 'deployable',
         });
-        if (chosen?.length) {
+        if (chosen?.length)
             targets = chosen;
-        }
     }
 
     if (!targets.length) {
@@ -637,69 +614,77 @@ export async function executeScanOnActivation(reactorToken) {
         return;
     }
 
-    const targetNames = targets.map(t => t.name).join(', ');
+    const targetNames = targets.map((t) => t.name).join(', ');
 
     if (reactorToken) {
-        for (const target of targets) {
+        for (const target of targets)
             await actionFX.playScanFX(reactorToken, target);
-        }
     }
 
+    const content = await renderTemplate(TPL.chooser, {
+        targetNames,
+        targetCount: targets.length,
+        isMulti: targets.length > 1,
+    });
+
     new Dialog({
-        title: "SCAN Action",
-        content: `
-            <div class="lancer-dialog-header">
-                <h2 class="lancer-dialog-title">SCAN Action</h2>
-                <p class="lancer-dialog-subtitle">Target${targets.length > 1 ? 's' : ''}: ${targetNames}</p>
-            </div>
-            <div style="margin-top: 12px;">
-                <label style="font-weight: bold; margin-bottom: 8px; display: block;">Choose what to scan:</label>
-                <select id="scan-type" name="scan-type" style="width: 100%; padding: 12px 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px; height: 44px;">
-                    <option value="system">Full Systems & Statistics (weapons, systems, HP, SPEED, EVASION, etc.)</option>
-                    <option value="hidden">Hidden Information (confidential cargo, mission, pilot identity, etc.)</option>
-                    <option value="generic">Generic/Public Information (model number, public records, etc.)</option>
-                </select>
-            </div>
-        `,
+        title: 'SCAN Action',
+        content,
         buttons: {
             scan: {
                 icon: '<i class="fas fa-radar"></i>',
-                label: "Scan",
+                label: 'Scan',
                 callback: async (html) => {
-                    const scanType = html.find('[name="scan-type"]').val();
+                    const $sel = html.find('.lancer-scaling-card.selected');
+                    const scanType = ($sel.data('scan-type')) || 'system';
                     if (scanType === 'system') {
                         showSystemScanDialog(targets);
-                    } else {
-                        const scanTitle = scanType === 'hidden' ? 'Hidden Information' : 'Generic/Public Information';
-                        if (game.user.isGM) {
-                            performGMInputScan(targets, scanTitle);
-                        } else {
-                            targets.forEach(target => {
-                                game.socket.emit("module.lancer-automations", {
-                                    action: "scanInfoRequest",
-                                    payload: {
-                                        targetId: target.id,
-                                        targetName: target.name,
-                                        scanTitle: scanTitle,
-                                        requestingUserId: game.user.id,
-                                        requestingUserName: game.user.name
-                                    }
-                                });
-                            });
-                            ui.notifications.info(`Scan request sent to GM for ${targets.length} target${targets.length > 1 ? 's' : ''}`);
-                        }
+                        return;
                     }
-                }
+                    const scanTitle = scanType === 'hidden' ? 'Hidden Information' : 'Generic/Public Information';
+                    if (game.user.isGM) {
+                        performGMInputScan(targets, scanTitle);
+                    } else {
+                        for (const target of targets) {
+                            game.socket.emit('module.lancer-automations', {
+                                action: 'scanInfoRequest',
+                                payload: {
+                                    targetId: target.id,
+                                    targetName: target.name,
+                                    scanTitle,
+                                    requestingUserId: game.user.id,
+                                    requestingUserName: game.user.name,
+                                },
+                            });
+                        }
+                        ui.notifications.info(`Scan request sent to GM for ${targets.length} target${targets.length > 1 ? 's' : ''}`);
+                    }
+                },
             },
-            cancel: {
-                icon: '<i class="fas fa-times"></i>',
-                label: "Cancel"
-            }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
         },
-        default: "scan"
-    }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 500 }).render(true);
+        default: 'scan',
+        render: (html) => {
+            html.find('.lancer-scaling-card').first().addClass('selected');
+            html.find('.lancer-scaling-card').on('click', function () {
+                html.find('.lancer-scaling-card').removeClass('selected');
+                $(this).addClass('selected');
+            });
+        },
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 540 }).render(true);
 }
 
+Hooks.on('renderChatMessage', (_msg, html) => {
+    html.find('.la-scan-open-btn').on('click', async (ev) => {
+        ev.preventDefault();
+        const uuid = ev.currentTarget.dataset.journalUuid;
+        if (!uuid) return;
+        const doc = await fromUuid(uuid);
+        if (doc?.sheet)
+            doc.sheet.render(true);
+    });
+});
+
 export const ScanAPI = {
-    executeScanOnActivation
+    executeScanOnActivation,
 };

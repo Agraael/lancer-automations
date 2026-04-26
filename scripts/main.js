@@ -1573,11 +1573,33 @@ function deserializeTriggerData(data) {
 }
 
 /**
+ * Send a GM-delegated socket request and await an `<action>Ack` response.
+ * Times out after `timeoutMs` (default 5s) and resolves anyway with a warn.
+ */
+export async function socketRequestWithAck(action, payload, { timeoutMs = 5000 } = {}) {
+    const requestId = `${action}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const ackPromise = new Promise((resolve) => {
+        _pendingFlowWaits.set(requestId, resolve);
+        setTimeout(() => {
+            if (_pendingFlowWaits.has(requestId)) {
+                _pendingFlowWaits.delete(requestId);
+                console.warn(`lancer-automations | ${action} GM ack timed out after ${timeoutMs}ms`);
+                resolve();
+            }
+        }, timeoutMs);
+    });
+    game.socket.emit('module.lancer-automations', { action, payload: { ...payload, requestId } });
+    await ackPromise;
+}
+
+/**
  * setFlag on a token, falling back to GM-delegated socket call when the user
- * lacks write perms on the token. `value === undefined` unsets the flag.
+ * lacks write perms. `value === undefined` unsets. Awaits the GM ack so callers
+ * can rely on `getFlag` returning the new value after this resolves.
  */
 export async function setTokenFlag(tokenDoc, ns, key, value) {
-    if (!tokenDoc) return;
+    if (!tokenDoc)
+        return;
     const td = tokenDoc.document ?? tokenDoc;
     if (game.user.isGM || td?.isOwner) {
         if (value === undefined)
@@ -1586,15 +1608,12 @@ export async function setTokenFlag(tokenDoc, ns, key, value) {
             await td.setFlag(ns, key, value);
         return;
     }
-    game.socket.emit('module.lancer-automations', {
-        action: 'setTokenFlag',
-        payload: {
-            sceneId: td.parent?.id ?? canvas?.scene?.id,
-            tokenId: td.id,
-            ns,
-            key,
-            value,
-        },
+    await socketRequestWithAck('setTokenFlag', {
+        sceneId: td.parent?.id ?? canvas?.scene?.id,
+        tokenId: td.id,
+        ns,
+        key,
+        value,
     });
 }
 
@@ -1645,19 +1664,89 @@ async function handleSocketEvent({ action, payload }) {
         const scene = game.scenes.get(payload.sceneId) ?? canvas.scene;
         const tokenDoc = scene?.tokens.get(payload.tokenId);
         if (tokenDoc) {
-            if (payload.value === undefined)
-                await tokenDoc.unsetFlag(payload.ns, payload.key);
-            else
-                await tokenDoc.setFlag(payload.ns, payload.key, payload.value);
+            try {
+                if (payload.value === undefined)
+                    await tokenDoc.unsetFlag(payload.ns, payload.key);
+                else
+                    await tokenDoc.setFlag(payload.ns, payload.key, payload.value);
+            } catch (e) {
+                console.warn('lancer-automations | setTokenFlag GM-side failed:', e);
+            }
+        }
+        if (payload.requestId) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'setTokenFlagAck',
+                payload: { requestId: payload.requestId }
+            });
+        }
+    } else if (action === 'setTokenFlagAck') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
         }
     } else if (action === 'setEffect' || action === 'setFlaggedEffect') {
-        setEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
+        if (!game.user.isGM)
+            return;
+        try {
+            await setEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
+        } catch (e) {
+            console.warn('lancer-automations | setEffect GM-side failed:', e);
+        }
+        if (payload.requestId) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'setEffectAck',
+                payload: { requestId: payload.requestId }
+            });
+        }
+    } else if (action === 'setEffectAck') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
+        }
     } else if (action === 'removeEffect' || action === 'removeFlaggedEffect') {
-        removeEffectsByName(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
-    } else if (action === 'removeEffect') {
+        if (!game.user.isGM)
+            return;
+        try {
+            await removeEffectsByName(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
+        } catch (e) {
+            console.warn('lancer-automations | removeEffect GM-side failed:', e);
+        }
+        if (payload.requestId) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'removeEffectAck',
+                payload: { requestId: payload.requestId }
+            });
+        }
+    } else if (action === 'removeEffectAck') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
+        }
+    } else if (action === 'removeEffectById') {
+        if (!game.user.isGM)
+            return;
         const target = canvas.tokens.get(payload.targetID);
         if (target?.actor) {
-            target.actor.deleteEmbeddedDocuments("ActiveEffect", [payload.effectID]);
+            try {
+                await target.actor.deleteEmbeddedDocuments('ActiveEffect', [payload.effectID]);
+            } catch (e) {
+                console.warn('lancer-automations | removeEffectById GM-side failed:', e);
+            }
+        }
+        if (payload.requestId) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'removeEffectByIdAck',
+                payload: { requestId: payload.requestId }
+            });
+        }
+    } else if (action === 'removeEffectByIdAck') {
+        const resolve = _pendingFlowWaits.get(payload.requestId);
+        if (resolve) {
+            _pendingFlowWaits.delete(payload.requestId);
+            resolve();
         }
     } else if (action === 'preLoadImageForAll') {
         if (payload)
@@ -1741,7 +1830,7 @@ async function handleSocketEvent({ action, payload }) {
                     label: "Create Journal Entry",
                     callback: async (html) => {
                         const customName = (String)(html.find('[name="custom-journal-name"]').val()).trim();
-                        await performSystemScan(target, true, customName);
+                        await performSystemScan(target, true, customName, payload.ownership ?? null);
                         ui.notifications.info(`Journal entry created for ${payload.targetName}`);
                     }
                 },

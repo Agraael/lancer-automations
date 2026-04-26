@@ -59,16 +59,16 @@ const ACTION_FX_PREVIEW = {
     ram:          { src: 'modules/lancer-automations/FX/audio/ram.wav', scale: 0.5 },
     boost:        { src: 'modules/lancer-automations/FX/audio/boost.wav', scale: 0.3 },
     overchargeNpc:{ src: 'modules/lancer-weapon-fx/soundfx/Overcharge.ogg', scale: 0.5 },
-    shutDown:     { src: 'modules/lancer-automations/FX/audio/shutdown.wav', scale: 0.7 },
+    shutDown:     { src: 'modules/lancer-automations/FX/audio/shutdown.wav', scale: 0.4 },
     fall:         { src: 'modules/lancer-automations/FX/audio/fall.mp3', scale: 0.7 },
     fallImpact:   { src: 'modules/lancer-automations/FX/audio/IMPACT.mp3', scale: 0.5 },
     search:       { src: 'modules/lancer-automations/FX/audio/radar-4.wav', scale: 0.5 },
-    scan:         { src: 'modules/lancer-automations/FX/audio/scan.mp3', scale: 0.5 },
+    scan:         { src: 'modules/lancer-automations/FX/audio/scan.mp3', scale: 0.7 },
     targetSuccess:{ src: 'modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3', scale: 0.5 },
     targetFail:   { src: 'modules/lancer-automations/FX/audio/denyerror-sound.wav', scale: 0.5 },
     hide:         { src: 'modules/lancer-automations/FX/audio/PuffSmoke.wav', scale: 0.7 },
     defaultThrow: { src: 'modules/lancer-weapon-fx/soundfx/bladeswing.ogg', scale: 0.2 },
-    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.7 },
+    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.5 },
 };
 
 /** @param {string} action */

@@ -1,6 +1,448 @@
-/* Interactive Tools - Info Card Overlay Styles */
-/* Uses native Lancer classes for container, header, and buttons. */
-/* Only adds styles for card-specific elements that Lancer doesn't provide. */
+.la-scan-banner {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    background: var(--primary-color, #782e22);
+    color: #fff;
+    padding: 10px 14px;
+    margin: 0 0 10px;
+    border-radius: 4px;
+}
+
+.la-scan-banner-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.la-scan-banner-title {
+    font-weight: bold;
+    font-size: 1.05em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.la-scan-banner-subtitle {
+    font-size: 0.82em;
+    opacity: 0.9;
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+}
+
+.la-scan-portrait {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border: 2px solid #fff;
+    border-radius: 3px;
+    background: #1a1a1a;
+}
+
+.la-scan-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 10px;
+}
+
+.la-scan-journal-stats-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.la-scan-stat-cell {
+    flex: 1 1 80px;
+    min-width: 70px;
+    background: #f5f5f5;
+    border: 1px solid #999;
+    border-left: 3px solid var(--primary-color, #782e22);
+    border-radius: 3px;
+    padding: 4px 8px;
+    color: #222;
+    text-align: left;
+}
+
+/* Force dark text inside the chat scan card so Foundry's chat-message dark theme can't bleed through. */
+.chat-message .la-scan-chat,
+.chat-message .la-scan-chat * {
+    color: #111 !important;
+    opacity: 1 !important;
+}
+
+.chat-message .la-scan-chat .la-scan-banner,
+.chat-message .la-scan-chat .la-scan-banner * {
+    color: #fff !important;
+}
+
+.chat-message .la-scan-chat .la-scan-stat-cell {
+    background: #fff !important;
+    min-width: 0 !important;
+    padding: 3px 4px !important;
+    text-align: center !important;
+}
+
+.chat-message .la-scan-chat .la-scan-stat-value {
+    color: #111 !important;
+    font-size: 1em !important;
+    line-height: 1.15 !important;
+}
+
+.chat-message .la-scan-chat .la-scan-stat-label {
+    color: #333 !important;
+    font-size: 0.65em !important;
+    letter-spacing: 0.5px !important;
+}
+
+.chat-message .la-scan-chat .la-scan-row.la-scan-hase-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.chat-message .la-scan-chat .la-scan-row.la-scan-stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+
+.chat-message .la-scan-chat .la-scan-row.la-scan-stats2-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+}
+
+.chat-message .la-scan-chat .la-scan-row-label {
+    color: #fff !important;
+}
+
+.chat-message .la-scan-chat .la-scan-tag {
+    color: #111 !important;
+    background: #ececec !important;
+    border-color: #888 !important;
+}
+
+.chat-message .la-scan-chat .la-scan-open-btn,
+.chat-message .la-scan-chat .la-scan-open-btn * {
+    color: #fff !important;
+}
+
+.la-scan-stat-cell.la-scan-hase {
+    text-align: center;
+    border-left-width: 1px;
+    border-top: 3px solid var(--primary-color, #782e22);
+}
+
+.la-scan-stat-label {
+    font-size: 0.7em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+.la-stat-icon {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    vertical-align: -4px;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* SVG loaded via <img> can't inherit currentColor, so force white via filter for the red banner. */
+.la-scan-banner-subtitle .la-stat-icon {
+    filter: brightness(0) invert(1);
+    margin-right: 4px;
+    width: 16px;
+    height: 16px;
+    vertical-align: -3px;
+}
+
+.la-scan-stat-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.la-scan-stat-icon-slot {
+    flex: 0 0 auto;
+    color: #777;
+    line-height: 0;
+}
+
+.la-scan-stat-cell.la-scan-hase .la-scan-stat-value-row {
+    justify-content: center;
+    position: relative;
+}
+
+.la-scan-stat-cell.la-scan-hase .la-scan-stat-icon-slot {
+    position: absolute;
+    right: 0;
+}
+
+.la-scan-stat-value {
+    font-size: 1.15em;
+    font-weight: bold;
+    line-height: 1.3;
+}
+
+.la-scan-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 12px 0 6px;
+    font-size: 0.95em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--primary-color, #782e22);
+    border-bottom: 1px solid #999;
+    padding-bottom: 3px;
+}
+
+.la-scan-section-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 2px;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.la-scan-owner-section {
+    margin-top: 12px;
+}
+
+.la-scan-owner-header {
+    font-size: 0.85em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #555;
+    border-bottom: 1px solid #999;
+    padding-bottom: 3px;
+    margin-bottom: 6px;
+}
+
+.la-scan-owner-grid {
+    display: grid;
+    gap: 4px 10px;
+}
+
+.la-scan-owner-row {
+    display: grid;
+    grid-template-columns: 1fr 140px;
+    align-items: center;
+    gap: 8px;
+}
+
+.la-scan-owner-name {
+    font-size: 0.9em;
+    color: #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.la-scan-owner-row.la-scan-owner-all .la-scan-owner-name {
+    font-weight: 700;
+}
+
+.la-scan-owner-row.la-scan-owner-group .la-scan-owner-name {
+    font-style: italic;
+    color: #444;
+}
+
+.la-scan-owner-row.la-scan-owner-all,
+.la-scan-owner-row.la-scan-owner-group + .la-scan-owner-row:not(.la-scan-owner-group) {
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #c5c5c5;
+    margin-bottom: 2px;
+}
+
+.la-scan-owner-select {
+    height: 26px;
+    padding: 2px 6px;
+    border: 1px solid #999;
+    border-radius: 3px;
+    background: #fff;
+    font-size: 0.85em;
+}
+
+details.la-scan-collapsible {
+    padding: 0;
+}
+
+details.la-scan-collapsible > .la-scan-card-summary {
+    cursor: pointer;
+    padding: 6px 26px 6px 10px;
+    list-style: none;
+    position: relative;
+}
+
+details.la-scan-collapsible > .la-scan-card-summary::-webkit-details-marker {
+    display: none;
+}
+
+details.la-scan-collapsible > .la-scan-card-summary::after {
+    content: '\25B6';
+    position: absolute;
+    right: 9px;
+    top: 8px;
+    font-size: 0.7em;
+    color: #888;
+    transition: transform 0.15s;
+}
+
+details.la-scan-collapsible[open] > .la-scan-card-summary::after {
+    transform: rotate(90deg);
+}
+
+details.la-scan-collapsible[open] > .la-scan-card-summary {
+    border-bottom: 1px solid #ddd;
+}
+
+details.la-scan-collapsible > .la-scan-card-details {
+    padding: 6px 10px;
+}
+
+details.la-scan-collapsible[open] > .la-scan-card-details {
+    animation: la-scan-card-open 0.18s ease-out;
+}
+
+@keyframes la-scan-card-open {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.la-scan-card {
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    border-left: 3px solid #999;
+    border-radius: 3px;
+    padding: 6px 10px;
+    margin: 0 0 6px;
+}
+
+.la-scan-card-title {
+    font-weight: bold;
+    font-size: 0.95em;
+    color: #222;
+    line-height: 1.3;
+}
+
+.la-scan-card-subtitle {
+    font-size: 0.75em;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.la-scan-card-body {
+    font-size: 0.88em;
+    color: #333;
+    line-height: 1.45;
+}
+
+.la-scan-row-label {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #fff;
+    font-size: 0.65em;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.la-scan-tag {
+    display: inline-block;
+    background: rgba(120, 46, 34, 0.08);
+    border: 1px solid #aaa;
+    border-radius: 2px;
+    padding: 0 5px;
+    margin: 1px 2px 1px 0;
+    font-size: 0.75em;
+    color: #444;
+    white-space: nowrap;
+}
+
+.la-scan-mod {
+    margin-top: 5px;
+    padding: 4px 8px;
+    border-left: 3px solid #ff8c00;
+    background: rgba(255, 140, 0, 0.06);
+    font-size: 0.85em;
+}
+
+.la-scan-mod-name {
+    font-weight: bold;
+    color: #b35900;
+}
+
+.la-scan-footer {
+    margin-top: 12px;
+    padding-top: 6px;
+    border-top: 1px solid #ccc;
+    font-size: 0.72em;
+    color: #888;
+    font-style: italic;
+}
+
+.la-scan-bar {
+    margin-top: 3px;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.la-scan-bar-fill {
+    height: 100%;
+    background: var(--primary-color, #782e22);
+}
+
+.la-scan-bar-fill.la-scan-bar-heat {
+    background: #d35400;
+}
+
+.la-scan-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 10px;
+    background: var(--primary-color, #782e22);
+    color: #fff !important;
+    border: 1px solid #5a221a;
+    border-radius: 3px;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.la-scan-open-btn:hover {
+    background: #8b3528;
+    text-decoration: none;
+}
+
 
 .la-compact-bool:hover {
     background: rgba(120, 46, 34, 0.08);
