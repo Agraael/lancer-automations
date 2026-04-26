@@ -703,8 +703,6 @@ export function registerTourBootstrap() {
 
 // Anonymous install counter, fired once on first-run.
 function _pingNewInstallCounter() {
-    fetch('https://api.counterapi.dev/v2/cedric-cescuttis-team-3920/first-counter-3920/up', {
-        method: 'GET',
-        headers: { Authorization: 'Bearer ut_3RernvBSpISSvTmIc7IqLPR6UXrtZJmM9Y9zrL77' },
-    }).catch(() => { /* offline / blocked, ignore */ });
+    fetch('https://api.counterapi.dev/v2/cedric-cescuttis-team-3920/first-counter-3920/up')
+        .catch(() => { /* offline / blocked, ignore */ });
 }
