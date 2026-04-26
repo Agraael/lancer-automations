@@ -225,7 +225,9 @@ Hooks.on('targetToken', (_user, _token, targeted) => {
     playUiSound(targeted ? 'tokenTarget' : 'tokenUntarget');
 });
 
-Hooks.on('updateToken', (_doc, change) => {
+Hooks.on('updateToken', (_doc, change, options) => {
+    if (options?.teleport)
+        return;
     if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
         playUiSound('tokenMove');
 });

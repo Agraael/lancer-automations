@@ -68,7 +68,7 @@ const ACTION_FX_PREVIEW = {
     targetFail:   { src: 'modules/lancer-automations/FX/audio/denyerror-sound.wav', scale: 0.5 },
     hide:         { src: 'modules/lancer-automations/FX/audio/PuffSmoke.wav', scale: 0.7 },
     defaultThrow: { src: 'modules/lancer-weapon-fx/soundfx/bladeswing.ogg', scale: 0.2 },
-    teleport:     { src: 'modules/lancer-automations/FX/audio/energy-impact-pure-power.mp3', scale: 0.5 },
+    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.7 },
 };
 
 /** @param {string} action */
@@ -347,12 +347,12 @@ export async function playTeleportFX(caster) {
     const fx = _weaponFx();
     await Sequencer.Preloader.preloadForClients([
         'modules/lancer-automations/FX/svg/Teleport.svg',
-        'modules/lancer-automations/FX/audio/energy-impact-pure-power.mp3',
+        'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/energy-impact-pure-power.mp3')
-        .volume(fx ? _vol(fx, 'teleport', 0.5) : 0.5);
+        .file('modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav')
+        .volume(fx ? _vol(fx, 'teleport', 0.7) : 0.7);
     await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Teleport.svg').play();
 }
 

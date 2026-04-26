@@ -1248,13 +1248,11 @@ export async function moveToken(token, options = {}) {
     const endCenter = token.getCenterPoint(destTopLeft);
     const moveCost = options.cost ?? getDistanceTokenToPoint(endCenter, token);
     const tokenSize = Math.max(1, token.document.width, token.document.height) * canvas.grid.size;
-    const weaponFx = game.modules.get("lancer-weapon-fx");
-    // Sequencer VFX (teleport only): impact at origin and destination
+    // Teleport-only impact visuals at origin and destination. Audio is owned
+    // by playTeleportFX (single source, mute-toggle aware).
     if (options.teleport && typeof Sequencer !== 'undefined') {
         // @ts-ignore
         new Sequence()
-            .sound("modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav")
-            .volume(weaponFx.api.getEffectVolume(0.7))
             .effect("jb2a.impact.003.yellow")
             .atLocation(startCenter)
             .size(tokenSize * 3)
