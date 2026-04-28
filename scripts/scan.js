@@ -9,6 +9,7 @@ const TPL = {
     chooser:   'modules/lancer-automations/templates/scan-chooser.html',
     sysOpts:   'modules/lancer-automations/templates/scan-system-options.html',
     gmInput:   'modules/lancer-automations/templates/scan-gm-input.html',
+    generate:  'modules/lancer-automations/templates/scan-generate.html',
 };
 
 const SECTION_COLORS = {
@@ -31,7 +32,8 @@ const NAME_PREFIX = 'SCAN: ';
 const NUMBER_PADDING = 3;
 
 function _fmtTags(tags) {
-    if (!tags?.length) return [];
+    if (!tags?.length)
+        return [];
     return tags.map((t) => {
         const baseName = t.name ?? t.lid?.replace(/^tg_/, '') ?? '';
         return t.val !== undefined && t.val !== null && String(t.val).length
@@ -41,17 +43,20 @@ function _fmtTags(tags) {
 }
 
 function _fmtRanges(ranges) {
-    if (!ranges?.length) return [];
+    if (!ranges?.length)
+        return [];
     return ranges.map((r) => ({ type: r.type, val: r.val }));
 }
 
 function _fmtDamages(damages) {
-    if (!damages?.length) return [];
+    if (!damages?.length)
+        return [];
     return damages.map((d) => ({ type: d.type, val: d.val }));
 }
 
 function _formatActions(actions) {
-    if (!actions?.length) return [];
+    if (!actions?.length)
+        return [];
     return actions.map((a) => ({
         name: a.name,
         activation: a.activation,
@@ -62,9 +67,11 @@ function _formatActions(actions) {
 
 function _buildMechWeapon(slot) {
     const weaponData = slot.weapon?.value;
-    if (!weaponData) return null;
+    if (!weaponData)
+        return null;
     const profile = weaponData.system.profiles?.[weaponData.system.selected_profile_index || 0];
-    if (!profile) return null;
+    if (!profile)
+        return null;
     const w = {
         name: weaponData.name,
         subtitle: [weaponData.system.size, profile.type].filter(Boolean).join(' · '),
@@ -91,7 +98,8 @@ function _buildMechWeapon(slot) {
 
 function _buildMechSystem(sysObj) {
     const sysData = sysObj.value;
-    if (!sysData) return null;
+    if (!sysData)
+        return null;
     return {
         name: sysData.name,
         subtitle: [sysData.system.type, sysData.system.sp ? `${sysData.system.sp} SP` : null].filter(Boolean).join(' · '),
@@ -124,7 +132,8 @@ function _buildNpcFeature(item, tier) {
         return { isExoticUnknown: true, name: 'UNKNOWN EXOTIC SYSTEM', description: '???' };
     }
     let desc = item.system.effect || 'No description given.';
-    if (item.system.trigger) desc = `<strong>Trigger:</strong> ${item.system.trigger}<br>${desc}`;
+    if (item.system.trigger)
+        desc = `<strong>Trigger:</strong> ${item.system.trigger}<br>${desc}`;
     return {
         isExoticUnknown: false,
         name: item.name,
@@ -168,7 +177,8 @@ function _getOwnerRows() {
     if (game.modules.get('player-groups')?.active) {
         const groups = game.settings.get('player-groups', 'groups') ?? {};
         for (const g of Object.values(groups)) {
-            if (g?.id) rows.push({ kind: 'group', id: g.id, key: `g-${g.id}`, name: g.name || 'Unnamed Group', isGroup: true });
+            if (g?.id)
+                rows.push({ kind: 'group', id: g.id, key: `g-${g.id}`, name: g.name || 'Unnamed Group', isGroup: true });
         }
     }
     for (const u of game.users.filter((u) => !u.isGM))
@@ -182,30 +192,37 @@ function _buildOwnershipFromForm(html) {
     const userPicks = {};
     html.find('.la-scan-owner-select').each(function () {
         const raw = String(this.value ?? '');
-        if (raw === '') return;
+        if (raw === '')
+            return;
         const lvl = Number(raw);
         const kind = this.dataset.kind;
         const id = this.dataset.id;
-        if (kind === 'all') ownership.default = lvl;
-        else if (kind === 'group') groupPicks.push({ id, lvl });
-        else if (kind === 'user') userPicks[id] = lvl;
+        if (kind === 'all')
+            ownership.default = lvl;
+        else if (kind === 'group')
+            groupPicks.push({ id, lvl });
+        else if (kind === 'user')
+            userPicks[id] = lvl;
     });
     if (groupPicks.length) {
         const groups = game.settings.get('player-groups', 'groups') ?? {};
         for (const { id, lvl } of groupPicks) {
             for (const uid of groups[id]?.members ?? []) {
-                if (userPicks[uid] === undefined) ownership[uid] = lvl;
+                if (userPicks[uid] === undefined)
+                    ownership[uid] = lvl;
             }
         }
     }
-    for (const [uid, lvl] of Object.entries(userPicks)) ownership[uid] = lvl;
+    for (const [uid, lvl] of Object.entries(userPicks))
+        ownership[uid] = lvl;
     return ownership;
 }
 
 function _getAllJournalsInFolder(folder) {
     let journals = [...folder.contents];
     const subfolders = game.folders.filter((f) => f.type === 'JournalEntry' && f.folder?.id === folder.id);
-    for (const sub of subfolders) journals = journals.concat(_getAllJournalsInFolder(sub));
+    for (const sub of subfolders)
+        journals = journals.concat(_getAllJournalsInFolder(sub));
     return journals;
 }
 
@@ -251,14 +268,16 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         for (const mount of actor.system.loadout.weapon_mounts ?? []) {
             for (const slot of mount.slots ?? []) {
                 const w = _buildMechWeapon(slot);
-                if (w) data.weapons.push(w);
+                if (w)
+                    data.weapons.push(w);
             }
         }
 
         const allSystems = [];
         for (const s of actor.system.loadout.systems ?? []) {
             const sys = _buildMechSystem(s);
-            if (sys) allSystems.push(sys);
+            if (sys)
+                allSystems.push(sys);
         }
         data.systems = allSystems.filter((s) => !s.isTech);
         data.techSystems = allSystems.filter((s) => s.isTech);
@@ -278,7 +297,8 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         const origins = [];
         for (const f of features) {
             const o = f.system.origin?.name;
-            if (o && !origins.includes(o)) origins.push(o);
+            if (o && !origins.includes(o))
+                origins.push(o);
         }
         data.npcFeatureGroups = origins.map((origin) => {
             const inOrigin = features.filter((f) => f.system.origin?.name === origin);
@@ -358,7 +378,8 @@ function _buildScanData(target, customName = '', scanIndex = '') {
 
 export async function performSystemScan(target, createJournal = false, customName = '', ownership = null) {
     const actor = target.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
     console.log('lancer-automations | Scanning', target);
 
     let scanIndex = '';
@@ -384,7 +405,8 @@ export async function performSystemScan(target, createJournal = false, customNam
     });
 }
 
-async function createScanJournalEntry(target, customName = '', ownership = null) {
+/** @param {Token|TokenDocument} target @param {string} customName @param {object|null} ownership */
+export async function createScanJournalEntry(target, customName = '', ownership = null) {
     if (!JournalEntry.canUserCreate(game.user)) {
         ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
         return null;
@@ -440,7 +462,16 @@ async function createScanJournalEntry(target, customName = '', ownership = null)
     }
 
     const finalOwnership = ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
-    await entry.update({ ownership: finalOwnership });
+    await entry.update({
+        ownership: finalOwnership,
+        'flags.lancer-automations.scan': {
+            actorUuid: actor.uuid,
+            actorName: actor.name,
+            actorImg: actor.img,
+            scanIndex,
+            scannedAt: Date.now(),
+        },
+    });
     entry.sheet.render(false);
     return { scanIndex, uuid: entry.uuid };
 }
@@ -558,24 +589,31 @@ async function showSystemScanDialog(targets) {
 
             const refreshGroup = (gid) => {
                 const gSel = groupSels.find((s) => s.dataset.id === gid);
-                if (!gSel) return;
+                if (!gSel)
+                    return;
                 const members = membersByGroup.get(gid) ?? [];
                 let shared;
                 for (const uid of members) {
                     const uSel = userSels.find((s) => s.dataset.id === uid);
-                    if (!uSel) continue;
-                    if (shared === undefined) shared = uSel.value;
-                    else if (shared !== uSel.value) { shared = null; break; }
+                    if (!uSel)
+                        continue;
+                    if (shared === undefined)
+                        shared = uSel.value;
+                    else if (shared !== uSel.value) {
+                        shared = null; break;
+                    }
                 }
                 gSel.value = shared == null ? '' : shared;
             };
 
             for (const gSel of groupSels) {
                 gSel.addEventListener('change', () => {
-                    if (gSel.value === '') return;
+                    if (gSel.value === '')
+                        return;
                     for (const uid of membersByGroup.get(gSel.dataset.id) ?? []) {
                         const uSel = userSels.find((s) => s.dataset.id === uid);
-                        if (uSel) uSel.value = gSel.value;
+                        if (uSel)
+                            uSel.value = gSel.value;
                     }
                 });
             }
@@ -583,7 +621,8 @@ async function showSystemScanDialog(targets) {
                 uSel.addEventListener('change', () => {
                     const uid = uSel.dataset.id;
                     for (const [gid, members] of membersByGroup) {
-                        if (members.includes(uid)) refreshGroup(gid);
+                        if (members.includes(uid))
+                            refreshGroup(gid);
                     }
                 });
             }
@@ -674,17 +713,201 @@ export async function executeScanOnActivation(reactorToken) {
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 540 }).render(true);
 }
 
+/** Helper: wire group→members propagation + members→group reflection on the ownership grid. */
+function _bindOwnerGroupSync(html) {
+    const root = html[0] ?? html;
+    const groupSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="group"]'));
+    const userSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="user"]'));
+    const groups = game.modules.get('player-groups')?.active
+        ? (game.settings.get('player-groups', 'groups') ?? {})
+        : {};
+    const membersByGroup = new Map(groupSels.map((s) => [s.dataset.id, groups[s.dataset.id]?.members ?? []]));
+    const refreshGroup = (gid) => {
+        const gSel = groupSels.find((s) => s.dataset.id === gid);
+        if (!gSel)
+            return;
+        const members = membersByGroup.get(gid) ?? [];
+        let shared;
+        for (const uid of members) {
+            const uSel = userSels.find((s) => s.dataset.id === uid);
+            if (!uSel)
+                continue;
+            if (shared === undefined)
+                shared = uSel.value;
+            else if (shared !== uSel.value) {
+                shared = null;
+                break;
+            }
+        }
+        gSel.value = shared == null ? '' : shared;
+    };
+    for (const gSel of groupSels) {
+        gSel.addEventListener('change', () => {
+            if (gSel.value === '')
+                return;
+            for (const uid of membersByGroup.get(gSel.dataset.id) ?? []) {
+                const uSel = userSels.find((s) => s.dataset.id === uid);
+                if (uSel)
+                    uSel.value = gSel.value;
+            }
+        });
+    }
+    for (const uSel of userSels) {
+        uSel.addEventListener('change', () => {
+            const uid = uSel.dataset.id;
+            for (const [gid, members] of membersByGroup) {
+                if (members.includes(uid))
+                    refreshGroup(gid);
+            }
+        });
+    }
+}
+
+/** TAH "Generate Scan" — picks chat-only / chat+journal / journal-only and runs the scan. */
+export async function executeGenerateScan(targetsArg) {
+    const targetArray = Array.isArray(targetsArg) ? targetsArg : [targetsArg];
+    if (!targetArray.length) {
+        ui.notifications.warn('No targets selected for Generate Scan.');
+        return;
+    }
+    const targetNames = targetArray.map((t) => t.name).join(', ');
+    const content = await renderTemplate(TPL.generate, {
+        targetNames,
+        isMulti: targetArray.length > 1,
+        ownerRows: _getOwnerRows(),
+    });
+
+    const dlg = new Dialog({
+        title: 'Generate Scan',
+        content,
+        buttons: {
+            ok: {
+                icon: '<i class="fas fa-check"></i>',
+                label: 'Generate',
+                callback: async (html) => {
+                    const $sel = html.find('.lancer-scaling-card.selected');
+                    const mode = String($sel.data('mode') ?? 'chat');
+                    const customName = String(html.find('[name="custom-journal-name"]').val() ?? '').trim();
+                    const ownership = _buildOwnershipFromForm(html);
+                    for (const target of targetArray) {
+                        if (mode === 'chat')
+                            await performSystemScan(target, false, customName);
+                        else if (mode === 'both')
+                            await performSystemScan(target, true, customName, ownership);
+                        else if (mode === 'journal')
+                            await createScanJournalEntry(target, customName, ownership);
+                    }
+                },
+            },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+        },
+        default: 'ok',
+        render: (html) => {
+            html.find('.lancer-scaling-card').first().addClass('selected');
+            html.find('.lancer-scaling-card').on('click', function () {
+                html.find('.lancer-scaling-card').removeClass('selected');
+                $(this).addClass('selected');
+                const mode = $(this).data('mode');
+                html.find('.la-scan-journal-options').toggle(mode === 'both' || mode === 'journal');
+                dlg.setPosition({ height: 'auto' });
+            });
+            _bindOwnerGroupSync(html);
+        },
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 580 });
+    dlg.render(true);
+}
+
 Hooks.on('renderChatMessage', (_msg, html) => {
     html.find('.la-scan-open-btn').on('click', async (ev) => {
         ev.preventDefault();
         const uuid = ev.currentTarget.dataset.journalUuid;
-        if (!uuid) return;
+        if (!uuid)
+            return;
         const doc = await fromUuid(uuid);
         if (doc?.sheet)
             doc.sheet.render(true);
     });
 });
 
+export async function regenerateScans(opts = {}) {
+    const { filter = null, dryRun = false } = opts;
+    const folder = game.folders.getName(FOLDER_NAME);
+    const journals = folder ? _getAllJournalsInFolder(folder) : [];
+    /** @type {{updated:string[], missing:string[], skipped:string[]}} */
+    const results = { updated: [], missing: [], skipped: [] };
+
+    for (const entry of journals) {
+        if (filter && !filter(entry)) {
+            results.skipped.push(entry.name);
+            continue;
+        }
+
+        const flag = entry.flags?.['lancer-automations']?.scan;
+        let actor = null;
+        if (flag?.actorUuid) {
+            try {
+                actor = /** @type {any} */ (await fromUuid(flag.actorUuid));
+            } catch { /* ignore */ }
+        }
+        if (!actor && flag?.actorName)
+            actor = game.actors.find((a) => a.name === flag.actorName);
+        if (!actor) {
+            const m = entry.name.match(/^SCAN:\s*\d+\s*-\s*(.+)$/);
+            if (m)
+                actor = game.actors.find((a) => a.name === m[1].trim());
+        }
+
+        if (!actor) {
+            results.missing.push(entry.name);
+            continue;
+        }
+
+        if (dryRun) {
+            results.updated.push(entry.name);
+            continue;
+        }
+
+        try {
+            const idxMatch = entry.name.match(/SCAN:\s*(\d+)/i);
+            const scanIndex = idxMatch ? idxMatch[1] : (flag?.scanIndex ?? '');
+            const data = _buildScanData(/** @type {any} */ ({ actor }), '', scanIndex);
+            const html = await renderTemplate(TPL.overview, data);
+
+            const pages = entry.pages.contents;
+            if (pages.length === 0) {
+                await entry.createEmbeddedDocuments('JournalEntryPage', [{
+                    name: entry.name, type: 'text', text: { content: html }, sort: 0,
+                }]);
+            } else {
+                await pages[0].update({ name: entry.name, text: { content: html } });
+                if (pages.length > 1)
+                    await entry.deleteEmbeddedDocuments('JournalEntryPage', pages.slice(1).map((p) => p.id));
+            }
+
+            await entry.update({
+                'flags.lancer-automations.scan': {
+                    actorUuid: actor.uuid,
+                    actorName: actor.name,
+                    actorImg: actor.img,
+                    scanIndex,
+                    scannedAt: flag?.scannedAt ?? Date.now(),
+                    regeneratedAt: Date.now(),
+                },
+            });
+            results.updated.push(entry.name);
+        } catch (e) {
+            console.error('lancer-automations | regenerateScans failed for', entry.name, e);
+            results.missing.push(entry.name);
+        }
+    }
+
+    ui.notifications.info(`Regenerated ${results.updated.length}, missing ${results.missing.length}, skipped ${results.skipped.length}.`);
+    console.log('lancer-automations | regenerateScans summary', results);
+    return results;
+}
+
 export const ScanAPI = {
     executeScanOnActivation,
+    executeGenerateScan,
+    regenerateScans,
 };

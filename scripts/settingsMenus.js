@@ -580,6 +580,8 @@ export class LancerAutomationsConfig extends FormApplication {
     constructor(...args) {
         super(...args);
         this._needsReload = false;
+        /** @type {Map<string, boolean>} label → collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
+        this._sectionStates = new Map();
     }
 
     static get defaultOptions() {
@@ -628,11 +630,16 @@ export class LancerAutomationsConfig extends FormApplication {
         });
         $html.find('h2.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h2) => {
             const $h2 = $(h2);
-            if ($h2.attr('data-collapsed') === 'true')
-                _toggleSection($h2, true);
+            const label = $h2.text().trim();
+            const collapsed = this._sectionStates.has(label)
+                ? this._sectionStates.get(label)
+                : $h2.attr('data-collapsed') === 'true';
+            _toggleSection($h2, collapsed);
         }).on('click', (/** @type {any} */ ev) => {
             const $h2 = $(ev.currentTarget);
-            _toggleSection($h2, $h2.attr('data-collapsed') !== 'true');
+            const next = $h2.attr('data-collapsed') !== 'true';
+            _toggleSection($h2, next);
+            this._sectionStates.set($h2.text().trim(), next);
         });
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);

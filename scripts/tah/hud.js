@@ -15,7 +15,9 @@ import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
 import { LogPanel } from './log-panel.js';
+import { GlossaryPanel } from './glossary-panel.js';
 import { playUiSound } from './sound.js';
+import { executeGenerateScan } from '../scan.js';
 
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
@@ -595,6 +597,8 @@ export class LancerHUD {
                 closeCol(c3);
                 closeCol(c4);
                 this._statusPanelInstance?.close();
+                this._logPanelInstance?.close();
+                this._glossaryPanelInstance?.close();
                 _clearC1Active();
                 $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
                     $(this).remove();
@@ -622,6 +626,11 @@ export class LancerHUD {
             cancelCollapse:  _cancelCollapse,
             scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
         });
+        this._glossaryPanelInstance = new GlossaryPanel({
+            el:    hud,
+            cancelCollapse:  _cancelCollapse,
+            scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
+        });
         hud.on('mouseleave', () => {
             if (!clickToOpen) {
                 _clearC1Active();
@@ -645,6 +654,8 @@ export class LancerHUD {
                 if (!$.contains(this._el[0], /** @type {Element} */ (/** @type {unknown} */ (ev.target))) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length) {
                     closeCol(c2); closeCol(c3); closeCol(c4);
                     this._statusPanelInstance?.close();
+                    this._logPanelInstance?.close();
+                    this._glossaryPanelInstance?.close();
                     _clearC1Active();
                     $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function() {
                         $(this).remove();
@@ -856,7 +867,7 @@ export class LancerHUD {
                 continue;
             }
             const rawChildren = item.getChildren ? item.getChildren() : null;
-            const hasChildren = rawChildren !== null || !!item.isLogPanel;
+            const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
 
@@ -880,6 +891,8 @@ export class LancerHUD {
                     if (item.isLogPanel) {
                         if (this._statusPanelInstance?.isVisible)
                             this._statusPanelInstance.close();
+                        if (this._glossaryPanelInstance?.isVisible)
+                            this._glossaryPanelInstance.close();
                         col.find('.la-hud-active').each(function() {
                             const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
                         });
@@ -888,8 +901,23 @@ export class LancerHUD {
                         this._logPanelInstance?.open(row);
                         return;
                     }
+                    if (item.isGlossaryPanel) {
+                        if (this._statusPanelInstance?.isVisible)
+                            this._statusPanelInstance.close();
+                        if (this._logPanelInstance?.isVisible)
+                            this._logPanelInstance.close();
+                        col.find('.la-hud-active').each(function() {
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                        });
+                        closeCol(this._c3, 80);
+                        closeCol(this._c4, 80);
+                        this._glossaryPanelInstance?.open(row);
+                        return;
+                    }
                     if (this._logPanelInstance?.isVisible)
                         this._logPanelInstance.close();
+                    if (this._glossaryPanelInstance?.isVisible)
+                        this._glossaryPanelInstance.close();
                     if (col === this._c2 && !hasChildren) {
                         col.find('.la-hud-active').each(function() {
                             const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
@@ -959,7 +987,7 @@ export class LancerHUD {
                 row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
             }
-            if (hasChildren && !item.isLogPanel) {
+            if (hasChildren && !item.isLogPanel && !item.isGlossaryPanel) {
                 const openChild = () => {
                     if (col === this._c2 && row.hasClass('la-hud-active') && this._c3.is(':visible')) {
                         if (this._clickToOpen) {
@@ -1565,6 +1593,7 @@ export class LancerHUD {
                 { label: 'Recharge', icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginRechargeFlow() },
                 { label: 'Reload Weapon', icon: 'modules/lancer-automations/icons/reload.svg',       onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t) },
             ] : []),
+            { label: 'Generate Scan', icon: 'modules/lancer-automations/icons/passport.svg', onClick: () => executeGenerateScan(this._tokens?.length ? this._tokens : [token]) },
             ...(actor?.system?.overcharge_sequence ? (() => {
                 const ocSeq = actor.system.overcharge_sequence.split(',').map(s => s.trim());
                 return [{
@@ -1747,6 +1776,7 @@ export class LancerHUD {
                 { label: 'Movement',  childColLabel: 'Movement',  getChildren: () => movementItems },
                 ...(rangeItems.length > 0 ? [{ label: 'Ranges', childColLabel: 'Ranges', getChildren: () => rangeItems }] : []),
                 { label: 'Log', isLogPanel: true },
+                { label: 'Glossary', isGlossaryPanel: true },
                 { label: 'Misc',
                     childColLabel: 'Misc',
                     getChildren: () => [
@@ -1766,6 +1796,11 @@ export class LancerHUD {
                             icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                             onClick: () => {
                                 const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; api?.openAddReserveDialog?.(token);
+                            } },
+                        { label: 'Rest',
+                            icon: 'modules/lancer-automations/icons/night-sleep.svg',
+                            onClick: () => {
+                                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; api?.executeRest?.(token);
                             } },
                     ] },
             ],

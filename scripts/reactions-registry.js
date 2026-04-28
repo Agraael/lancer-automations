@@ -260,6 +260,7 @@ export function getDefaultGeneralReactionRegistry() {
                 checkReaction: true,
                 triggerSelf: true,
                 triggerOther: false,
+                outOfCombat: true,
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],

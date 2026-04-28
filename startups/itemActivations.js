@@ -3574,7 +3574,7 @@ api.registerDefaultGeneralReactions({
                         return;
                     _guardianAuraPending.add(reactorToken.id);
                     try {
-                        await api.createAura(reactorToken, {
+                        await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Guardian",
                             unified: false,
                             radius: "0",
@@ -3586,7 +3586,7 @@ api.registerDefaultGeneralReactions({
                             fillType: 0,
                             animation: false,
                             nonOwnerVisibility: { default: true }
-                        });
+                        }));
                     } finally {
                         _guardianAuraPending.delete(reactorToken.id);
                     }

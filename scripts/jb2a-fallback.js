@@ -22,6 +22,7 @@ const JB2A_FALLBACKS = {
     'jb2a.static_electricity.03':                { src: 'jb2a.static_electricity.03.blue' },
     'jb2a.static_electricity.03.blue02':         { src: 'jb2a.static_electricity.03.blue', tint: 0x2040c0 },
     'jb2a.static_electricity.03.green02':        { src: 'jb2a.static_electricity.03.blue', tint: 0x208030 },
+    'jb2a.static_electricity.03.dark_red':       { src: 'jb2a.static_electricity.03.blue', tint: 0x802020 },
     'jb2a.greatsword.throw':                     { src: 'jb2a.dagger.throw' },
 
     'jb2a.impact.003.yellow':  { src: 'jb2a.impact.003.blue', tint: 0xffcc33 },
@@ -37,6 +38,7 @@ const JB2A_FALLBACKS = {
     'jb2a.template_circle.out_pulse.02.burst.greenorange': { src: 'jb2a.template_circle.out_pulse.02.burst.bluewhite', tint: 0xff8800 },
 
     'jb2a.markers.chain.standard.complete.02.grey': { src: 'jb2a.markers.chain.standard.complete.02.red', tint: 0x888888 },
+    
 };
 
 const PLACEHOLDER = 'modules/lancer-automations/FX/Debugempty.png';

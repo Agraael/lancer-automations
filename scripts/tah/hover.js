@@ -1,6 +1,7 @@
 /*global game, canvas, Hooks, foundry */
 
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus, getWeaponProfiles_WithBonus } from '../misc-tools.js';
+import { scaleAuraStroke as _scaleAuraStroke } from '../aura.js';
 
 // ── LA_range_preview aura ────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ async function ensureRangePreviewAura(tokenDoc) {
     const aura = foundry.utils.deepClone(RANGE_PREVIEW_TEMPLATE);
     aura.id = foundry.utils.randomID();
     aura.radius = '1';
+    _scaleAuraStroke(aura);
     await tokenDoc.setFlag('grid-aware-auras', 'auras', [...auras, aura]);
 }
 
@@ -310,7 +312,7 @@ function _buildPersistentTemplate(auraName) {
         opacity = game.settings.get('lancer-automations', def.settingOpacity) ?? 1;
     } catch { /* use defaults */ }
 
-    return {
+    const tpl = {
         _v: 1,
         unified: true,
         name: auraName,
@@ -347,6 +349,8 @@ function _buildPersistentTemplate(auraName) {
         macros: [],
         terrainHeightTools: getTHTConfig()
     };
+    _scaleAuraStroke(tpl);
+    return tpl;
 }
 
 async function ensurePersistentAura(tokenDoc, auraName) {

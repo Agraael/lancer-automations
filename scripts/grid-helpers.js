@@ -194,6 +194,15 @@ export function measureGridDistance(c1, c2) {
 }
 
 export function getOccupiedOffsets(token, overridePos = null) {
+    if (typeof token.getOccupiedSpaces === 'function') {
+        const dx = overridePos ? (overridePos.x - token.x) : 0;
+        const dy = overridePos ? (overridePos.y - token.y) : 0;
+        return token.getOccupiedSpaces().map(p => {
+            const o = canvas.grid.getOffset({ x: p.x + dx, y: p.y + dy });
+            return { col: o.j, row: o.i };
+        });
+    }
+
     const doc = token.document;
     const x = overridePos ? overridePos.x : doc.x;
     const y = overridePos ? overridePos.y : doc.y;

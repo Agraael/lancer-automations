@@ -893,37 +893,6 @@ function isEnkiduFrame(actor) {
     return actor?.items?.filter(i => i.system?.lid === 'mf_tokugawa_alt_enkidu').length > 0;
 }
 
-async function applyFX(token, statusName, enable) {
-    if (!isMasterEnabled())
-        return;
-    if (typeof TokenMagic === 'undefined')
-        return;
-
-    const entry = EFFECT_MAP.find(e => e.name === statusName);
-    if (!entry)
-        return;
-    if (!isFXEnabled(entry.key))
-        return;
-
-    // Enkidu frame gets a purple Danger Zone instead of orange
-    let preset = entry.preset;
-    if (entry.key === 'dangerZone' && isEnkiduFrame(token.actor)) {
-        preset = enkiduDangerZoneEffect;
-    }
-
-    if (enable) {
-        if (!TokenMagic.hasFilterId(token, entry.filterIds[0])) {
-            await token.TMFXaddUpdateFilters(preset);
-        }
-    } else {
-        for (const filterId of entry.filterIds) {
-            if (TokenMagic.hasFilterId(token, filterId)) {
-                await token.TMFXdeleteFilters(filterId);
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Auto-status logic
 // ---------------------------------------------------------------------------
@@ -966,22 +935,16 @@ async function autoStatusInfection(actor) {
 // Hook handlers
 // ---------------------------------------------------------------------------
 
-function onCreateActiveEffect(document, _change, userId) {
-    if (game.userId !== userId || !isMasterEnabled())
+function onCreateActiveEffect(document, _change, _userId) {
+    if (!isMasterEnabled())
         return;
-    const token = document.parent?.getActiveTokens?.()?.pop?.();
-    if (!token)
-        return;
-    applyFX(token, document.name, true);
+    reconcileStatusFX(document.parent);
 }
 
-function onDeleteActiveEffect(document, _change, userId) {
-    if (game.userId !== userId || !isMasterEnabled())
+function onDeleteActiveEffect(document, _change, _userId) {
+    if (!isMasterEnabled())
         return;
-    const token = document.parent?.getActiveTokens?.()?.pop?.();
-    if (!token)
-        return;
-    applyFX(token, document.name, false);
+    reconcileStatusFX(document.parent);
 }
 
 function onUpdateActor(actor, change, _options, userId) {
@@ -1038,6 +1001,54 @@ function blockQoLEffects() {
     }
 }
 
+// Sync TMFX filters with the actor's current AE state (add missing, remove orphans).
+// Debounced per actor to coalesce bursts and avoid races on token.flags.tokenmagic.filters.
+async function _doReconcileStatusFX(actor) {
+    if (!isMasterEnabled() || typeof TokenMagic === 'undefined' || !actor) {
+        return;
+    }
+    const tokens = actor.getActiveTokens?.() ?? [];
+    if (!tokens.length) {
+        return;
+    }
+    const aeNames = new Set((actor.effects ?? []).map(e => e.name));
+    for (const token of tokens) {
+        for (const entry of EFFECT_MAP) {
+            const wantFilter = aeNames.has(entry.name) && isFXEnabled(entry.key);
+            const hasFilter = entry.filterIds.some(fid => TokenMagic.hasFilterId(token, fid));
+            if (wantFilter && !hasFilter) {
+                let preset = entry.preset;
+                if (entry.key === 'dangerZone' && isEnkiduFrame(actor)) {
+                    preset = enkiduDangerZoneEffect;
+                }
+                await token.TMFXaddUpdateFilters(preset);
+            } else if (!wantFilter && hasFilter) {
+                for (const filterId of entry.filterIds) {
+                    if (TokenMagic.hasFilterId(token, filterId)) {
+                        await token.TMFXdeleteFilters(filterId);
+                    }
+                }
+            }
+        }
+    }
+}
+
+const _reconcileTimers = new Map();
+function reconcileStatusFX(actor) {
+    if (!actor?.id) {
+        return;
+    }
+    const prev = _reconcileTimers.get(actor.id);
+    if (prev) {
+        clearTimeout(prev);
+    }
+    const timer = setTimeout(() => {
+        _reconcileTimers.delete(actor.id);
+        _doReconcileStatusFX(actor);
+    }, 50);
+    _reconcileTimers.set(actor.id, timer);
+}
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -1048,7 +1059,10 @@ export function initStatusFX() {
 
     Hooks.on('createActiveEffect', onCreateActiveEffect);
     Hooks.on('deleteActiveEffect', onDeleteActiveEffect);
-    Hooks.on('updateActor', onUpdateActor);
+    Hooks.on('updateActor', (actor, _change, _options, _userId) => {
+        onUpdateActor(actor, _change, _options, _userId);
+        reconcileStatusFX(actor);
+    });
 
     blockQoLEffects();
 

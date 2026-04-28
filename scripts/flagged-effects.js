@@ -493,6 +493,16 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         return [];
     }
 
+    const hasLimitedDuration = duration && (
+        ['start', 'end', 'round'].includes(duration.label) ||
+        (duration.turns != null && duration.turns !== 0) ||
+        (duration.rounds != null && duration.rounds !== 0)
+    );
+    if (hasLimitedDuration && !game.combat?.started) {
+        const names = effectsToApply.map(e => typeof e === 'string' ? e : e?.name).filter(Boolean).join(', ');
+        ui.notifications.warn(`Out of combat: ${names} duration will not tick.`);
+    }
+
     const validTokens = [];
 
     for (const token of tokens) {

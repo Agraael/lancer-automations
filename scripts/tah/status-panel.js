@@ -524,11 +524,21 @@ export class StatusPanel {
         leftWrap.append(header, searchWrap, gridEl);
         panel.append(leftWrap, rightEl);
 
-        const topInHud  = anchorRow.offset().top - this._el.offset().top;
+        let topInHud  = anchorRow.offset().top - this._el.offset().top;
         const leftInHud = /** @type {any} */ (this._el.children().first()).outerWidth();
         panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
 
         this._el.append(panel);
+
+        // Clamp so the panel fits in the viewport; shift up if it would overflow the bottom.
+        const margin = 8;
+        const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
+        const hudTop = this._el.offset().top;
+        const maxTopInHud = window.innerHeight - margin - panelHeight - hudTop;
+        if (topInHud > maxTopInHud)
+            topInHud = Math.max(margin - hudTop, maxTopInHud);
+        panel.css({ top: topInHud });
+
         panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
         panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
         this._panel = panel;

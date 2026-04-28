@@ -1046,3 +1046,15 @@ Basically it works like Burn damage but for Heat. Check out https://cornylius.it
 ## Support
 
 For help or questions, drop by the [Pilot NET Discord](https://discord.com/invite/lancer).
+
+---
+
+## Acknowledgments
+
+Inspiration, reference code, and ideas drawn from the work of:
+
+- [Eranziel](https://github.com/Eranziel)
+- [mandatoryhashtags](https://github.com/mandatoryhashtags)
+- [caewok](https://github.com/caewok)
+- [Wibble199](https://github.com/Wibble199)
+- [csmcfarland](https://gitlab.com/csmcfarland)

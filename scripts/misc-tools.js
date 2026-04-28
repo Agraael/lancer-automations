@@ -391,6 +391,13 @@ export function isItemAvailable(item, reactionPath) {
 
 export function hasReactionAvailable(tokenOrActor) {
     const actor = tokenOrActor?.actor || tokenOrActor;
+    const tokenId = tokenOrActor?.id && tokenOrActor !== actor ? tokenOrActor.id : actor?.token?.id;
+    const combat = game.combat;
+    const inCombat = !!combat?.started && combat.combatants.some(c =>
+        (tokenId && c.tokenId === tokenId) || (actor && c.actor?.id === actor.id)
+    );
+    if (!inCombat)
+        return true;
     const reaction = actor?.system?.action_tracker?.reaction;
     return reaction !== undefined && Number(reaction) > 0;
 }
@@ -938,9 +945,7 @@ export async function executeReactorExplosion(token) {
         .effect("jb2a.ground_cracks.01.orange")
         .persist()
         .belowTokens()
-        .aboveLighting()
         .zIndex(1)
-        .xray()
         .randomRotation()
         .atLocation({ x: tokenCenterX, y: tokenCenterY })
         .scale(scaleFactor)
@@ -963,7 +968,6 @@ export async function executeReactorExplosion(token) {
         .belowTokens()
         .zIndex(0)
         .randomRotation()
-        .xray()
         .canvasPan()
         .delay(1000)
         .atLocation(tokenCenter)

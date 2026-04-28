@@ -174,8 +174,36 @@ export class LAAuras {
     }
 }
 
+/** Scene grid size relative to baseline (100 px) — multiply stroke / dash / texture-scale fields by this. */
+export function gridScale() {
+    const g = canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100;
+    return g / 100;
+}
+
+/** Scale lineWidth / lineDashSize / lineGapSize / fillTextureScale on an aura config in place. */
+export function scaleAuraStroke(aura) {
+    const s = gridScale();
+    if (s === 1)
+        return aura;
+    if (typeof aura.lineWidth === 'number')
+        aura.lineWidth = Math.max(1, Math.round(aura.lineWidth * s));
+    if (typeof aura.lineDashSize === 'number')
+        aura.lineDashSize = Math.max(1, Math.round(aura.lineDashSize * s));
+    if (typeof aura.lineGapSize === 'number')
+        aura.lineGapSize = Math.max(1, Math.round(aura.lineGapSize * s));
+    if (aura.fillTextureScale && typeof aura.fillTextureScale === 'object') {
+        if (typeof aura.fillTextureScale.x === 'number')
+            aura.fillTextureScale.x = Math.max(1, Math.round(aura.fillTextureScale.x * s));
+        if (typeof aura.fillTextureScale.y === 'number')
+            aura.fillTextureScale.y = Math.max(1, Math.round(aura.fillTextureScale.y * s));
+    }
+    return aura;
+}
+
 export const AurasAPI = {
     createAura: LAAuras.createAura,
     deleteAuras: LAAuras.deleteAuras,
-    findAura: LAAuras.findAura
+    findAura: LAAuras.findAura,
+    gridScale,
+    scaleAuraStroke,
 };

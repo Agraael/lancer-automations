@@ -1,0 +1,36 @@
+<div class="lancer-dialog-base la-rest-dialog la-rest-emergency">
+    <div class="lancer-dialog-header">
+        <div class="lancer-dialog-title">EMERGENCY RECOVERY :: {{mech.name}}</div>
+        {{#if pilot}}
+        <div class="lancer-dialog-subtitle">{{pilot.name}}{{#if pilot.callsign}} [{{pilot.callsign}}]{{/if}}</div>
+        {{/if}}
+    </div>
+
+    <div class="la-rest-emergency-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div>
+            <div class="la-rest-emergency-title">CATASTROPHIC DAMAGE DETECTED</div>
+            <div class="la-rest-emergency-sub">
+                Chassis recovery requires <b>4</b> repairs total. Contributions from allies&rsquo; recent rest reports are credited automatically.
+            </div>
+        </div>
+    </div>
+
+    <div class="la-rest-recovery-grid">
+        <div class="la-rest-recovery-cell">
+            <div class="la-rest-recovery-label">From Pilot</div>
+            <div class="la-rest-recovery-value">{{mech.repairs.value}}</div>
+        </div>
+        <div class="la-rest-recovery-cell">
+            <div class="la-rest-recovery-label">
+                Allied
+                <button type="button" class="la-rest-allied-refresh" title="Re-scan recent chat for contributions"><i class="fas fa-sync"></i></button>
+            </div>
+            <div class="la-rest-recovery-value" id="la-rest-allied-count">{{alliedRepairs}}</div>
+        </div>
+        <div class="la-rest-recovery-cell la-rest-recovery-required">
+            <div class="la-rest-recovery-label">Still Required</div>
+            <div class="la-rest-recovery-value" id="la-rest-required-count">4</div>
+        </div>
+    </div>
+</div>

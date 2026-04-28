@@ -88,26 +88,20 @@
     </div>
     {{#each weapons}}
     <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.weapon}};">
-        <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}{{#if unloaded}} <span style="font-size:0.78em;color:#b71c1c;">UNLOADED</span>{{/if}}</div>
-            {{#if subtitle}}<div class="la-scan-card-subtitle">{{subtitle}}</div>{{/if}}
-            {{#if ranges.length}}
-            <div style="margin:2px 0;">
-                <span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span>
-                {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+        <summary class="la-scan-card-summary la-scan-summary-weapon">
+            <div class="la-scan-summary-row">
+                <span class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}{{#if unloaded}} <span style="font-size:0.78em;color:#b71c1c;">UNLOADED</span>{{/if}}</span>
+                {{#if subtitle}}<span class="la-scan-card-subtitle">{{subtitle}}</span>{{/if}}
+                {{#if tags.length}}<span class="la-scan-tag-row">{{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}</span>{{/if}}
             </div>
-            {{/if}}
-            {{#if damages.length}}
-            <div style="margin:2px 0;">
-                <span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span>
-                {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            <div class="la-scan-summary-row">
+                {{#if ranges.length}}
+                <span><span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                {{/if}}
+                {{#if damages.length}}
+                <span><span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                {{/if}}
             </div>
-            {{/if}}
-            {{#if tags.length}}
-            <div style="margin:4px 0;">
-                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
-            </div>
-            {{/if}}
         </summary>
         <div class="la-scan-card-body la-scan-card-details">
             {{#if onHit}}
@@ -211,26 +205,20 @@
             <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
         </summary>
         {{else}}
-        <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}</div>
-            <div class="la-scan-card-subtitle">WEAPON{{#if attackBonus}} · ATK {{attackBonus}}{{/if}}{{#if accuracyText}} · {{accuracyText}}{{/if}}</div>
-            {{#if ranges.length}}
-            <div style="margin:2px 0;">
-                <span class="la-scan-row-label" style="background:{{../../section.range}};">RANGE</span>
-                {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+        <summary class="la-scan-card-summary la-scan-summary-weapon">
+            <div class="la-scan-summary-row">
+                <span class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}</span>
+                <span class="la-scan-card-subtitle">WEAPON{{#if attackBonus}} · ATK {{attackBonus}}{{/if}}{{#if accuracyText}} · {{accuracyText}}{{/if}}</span>
+                {{#if tags.length}}<span class="la-scan-tag-row">{{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}</span>{{/if}}
             </div>
-            {{/if}}
-            {{#if damages.length}}
-            <div style="margin:2px 0;">
-                <span class="la-scan-row-label" style="background:{{../../section.damage}};">DAMAGE</span>
-                {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}
+            <div class="la-scan-summary-row">
+                {{#if ranges.length}}
+                <span><span class="la-scan-row-label" style="background:{{../../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                {{/if}}
+                {{#if damages.length}}
+                <span><span class="la-scan-row-label" style="background:{{../../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                {{/if}}
             </div>
-            {{/if}}
-            {{#if tags.length}}
-            <div style="margin:4px 0;">
-                {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
-            </div>
-            {{/if}}
         </summary>
         <div class="la-scan-card-body la-scan-card-details">
             {{#if trigger}}

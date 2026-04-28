@@ -1,0 +1,48 @@
+<div class="lancer-dialog-base">
+    <div class="lancer-dialog-header">
+        <div class="lancer-dialog-title">GENERATE SCAN</div>
+        <div class="lancer-dialog-subtitle">{{#if isMulti}}Targets{{else}}Target{{/if}}: {{targetNames}}</div>
+    </div>
+
+    <div class="lancer-section-title" style="margin-top:8px;">Output:</div>
+    <div class="lancer-scaling-cards" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="lancer-scaling-card" data-mode="chat">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-comment-dots"></i></div>
+            <div class="lancer-scaling-card-name">CHAT</div>
+            <div class="lancer-scaling-card-desc">Post a chat card only.</div>
+        </div>
+        <div class="lancer-scaling-card" data-mode="both">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-book"></i></div>
+            <div class="lancer-scaling-card-name">CHAT + JOURNAL</div>
+            <div class="lancer-scaling-card-desc">Post chat and create / update the journal entry.</div>
+        </div>
+        <div class="lancer-scaling-card" data-mode="journal">
+            <div class="lancer-scaling-card-icon"><i class="fas fa-book-open"></i></div>
+            <div class="lancer-scaling-card-name">JOURNAL</div>
+            <div class="lancer-scaling-card-desc">Create / update the journal entry quietly.</div>
+        </div>
+    </div>
+
+    <div class="la-scan-journal-options" style="display:none;margin-top:12px;">
+        <label for="la-scan-gen-custom-name" style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Custom journal name (optional)</label>
+        <input id="la-scan-gen-custom-name" type="text" name="custom-journal-name" placeholder="Leave blank to use target name" style="width:100%;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#fff;">
+
+        <div class="la-scan-owner-section">
+            <div class="la-scan-owner-header">Ownership</div>
+            <div class="la-scan-owner-grid">
+                {{#each ownerRows}}
+                <div class="la-scan-owner-row{{#if isAll}} la-scan-owner-all{{/if}}{{#if isGroup}} la-scan-owner-group{{/if}}">
+                    <label for="la-scan-gen-own-{{key}}" class="la-scan-owner-name">{{name}}</label>
+                    <select id="la-scan-gen-own-{{key}}" class="la-scan-owner-select" data-kind="{{kind}}" data-id="{{id}}">
+                        <option value="" {{#unless isAll}}selected{{/unless}}>No Change</option>
+                        <option value="0">None</option>
+                        <option value="1">Limited</option>
+                        <option value="2">Observer</option>
+                        <option value="3" {{#if isAll}}selected{{/if}}>Owner</option>
+                    </select>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+    </div>
+</div>

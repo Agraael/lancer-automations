@@ -1,0 +1,134 @@
+<div class="lancer-dialog-base la-rest-dialog">
+    <div class="lancer-dialog-header">
+        <div class="lancer-dialog-title">REST :: {{mech.name}}</div>
+        {{#if pilot}}
+        <div class="lancer-dialog-subtitle">{{pilot.name}}{{#if pilot.callsign}} [{{pilot.callsign}}]{{/if}}</div>
+        {{/if}}
+    </div>
+
+    <div class="la-rest-top-row">
+        <div class="la-rest-repairs-box">
+            <img src="{{repairIcon}}" alt="">
+            <div class="la-rest-repairs-stack">
+                <div class="la-rest-repairs-label">REPAIRS</div>
+                <div class="la-rest-repairs-value"><span>{{mech.repairs.value}}</span><span class="la-rest-repairs-sep">/</span><span>{{mech.repairs.max}}</span></div>
+            </div>
+        </div>
+        <img class="la-rest-portrait" src="{{mech.img}}" alt="">
+    </div>
+
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">CONDITIONS &amp; HEAT</div>
+        <div class="la-rest-section-body">
+            {{#if heatNotZero}}
+            <div class="lancer-toggle-card la-rest-toggle" data-action="resetHeat">
+                <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
+                <div class="lancer-toggle-card-text">
+                    Reset Heat
+                    <div class="la-rest-card-sub">Heat: {{mech.heat.value}} / {{mech.heat.max}}</div>
+                </div>
+                <div class="la-rest-cost-chip la-rest-cost-free">FREE</div>
+            </div>
+            {{/if}}
+            {{#if hasEffects}}
+            <div class="lancer-toggle-card la-rest-toggle" data-action="clearEffects">
+                <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
+                <div class="lancer-toggle-card-text">
+                    Clear Status Effects
+                    <div class="la-rest-effect-row">
+                        {{#each effects}}<img src="{{img}}" title="{{name}}" alt="{{name}}" class="la-rest-effect-icon">{{/each}}
+                    </div>
+                </div>
+                <div class="la-rest-cost-chip la-rest-cost-free">FREE</div>
+            </div>
+            {{/if}}
+            {{#unless heatNotZero}}{{#unless hasEffects}}
+            <div class="la-rest-empty">No conditions to clear.</div>
+            {{/unless}}{{/unless}}
+        </div>
+    </div>
+
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">CHASSIS HEALTH</div>
+        <div class="la-rest-section-body">
+            {{#if hpDamaged}}
+            <div class="lancer-toggle-card la-rest-toggle" data-action="restoreHp">
+                <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
+                <div class="lancer-toggle-card-text">
+                    Restore HP to Full
+                    <div class="la-rest-card-sub">HP: {{mech.hp.value}} / {{mech.hp.max}}</div>
+                </div>
+                <div class="la-rest-cost-chip">1</div>
+            </div>
+            {{/if}}
+
+            <div class="la-rest-stepper">
+                <div class="la-rest-stepper-label">Structure</div>
+                <div class="la-rest-stepper-icons" id="la-rest-structure-icons"></div>
+                <div class="la-rest-stepper-controls">
+                    <button type="button" class="la-rest-step-down" data-target="structure">−</button>
+                    <span class="la-rest-stepper-rate">{{structureRate}} / pt</span>
+                    <button type="button" class="la-rest-step-up" data-target="structure">+</button>
+                </div>
+            </div>
+
+            <div class="la-rest-stepper">
+                <div class="la-rest-stepper-label">Stress</div>
+                <div class="la-rest-stepper-icons" id="la-rest-stress-icons"></div>
+                <div class="la-rest-stepper-controls">
+                    <button type="button" class="la-rest-step-down" data-target="stress">−</button>
+                    <span class="la-rest-stepper-rate">{{stressRate}} / pt</span>
+                    <button type="button" class="la-rest-step-up" data-target="stress">+</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{#if hasDestroyed}}
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">DESTROYED EQUIPMENT</div>
+        <div class="la-rest-section-body">
+            {{#if destroyedWeapons.length}}
+            <div class="la-rest-equipment-row">
+                <span class="la-rest-equipment-label" style="background:#b71c1c;">WPN</span>
+                {{#each destroyedWeapons}}
+                <button type="button" class="la-rest-equipment-btn" data-kind="weapon" data-index="{{@index}}">{{name}} <span class="la-rest-cost-chip">1</span></button>
+                {{/each}}
+            </div>
+            {{/if}}
+            {{#if destroyedSystems.length}}
+            <div class="la-rest-equipment-row">
+                <span class="la-rest-equipment-label" style="background:#1a5c3a;">SYS</span>
+                {{#each destroyedSystems}}
+                <button type="button" class="la-rest-equipment-btn" data-kind="system" data-index="{{@index}}">{{name}} <span class="la-rest-cost-chip">1</span></button>
+                {{/each}}
+            </div>
+            {{/if}}
+        </div>
+    </div>
+    {{/if}}
+
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">ALLIED CONTRIBUTION</div>
+        <div class="la-rest-section-body">
+            <div class="lancer-info-box">
+                <i class="fas fa-info-circle"></i>
+                <span>Donate repairs for an ally's destroyed mech. The amount is deducted from this pilot and surfaces in the chat report so their emergency reinit can pick it up.</span>
+            </div>
+            <div class="la-rest-contribute-row">
+                <label for="la-rest-contribute">Contribute</label>
+                <input id="la-rest-contribute" type="number" min="0" max="4" value="0">
+                <span class="la-rest-contribute-suffix">repairs</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="la-rest-cost-tally">
+        <div class="la-rest-cost-tally-label">REPAIR COST</div>
+        <div class="la-rest-cost-tally-value">
+            <span id="la-rest-cost-current">0</span>
+            <span class="la-rest-cost-tally-sep">/</span>
+            <span>{{mech.repairs.value}}</span>
+        </div>
+    </div>
+</div>

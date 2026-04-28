@@ -211,13 +211,13 @@ const TAH_STEPS = [
     {
         id: 'intro',
         title: 'Token Action HUD',
-        content: 'This is Lancer automation Token Action HUD, is it not relted the module of the same name, this HUD  is standalone.',
+        content: 'This is Lancer automation Token Action HUD, is it not related the module of the same name, this HUD  is standalone.',
         selector: TAH_ROOT,
     },
     {
         id: 'token-name',
         title: 'Token Name',
-        content: 'Click the name to open the actor sheet. On the right the lock idon allow you to change the position of the HUD',
+        content: 'Click the name to open the actor sheet. On the right the lock icon allow you to change the position of the HUD',
         selector: `${TAH_ROOT} .la-hud-token-name`,
     },
     {

@@ -1,4 +1,4 @@
-/* global game, ui */
+/* global game, ui, Hooks */
 
 import { altRollStress, insertEngheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
 import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow } from "./structure.js";
@@ -172,6 +172,7 @@ export function initAltStructReady() {
     }
 
     setupHooks(_flowSteps, _flows);
+    _registerChatHook();
 
     // Chain our handler in front of the original noStressRemaining.
     const originalNoStressRemaining = _flowSteps?.get("noStressRemaining");
@@ -189,4 +190,49 @@ export function initAltStructReady() {
         mod.api.manualSystemTrauma = manualSystemTrauma;
 
     console.log("lancer-automations (alt-struct): initialized");
+}
+
+let _chatHookRegistered = false;
+
+function _runAltStructFlow(btn) {
+    const flowType = btn.dataset.flowType;
+    const actorId = btn.dataset.actorId;
+    if (!flowType || !actorId) {
+        ui.notifications?.error("Missing flow type or actor ID on alt-struct button.");
+        return;
+    }
+    const Flow = /** @type {any} */ (game)?.lancer?.Flow;
+    const flowDef = /** @type {any} */ (game)?.lancer?.flows?.get(flowType);
+    if (!Flow || !flowDef?.steps) {
+        ui.notifications?.error(`Alt-struct flow "${flowType}" not registered.`);
+        return;
+    }
+    const data = { ...btn.dataset };
+    delete data.flowType;
+    delete data.actorId;
+    if (data.checkType) {
+        data.type = "stat";
+        data.path = `system.${data.checkType}`;
+        const cap = data.checkType[0].toUpperCase() + data.checkType.slice(1);
+        data.title = data.title ?? `${cap} Check`;
+        data.bonus = 0;
+        data.roll_str = "1d20";
+    }
+    class AltStructFlow extends Flow {}
+    AltStructFlow.steps = flowDef.steps;
+    Object.defineProperty(AltStructFlow, "name", { value: flowType });
+    new AltStructFlow(actorId, data).begin();
+}
+
+function _registerChatHook() {
+    if (_chatHookRegistered) {
+        return;
+    }
+    _chatHookRegistered = true;
+    Hooks.on("renderChatMessage", (_app, html) => {
+        html.find(".alt-struct-flow-button").on("click", function (ev) {
+            ev.stopPropagation();
+            _runAltStructFlow(this);
+        });
+    });
 }

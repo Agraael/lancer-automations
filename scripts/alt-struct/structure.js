@@ -233,7 +233,7 @@ export async function insertHullCheckButton(state) {
         if (one_count > 1) {
             // Crushing Hit (Multiple 1's): Special HULL check
             state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="CrushingHitHullCheckFlow"
             data-check-type="hull"
             data-actor-id="${actor.uuid}"
@@ -243,7 +243,7 @@ export async function insertHullCheckButton(state) {
         } else if (rollTotal === 1 && structure === 2) {
             // Direct Hit with 2 Structure: HULL check with conditional TEAR OFF
             state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="DirectHitHullCheckFlow"
             data-check-type="hull"
             data-actor-id="${actor.uuid}"
@@ -254,7 +254,7 @@ export async function insertHullCheckButton(state) {
           </a>`);
         } else if (rollTotal === 1 && structure === 1) {
             state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="DirectHitHullCheckFlow"
             data-check-type="hull"
             data-actor-id="${actor.uuid}"
@@ -265,7 +265,7 @@ export async function insertHullCheckButton(state) {
           </a>`);
         } else {
             state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="check"
             data-check-type="hull"
             data-actor-id="${actor.uuid}"
@@ -318,7 +318,7 @@ export async function insertSecondaryRollButton(state) {
         state.data.embedButtons = state.data.embedButtons || [];
         if (hasWeaponsOrSystems) {
             state.data.embedButtons.push(`<a
-          class="flow-button lancer-button"
+          class="alt-struct-flow-button lancer-button"
           data-flow-type="secondaryStructure"
           data-actor-id="${actor.uuid}"
         >
@@ -326,7 +326,7 @@ export async function insertSecondaryRollButton(state) {
         </a>`);
         } else {
             state.data.embedButtons.push(`<a
-              class="flow-button lancer-button"
+              class="alt-struct-flow-button lancer-button"
               data-flow-type="TearOffDirectHitFlow"
               data-actor-id="${actor.uuid}"
             >
@@ -918,7 +918,7 @@ async function handleTearOffChoice(state, isSystemTrauma) {
     if (currentStructure === 1) {
         state.data.embedButtons = state.data.embedButtons || [];
         state.data.embedButtons.push(`<a
-          class="flow-button lancer-button"
+          class="alt-struct-flow-button lancer-button"
           data-flow-type="DirectHitHullCheckFlow"
           data-check-type="hull"
           data-actor-id="${actor.uuid}"
@@ -1153,7 +1153,7 @@ export async function handleDirectHitHullCheckResult(state) {
                     }
                 }
                 state.data.embedButtons.push(`<a
-          class="flow-button lancer-button"
+          class="alt-struct-flow-button lancer-button"
           data-flow-type="secondaryStructureCrushingHit"
           data-actor-id="${actor.uuid}"
         >
@@ -1161,7 +1161,7 @@ export async function handleDirectHitHullCheckResult(state) {
         </a>`);
             } else {
                 state.data.embedButtons.push(`<a
-              class="flow-button lancer-button"
+              class="alt-struct-flow-button lancer-button"
               data-flow-type="TearOffCrushingHitFlow"
               data-actor-id="${actor.uuid}"
             >
@@ -1172,7 +1172,7 @@ export async function handleDirectHitHullCheckResult(state) {
     } else if (remStruct === 1) {
         if (!hasWeaponsOrSystems) {
             state.data.embedButtons.push(`<a
-              class="flow-button lancer-button"
+              class="alt-struct-flow-button lancer-button"
               data-flow-type="TearOffCrushingHitFlow"
               data-actor-id="${actor.uuid}"
             >
@@ -1180,7 +1180,7 @@ export async function handleDirectHitHullCheckResult(state) {
             </a>`);
         } else {
             state.data.embedButtons.push(`<a
-              class="flow-button lancer-button"
+              class="alt-struct-flow-button lancer-button"
               data-flow-type="secondaryStructureCrushingHit"
               data-actor-id="${actor.uuid}"
             >

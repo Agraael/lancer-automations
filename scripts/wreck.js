@@ -16,15 +16,19 @@ const _activeStructureFlows = new Map(); // actorUuid -> { promise, resolve }
 
 Hooks.on('lancer.preFlow.StructureFlow', (flow) => {
     const uuid = flow?.state?.actor?.uuid;
-    if (!uuid) return;
+    if (!uuid)
+        return;
     let resolve;
-    const promise = new Promise(r => { resolve = r; });
+    const promise = new Promise(r => {
+        resolve = r;
+    });
     _activeStructureFlows.set(uuid, { promise, resolve });
 });
 
 Hooks.on('lancer.postFlow.StructureFlow', (flow) => {
     const uuid = flow?.state?.actor?.uuid;
-    if (!uuid) return;
+    if (!uuid)
+        return;
     const entry = _activeStructureFlows.get(uuid);
     if (entry) {
         entry.resolve();
@@ -34,7 +38,8 @@ Hooks.on('lancer.postFlow.StructureFlow', (flow) => {
 
 async function waitForStructureFlow(actorUuid, timeoutMs = 3000) {
     const entry = _activeStructureFlows.get(actorUuid);
-    if (!entry) return;
+    if (!entry)
+        return;
     await Promise.race([
         entry.promise,
         new Promise(r => setTimeout(r, timeoutMs)),
@@ -46,19 +51,25 @@ async function waitForStructureFlow(actorUuid, timeoutMs = 3000) {
 let _lwfxStructWrapped = false;
 
 function _shouldSuppressLwfxStructure(flow) {
-    if (!game.settings.get(MODULE_ID, 'enableWrecks')) return false;
+    if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+        return false;
     return flow?.state?.data?.remStruct === 0;
 }
 
 function _wrapLwfxStructureHook() {
     const hookName = 'lancer.postFlow.StructureFlow';
     const listeners = Hooks.events?.[hookName];
-    if (!Array.isArray(listeners) || listeners.length === 0) return false;
+    if (!Array.isArray(listeners) || listeners.length === 0)
+        return false;
     const lwfxEntry = listeners.find(e => {
-        try { return /_isTriggerOnAbortedFlow/.test(e?.fn?.toString?.() ?? ''); }
-        catch { return false; }
+        try {
+            return /_isTriggerOnAbortedFlow/.test(e?.fn?.toString?.() ?? '');
+        } catch {
+            return false;
+        }
     });
-    if (!lwfxEntry) return false;
+    if (!lwfxEntry)
+        return false;
     const originalFn = lwfxEntry.fn;
     Hooks.off(hookName, lwfxEntry.id);
     Hooks.on(hookName, async (flow, isContinue) => {
@@ -73,11 +84,14 @@ function _wrapLwfxStructureHook() {
 }
 
 Hooks.once('ready', () => {
-    if (!game.settings.get(MODULE_ID, 'enableWrecks')) return;
-    if (!game.modules.get('lancer-weapon-fx')?.active) return;
+    if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+        return;
+    if (!game.modules.get('lancer-weapon-fx')?.active)
+        return;
     // Wait a tick so LWFX has finished registering its hook.
     setTimeout(() => {
-        if (_lwfxStructWrapped) return;
+        if (_lwfxStructWrapped)
+            return;
         _lwfxStructWrapped = _wrapLwfxStructureHook();
     }, 0);
 });
@@ -89,7 +103,8 @@ let _macroCount = 10;
 async function macroEffect(name, actor, token, enable) {
     const suffix = enable ? 'apply' : 'remove';
     const macro = game.macros.find(m => m.name === `${name}.${suffix}`);
-    if (!macro) return;
+    if (!macro)
+        return;
     const now = +new Date();
     if (now - _macroThrottle > 500) {
         _macroCount = 10;
@@ -107,15 +122,22 @@ async function macroEffect(name, actor, token, enable) {
 
 export function getTokenCategory(token) {
     const actor = token.actor ?? game.actors.find(x => x.id === token.document?.actorId);
-    if (!actor) return 'mech';
-    if (actor.type === 'pilot') return 'pilot';
+    if (!actor)
+        return 'mech';
+    if (actor.type === 'pilot')
+        return 'pilot';
     const items = actor.items ?? [];
     const hasLid = (lid) => items.some(i => i.system?.lid === lid);
-    if (hasLid('npcc_squad')) return 'squad';
-    if (hasLid('npcc_monstrosity')) return 'monstrosity';
-    if (hasLid('npcc_human')) return 'human';
-    if (hasLid('npcc_specialist')) return 'human';
-    if (items.some(i => i.system?.role === 'biological')) return 'biological';
+    if (hasLid('npcc_squad'))
+        return 'squad';
+    if (hasLid('npcc_monstrosity'))
+        return 'monstrosity';
+    if (hasLid('npcc_human'))
+        return 'human';
+    if (hasLid('npcc_specialist'))
+        return 'human';
+    if (items.some(i => i.system?.role === 'biological'))
+        return 'biological';
     return 'mech';
 }
 
@@ -147,7 +169,9 @@ const CATEGORY_FALLBACKS = {
     mech: [],
 };
 
-function isSquad(token) { return getTokenCategory(token) === 'squad'; }
+function isSquad(token) {
+    return getTokenCategory(token) === 'squad';
+}
 
 // ---------------------------------------------------------------------------
 // Asset resolution
@@ -163,14 +187,16 @@ async function _browseFiles(path) {
 }
 
 function _randomFile(files) {
-    if (!files || files.length === 0) return null;
+    if (!files || files.length === 0)
+        return null;
     return files[Math.floor(Math.random() * files.length)];
 }
 
 function _getWreckBasePath() {
     try {
         const custom = game.settings.get(MODULE_ID, 'wreckAssetsPath');
-        if (custom && custom.trim()) return custom.trim();
+        if (custom && custom.trim())
+            return custom.trim();
     } catch { /* fall through */ }
     return `modules/${MODULE_ID}/wrecks`;
 }
@@ -180,7 +206,8 @@ async function _resolveAssetWithFallback(subDir, category) {
     const chain = CATEGORY_FALLBACKS[category] ?? [];
     for (const cat of chain) {
         const files = await _browseFiles(`${basePath}/${subDir}/${cat}`);
-        if (files.length > 0) return _randomFile(files);
+        if (files.length > 0)
+            return _randomFile(files);
     }
     if (category === 'mech') {
         const fallback = await _browseFiles(`${basePath}/${subDir}`);
@@ -190,20 +217,32 @@ async function _resolveAssetWithFallback(subDir, category) {
 }
 
 async function getCorpseImage(category, size = 1) {
-    if (size < 1) size = 1;
-    if (size > 3) size = 3;
+    if (size < 1)
+        size = 1;
+    if (size > 3)
+        size = 3;
     return _resolveAssetWithFallback(`s${size}`, category);
 }
-async function getCorpseEffect(category) { return _resolveAssetWithFallback('effects', category); }
-async function getCorpseSound(category) { return _resolveAssetWithFallback('audio', category); }
+async function getCorpseEffect(category) {
+    return _resolveAssetWithFallback('effects', category);
+}
+async function getCorpseSound(category) {
+    return _resolveAssetWithFallback('audio', category);
+}
 
 async function getWreckImage(size) {
-    if (size < 1) size = 1;
-    if (size > 3) size = 3;
+    if (size < 1)
+        size = 1;
+    if (size > 3)
+        size = 3;
     return _resolveAssetWithFallback(`s${size}`, 'mech');
 }
-async function getWreckEffect() { return _resolveAssetWithFallback('effects', 'mech'); }
-async function getWreckSound() { return _resolveAssetWithFallback('audio', 'mech'); }
+async function getWreckEffect() {
+    return _resolveAssetWithFallback('effects', 'mech');
+}
+async function getWreckSound() {
+    return _resolveAssetWithFallback('audio', 'mech');
+}
 
 // ---------------------------------------------------------------------------
 // Terrain
@@ -214,17 +253,21 @@ function getTokenCells(token) {
 }
 
 async function spawnDifficultTerrain(token) {
-    if (!game.modules.get('terrain-height-tools')?.active) return;
+    if (!game.modules.get('terrain-height-tools')?.active)
+        return;
     const terrainTypeId = game.settings.get(MODULE_ID, 'wreckTerrainType');
-    if (!terrainTypeId) return;
+    if (!terrainTypeId)
+        return;
     try {
         const terrainAPI = globalThis.terrainHeightTools;
-        if (!terrainAPI) return;
+        if (!terrainAPI)
+            return;
         const wallHeight = token.actor?.prototypeToken?.flags?.['wall-height']?.tokenHeight;
         const rawHeight = wallHeight ?? (token.actor?.system?.size ?? 1);
         const terrainHeight = Math.floor(rawHeight * 2) / 2;
         const cells = getTokenCells(token);
-        if (cells.length === 0) return;
+        if (cells.length === 0)
+            return;
         const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
         // Each cell gets its own elevation based on the ground below it.
         for (const [row, col] of cells) {
@@ -254,7 +297,8 @@ async function spawnDifficultTerrain(token) {
 async function getOrCreateWreckActor() {
     const WRECK_NAME = 'Template Wreck';
     let actor = game.actors.find(a => a.name === WRECK_NAME && a.type === 'deployable');
-    if (actor) return actor;
+    if (actor)
+        return actor;
     actor = await Actor.create({
         name: WRECK_NAME,
         type: 'deployable',
@@ -275,7 +319,8 @@ async function getOrCreateWreckActor() {
 // ---------------------------------------------------------------------------
 
 export async function preLoadImageForAll(src, push = false) {
-    if (!src || !src.trim()) return src;
+    if (!src || !src.trim())
+        return src;
     if (push) {
         game.socket.emit(`module.${MODULE_ID}`, { action: 'preLoadImageForAll', payload: src });
     }
@@ -369,7 +414,7 @@ async function wreckIt(token) {
         new Sequence()
             .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
             .effect().file(effString).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
-                .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
+            .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(async () => {
                 const gridSize = canvas.scene.grid.size;
                 const newWidth = token.document.width * gridSize * wreckScale;
@@ -378,12 +423,16 @@ async function wreckIt(token) {
                 const newY = token.document.y - (newHeight - token.h) / 2;
                 if (spawnWreckImage && imgString) {
                     canvas.scene.createEmbeddedDocuments('Tile', [{
-                        x: newX, y: newY, height: newHeight, width: newWidth,
+                        x: newX,
+                        y: newY,
+                        height: newHeight,
+                        width: newWidth,
                         texture: { src: imgString },
                         flags: { [MODULE_ID]: { isWreck: true, tokenDocument: token.document.toObject() } }
                     }]);
                 }
-                if (shouldSpawnTerrain) spawnDifficultTerrain(token);
+                if (shouldSpawnTerrain)
+                    spawnDifficultTerrain(token);
                 await waitForStructureFlow(token.actor?.uuid);
                 token.document.delete();
             })
@@ -392,7 +441,7 @@ async function wreckIt(token) {
         new Sequence()
             .sound().file(souString).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!souString && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
             .effect().file(effString).scaleToObject(2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
-                .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
+            .playIf(!!effString && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
             .thenDo(async () => {
                 try {
                     if (spawnWreckImage) {
@@ -444,7 +493,8 @@ async function wreckIt(token) {
                             }
                         }
                     }
-                    if (shouldSpawnTerrain) spawnDifficultTerrain(token);
+                    if (shouldSpawnTerrain)
+                        spawnDifficultTerrain(token);
                     await waitForStructureFlow(token.actor?.uuid);
                     token.document.delete();
                 } catch (e) {
@@ -468,7 +518,8 @@ export async function resurrect(token) {
     }
     log(`Resurrecting ${token.name}!`);
     const tokenData = token.document.getFlag(MODULE_ID, 'tokenDocument');
-    if (!tokenData) return token;
+    if (!tokenData)
+        return token;
     const actor = game.actors.get(tokenData.actorId);
     if (!actor) {
         log(`No actor found for wreck token ${token.name}`);
@@ -505,7 +556,8 @@ export async function resurrect(token) {
 
 export function tileHUDButton(app, html) {
     const tile = app?.object?.document;
-    if (!tile || !tile.getFlag(MODULE_ID, 'isWreck')) return;
+    if (!tile || !tile.getFlag(MODULE_ID, 'isWreck'))
+        return;
     const button = document.createElement('div');
     button.classList.add('control-icon', MODULE_ID);
     button.title = 'Resurrect';
@@ -519,7 +571,8 @@ export function tileHUDButton(app, html) {
 
 async function unWreckTile(tile) {
     const isWreck = tile.getFlag(MODULE_ID, 'isWreck');
-    if (!isWreck) return;
+    if (!isWreck)
+        return;
     const tokenData = tile.getFlag(MODULE_ID, 'tokenDocument');
     const actor = game.actors.get(tokenData?.actorId);
     if (!actor) {
@@ -548,7 +601,8 @@ async function unWreckTile(tile) {
 // ---------------------------------------------------------------------------
 
 export async function preWreck(document, _change, userId) {
-    if (!game.users.activeGM?.isSelf) return;
+    if (!game.users.activeGM?.isSelf)
+        return;
     const size = document.actor?.system?.size ?? 1;
     let wreckImgPath = document.getFlag(MODULE_ID, 'wreckImgPath');
     let wreckEffectPath = document.getFlag(MODULE_ID, 'wreckEffectPath');
@@ -563,19 +617,30 @@ export async function preWreck(document, _change, userId) {
     const muteHumanSound = ['human', 'pilot', 'squad'].includes(category)
         && game.settings.get(MODULE_ID, 'disableHumanDeathSound');
     if (useCorpse) {
-        if (noImg) wreckImgPath = await getCorpseImage(category, size);
-        if (noEff) wreckEffectPath = await getCorpseEffect(category);
-        if (noSnd && !muteHumanSound) wreckSoundPath = await getCorpseSound(category);
+        if (noImg)
+            wreckImgPath = await getCorpseImage(category, size);
+        if (noEff)
+            wreckEffectPath = await getCorpseEffect(category);
+        if (noSnd && !muteHumanSound)
+            wreckSoundPath = await getCorpseSound(category);
     } else {
-        if (noImg) wreckImgPath = await getWreckImage(size);
-        if (noEff) wreckEffectPath = await getWreckEffect();
-        if (noSnd) wreckSoundPath = await getWreckSound();
+        if (noImg)
+            wreckImgPath = await getWreckImage(size);
+        if (noEff)
+            wreckEffectPath = await getWreckEffect();
+        if (noSnd)
+            wreckSoundPath = await getWreckSound();
     }
-    if (wreckImgPath) await preLoadImageForAll(wreckImgPath, true);
-    if (wreckEffectPath) await preLoadImageForAll(wreckEffectPath, true);
-    if (wreckImgPath) await document.setFlag(MODULE_ID, 'wreckImgPath', wreckImgPath);
-    if (wreckEffectPath) await document.setFlag(MODULE_ID, 'wreckEffectPath', wreckEffectPath);
-    if (wreckSoundPath) await document.setFlag(MODULE_ID, 'wreckSoundPath', wreckSoundPath);
+    if (wreckImgPath)
+        await preLoadImageForAll(wreckImgPath, true);
+    if (wreckEffectPath)
+        await preLoadImageForAll(wreckEffectPath, true);
+    if (wreckImgPath)
+        await document.setFlag(MODULE_ID, 'wreckImgPath', wreckImgPath);
+    if (wreckEffectPath)
+        await document.setFlag(MODULE_ID, 'wreckEffectPath', wreckEffectPath);
+    if (wreckSoundPath)
+        await document.setFlag(MODULE_ID, 'wreckSoundPath', wreckSoundPath);
 
     const wreckScale = document.getFlag(MODULE_ID, 'wreckScale');
     if (wreckScale === undefined || wreckScale === null) {
@@ -596,11 +661,14 @@ export async function preWreck(document, _change, userId) {
 
 export function initWreckTokenConfig() {
     Hooks.on('renderTokenConfig', (app, html, data) => {
-        if (!game.settings.get(MODULE_ID, 'enableWrecks')) return;
+        if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+            return;
         const tokenDoc = app.token ?? app.object;
-        if (!tokenDoc?.actor) return;
+        if (!tokenDoc?.actor)
+            return;
         const actorType = tokenDoc.actor.type;
-        if (!['mech', 'npc', 'pilot'].includes(actorType)) return;
+        if (!['mech', 'npc', 'pilot'].includes(actorType))
+            return;
 
         const $html = html instanceof $ ? html : $(html);
 
@@ -611,7 +679,8 @@ export function initWreckTokenConfig() {
         }
 
         // Add L.A tab content.
-        if ($html.find('div.tab[data-tab="la"]').length) return;
+        if ($html.find('div.tab[data-tab="la"]').length)
+            return;
 
         const flags = data.object?.flags?.[MODULE_ID] ?? {};
         const imgPath = flags.wreckImgPath ?? '';
@@ -715,8 +784,10 @@ export async function canvasReadyWreck() {
         if (wreckImgPath === undefined || wreckEffectPath === undefined) {
             await preWreck(token.document);
         } else {
-            if (wreckImgPath) await preLoadImageForAll(wreckImgPath);
-            if (wreckEffectPath) await preLoadImageForAll(wreckEffectPath);
+            if (wreckImgPath)
+                await preLoadImageForAll(wreckImgPath);
+            if (wreckEffectPath)
+                await preLoadImageForAll(wreckEffectPath);
         }
     }
 }

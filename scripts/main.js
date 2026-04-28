@@ -62,6 +62,7 @@ import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtili
     forceTechHUDStep
 } from "./flows.js";
 import { DowntimeAPI } from "./downtime.js";
+import { RestAPI } from "./rest.js";
 import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
 import { LAAuras, AurasAPI } from "./aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
@@ -4765,6 +4766,7 @@ Hooks.on('ready', async () => {
         ...TerrainAPI,
         ...DowntimeAPI,
         ...ScanAPI,
+        ...RestAPI,
         ...AurasAPI,
         ...ItemDisabledAPI,
         applyInfection,

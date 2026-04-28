@@ -163,7 +163,7 @@ export async function insertEngheckButton(state) {
     if (show_button && !(one_count > 1)) {
         state.data.embedButtons = state.data.embedButtons || [];
         state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="StressEngineeringCheckFlow"
             data-check-type="engineering"
             data-actor-id="${actor.uuid}"
@@ -176,9 +176,9 @@ export async function insertEngheckButton(state) {
 
 /**
  * Apply automatic effects based on stress/overheat roll result
- * - Power Fail (2-4): Apply SLOW + DAZED until end of next turn
+ * - Power Fail (2-4): Apply SLOW + THROTTLED until end of next turn
  * - Emergency Shunt (5-6): Apply IMPAIRED until end of next turn
- * - Multiple 1s: Apply EXPOSED + DAZED (+ meltdown check)
+ * - Multiple 1s: Apply EXPOSED + THROTTLED (+ meltdown check)
  */
 export async function applyStressEffects(state) {
     if (!state.data)
@@ -211,22 +211,22 @@ export async function applyStressEffects(state) {
 
     // Apply effects based on roll result
     if (hasMultipleOnes) {
-    // Multiple 1s: EXPOSED + DAZED + Critical Meltdown
+    // Multiple 1s: EXPOSED + THROTTLED + Critical Meltdown
         try {
             await applyEffectsToTokens({
                 tokens: [token],
-                effectNames: ["exposed", "dazed"],
+                effectNames: ["exposed", "throttled"],
                 note: "Critical Stress Failure",
                 duration: { label: 'end', turns: 1, rounds: 0 },
             });
         } catch (error) {
-            console.warn("lancer-automations (alt-struct): Could not apply EXPOSED + DAZED effects:", error);
+            console.warn("lancer-automations (alt-struct): Could not apply EXPOSED + THROTTLED effects:", error);
         }
 
         // Add Critical Meltdown button
         state.data.embedButtons = state.data.embedButtons || [];
         state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="CriticalMeltdownFlow"
             data-actor-id="${actor.uuid}"
           >
@@ -238,16 +238,16 @@ export async function applyStressEffects(state) {
         case 2:
         case 3:
         case 4:
-        // Power Fail: SLOW + DAZED until end of next turn
+        // Power Fail: SLOW + THROTTLED until end of next turn
             try {
                 await applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ["slow", "dazed"],
+                    effectNames: ["slow", "throttled"],
                     note: "Power Fail",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
             } catch (error) {
-                console.warn("lancer-automations (alt-struct): Could not apply SLOW + DAZED effects:", error);
+                console.warn("lancer-automations (alt-struct): Could not apply SLOW + THROTTLED effects:", error);
             }
             break;
 
@@ -303,10 +303,10 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
         if (remStress >= 3) {
             // 3+ stress remaining
             if (engineeringSuccess) {
-                // Success: SLOW + DAZED
+                // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ["slow", "dazed"],
+                    effectNames: ["slow", "throttled"],
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
@@ -322,10 +322,10 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
         } else if (remStress === 2) {
             // 2 stress remaining
             if (engineeringSuccess) {
-                // Success: SLOW + DAZED
+                // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ["slow", "dazed"],
+                    effectNames: ["slow", "throttled"],
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
@@ -341,7 +341,7 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                 // Add Meltdown button
                 state.data.embedButtons = state.data.embedButtons || [];
                 state.data.embedButtons.push(`<a
-                class="flow-button lancer-button"
+                class="alt-struct-flow-button lancer-button"
                 data-flow-type="MeltdownFlow"
                 data-actor-id="${actor.uuid}"
               >
@@ -351,10 +351,10 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
         } else if (remStress === 1) {
             // 1 stress remaining
             if (engineeringSuccess) {
-                // Success: DAZED only
+                // Success: THROTTLED only
                 await applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ["dazed"],
+                    effectNames: ["throttled"],
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
@@ -362,7 +362,7 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                 // Failure: Meltdown
                 state.data.embedButtons = state.data.embedButtons || [];
                 state.data.embedButtons.push(`<a
-                class="flow-button lancer-button"
+                class="alt-struct-flow-button lancer-button"
                 data-flow-type="MeltdownFlow"
                 data-actor-id="${actor.uuid}"
               >
@@ -535,7 +535,7 @@ export async function handleNoStressRemaining(state) {
     // Add Critical Meltdown button
         state.data.embedButtons = state.data.embedButtons || [];
         state.data.embedButtons.push(`<a
-            class="flow-button lancer-button"
+            class="alt-struct-flow-button lancer-button"
             data-flow-type="CriticalMeltdownFlow"
             data-actor-id="${actor.uuid}"
           >
