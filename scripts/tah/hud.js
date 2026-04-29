@@ -771,9 +771,11 @@ export class LancerHUD {
         col.children(':not(.la-hud-col-label)').remove();
         // Use page-relative offset minus hud offset so the result is correct
         // regardless of which column anchorRow lives in (c1 or c2).
-        if (reposition && anchorRow) {
-            const topInHud = anchorRow.offset().top - this._el.offset().top - 18;
-            col.css({ top: topInHud });
+        if (reposition && anchorRow && this._el) {
+            const aOff = anchorRow.offset();
+            const eOff = this._el.offset();
+            if (aOff && eOff)
+                col.css({ top: aOff.top - eOff.top - 18 });
         }
 
         if (!filteredItems.length) {

@@ -315,6 +315,35 @@ Returns the highest terrain height value under any cell occupied by the token. R
 
 ---
 
+<details>
+<summary><b><code>triggerDangerousZoneFlow</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.triggerDangerousZoneFlow(token, damageType, damageValue)
+```
+
+Rolls an ENG check on the token's actor. On a result below 10 the token is targeted and a damage roll is performed. Dedupes to once per combat round per actor (uses an actor flag in the `lancer-automations` namespace). Outside combat, fires every call.
+
+Useful as the body of a "dangerous terrain" trigger from a sibling module (e.g. Terrain Height Tools' on-enter trigger):
+
+```js
+await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token, "burn", 5);
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>token</kbd> | `Token \| TokenDocument` | Token whose actor rolls ENG and takes damage on failure |
+| <kbd>damageType</kbd> | `string` | `"kinetic"`, `"energy"`, `"explosive"`, `"burn"`, `"heat"`, `"variable"`. Defaults to `"kinetic"` |
+| <kbd>damageValue</kbd> | `number \| string` | Damage amount or dice expression. Defaults to `5` |
+
+> Designed for Pilot/Mech actors; NPCs do not have a direct `system.eng` and the flow returns silently.
+
+</details>
+
+---
+
 ### Debug Visualizations
 
 <details>

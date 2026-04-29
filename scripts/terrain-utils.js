@@ -59,7 +59,56 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     return maxGroundHeight;
 }
 
+/**
+ * Roll an ENG check; on a result below 10 target the token and roll damage.
+ * Dedupes to once per combat round per actor.
+ * @param {Token | TokenDocument} token
+ * @param {string} [damageType="kinetic"] kinetic, energy, explosive, burn, heat, variable
+ * @param {number | string} [damageValue=5]
+ */
+export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
+    const actor = token?.actor;
+    if (!actor) return;
+    const curRound = game.combat?.round || 0;
+    const lastRound = actor.getFlag("lancer-automations", "dangerousZoneRound");
+
+    if (lastRound === curRound && game.combat?.started) return;
+
+    if (game.combat?.started) {
+        await actor.setFlag("lancer-automations", "dangerousZoneRound", curRound);
+    } else if (lastRound !== undefined) {
+        await actor.unsetFlag("lancer-automations", "dangerousZoneRound");
+    }
+
+    const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
+
+    const StatRollFlow = game.lancer?.flows?.get?.("StatRollFlow");
+    if (!StatRollFlow) return;
+
+    const flow = new StatRollFlow(actor, { path: "system.eng", title: "Dangerous Terrain :: ENG" });
+    const completed = await flow.begin();
+
+    if (completed && (flow.state.data?.result?.roll?.total ?? 10) < 10) {
+        const t = /** @type {any} */ (token).object || token;
+        if (t?.setTarget) {
+            t.setTarget(true, { releaseOthers: true, groupSelection: false });
+        }
+
+        const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
+        if (!DamageRollFlow) return;
+        const dmgFlow = new DamageRollFlow(actor.uuid, {
+            title: "Dangerous Terrain",
+            damage: [{ val: String(damageValue), type: typeMap[String(damageType).toLowerCase()] || "Kinetic" }],
+            tags: [],
+            hit_results: [],
+            has_normal_hit: true
+        });
+        await dmgFlow.begin();
+    }
+}
+
 export const TerrainAPI = {
     getTokenCells,
-    getMaxGroundHeightUnderToken
+    getMaxGroundHeightUnderToken,
+    triggerDangerousZoneFlow
 };
