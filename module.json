@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.12.8",
+    "version": "2.12.9",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -16,6 +16,7 @@
         "scripts/overwatch.js",
         "scripts/main.js",
         "scripts/grapple.js",
+        "scripts/speed-provider.js",
         "scripts/tah/index.js"
     ],
     "styles": [

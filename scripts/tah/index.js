@@ -59,6 +59,14 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.rangePreviewOnAttackCard', {
+        name: 'Range Preview on Attack Card',
+        hint: 'Show attacker range on the canvas when an attack card prints, while TAH is open.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
     game.settings.register(MODULE, 'tah.uiSoundVolume', {
         name: 'UI Sound Volume',
         hint: 'Volume of TAH hover/click sounds. Set to 0 to disable.',
@@ -435,7 +443,8 @@ Hooks.on('deleteCombat', () => {
 
 // ── Persistent range auras — combat auto-toggle + data refresh ─────────────
 
-import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii } from './hover.js';
+import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview } from './hover.js';
+import { getMaxItemRanges_WithBonus } from '../misc-tools.js';
 
 Hooks.on('combatStart', (combat) => {
     for (const c of combat.combatants) {
@@ -474,4 +483,78 @@ Hooks.on('forceUpdateTokenActionHud', () => {
         return;
     if (hud._token)
         hud.refresh();
+});
+
+// ── Range preview during attack AccDiff HUD ───────────────────────────────────
+
+const BASIC_MELEE_NAMES = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pickup weapon', 'pick up weapon']);
+
+function _getSensorRange(actor) {
+    if (!actor) return 10;
+    if (actor.type === 'pilot') return 5;
+    return actor.system?.sensor_range ?? 10;
+}
+
+async function _computeAttackHudRange(state) {
+    const actor = state.actor;
+    const item = state.item;
+    const actionName = (state.data?.action?.name ?? state.data?.title ?? '').toLowerCase().trim();
+
+    if (item) {
+        const ranges = await getMaxItemRanges_WithBonus(item, actor);
+        const ALL = ['Range', 'Line', 'Cone', 'Blast', 'Burst', 'Threat', 'Thrown'];
+        const max = Math.max(0, ...ALL.map(t => ranges[t] ?? 0));
+        if (max > 0) return Math.max(1, max);
+    }
+
+    if (BASIC_MELEE_NAMES.has(actionName)) return 1;
+
+    const isTech = !!state.data?.invade
+        || /invade|tech/i.test(state.data?.action?.activation ?? '')
+        || /invade|tech/i.test(actionName);
+    if (isTech) return _getSensorRange(actor);
+
+    return null;
+}
+
+Hooks.once('ready', () => {
+    const original = game.lancer?.flowSteps?.get?.('showAttackHUD');
+    if (!original) return;
+    game.lancer.flowSteps.set('showAttackHUD', async function(state, options) {
+        let token = null;
+        let activated = false;
+        let range = null;
+        const reassert = () => {
+            if (activated && token)
+                setTimeout(() => activateRangePreview(token, range), 0);
+        };
+        const onControl = (t) => { if (t?.id === token?.id) reassert(); };
+        const onTarget = (_u, t) => { if (t?.id === token?.id) reassert(); };
+        const onHover = (t) => { if (t?.id === token?.id) reassert(); };
+        try {
+            if (enabled()
+                && game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')
+                && hud._token) {
+                token = state.actor?.getActiveTokens?.()[0];
+                if (token) {
+                    range = await _computeAttackHudRange(state);
+                    if (range != null) {
+                        await activateRangePreview(token, range);
+                        activated = true;
+                        Hooks.on('controlToken', onControl);
+                        Hooks.on('targetToken', onTarget);
+                        Hooks.on('hoverToken', onHover);
+                    }
+                }
+            }
+            return await original(state, options);
+        } finally {
+            if (activated) {
+                Hooks.off('controlToken', onControl);
+                Hooks.off('targetToken', onTarget);
+                Hooks.off('hoverToken', onHover);
+                if (token) deactivateRangePreview(token);
+            }
+        }
+    });
 });

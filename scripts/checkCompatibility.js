@@ -222,6 +222,24 @@ function getConflictRules() {
             }
         },
 
+        // ── Built-in Speed Provider vs standalone lancer-speed-provider ──
+        {
+            id: 'speedprovider-vs-standalone',
+            label: '<b>Built-in Speed Provider</b> conflicts with standalone <i>lancer-speed-provider</i> module. Auto-fix will disable the built-in provider.',
+            check() {
+                if (!game.modules.get('lancer-speed-provider')?.active)
+                    return false;
+                try {
+                    return game.settings.get(MODULE_ID, 'enableBuiltinSpeedProvider') === true;
+                } catch {
+                    return false;
+                }
+            },
+            async fix() {
+                await game.settings.set(MODULE_ID, 'enableBuiltinSpeedProvider', false);
+            }
+        },
+
         // ── Wreck system vs csm-lancer-qol wrecks ──
         {
             id: 'wreck-vs-qol',

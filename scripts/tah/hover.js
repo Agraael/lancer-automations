@@ -100,7 +100,7 @@ async function ensureRangePreviewAura(tokenDoc) {
  * @param {any} token  — canvas Token object (not document)
  * @param {number} range
  */
-async function activateRangePreview(token, range) {
+export async function activateRangePreview(token, range) {
     if (!hasGAA())
         return;
     const auraLayer = /** @type {any} */ (canvas).gaaAuraLayer;

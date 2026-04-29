@@ -27,6 +27,11 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
+    { type: 'section', label: 'Speed Provider (drag-ruler / elevation-ruler)', collapsible: true, collapsed: true },
+    { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Built-in Speed Provider', hint: 'Provide ruler tiers from this module instead of the standalone lancer-speed-provider. Reload after toggling.' },
+    { key: 'speedProvider.colorStandard', type: 'color', label: 'Speed Color: Standard' },
+    { key: 'speedProvider.colorBoost', type: 'color', label: 'Speed Color: Boost' },
+    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Speed Color: Over-boost' },
 ];
 
 const WRECKS_FIELDS = [
@@ -139,6 +144,7 @@ const TAH_FIELDS = [
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.rangePreview', type: 'boolean' },
+    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean' },
     { key: 'tah.auraUseAltKey', type: 'boolean' },
     { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
     { key: 'tah.resetPosition', type: 'button', label: 'Reset TAH Position', icon: 'fas fa-undo', hint: 'Reset the HUD to its default screen position.',
@@ -276,6 +282,7 @@ const STATUS_FX_AUTO = [
     { sub: 'auto_burn',       label: 'Auto Burn icon (burn > 0)' },
     { sub: 'auto_overshield', label: 'Auto Overshield icon (OS > 0)' },
     { sub: 'auto_infection',  label: 'Auto Infection icon (infection > 0)' },
+    { sub: 'auto_cascading',  label: 'Auto Cascading icon (NHP cascading)' },
 ];
 
 const STATUSES_FIELDS = [
@@ -411,6 +418,13 @@ function _buildItem(f) {
         value = f.default;
     }
     const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`) || {};
+    if (f.type === 'color') {
+        const hexRe = /^#[0-9a-fA-F]{6}$/;
+        if (typeof value !== 'string' || !hexRe.test(value)) {
+            const fromColor = (typeof value?.toString === 'function') ? value.toString() : null;
+            value = (fromColor && hexRe.test(fromColor)) ? fromColor : (setting.default ?? f.default ?? '#000000');
+        }
+    }
     return {
         key: f.key,
         type: f.type,

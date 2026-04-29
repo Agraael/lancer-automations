@@ -197,6 +197,17 @@ interface CONFIG {
         };
         [key: string]: any;
     };
+    elevationruler?: {
+        SPEED?: {
+            ATTRIBUTES?: { [key: string]: any };
+            CATEGORIES?: any[];
+            tokenSpeed?: (token: any) => number;
+            maximumCategoryDistance?: (token: any, cat: any, ts?: number) => number;
+            [key: string]: any;
+        };
+        MovePenalty?: any;
+        [key: string]: any;
+    };
 }
 
 // ─── CompendiumCollection.getIndex augmentation ───────────────────────────────
