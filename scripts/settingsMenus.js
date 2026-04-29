@@ -20,6 +20,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'statRollTargeting', type: 'boolean' },
     { key: 'enablePathHexCalculation', type: 'boolean' },
     { key: 'enableMovementCapDetection', type: 'boolean' },
+    { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
     { key: 'dragVisionMultiplier', type: 'number' },
     { key: 'enableAltStruct', type: 'boolean' },

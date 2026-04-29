@@ -1619,7 +1619,8 @@ export class LancerHUD {
                     return false;
                 }
             })();
-        const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection');
+        const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection')
+            || game.settings.get('lancer-automations', 'enableBoostOffer');
 
         const movementItems = [
             { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },

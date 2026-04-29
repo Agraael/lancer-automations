@@ -955,11 +955,9 @@ export function cancelRulerDrag(token, moveInfo = null) {
         );
 
         if (matchIndex !== -1) {
-            // Truncate the history down to the matched point (inclusive)
-            // This natively strips all 'future' queued waypoints from a multi-segment drag
-            history.length = matchIndex;
+            // Keep up to AND INCLUDING the matched point (= where the token actually is).
+            history.length = matchIndex + 1;
         } else {
-            // Fallback for when current position isn't explicitly in history
             history.pop();
         }
     }

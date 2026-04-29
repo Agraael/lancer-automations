@@ -337,11 +337,6 @@ export async function updateStructure(token) {
     const structure = token.actor.system.structure.value;
     if (structure <= 0) {
         response = `${token.name} structure is zero or less.`;
-        const statusFXConfig = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
-        if (statusFXConfig.removeStatusesOnDeath) {
-            log(`${token.name} is dead, removing statuses.`);
-            await token.actor.deleteEmbeddedDocuments('ActiveEffect', token.actor.effects.map(e => e.id));
-        }
         if (game.combat && token.combatant && game.settings.get(MODULE_ID, 'enableRemoveFromCombat')) {
             log(`${token.name} is dead, removing from combat.`);
             await game.combat.combatants.get(token.combatant._id)?.delete();

@@ -70,6 +70,33 @@ export function getDefaultItemReactionRegistry() {
             }]
         }
     };
+
+    // Limitless (Ultra / Veteran) — grants the "Overcharge (NPC)" extra action.
+    /** @type {ReactionGroup} */
+    const limitlessOvercharge = {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.addExtraActions(item, {
+                    name: "Overcharge (NPC)",
+                    activation: "Protocol",
+                    icon: "systems/lancer/assets/icons/overcharge.svg",
+                    detail: item.system.effect
+                });
+            }
+        }]
+    };
+    builtInDefaults["npcf_limitless_ultra"] = limitlessOvercharge;
+    builtInDefaults["npcf_limitless_veteran"] = limitlessOvercharge;
+    builtInDefaults["npc-rebake_npcf_limitless_ultra"] = limitlessOvercharge;
+    builtInDefaults["npc-rebake_npcf_limitless_veteran"] = limitlessOvercharge;
+
     return { ...builtInDefaults, ...externalItemReactions };
 }
 

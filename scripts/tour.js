@@ -1,6 +1,7 @@
 /* global Tour, game, ui, Dialog, Hooks, FormApplication, $, fetch */
 
 const SETTING_TOUR_DONE = 'tourCompleted';
+const SETTING_MOVEMENT_WARNING_SHOWN = 'movementWarningShown';
 const NS = 'lancer-automations';
 const ROOT = '#lancer-automations-config';
 const RM_ROOT = '#reaction-manager-config';
@@ -568,6 +569,53 @@ function _welcomeDialog() {
     });
 }
 
+function _movementWarningDialog() {
+    return new Promise((resolve) => {
+        new Dialog({
+            title: 'Lancer Automations - Movement',
+            content: `
+                <div class="lancer-dialog-header">
+                    <div class="lancer-dialog-title">A WORD ON MOVEMENT</div>
+                    <div class="lancer-dialog-subtitle">Please read this once.</div>
+                </div>
+                <div style="padding: 8px 10px; line-height: 1.5;">
+                    <p style="margin: 0 0 8px;">Movement and the automation around it (Overwatch, Engagement, reactions on move, boost split, etc.) hooks into Foundry's move pipeline. With the Lancer fork of Elevation Ruler it now works reliably for most cases: the multi step stacks (Boost &amp; Move, Overcharge &amp; Boost &amp; Move) advance on <code>onMove</code> / <code>onActivation</code>, which fire post commit, so each leg has settled before the next one runs.</p>
+                    <p style="margin: 0 0 8px;">It's only medium stable though, so a few caveats:</p>
+                    <ul style="margin: 0 0 8px 18px;">
+                        <li>Be wary on <b>very vertical maps</b>: heavy climbing / hover / big elevation deltas can throw off the cost math, and the longer chains (3 leg Overcharge path) have the most surface to misbehave.</li>
+                        <li>If a stack stalls or a leg lands wrong, fall back to <b>Ignore</b> on the choice card, or hold the <b>free movement</b> key for a single drag.</li>
+                        <li>For purely measuring (no token follow, no cost), <b>Ctrl+drag</b> from any empty hex gives you the vanilla ruler.</li>
+                    </ul>
+                    <p style="margin: 0; opacity: 0.85;">Predictive / multi waypoint dragging is still beta. If you hit weirdness, splitting the move into two drags usually unblocks it.</p>
+                </div>
+            `,
+            buttons: {
+                ok: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: 'Got it',
+                    callback: () => resolve(true),
+                },
+            },
+            default: 'ok',
+            close: () => resolve(true),
+        }, { width: 600, classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+    });
+}
+
+async function _maybeShowMovementWarning() {
+    let shown = false;
+    try {
+        shown = !!game.settings.get(NS, SETTING_MOVEMENT_WARNING_SHOWN);
+    } catch { /* not registered yet */ }
+    if (shown) {
+        return;
+    }
+    await _movementWarningDialog();
+    try {
+        await game.settings.set(NS, SETTING_MOVEMENT_WARNING_SHOWN, true);
+    } catch { /* not ready */ }
+}
+
 // Run all three tours back to back: configuration, activation manager, TAH.
 async function _runFullTour() {
     await _ensureConfigOpen();
@@ -605,6 +653,13 @@ class TourMenu extends FormApplication {
 export function registerTourBootstrap() {
     console.log('lancer-automations | registerTourBootstrap called');
     game.settings.register(NS, SETTING_TOUR_DONE, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+
+    game.settings.register(NS, SETTING_MOVEMENT_WARNING_SHOWN, {
         scope: 'world',
         config: false,
         type: Boolean,
@@ -694,10 +749,11 @@ export function registerTourBootstrap() {
         try {
             done = !!game.settings.get(NS, SETTING_TOUR_DONE);
         } catch { /* not ready */ }
-        if (done)
-            return;
-        _pingNewInstallCounter();
-        await _runChooser();
+        if (!done) {
+            _pingNewInstallCounter();
+            await _runChooser();
+        }
+        await _maybeShowMovementWarning();
     });
 }
 

@@ -1292,6 +1292,15 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'enableBoostOffer', {
+        name: 'Boost & Move Offer [beta]',
+        hint: 'When a move exceeds the cap, offer to split it with Boost (and Overcharge for mechs or NPCs with the Overcharge action).',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'showDeployableLines', {
         name: 'Show Deployable Lines',
         hint: 'Draw lines between owned tokens and their deployables on hover.',
@@ -2010,6 +2019,49 @@ async function handleSocketEvent({ action, payload }) {
 // In-memory cache for move history (survives between preUpdateToken calls in multi-segment moves)
 const _moveHistoryCache = new Map();
 
+// Per-mover action stack for chained move/activation sequences (e.g. Boost & Move).
+// Only one stack exists at a time. A new push wipes the previous one.
+// Frame: { kind: 'awaitMove' | 'awaitActivation', matchActionName?: string, onSatisfy?: () => Promise<void> }
+let _activeMoveStack = null;
+const _MOVE_STACK_TIMEOUT_MS = 5000;
+const _MOVE_STACK_INTER_DELAY_MS = 1000;
+
+function _wipeMoveStack() {
+    if (!_activeMoveStack) return;
+    if (_activeMoveStack._timer) clearTimeout(_activeMoveStack._timer);
+    _activeMoveStack = null;
+}
+
+function _pushMoveStack(tokenId, frames) {
+    _wipeMoveStack();
+    _activeMoveStack = { tokenId, cursor: 0, frames };
+    _activeMoveStack._timer = setTimeout(() => _wipeMoveStack(), _MOVE_STACK_TIMEOUT_MS);
+}
+
+async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {}) {
+    const s = _activeMoveStack;
+    if (!s || s.tokenId !== tokenId) return;
+    const frame = s.frames[s.cursor];
+    if (!frame || frame.kind !== kind) return;
+    if (frame.matchActionName && ctx.actionName !== frame.matchActionName) return;
+    if (cancelled) { _wipeMoveStack(); return; }
+    const onSatisfy = frame.onSatisfy;
+    s.cursor++;
+    // Reset the wall-clock safety timer — this frame matched, so the chain is making progress.
+    if (s._timer) clearTimeout(s._timer);
+    s._timer = setTimeout(() => _wipeMoveStack(), _MOVE_STACK_TIMEOUT_MS);
+    if (s.cursor >= s.frames.length) _wipeMoveStack();
+    if (onSatisfy) {
+        try {
+            // Inter-action grace period: lets async side-effects (cap bumps, action-tracker
+            // updates) from the just-completed frame propagate before the next one fires.
+            await new Promise(r => setTimeout(r, _MOVE_STACK_INTER_DELAY_MS));
+            await onSatisfy();
+        }
+        catch (err) { console.error('lancer-automations | move stack onSatisfy failed', err); _wipeMoveStack(); }
+    }
+}
+
 function _getMoveHistoryDoc(tokenOrId) {
     if (typeof tokenOrId === 'string')
         return canvas.tokens.get(tokenOrId)?.document ?? null;
@@ -2161,6 +2213,184 @@ function increaseMovementCap(tokenOrId, value) {
     if (!doc)
         return;
     _writeMovementCap(doc, getMovementCap(tokenOrId) + value);
+}
+
+/**
+ * Cap-overflow handler invoked from `preUpdateToken` when the requested move would exceed the
+ * remaining movement allowance. Cancels the original update, then offers Boost & Move (any actor)
+ * or Overcharge & Boost & Move (mech-only 3-leg path). Each accepted offer pushes a move stack.
+ *
+ * @param {Token} token
+ * @param {{
+ *   options: any,
+ *   change: any,
+ *   startPos: { x: number, y: number },
+ *   endPos: { x: number, y: number },
+ *   moveInfo: any,
+ *   moveToMovementCost: number,
+ *   moveIsFreeMovement: boolean,
+ *   triggerData: any
+ * }} ctx
+ */
+function _handleMovementCapExceeded(token, ctx) {
+    const { options, change, startPos, endPos, moveInfo, moveToMovementCost, moveIsFreeMovement, triggerData } = ctx;
+    const capDetect = game.settings.get('lancer-automations', 'enableMovementCapDetection');
+    const boostOffer = game.settings.get('lancer-automations', 'enableBoostOffer');
+    const isTokenInCombat = !!game.combat?.combatants.find(c => c.token?.id === token.id);
+    if (options.ignoreMovementCap
+        || (!capDetect && !boostOffer)
+        || !isTokenInCombat || moveIsFreeMovement || moveToMovementCost <= 0) {
+        return;
+    }
+
+    const cap = getMovementCap(token);
+    const history = getMovementHistory(token);
+    const spent = history.exists ? history.intentional.regularCost : 0;
+    if (!(spent <= cap && spent + moveToMovementCost > cap)) {
+        return;
+    }
+
+    const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
+    const speed = token.actor?.system?.speed ?? 0;
+    const isMech = token.actor?.type === 'mech';
+    const npcOvercharge = !isMech && token.actor?.type === 'npc'
+        ? (token.actor.getFlag('lancer-automations', 'extraActions') || []).find(a => a.name === 'Overcharge (NPC)')
+        : null;
+    const need = spent + moveToMovementCost;
+    const canBoost = speed > 0 && need <= (cap + speed);
+    const canOvercharge = (isMech || !!npcOvercharge) && speed > 0 && need > (cap + speed) && need <= (cap + speed * 2);
+    const overchargeActionName = isMech ? 'Overcharge' : 'Overcharge (NPC)';
+    options.ignoreMovementCap = true;
+    triggerData.cancelTriggeredMove._engineCancel = true;
+
+    triggerData.cancel();
+    cancelRulerDrag(token, moveInfo);
+
+    const finalX = change.x ?? endPos.x;
+    const finalY = change.y ?? endPos.y;
+    const finalElev = change.elevation;
+    const finalDest = { x: finalX, y: finalY, elevation: finalElev };
+
+    const fireBoost = () => executeSimpleActivation(token.actor, {
+        title: 'Boost',
+        action: { name: 'Boost', activation: 'Quick' },
+        detail: 'Move your speed.',
+    });
+    const fireOvercharge = async () => {
+        if (isMech) {
+            const OverchargeFlow = game.lancer?.flows?.get?.('OverchargeFlow');
+            if (OverchargeFlow) {
+                const flow = new OverchargeFlow(token.actor.uuid);
+                await flow.begin();
+            }
+            return;
+        }
+        // NPC path: fire the registered "Overcharge (NPC)" extra action so its built-in
+        // reaction (heat roll + FX) handles it.
+        await executeSimpleActivation(token.actor, {
+            title: 'Overcharge (NPC)',
+            action: { name: 'Overcharge (NPC)', activation: 'Protocol' },
+            detail: npcOvercharge?.detail || '',
+        });
+    };
+    const computeMid = (/** @type {number} */ cost) => {
+        const ratio = moveToMovementCost > 0 ? Math.max(0, cost / moveToMovementCost) : 0;
+        return token.getSnappedPosition({
+            x: startPos.x + (endPos.x - startPos.x) * ratio,
+            y: startPos.y + (endPos.y - startPos.y) * ratio,
+        });
+    };
+
+    if (canBoost && boostOffer && !options._skipBoostOffer) {
+        const remaining = cap - spent;
+        const snapMid = remaining > 0 ? computeMid(remaining) : null;
+        (async () => {
+            const result = await startChoiceCard({
+                title: 'BOOST & MOVE',
+                icon: 'modules/lancer-automations/icons/black/speedometer.svg',
+                description: `Movement exceeds cap (${need}/${cap}). Boost adds +${speed}.`,
+                originToken: token,
+                userIdControl: getTokenOwnerUserId(token),
+                choices: [
+                    { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/black/speedometer.svg' },
+                    { text: 'Ignore', icon: 'fas fa-forward' },
+                ]
+            });
+            const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
+            if (choiceIdx === 1) {
+                // Ignore: do the move anyway, bypassing the cap (and any further offer).
+                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+                return;
+            }
+            if (choiceIdx !== 0) return; // Card cancelled: do nothing.
+            const fireFinalLeg = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+            if (snapMid) {
+                // Cap not yet exhausted: leg1 -> Boost -> leg2.
+                _pushMoveStack(token.id, [
+                    { kind: 'awaitMove', onSatisfy: fireBoost },
+                    { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: fireFinalLeg },
+                    { kind: 'awaitMove' }
+                ]);
+                await _rulerMove(token, snapMid, { _skipBoostOffer: true, useElevationRuler: true });
+            } else {
+                // Cap already exhausted: skip leg1, fire Boost immediately.
+                _pushMoveStack(token.id, [
+                    { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: fireFinalLeg },
+                    { kind: 'awaitMove' }
+                ]);
+                await fireBoost();
+            }
+        })();
+    } else if (canOvercharge && boostOffer && !options._skipBoostOffer) {
+        // 3-leg path: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3.
+        // If cap already exhausted, skip leg1 and start at the Boost.
+        const remaining = cap - spent;
+        const mid1 = remaining > 0 ? computeMid(remaining) : null;
+        const mid2 = computeMid(remaining + speed);
+        (async () => {
+            const result = await startChoiceCard({
+                title: 'OVERCHARGE & BOOST & MOVE',
+                icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
+                description: `Movement exceeds cap+boost (${need}/${cap + speed}). Overcharge grants an extra Boost (+${speed}).`,
+                originToken: token,
+                userIdControl: getTokenOwnerUserId(token),
+                choices: [
+                    { text: 'Overcharge & Boost & Move', icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg' },
+                    { text: 'Ignore', icon: 'fas fa-forward' },
+                ]
+            });
+            const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
+            if (choiceIdx === 1) {
+                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+                return;
+            }
+            if (choiceIdx !== 0) return; // Card cancelled: do nothing.
+            const mid2Move = () => _rulerMove(token, mid2, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+            const finalMove = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+            const tailFrames = [
+                { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: mid2Move },
+                { kind: 'awaitMove', onSatisfy: fireOvercharge },
+                { kind: 'awaitActivation', matchActionName: overchargeActionName, onSatisfy: fireBoost },
+                { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: finalMove },
+                { kind: 'awaitMove' }
+            ];
+            if (mid1) {
+                _pushMoveStack(token.id, [
+                    { kind: 'awaitMove', onSatisfy: fireBoost },
+                    ...tailFrames
+                ]);
+                await _rulerMove(token, mid1, { _skipBoostOffer: true, useElevationRuler: true });
+            } else {
+                _pushMoveStack(token.id, tailFrames);
+                await fireBoost();
+            }
+        })();
+    } else if (capDetect) {
+        triggerData.cancelTriggeredMove(
+            `Not enough movement points (${need} > ${cap}). ` +
+            `Hold <b>${freeKey}</b> for free movement.`
+        );
+    }
 }
 
 /**
@@ -2331,6 +2561,10 @@ async function handleTokenMove(document, change, options, userId) {
         return;
 
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
+
+    // Move leg complete: advance the action stack if this token is the awaited mover.
+    // Fire-and-forget so this hook returns promptly.
+    _advanceMoveStack('awaitMove', token.id, false);
 }
 
 async function onAttackStep(state) {
@@ -3188,6 +3422,9 @@ async function onActivationStep(state) {
 
     if (token) {
         state.actor = token.actor;
+        // Advance the move stack now that the activation is fully complete (post-effects).
+        // Fire-and-forget — same reason as in the onMove handler.
+        _advanceMoveStack('awaitActivation', token.id, false, { actionName });
     }
 
     // Auto-discharge extra actions that carry a `recharge` field after activation
@@ -3298,6 +3535,9 @@ async function onInitActivationStep(state) {
     });
 
     if (cancelActivation) {
+        if (_activeMoveStack && token && _activeMoveStack.tokenId === token.id) {
+            _wipeMoveStack();
+        }
         await cancelAction.wait();
         return false;
     }
@@ -4069,6 +4309,9 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('SystemFlow')?.insertStepAfter('initSystemUseData', 'lancer-automations:onInitActivation');
     flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onInitActivation');
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onInitActivation');
+    // OverchargeFlow / StabilizeFlow have no init step — insert at the start so they're cancellable.
+    flows.get('OverchargeFlow')?.insertStepBefore('initOverchargeData', 'lancer-automations:onInitActivation');
+    flows.get('StabilizeFlow')?.insertStepBefore('initializeStabilize', 'lancer-automations:onInitActivation');
 
 }
 
@@ -5035,8 +5278,10 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
 });
 
 // Init movement cap for all combatants when combat starts.
+// Either feature needs the cap initialized — boost offer reads it to know what's exceeded.
 Hooks.on('combatStart', (combat) => {
-    if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')) {
+    if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')
+        && !game.settings.get('lancer-automations', 'enableBoostOffer')) {
         return;
     }
     for (const combatant of combat.combatants) {
@@ -5836,92 +6081,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             trace.destroy();
         };
 
-        // Movement cap check: block the move if it would exceed the cap (combat only, non-free moves)
-        const isTokenInCombat = !!game.combat?.combatants.find(c => c.token?.id === token.id);
-        if (!options.ignoreMovementCap
-            && game.settings.get('lancer-automations', 'enableMovementCapDetection')
-            && isTokenInCombat && !moveIsFreeMovement && moveToMovementCost > 0) {
-            const cap = getMovementCap(token);
-            const history = getMovementHistory(token);
-            const spent = history.exists ? history.intentional.regularCost : 0;
-            if (spent <= cap && spent + moveToMovementCost > cap) {
-                const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
-                const speed = token.actor?.system?.speed ?? 0;
-                const canBoost = speed > 0 && (spent + moveToMovementCost) <= (cap + speed);
-                options.ignoreMovementCap = true;
-                triggerData.cancelTriggeredMove._engineCancel = true;
-
-                // Always cancel first
-                triggerData.cancel();
-                cancelRulerDrag(token, moveInfo);
-
-                const finalX = change.x ?? endPos.x;
-                const finalY = change.y ?? endPos.y;
-                const finalElev = change.elevation;
-
-                if (canBoost && !options._skipBoostOffer) {
-                    const remaining = cap - spent;
-                    const totalDist = moveToMovementCost;
-                    const ratio = totalDist > 0 ? Math.max(0, remaining / totalDist) : 0;
-                    const midX = startPos.x + (endPos.x - startPos.x) * ratio;
-                    const midY = startPos.y + (endPos.y - startPos.y) * ratio;
-
-                    setTimeout(async () => {
-                        const result = await startChoiceCard({
-                            title: 'BOOST & MOVE',
-                            icon: 'modules/lancer-automations/icons/black/speedometer.svg',
-                            description: `Movement exceeds cap (${spent + moveToMovementCost}/${cap}). Boost adds +${speed}.`,
-                            originToken: token,
-                            userIdControl: getTokenOwnerUserId(token),
-                            choices: [
-                                { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/black/speedometer.svg' },
-                                { text: 'No', icon: 'fas fa-times' },
-                            ]
-                        });
-                        if (/** @type {any} */ (result)?.choiceIdx !== 0) {
-                            // Redo the original move, skip boost offer, fall back to normal cap check
-                            await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { _skipBoostOffer: true });
-                            return;
-                        }
-                        // Step 1: move to cap boundary. Let onPreMove/onMove fire normally
-                        // so Overwatch and other reactions get a chance to trigger and cancel.
-                        const snapMid = token.getSnappedPosition({ x: midX, y: midY });
-                        await _rulerMove(token, snapMid, { _skipBoostOffer: true });
-
-                        // If leg 1 was cancelled (e.g. Overwatch), abort the boost sequence.
-                        const tol = canvas.grid.size / 2;
-                        const leg1Done = Math.abs(token.document.x - snapMid.x) < tol
-                            && Math.abs(token.document.y - snapMid.y) < tol;
-                        if (!leg1Done) {
-                            return;
-                        }
-
-                        // Step 2: boost
-                        await new Promise(r => setTimeout(r, 800));
-                        await executeSimpleActivation(token.actor, {
-                            title: 'Boost',
-                            action: { name: 'Boost', activation: 'Quick' },
-                            detail: 'Move your speed.',
-                        });
-                        // Step 3: move to final destination.
-                        await new Promise(r => setTimeout(r, 800));
-                        await _rulerMove(token, { x: finalX, y: finalY, elevation: finalElev }, { _skipBoostOffer: true });
-                    }, 100);
-                } else {
-                    // No boost possible or boost declined — redo with normal cap check
-                    setTimeout(() => {
-                        const redoUpdate = { x: finalX, y: finalY };
-                        if (finalElev !== undefined) {
-                            redoUpdate.elevation = finalElev;
-                        }
-                        triggerData.cancelTriggeredMove(
-                            `Not enough movement points (${spent + moveToMovementCost} > ${cap}). ` +
-                            `Hold <b>${freeKey}</b> for free movement.`
-                        );
-                    }, 100);
-                }
-            }
-        }
+        _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost, moveIsFreeMovement, triggerData });
 
         // Call handleTrigger without await. If onPreMove reactions are synchronous,
         // cancelUpdate will be set to true before we check it on the next line.
@@ -5931,6 +6091,11 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         }
 
         if (cancelUpdate) {
+            // A reactor (Overwatch, Engagement, etc.) cancelled this move. If a stack
+            // is awaiting this token's leg, wipe it: chain is broken.
+            if (_activeMoveStack && _activeMoveStack.tokenId === token.id) {
+                _wipeMoveStack();
+            }
             return false;
         }
 

@@ -176,6 +176,7 @@ function getConflictRules() {
                 }
                 try {
                     return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
+                        || game.settings.get(MODULE_ID, 'enableBoostOffer')
                         || game.settings.get(MODULE_ID, 'experimentalBoostDetection');
                 } catch {
                     return false;
@@ -204,13 +205,14 @@ function getConflictRules() {
                     return false;
                 try {
                     return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
+                        || game.settings.get(MODULE_ID, 'enableBoostOffer')
                         || game.settings.get(MODULE_ID, 'experimentalBoostDetection');
                 } catch {
                     return false;
                 }
             },
             async fix() {
-                for (const key of ['enableMovementCapDetection', 'experimentalBoostDetection']) {
+                for (const key of ['enableMovementCapDetection', 'enableBoostOffer', 'experimentalBoostDetection']) {
                     try {
                         await game.settings.set(MODULE_ID, key, false);
                     } catch (e) {

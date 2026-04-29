@@ -40,6 +40,7 @@ const FX_DEFAULTS = {
     auto_burn:        true,
     auto_overshield:  true,
     auto_infection:   true,
+    auto_cascading:   true,
     // Action FX (Boost, Hide, Shut Down, Fall, Overcharge, etc.)
     actionFX:         false,
 };
@@ -136,6 +137,7 @@ export class StatusFXConfig extends FormApplication {
                 { key: 'burn',        label: 'Auto Burn icon (burn > 0)',      enabled: config.auto_burn },
                 { key: 'overshield',  label: 'Auto Overshield icon (OS > 0)',  enabled: config.auto_overshield },
                 { key: 'infection',   label: 'Auto Infection icon (infection > 0)', enabled: config.auto_infection },
+                { key: 'cascading',   label: 'Auto Cascading icon (NHP cascading)', enabled: config.auto_cascading },
             ],
             removeStatusesOnDeath: config.removeStatusesOnDeath ?? false
         };
@@ -931,6 +933,13 @@ async function autoStatusInfection(actor) {
     await actor.toggleStatusEffect('infection', { active: infection > 0 });
 }
 
+async function autoStatusCascading(actor) {
+    if (!isAutoEnabled('cascading'))
+        return;
+    const hasCascading = actor.items?.some?.(i => i.system?.cascading === true) ?? false;
+    await actor.toggleStatusEffect('cascading', { active: hasCascading });
+}
+
 // ---------------------------------------------------------------------------
 // Hook handlers
 // ---------------------------------------------------------------------------
@@ -1062,6 +1071,14 @@ export function initStatusFX() {
     Hooks.on('updateActor', (actor, _change, _options, _userId) => {
         onUpdateActor(actor, _change, _options, _userId);
         reconcileStatusFX(actor);
+    });
+    Hooks.on('updateItem', (item, change, _options, userId) => {
+        if (game.userId !== userId || !isMasterEnabled()) {
+            return;
+        }
+        if (change.system?.cascading !== undefined && item.parent) {
+            autoStatusCascading(item.parent);
+        }
     });
 
     blockQoLEffects();
