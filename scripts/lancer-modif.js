@@ -51,14 +51,17 @@ export function injectDisabledSchemaField() {
 /** Item types that support the disabled state. */
 const DISABLEABLE_TYPES = new Set(['mech_weapon', 'mech_system', 'npc_feature', 'weapon_mod']);
 
+/** @returns {boolean} */
 function isDisableable(item) {
     return item?.documentName === 'Item' && DISABLEABLE_TYPES.has(item.type);
 }
 
+/** @returns {boolean} */
 function isItemDisabled(item) {
     return !!item?.system?.disabled;
 }
 
+/** @returns {Promise<Item>} */
 async function setItemDisabled(item, disabled) {
     return item.update({ 'system.disabled': disabled });
 }

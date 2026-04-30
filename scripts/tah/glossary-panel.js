@@ -1,5 +1,7 @@
 /* global $, game, fromUuid */
 
+import { playUiSound } from './sound.js';
+
 const S_COL_LABEL = [
     'padding:3px 12px 4px',
     'background:var(--primary-color)',
@@ -76,8 +78,9 @@ export class GlossaryPanel {
         const panel = $(`<div class="la-hud-glossary-panel" style="display:flex;flex-direction:column;background:#f5f5f5;border:2px solid var(--primary-color);border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.82em;width:480px;"></div>`);
         panel.append(`<div style="${S_COL_LABEL}">Glossary &middot; Scanned Units</div>`);
 
-        const search = $(`<input type="text" placeholder="Search by name…" style="margin:6px 8px;padding:5px 8px;border:1px solid #999;border-radius:3px;background:#fff;color:#222;font-size:0.95em;">`);
-        panel.append(search);
+        const searchWrap = $(`<div style="padding:6px 8px;box-sizing:border-box;"><input type="text" placeholder="Search by name…" style="width:100%;padding:5px 8px;border:1px solid #999;border-radius:3px;background:#fff;color:#222;font-size:0.95em;box-sizing:border-box;"></div>`);
+        const search = searchWrap.find('input');
+        panel.append(searchWrap);
 
         const list = $(`<div class="la-hud-glossary-list" style="overflow-y:auto;padding:4px 6px 8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1;min-height:80px;"></div>`);
         const empty = $(`<div style="grid-column:1 / -1;font-size:0.9em;color:#666;text-align:center;padding:16px 8px;">No scans visible to you yet.</div>`);
@@ -103,6 +106,7 @@ export class GlossaryPanel {
                 </div>`);
                 row.on('mouseenter', () => {
                     this._cancelCollapse();
+                    playUiSound('statusHover');
                     row.css('background', '#ffe0e0');
                     const clip = row.find('.la-hud-clip')[0];
                     const pan  = row.find('.la-hud-pan')[0];

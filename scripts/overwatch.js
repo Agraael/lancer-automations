@@ -29,6 +29,7 @@ function getDispositionData(t1, t2) {
     };
 }
 
+/** @returns {boolean} */
 export function isFriendly(token1, token2) {
     const d = getDispositionData(token1, token2);
     if (d.factionDisposition !== undefined) {
@@ -37,6 +38,7 @@ export function isFriendly(token1, token2) {
     return (d.is1Good && d.is2Good) || (d.is1Bad && d.is2Bad);
 }
 
+/** @returns {boolean} */
 export function isHostile(reactor, mover) {
     const d = getDispositionData(reactor, mover);
     if (d.factionDisposition !== undefined) {
@@ -46,6 +48,7 @@ export function isHostile(reactor, mover) {
     return (d.is1Good && d.is2Bad) || (d.is1Bad && d.is2Good);
 }
 
+/** @returns {boolean} */
 export function checkOverwatchCondition(reactor, mover, startPos) {
     if (reactor.id === mover.id)
         return false;
@@ -250,6 +253,7 @@ export function displayOverwatch(reactors, target) {
 }
 
 
+/** @returns {Promise<void>} */
 export async function drawThreatDebug(token) {
     if (!token)
         return;
@@ -317,6 +321,7 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.endFill();
 }
 
+/** @returns {number} */
 export function getTokenDistance(token1, token2, includeElevation = undefined) {
     return getMinGridDistance(token1, token2, null, includeElevation);
 }
@@ -418,6 +423,7 @@ export async function drawDistanceDebug() {
  * immunity bonus, or is intangible while the reactor is not also intangible
  * (different planes). Same-token pairs always return true (self-reactions
  * bypass this check).
+ * @returns {boolean}
  */
 export function canProvokeReaction(triggering, reactor) {
     if (!triggering || !reactor)
@@ -443,6 +449,7 @@ export function canProvokeReaction(triggering, reactor) {
     return true;
 }
 
+/** @returns {boolean} */
 export function canEngage(token1, token2) {
     if (!token1 || !token2)
         return false;
@@ -495,6 +502,7 @@ export function canEngage(token1, token2) {
     return true;
 }
 
+/** @returns {Promise<void>} */
 export async function updateAllEngagements(options = {}) {
     if (!game.user.isGM)
         return;

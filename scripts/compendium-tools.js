@@ -2,6 +2,7 @@
 
 /**
  * Looks up a macro by name in the lancer-automations compendium and executes it.
+ * @returns {Promise<void>}
  */
 export async function executePackMacro(macroName, scope = {}) {
     const packKey = "lancer-automations.macros";

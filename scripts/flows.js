@@ -48,7 +48,8 @@ export function registerFlowStatePersistence() {
                     return;
                 const effectMatch = attackData.executeEffectId === state.data?.executeEffectId;
                 const hasInjectedTags = Array.isArray(state.la_extraData?.injectedTags) && state.la_extraData.injectedTags.length > 0;
-                if (!effectMatch && !hasInjectedTags)
+                const hasFlowBonus = Array.isArray(state.la_extraData?.flow_bonus) && state.la_extraData.flow_bonus.length > 0;
+                if (!effectMatch && !hasInjectedTags && !hasFlowBonus)
                     return;
                 let flowState = {};
                 if (state.la_extraData && typeof state.la_extraData === 'object') {

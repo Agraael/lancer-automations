@@ -13,6 +13,7 @@ import { openItemBrowserDialog } from "./misc-tools.js";
 /**
  * Open item browser and populate targetInput with the selected LID.
  * @param {JQuery} targetInput
+ * @returns {Promise<string|null>}
  */
 export async function openItemBrowser(targetInput) {
     const result = await openItemBrowserDialog();
@@ -422,7 +423,10 @@ async function fetchAvailableTags() {
     return tags;
 }
 
-// Main Function: executeEffectManager
+/**
+ * Main Function: executeEffectManager
+ * @returns {Promise<void>}
+ */
 export async function executeEffectManager(options = {}) {
     console.log('lancer-automations | Executing Effect Manager');
 

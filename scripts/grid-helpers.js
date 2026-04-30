@@ -247,6 +247,7 @@ export function getOccupiedCenters(token, overridePos = null) {
     return offsets.map(o => getHexCenter(o.col, o.row));
 }
 
+/** @returns {number} */
 export function getMinGridDistance(token1, token2, overridePos1 = null, includeElevation = undefined) {
     if (includeElevation === undefined) {
         try {

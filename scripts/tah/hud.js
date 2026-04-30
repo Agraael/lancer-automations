@@ -884,7 +884,7 @@ export class LancerHUD {
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
 
-            if (!hasChildren)
+            if (!hasChildren || item.isLogPanel || item.isGlossaryPanel)
                 row.on('mouseenter', () => playUiSound('hover'));
 
             if (col !== this._c4 && !this._clickToOpen) {

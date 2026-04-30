@@ -108,6 +108,7 @@ async function dispatchNotifications() {
     }
 }
 
+/** @returns {Promise<void>} */
 export async function pushEffect(targetID, effect, duration, note, originID) {
     const target = canvas.tokens.get(targetID);
     const canActDirectly = game.user.isGM || target?.document?.isOwner;
@@ -140,6 +141,7 @@ function _sameIdentity(extraOptions, existingEffect) {
     return identityKeys.every(k => storedFlags[k] === extraOptions[k]);
 }
 
+/** @returns {Promise<void>} */
 export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}) {
     log('**setEffect**');
     const target = canvas.tokens.placeables.find(x => x.id === targetID);
@@ -815,6 +817,7 @@ export async function consumeEffectCharge(effect) {
  * Supports both single-duration effects and multi-duration stacked effects via durationEntries.
  * @param {string} triggerLabel - 'start' or 'end'
  * @param {string} triggeringTokenId - The token ID whose turn is starting/ending
+ * @returns {Promise<void>}
  */
 export async function processDurationEffects(triggerLabel, triggeringTokenId) {
     // Only the active GM processes duration to avoid conflicts
@@ -958,6 +961,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
  * @param {Array<string>|string} effectNames - List of effects to check for
  * @param {Item|string} source - The item or text describing the source of immunity
  * @param {boolean} [notify=true] - Whether to show a chat notification
+ * @returns {Promise<void>}
  */
 export async function triggerEffectImmunity(token, effectNames, source = "", notify = true) {
     const actor = token?.actor;
@@ -999,6 +1003,7 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
 /**
  * Delete flagged (or all) active effects from a list of tokens.
  * @param {Array<Token|TokenDocument>} tokens - List of tokens to process
+ * @returns {Promise<void>}
  */
 export async function deleteAllEffects(tokens) {
     if (!tokens || tokens.length === 0) {
@@ -1234,6 +1239,7 @@ export function getAllEffects(target) {
  * Delete a specific active effect from a token by ID, with GM socket routing for non-GM users.
  * @param {Token|TokenDocument|string} token - The token (or its ID) that owns the effect
  * @param {ActiveEffect|string} effect - The effect (or its ID) to delete
+ * @returns {Promise<void>}
  */
 export async function deleteEffect(token, effect) {
     const tokenID = /** @type {any} */ (token)?.id ?? token;
@@ -1256,49 +1262,49 @@ export function pushFlaggedEffect(...args) {
     return pushEffect.apply(null, args);
 }
 
-/** @deprecated use setEffect */
+/** @deprecated use setEffect @returns {Promise<void>} */
 export function setFlaggedEffect(...args) {
     console.warn("lancer-automations | setFlaggedEffect is deprecated, use setEffect instead");
     return setEffect.apply(null, args);
 }
 
-/** @deprecated use applyEffectsToTokens */
+/** @deprecated use applyEffectsToTokens @returns {Promise<void>} */
 export function applyFlaggedEffectToTokens(...args) {
     console.warn("lancer-automations | applyFlaggedEffectToTokens is deprecated, use applyEffectsToTokens instead");
     return applyEffectsToTokens.apply(null, args);
 }
 
-/** @deprecated use removeEffectsByNameFromTokens */
+/** @deprecated use removeEffectsByNameFromTokens @returns {Promise<void>} */
 export function removeFlaggedEffectFromTokens(...args) {
     console.warn("lancer-automations | removeFlaggedEffectFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
     return removeEffectsByNameFromTokens.apply(null, args);
 }
 
-/** @deprecated use removeEffectsByNameFromTokens */
+/** @deprecated use removeEffectsByNameFromTokens @returns {Promise<void>} */
 export function removeEffectsFromTokens(...args) {
     console.warn("lancer-automations | removeEffectsFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
     return removeEffectsByNameFromTokens.apply(null, args);
 }
 
-/** @deprecated use findEffectOnToken */
+/** @deprecated use findEffectOnToken @returns {ActiveEffect|null} */
 export function findFlaggedEffectOnToken(...args) {
     console.warn("lancer-automations | findFlaggedEffectOnToken is deprecated, use findEffectOnToken instead");
     return findEffectOnToken.apply(null, args);
 }
 
-/** @deprecated use triggerEffectImmunity */
+/** @deprecated use triggerEffectImmunity @returns {Promise<void>} */
 export function triggerFlaggedEffectImmunity(...args) {
     console.warn("lancer-automations | triggerFlaggedEffectImmunity is deprecated, use triggerEffectImmunity instead");
     return triggerEffectImmunity.apply(null, args);
 }
 
-/** @deprecated use deleteAllEffects */
+/** @deprecated use deleteAllEffects @returns {Promise<void>} */
 export function executeDeleteAllFlaggedEffect(...args) {
     console.warn("lancer-automations | executeDeleteAllFlaggedEffect is deprecated, use deleteAllEffects instead");
     return deleteAllEffects.apply(null, args);
 }
 
-/** @deprecated use getAllEffects */
+/** @deprecated use getAllEffects @returns {ActiveEffect[]} */
 export function getAllFlaggedEffects(...args) {
     console.warn("lancer-automations | getAllFlaggedEffects is deprecated, use getAllEffects instead");
     return getAllEffects.apply(null, args);

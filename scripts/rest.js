@@ -378,6 +378,7 @@ async function _showRegularRest(mech, pilot) {
     dlg.render(true);
 }
 
+/** @returns {Promise<void>} */
 export async function executeRest(token) {
     const { mech, pilot } = await _resolveMechAndPilot(token);
     if (!mech) {

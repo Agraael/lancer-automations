@@ -3797,13 +3797,19 @@ async function playThrowFXIfNeeded(state) {
  */
 async function pullInjectedTagsFromAttack(state) {
     const tags = ActiveFlowState.current?.injectedTags;
-    if (!Array.isArray(tags) || tags.length === 0)
-        return true;
-    if (!state.data)
-        state.data = {};
-    state.data.tags = [...(state.data.tags || []), ...tags];
-    state.la_extraData = state.la_extraData || {};
-    state.la_extraData.injectedTags = tags;
+    if (Array.isArray(tags) && tags.length > 0) {
+        if (!state.data)
+            state.data = {};
+        state.data.tags = [...(state.data.tags || []), ...tags];
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.injectedTags = tags;
+    }
+
+    const flowBonus = ActiveFlowState.current?.flow_bonus;
+    if (Array.isArray(flowBonus) && flowBonus.length > 0) {
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.flow_bonus = [...(state.la_extraData.flow_bonus || []), ...flowBonus];
+    }
     return true;
 }
 

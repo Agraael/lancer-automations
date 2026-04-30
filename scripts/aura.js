@@ -57,6 +57,7 @@ export class LAAuras {
      * Intercepts `function` definitions in `macros` and converts them to virtual macro IDs.
      * Accepts Token / TokenDocument / Item owners — for Item owners, the context actor is
      * resolved from `item.parent` and the active token (or prototypeToken) provides name/disposition.
+     * @returns {Promise<object|undefined>}
      */
     static async createAura(owner, auraConfig) {
         const gaa = game.modules.get("grid-aware-auras");
@@ -151,6 +152,7 @@ export class LAAuras {
 
     /**
      * Passthrough wrapper for Grid-Aware Auras `deleteAuras`.
+     * @returns {Promise<object[]>}
      */
     static async deleteAuras(owner, filter, options = {}) {
         const gaa = game.modules.get("grid-aware-auras");
@@ -180,7 +182,10 @@ export function gridScale() {
     return g / 100;
 }
 
-/** Scale lineWidth / lineDashSize / lineGapSize / fillTextureScale on an aura config in place. */
+/**
+ * Scale lineWidth / lineDashSize / lineGapSize / fillTextureScale on an aura config in place.
+ * @returns {object}
+ */
 export function scaleAuraStroke(aura) {
     const s = gridScale();
     if (s === 1)

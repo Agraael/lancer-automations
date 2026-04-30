@@ -613,6 +613,7 @@ export async function placeDeployable(options = /** @type {any} */({})) {
  * @param {string} deployableLid - The LID of the deployable
  * @param {Object|null} parentItem - The item that grants the deployable (for use consumption)
  * @param {boolean} consumeUse - Whether to consume a use from parentItem
+ * @returns {Promise<void>}
  */
 export async function deployDeployable(actor, deployableLid, parentItem, consumeUse) {
     const depInfo = getDeployableInfoSync(deployableLid, actor);

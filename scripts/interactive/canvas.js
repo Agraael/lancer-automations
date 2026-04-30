@@ -25,6 +25,7 @@ export function pointerToWorld(event) {
     return canvas.stage.worldTransform.applyInverse(event.global);
 }
 
+/** @returns {PIXI.Graphics} */
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
     const highlight = new PIXI.Graphics();
 
@@ -179,6 +180,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
     return trace;
 }
 
+/** @returns {number} */
 export function getGridDistance(pos1, pos2) {
     if (isHexGrid()) {
         const offset1 = pixelToOffset(pos1.x, pos1.y);
@@ -1326,6 +1328,7 @@ export async function moveToken(token, options = {}) {
 }
 const _title = "TELEPORT"; // for _queueCard
 
+/** @returns {Promise<{cancelled: boolean, moves?: object[]}>} */
 export function knockBackToken(tokens, distance, options = {}) {
     const _title = options.title || 'KNOCKBACK';
     return _queueCard(() => new Promise((resolve) => {

@@ -2,6 +2,7 @@
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { openItemBrowserDialog } from "./misc-tools.js";
+import { installLancerHints } from "./codemirror-hints.js";
 
 const scriptCache = new Map();
 
@@ -902,6 +903,67 @@ export class ReactionConfig extends FormApplication {
             applyFilters(container);
         });
 
+        const buildByTriggerView = (container) => {
+            const list = container.find('.reaction-list');
+            let byTrigger = list.find('.scrollable-by-trigger');
+            if (byTrigger.length)
+                byTrigger.empty();
+            else
+                byTrigger = $('<div class="scrollable scrollable-by-trigger" style="display: none;"></div>').appendTo(list);
+
+            const groups = new Map();
+            list.find('.scrollable .reaction-item:not(.group-header):not(.folder-header)').each(function () {
+                const row = $(this);
+                const triggers = (row.find('.col-triggers').text() || '').split(',').map(s => s.trim()).filter(Boolean);
+                if (triggers.length === 0)
+                    triggers.push('(no trigger)');
+                for (const trig of triggers) {
+                    if (!groups.has(trig))
+                        groups.set(trig, []);
+                    groups.get(trig).push(row);
+                }
+            });
+
+            const sortedTriggers = [...groups.keys()].sort();
+            for (const trig of sortedTriggers) {
+                const rows = groups.get(trig);
+                const groupEl = $(`
+                    <div class="trigger-group" data-trigger="${trig}">
+                        <div class="reaction-item flexrow folder-header" style="background: rgba(120, 46, 34, 0.15);">
+                            <span class="col-enabled" style="flex: 0.15;"><i class="fas fa-bolt"></i></span>
+                            <span class="col-type" style="flex: 0.3;"></span>
+                            <span class="col-name" style="flex: 4;"><strong>${trig}</strong>
+                                <span style="font-size: 0.8em; color: #888; margin-left: 5px;">(${rows.length})</span>
+                            </span>
+                            <span class="col-triggers" style="flex: 1;"></span>
+                            <span class="col-controls" style="flex: 0.5;"></span>
+                        </div>
+                    </div>
+                `);
+                for (const row of rows)
+                    groupEl.append(row.clone(true, true));
+                byTrigger.append(groupEl);
+            }
+        };
+
+        html.find('.group-by-trigger-toggle').on('click', function () {
+            const btn = $(this);
+            const container = btn.closest('.tab');
+            const list = container.find('.reaction-list');
+            const original = list.find('.scrollable').not('.scrollable-by-trigger').first();
+            const isOn = btn.hasClass('active');
+            if (isOn) {
+                btn.removeClass('active');
+                list.find('.scrollable-by-trigger').hide();
+                original.show();
+            } else {
+                btn.addClass('active');
+                buildByTriggerView(container);
+                original.hide();
+                list.find('.scrollable-by-trigger').show();
+            }
+        });
+
         // Custom folder management
         const self = this;
         html.find('.create-folder-btn').click(async () => {
@@ -1373,6 +1435,7 @@ export class StartupScriptEditor extends FormApplication {
                     if (textarea)
                         textarea.value = cm.getValue();
                 });
+                installLancerHints(this._codeEditor, 'startup');
             }
             setTimeout(() => this._codeEditor.refresh(), 100);
         }
@@ -1967,6 +2030,7 @@ export class ReactionEditor extends FormApplication {
                     scrollbarStyle: "native"
                 });
                 this.evaluateEditor.on('change', (cm) => cm.save());
+                installLancerHints(this.evaluateEditor, 'evaluate');
             }
 
             const activationCodeTextarea = html.find('textarea[name="activationCode"]')[0];
@@ -1982,6 +2046,7 @@ export class ReactionEditor extends FormApplication {
                     scrollbarStyle: "native"
                 });
                 this.codeEditor.on('change', (cm) => cm.save());
+                installLancerHints(this.codeEditor, 'activationCode');
             }
 
             const onInitTextarea = html.find('textarea[name="onInit"]')[0];
@@ -1997,6 +2062,7 @@ export class ReactionEditor extends FormApplication {
                     scrollbarStyle: "native"
                 });
                 this.onInitEditor.on('change', (cm) => cm.save());
+                installLancerHints(this.onInitEditor, 'onInit');
             }
 
             const onMessageTextarea = html.find('textarea[name="onMessage"]')[0];
@@ -2012,6 +2078,7 @@ export class ReactionEditor extends FormApplication {
                     scrollbarStyle: "native"
                 });
                 this.onMessageEditor.on('change', (cm) => cm.save());
+                installLancerHints(this.onMessageEditor, 'onMessage');
             }
 
             const refreshEditors = () => {
@@ -2277,6 +2344,7 @@ export class ReactionEditor extends FormApplication {
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
+                installLancerHints(expandedEditor, targetName);
 
                 const windowEl = html.closest('.window-app')[0];
                 const updateSize = () => {

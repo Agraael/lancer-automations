@@ -225,6 +225,7 @@ async function addVirtualMovement(token, cost) {
     }
 }
 
+/** @returns {Promise<void>} */
 export async function executeStandingUp(token) {
     if (!token?.actor)
         return;
@@ -243,6 +244,7 @@ export async function executeStandingUp(token) {
     });
 }
 
+/** @returns {Promise<void>} */
 export async function executeTeleport(token, cost) {
     if (!token?.actor)
         return;
@@ -261,6 +263,7 @@ export async function executeTeleport(token, cost) {
     playTeleportFX(token);
 }
 
+/** @returns {Promise<void>} */
 export async function executeFall(paramToken) {
     if (!paramToken) {
         ui.notifications.error('lancer-automations | executeFall requires a target token.');
@@ -644,6 +647,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     };
 }
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 export async function executeDamageRoll(attacker, targets, damageValue = null, damageType = null, title = "Damage Roll", options = {}, extraData = {}) {
     const DamageRollFlow = game.lancer.flows.get("DamageRollFlow");
     if (!DamageRollFlow) {
@@ -693,6 +697,7 @@ export async function executeDamageRoll(attacker, targets, damageValue = null, d
     return { completed, flow };
 }
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 async function beginWeaponThrowFlow(weapon, options, extraData = {}) {
     const WeaponAttackFlow = game.lancer.flows.get("WeaponAttackFlow");
     if (!WeaponAttackFlow) {
@@ -709,6 +714,7 @@ async function beginWeaponThrowFlow(weapon, options, extraData = {}) {
 }
 
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 async function beginWeaponAttackFlow(weapon, options, extraData = {}) {
     const WeaponAttackFlow = game.lancer.flows.get("WeaponAttackFlow");
     if (!WeaponAttackFlow) {
@@ -725,6 +731,7 @@ async function beginWeaponAttackFlow(weapon, options, extraData = {}) {
 
 
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     const BasicAttackFlow = game.lancer.flows.get("BasicAttackFlow");
     if (!BasicAttackFlow) {
@@ -752,6 +759,7 @@ export async function executeBasicAttack(actor, options = {}, extraData = {}) {
     return { completed, flow };
 }
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 export async function executeTechAttack(target, options = {}, extraData = {}) {
     const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
     if (!TechAttackFlow) {
@@ -769,6 +777,7 @@ export async function executeTechAttack(target, options = {}, extraData = {}) {
     return { completed, flow };
 }
 
+/** @returns {Promise<void>} */
 export async function executeReactorMeltdown(tokenOrActor, turns = null) {
     if (!tokenOrActor) {
         ui.notifications.error('lancer-automations | executeReactorMeltdown requires a token or actor.');
@@ -867,6 +876,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null) {
     }, { selectedTurns });
 }
 
+/** @returns {Promise<void>} */
 export async function executeReactorExplosion(token) {
     if (!token) {
         ui.notifications.error('lancer-automations | executeReactorExplosion requires a token.');
@@ -981,6 +991,7 @@ export async function executeReactorExplosion(token) {
         .play();
 }
 
+/** @returns {Promise<{completed: boolean, flow?: object}>} */
 export async function executeSimpleActivation(actor, options = {}, extraData = {}) {
     const SimpleActivationFlow = game.lancer.flows.get("SimpleActivationFlow");
     if (!SimpleActivationFlow) {
@@ -1093,6 +1104,7 @@ async function _fetchReservesByType() {
     return map;
 }
 
+/** @returns {Promise<void>} */
 export async function openAddReserveDialog(tokenOrActor) {
     const pilot = _resolvePilot(tokenOrActor);
     if (!pilot) {

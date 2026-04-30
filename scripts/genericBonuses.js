@@ -699,6 +699,14 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
 /**
  * Specifically handles ephemeral bonuses and their consumption.
  */
+const ATTACK_TARGET_MOD_SUBTYPES = new Set(['invisible', 'no_invisible', 'no_cover', 'soft_cover', 'hard_cover']);
+const DAMAGE_TARGET_MOD_SUBTYPES = new Set(['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss']);
+function targetModSubtypeMatchesFlow(subtype, flowType) {
+    if (flowType === 'damage')
+        return DAMAGE_TARGET_MOD_SUBTYPES.has(subtype);
+    return ATTACK_TARGET_MOD_SUBTYPES.has(subtype);
+}
+
 async function processEphemeralBonuses(actor, flowType, tags, state, results) {
     const bonuses = state?.la_extraData?.flow_bonus || [];
     if (!bonuses.length) {
@@ -709,13 +717,20 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results) {
 
     for (const b of bonuses) {
         if (await isBonusApplicable(b, tags, state)) {
-            const res = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [] };
+            // Defer target_modifier bonuses whose subtype doesn't apply to the current flow type
+            // (e.g. half_damage during the attack flow) so they survive to the damage flow.
+            if (b.type === 'target_modifier' && !targetModSubtypeMatchesFlow(b.subtype, flowType)) {
+                remaining.push(b);
+                continue;
+            }
+            const res = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [], targetModifiers: [] };
             await processBonusBatch([b], flowType, tags, state, res);
 
             // If it was actually applicable and used in the current context, consume it
             const consumed = (res.activeBonuses.length > 0) || (res.rangeBonuses.length > 0) ||
                              (res.damageBonuses.length > 0) || (res.allTargetedBonuses.length > 0) ||
-                             (res.targetedDamageBonuses.length > 0) || (res.netBonus !== 0);
+                             (res.targetedDamageBonuses.length > 0) || (res.targetModifiers.length > 0) ||
+                             (res.netBonus !== 0);
 
             if (consumed) {
                 results.netBonus += res.netBonus;
@@ -724,6 +739,8 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results) {
                 results.damageBonuses.push(...res.damageBonuses);
                 results.allTargetedBonuses.push(...res.allTargetedBonuses);
                 results.targetedDamageBonuses.push(...res.targetedDamageBonuses);
+                if (results.targetModifiers)
+                    results.targetModifiers.push(...res.targetModifiers);
                 changed = true;
             } else {
                 remaining.push(b);
@@ -1917,6 +1934,7 @@ export const genericAccuracyStepWeaponAttack = createGenericBonusStep("weapon_at
 export const genericAccuracyStepStatRoll = createGenericBonusStep("stat_roll");
 export const genericBonusStepDamage = createGenericBonusStep("damage");
 
+/** @returns {Promise<string|undefined>} bonus ID, or undefined if no actor */
 export async function addGlobalBonus(actor, bonusData, options = {}) {
     if (!actor)
         return;
@@ -2079,6 +2097,7 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
 /**
  * @param {string|function(bonuses): boolean} bonusIdOrPredicate - Bonus ID string, or a predicate
  *   to remove all matching bonuses in a single flag update.
+ * @returns {Promise<boolean>} true if at least one bonus was removed
  */
 export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false) {
     if (!actor)
@@ -2115,6 +2134,7 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
     return false;
 }
 
+/** @returns {object[]} */
 export function getGlobalBonuses(actor) {
     return actor ? (actor.getFlag("lancer-automations", "global_bonuses") || []) : [];
 }
@@ -2195,6 +2215,7 @@ Hooks.on("deleteActiveEffect", (effect) => {
  * Inject a bonus to the active flow state.
  * @param {Object} state - The flow state object
  * @param {Object} bonus - The bonus to inject
+ * @returns {Promise<void>}
  */
 export async function injectBonusToFlowState(state, bonus) {
     if (!state)
@@ -2211,6 +2232,7 @@ export async function injectBonusToFlowState(state, bonus) {
     state.la_extraData.flow_bonus.push(bonus);
 }
 
+/** @returns {Promise<void>} */
 export async function addConstantBonus(actor, bonusData) {
     if (!actor)
         return;
@@ -2234,6 +2256,7 @@ export async function addConstantBonus(actor, bonusData) {
     await delegateSetActorFlag(actor, "lancer-automations", "constant_bonuses", bonuses);
 }
 
+/** @returns {object[]} */
 export function getConstantBonuses(actor) {
     if (!actor)
         return [];
@@ -2245,6 +2268,7 @@ export function getConstantBonuses(actor) {
  * @param {Actor} actor
  * @param {string|function(bonuses): boolean} bonusIdOrPredicate - Bonus ID string to remove one,
  *   or a predicate function to remove all matching bonuses in a single flag update.
+ * @returns {Promise<void>}
  */
 export async function removeConstantBonus(actor, bonusIdOrPredicate) {
     if (!actor)
@@ -2259,10 +2283,12 @@ export async function removeConstantBonus(actor, bonusIdOrPredicate) {
     }
 }
 
+/** @returns {void} */
 export function executeGenericBonusMenu(actor = null) {
     executeEffectManager({ initialTab: 'bonus', actor });
 }
 
+/** @returns {object[]} */
 export function getImmunityBonuses(actor, subtype, state = null) {
     if (!actor) {
         return [];
@@ -2276,6 +2302,7 @@ export function getImmunityBonuses(actor, subtype, state = null) {
     return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses]).filter(b => b.type === "immunity" && b.subtype === subtype);
 }
 
+/** @returns {string[]} array of immunity source names; empty if not immune */
 export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null) {
     if (!actor || !effectIdOrName) {
         return [];
@@ -2344,6 +2371,7 @@ export function checkDamageResistances(actor, damageType) {
         .map(b => b.source || b.name || "Unknown Resistance");
 }
 
+/** @returns {object[]} damages with immune types zeroed */
 export function applyDamageImmunities(actor, damages, state = null) {
     if (!actor || !damages) {
         return damages;
@@ -2376,6 +2404,7 @@ export function applyDamageImmunities(actor, damages, state = null) {
     });
 }
 
+/** @returns {Promise<boolean>} */
 export async function hasCritImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;
@@ -2392,6 +2421,7 @@ export async function hasCritImmunity(actor, attackerActor = null, state = null)
     return false;
 }
 
+/** @returns {Promise<boolean>} */
 export async function hasHitImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;
@@ -2408,6 +2438,7 @@ export async function hasHitImmunity(actor, attackerActor = null, state = null) 
     return false;
 }
 
+/** @returns {Promise<boolean>} */
 export async function hasMissImmunity(actor, attackerActor = null, state = null) {
     if (!actor)
         return false;

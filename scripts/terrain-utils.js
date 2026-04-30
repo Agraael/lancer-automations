@@ -65,6 +65,7 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
  * @param {Token | TokenDocument} token
  * @param {string} [damageType="kinetic"] kinetic, energy, explosive, burn, heat, variable
  * @param {number | string} [damageValue=5]
+ * @returns {Promise<void>}
  */
 export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
     const actor = token?.actor;

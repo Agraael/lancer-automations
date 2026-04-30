@@ -453,6 +453,7 @@ export function startChoiceCard(options = {}) {
 /**
  * Called on the GM's client (via socket) to show a controlled choice card on behalf of a player.
  * When the GM picks or cancels, the result is sent back to the requesting user.
+ * @returns {Promise<void>}
  */
 export async function showUserIdControlledChoiceCard({ cardId, requestingUserId, title, description, icon, headerClass, mode, choices, itemUuid = null, relatedTokenId = null, originTokenId = null }) {
     const requesterName = game.users.get(requestingUserId)?.name ?? '?';
@@ -547,6 +548,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
 
 /**
  * Called on the player's client (via socket) to resolve a pending GM-controlled choice.
+ * @returns {Promise<void>}
  */
 export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, responderUserId = null) {
     const pending = _pendingGMChoices.get(cardId);
@@ -628,6 +630,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
 /**
  * Called on a non-winning target client to forcefully dismiss their broadcast choice card
  * when another target responded first or the requester cancelled.
+ * @returns {void}
  */
 export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation = false) {
     const cancel = _pendingBroadcastCards.get(cardId);
@@ -850,6 +853,7 @@ export function startVoteCard(options = {}) {
 /**
  * Called on voter clients when a voteCardRequest socket event arrives.
  * @param {{ cardId:string, requestingUserId:string, allVoterUserIds:string[], title:string, description:string, icon:string, headerClass:string, choices:Array, hidden:boolean }} payload
+ * @returns {Promise<void>}
  */
 export async function showVoteCardOnVoter({ cardId, requestingUserId, allVoterUserIds, title, description, icon, headerClass, choices, hidden }) {
     const creatorName = game.users.get(requestingUserId)?.name ?? '?';
@@ -964,6 +968,7 @@ export async function showVoteCardOnVoter({ cardId, requestingUserId, allVoterUs
 /**
  * Called on the creator's client when a voter submits or withdraws their vote.
  * @param {{ cardId:string, voterUserId:string, voterName:string, choiceIdx:number|null }} payload
+ * @returns {void}
  */
 export function receiveVoteSubmission({ cardId, voterUserId, voterName, choiceIdx }) {
     const pending = _pendingVoteCards.get(cardId);
@@ -982,6 +987,7 @@ export function receiveVoteSubmission({ cardId, voterUserId, voterName, choiceId
 /**
  * Called on voter clients to update vote tallies (non-hidden mode).
  * @param {{ cardId:string, voteCounts:number[]|null, responded:string[] }} payload
+ * @returns {void}
  */
 export function updateVoteCardOnVoter({ cardId, voteCounts, responded }) {
     const pending = _pendingVoterCards.get(cardId);
@@ -993,6 +999,7 @@ export function updateVoteCardOnVoter({ cardId, voteCounts, responded }) {
 /**
  * Called on voter clients when the creator confirms the vote result.
  * @param {{ cardId:string, winnerIdx:number, winnerText:string }} payload
+ * @returns {void}
  */
 export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText }) {
     const pending = _pendingVoterCards.get(cardId);
@@ -1007,6 +1014,7 @@ export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText }) {
 /**
  * Called on voter clients when the creator cancels the vote.
  * @param {{ cardId:string }} payload
+ * @returns {void}
  */
 export function cancelVoteCardOnVoter({ cardId }) {
     const pending = _pendingVoterCards.get(cardId);
@@ -1023,6 +1031,7 @@ export function cancelVoteCardOnVoter({ cardId }) {
  * First user to respond wins: their choice is sent to the requester and all other
  * targets' cards are cancelled.
  * @param {{ cardId: string, requestingUserId: string, allTargetUserIds: string[], title: string, description: string, icon: string, headerClass: string, mode: string, choices: Array, itemUuid?: string|null, relatedTokenId?: string|null, originTokenId?: string|null }} payload
+ * @returns {Promise<void>}
  */
 export async function showMultiUserControlledChoiceCard({ cardId, requestingUserId, allTargetUserIds, title, description, icon, headerClass, mode, choices, itemUuid = null, relatedTokenId = null, originTokenId = null }) {
     const requesterName = game.users.get(requestingUserId)?.name ?? '?';

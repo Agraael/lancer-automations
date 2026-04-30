@@ -153,6 +153,12 @@ const ACTIVATION_MANAGER_STEPS = [
                 await new Promise((r) => setTimeout(r, 50));
             }
         },
+    },
+    {
+        id: 'editor-autocomplete',
+        title: 'Autocomplete',
+        content: "The code editor suggests API names as you type. Press <b>Alt-Enter</b> any time to open the list, then arrow up and down to see what each one does.",
+        selector: '#reaction-editor .CodeMirror',
         cleanup: async () => {
             const app = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).id === 'reaction-editor');
             if (app)

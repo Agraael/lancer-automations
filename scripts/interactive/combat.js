@@ -8,6 +8,7 @@ import { getWeaponProfiles_WithBonus } from "../misc-tools.js";
 /**
  * Opens a dialog to select and throw a weapon.
  * @param {Actor} [actor] - The actor throwing the weapon. Defaults to the character of the first controlled token.
+ * @returns {Promise<void>}
  */
 export async function openThrowMenu(actor) {
     const controlled = canvas.tokens.controlled;
@@ -167,6 +168,7 @@ export async function revertMovement(token, destination = null) {
  * Clear movement history for tokens.
  * @param {Token|Token[]} tokens - Token or list of tokens to clear
  * @param {boolean} [revert=false] - Whether to also revert movement visually
+ * @returns {Promise<void>}
  */
 export async function clearMovementHistory(tokens, revert = false) {
     const tokenList = Array.isArray(tokens) ? tokens : [tokens];
@@ -567,6 +569,7 @@ function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberT
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** @returns {Promise<object[]|null>} array of selected mounts, or null if cancelled */
 export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)

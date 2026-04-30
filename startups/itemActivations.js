@@ -1449,7 +1449,7 @@ api.registerDefaultItemReactions({
                 if (triggerType === "onHit") {
                     const targets = triggerData.targets?.map(t => t.target) || (triggerData.target ? [triggerData.target] : []);
                     if (targets.length) {
-                        await api.applyEffectToTokens({
+                        await api.applyEffectsToTokens({
                             tokens: targets,
                             effectNames: ["impaired"],
                             note: "Remote Machine Gun",
@@ -1542,7 +1542,7 @@ api.registerDefaultItemReactions({
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (!api?.applyEffectToTokens) {
+                if (!api?.applyEffectsToTokens) {
                     ui.notifications.error("lancer-automations module required");
                     return;
                 }
@@ -1568,7 +1568,7 @@ api.registerDefaultItemReactions({
                 const charges = roll.total;
                 const resistances = ["Resist All"];
 
-                await api.applyEffectToTokens({
+                await api.applyEffectsToTokens({
                     tokens: [target],
                     effectNames: resistances,
                     note: `Dispersal Shield (${charges} charges)`,
@@ -2064,7 +2064,7 @@ api.registerDefaultItemReactions({
                     const existingFlags = reactorToken.actor.getFlag("lancer-automations", flagKey) || [];
 
                     await reactorToken.actor.setFlag("lancer-automations", flagKey, [...existingFlags, triggerer.id]);
-                    await api.applyEffectToTokens({
+                    await api.applyEffectsToTokens({
                         tokens: [triggerer],
                         effectNames: ["lockon"],
                         note: "Failed Triangulation Ping Save"
@@ -2209,11 +2209,11 @@ api.registerDefaultItemReactions({
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 triggerData.targets.forEach(target => {
-                    api.applyEffectToTokens({
+                    api.applyEffectsToTokens({
                         tokens: [target],
                         effectNames: ["lockon"],
                     });
-                    api.applyEffectToTokens({
+                    api.applyEffectsToTokens({
                         tokens: [target],
                         effectNames: ["shredded"],
                         duration: { label: 'end', turns: 1, rounds: 0 }
@@ -2257,7 +2257,7 @@ api.registerDefaultItemReactions({
                                 if (entry) {
                                     entry.hit = false;
                                     entry.crit = false;
-                                    api.applyEffectToTokens({
+                                    api.applyEffectsToTokens({
                                         tokens: [reactorToken],
                                         effectNames: ["Resist All"],
                                         duration: { label: 'start', turns: 1, rounds: 0 }
@@ -3520,6 +3520,108 @@ api.registerDefaultGeneralReactions({
             }
             ui.notifications.info(`${reactorToken.name} breaks free from the Sealant Blend!`);
         }
+    }
+});
+
+// ─── Press the Attack (Commander) — onDamage reaction provokes a half-damage retaliatory attack ─
+api.registerDefaultItemReactions({
+    "npcf_press_the_attack_commander": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            // ── R0: onDamage — ally damaged → choice card → provoke the reaction's activation ──
+            {
+                triggers: ["onDamage"],
+                triggerSelf: false,
+                triggerOther: true,
+                outOfCombat: false,
+                actionType: "Reaction",
+                frequency: "1/Round",
+                autoActivate: true,
+                isReaction: true,
+                checkReaction: true,
+                requireCanProvoke: true,
+                awaitActivationCompletion: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const attacker = triggerData.triggeringToken;
+                    const damaged = triggerData.target;
+                    if (!attacker || !damaged)
+                        return false;
+                    if (damaged.id === reactorToken.id)
+                        return false;
+                    if (!triggerData.isHit)
+                        return false;
+                    if (!api?.isFriendly?.(reactorToken, damaged))
+                        return false;
+                    if (!api?.isHostile?.(reactorToken, attacker))
+                        return false;
+                    return true;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const attacker = triggerData.triggeringToken;
+                    if (!attacker)
+                        return;
+                    const result = await api.startChoiceCard({
+                        title: "PRESS THE ATTACK",
+                        description: `<b>${attacker.name}</b> damaged <b>${triggerData.target?.name}</b>. Use Press the Attack? On hit, <b>${reactorToken.name}</b> deals half damage / heat / burn.`,
+                        item,
+                        originToken: reactorToken,
+                        relatedToken: attacker,
+                        userIdControl: api.getTokenOwnerUserId(reactorToken),
+                        choices: [
+                            { text: "Press the Attack", icon: "fas fa-crosshairs", callback: async () => {} },
+                            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
+                        ]
+                    });
+                    if (result?.choiceIdx !== 0)
+                        return;
+                    triggerData.startRelatedFlowToReactor(
+                        result?.responderIds?.[0],
+                        { pressTheAttackTargetId: attacker.id }
+                    );
+                }
+            },
+            // ── R1: onActivation — picks a weapon and fires it with a flow-scoped half-damage bonus ──
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: true,
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const attackerId = triggerData.extraData?.pressTheAttackTargetId;
+                    const attacker = attackerId ? canvas.tokens.get(attackerId) : null;
+
+                    const weapons = api.getWeapons(reactorToken)
+                        .filter(w => !w.system?.destroyed && !w.system?.disabled);
+                    const weapon = await api.pickItem(weapons, {
+                        title: "PRESS THE ATTACK — Choose Weapon",
+                        description: attacker
+                            ? `Fire at <b>${attacker.name}</b>. The attack deals half damage.`
+                            : `Choose a weapon. The attack deals half damage.`,
+                        icon: "fas fa-crosshairs",
+                        relatedToken: attacker ?? reactorToken
+                    });
+                    if (!weapon)
+                        return;
+
+                    const halfDamageBonus = {
+                        id: `press-the-attack-${foundry.utils.randomID()}`,
+                        name: 'Press the Attack',
+                        type: 'target_modifier',
+                        subtype: 'half_damage'
+                    };
+                    if (attacker)
+                        game.user.updateTokenTargets([attacker.id]);
+                    await api.beginWeaponAttackFlow(weapon, {}, { flow_bonus: [halfDamageBonus] });
+                }
+            }
+        ]
     }
 });
 

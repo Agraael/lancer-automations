@@ -631,6 +631,7 @@ async function showSystemScanDialog(targets) {
     dlg.render(true);
 }
 
+/** @returns {Promise<void>} */
 export async function executeScanOnActivation(reactorToken) {
     const api = game.modules.get('lancer-automations')?.api;
     let targets = Array.from(game.user.targets);
@@ -763,7 +764,10 @@ function _bindOwnerGroupSync(html) {
     }
 }
 
-/** TAH "Generate Scan" — picks chat-only / chat+journal / journal-only and runs the scan. */
+/**
+ * TAH "Generate Scan" — picks chat-only / chat+journal / journal-only and runs the scan.
+ * @returns {Promise<void>}
+ */
 export async function executeGenerateScan(targetsArg) {
     const targetArray = Array.isArray(targetsArg) ? targetsArg : [targetsArg];
     if (!targetArray.length) {
@@ -829,6 +833,7 @@ Hooks.on('renderChatMessage', (_msg, html) => {
     });
 });
 
+/** @returns {Promise<{updated:string[], missing:string[], skipped:string[]}>} */
 export async function regenerateScans(opts = {}) {
     const { filter = null, dryRun = false } = opts;
     const folder = game.folders.getName(FOLDER_NAME);
