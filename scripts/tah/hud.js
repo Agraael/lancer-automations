@@ -3,7 +3,7 @@
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, hasItem } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
@@ -585,7 +585,7 @@ export class LancerHUD {
         let _leaveTimer = null;
         const _clearC1Active = () => {
             c1.find('.la-hud-row').each(function() {
-                const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
             });
         };
         const _scheduleCollapse = () => {
@@ -731,11 +731,10 @@ export class LancerHUD {
 
     // ── Item-building helpers ─────────────────────────────────────────────────
 
-    /** Returns the two highlight color props for a destroyed/unavailable status object. */
+    /** Returns a status-kind marker for destroyed/unavailable items. The renderer maps it to a striped style. */
     _statusColors(/** @type {any} */ status) {
         return {
-            highlightBg:          status.destroyed ? '#ffcccc' : status.unavailable ? '#ffe5b4' : null,
-            highlightBorderColor: status.destroyed ? '#cc3333' : status.unavailable ? '#cc7700' : null,
+            statusKind: status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null,
         };
     }
 
@@ -876,7 +875,52 @@ export class LancerHUD {
             // if (hasChildren && rawChildren !== null && !rawChildren.length)
             //     row.css({ opacity: 0.9 });
 
-            if (item.highlightBg) {
+            const _stripeStyle = (() => {
+                if (item.softDisabled)
+                    return {
+                        bg: 'repeating-linear-gradient(45deg, #3a3a3a 0 6px, #2f2f2f 6px 12px)',
+                        hoverBg: 'repeating-linear-gradient(45deg, #555 0 6px, #444 6px 12px)',
+                        border: '#666',
+                        color: '#bbb',
+                        hoverColor: '#ddd'
+                    };
+                if (item.statusKind === 'destroyed')
+                    return {
+                        bg: 'repeating-linear-gradient(45deg, #5a2222 0 6px, #4a1c1c 6px 12px)',
+                        hoverBg: 'repeating-linear-gradient(45deg, #7a3535 0 6px, #6a2828 6px 12px)',
+                        border: '#a04444',
+                        color: '#e0b0b0',
+                        hoverColor: '#f0c8c8'
+                    };
+                if (item.statusKind === 'unavailable')
+                    return {
+                        bg: 'repeating-linear-gradient(45deg, #5a4422 0 6px, #4a3818 6px 12px)',
+                        hoverBg: 'repeating-linear-gradient(45deg, #7a5c30 0 6px, #6a4c25 6px 12px)',
+                        border: '#a07744',
+                        color: '#e0c8a0',
+                        hoverColor: '#f0d8b8'
+                    };
+                return null;
+            })();
+            if (_stripeStyle) {
+                row.data('restingBg', _stripeStyle.bg);
+                row.data('restingBorder', _stripeStyle.border);
+                row.data('hoverBg', _stripeStyle.hoverBg);
+                row.data('restingColor', _stripeStyle.color);
+                row.data('hoverColor', _stripeStyle.hoverColor);
+                row.css({ background: _stripeStyle.bg, borderLeftColor: _stripeStyle.border, color: _stripeStyle.color });
+                if (item.softDisabled)
+                    row.css({ cursor: 'not-allowed' });
+                // Keep the leading icon visible on the dark stripes:
+                // white-source SVGs (invert(1) applied by laHudRenderIcon) → strip the invert so they stay white-ish;
+                // dark-source SVGs (no invert) → apply invert(1) so they become white-ish. Both end up dimmed at 0.55 opacity.
+                const _leadingIcon = row.children('img').first();
+                if (_leadingIcon.length) {
+                    const _styleAttr = _leadingIcon.attr('style') || '';
+                    const _wasInverted = _styleAttr.includes('invert(1)');
+                    _leadingIcon.css({ filter: _wasInverted ? 'none' : 'invert(1)', opacity: '0.55' });
+                }
+            } else if (item.highlightBg) {
                 const borderColor = item.highlightBorderColor ?? '#3a78b5';
                 row.data('restingBg', item.highlightBg);
                 row.data('restingBorder', borderColor);
@@ -896,7 +940,7 @@ export class LancerHUD {
                         if (this._glossaryPanelInstance?.isVisible)
                             this._glossaryPanelInstance.close();
                         col.find('.la-hud-active').each(function() {
-                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         });
                         closeCol(this._c3, 80);
                         closeCol(this._c4, 80);
@@ -909,7 +953,7 @@ export class LancerHUD {
                         if (this._logPanelInstance?.isVisible)
                             this._logPanelInstance.close();
                         col.find('.la-hud-active').each(function() {
-                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         });
                         closeCol(this._c3, 80);
                         closeCol(this._c4, 80);
@@ -922,13 +966,13 @@ export class LancerHUD {
                         this._glossaryPanelInstance.close();
                     if (col === this._c2 && !hasChildren) {
                         col.find('.la-hud-active').each(function() {
-                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         });
                         closeCol(this._c3, 80);
                         closeCol(this._c4, 80);
                     } else if (col === this._c3 && !hasChildren) {
                         col.find('.la-hud-active').each(function() {
-                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            const r = $(this); r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         });
                         closeCol(this._c4, 80);
                     }
@@ -995,7 +1039,7 @@ export class LancerHUD {
                         if (this._clickToOpen) {
                             closeCol(this._c3);
                             closeCol(this._c4);
-                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: row.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         } else {
                             this._cancelCollapse();
                         }
@@ -1004,7 +1048,7 @@ export class LancerHUD {
                     if (col === this._c3 && row.hasClass('la-hud-active') && this._c4.is(':visible')) {
                         if (this._clickToOpen) {
                             closeCol(this._c4);
-                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT }).removeClass('la-hud-active');
+                            row.css({ background: row.data('restingBg') ?? BG_DEFAULT, color: row.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
                         } else {
                             this._cancelCollapse();
                         }
@@ -1265,7 +1309,12 @@ export class LancerHUD {
                     { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
                     { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
                     this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
-                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.'),
+                    (() => {
+                        const grappleItem = this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.');
+                        if (hasItem(actor, ['npcf_limited_melee_attacks_ship', 'npcf_limited_melee_vehicle', 'npcf_no_manipulators_ship', 'npcf_no_manipulators_vehicle']))
+                            grappleItem.softDisabled = true;
+                        return grappleItem;
+                    })(),
                     { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
                 ] : []),
                 ...(actor.type === 'pilot' ? [
@@ -1393,7 +1442,12 @@ export class LancerHUD {
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
                 this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
                 this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
-                this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.'),
+                (() => {
+                    const handleItem = this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.');
+                    if (hasItem(actor, ['npcf_no_manipulators_ship', 'npcf_no_manipulators_vehicle']))
+                        handleItem.softDisabled = true;
+                    return handleItem;
+                })(),
                 this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.')] : []),
@@ -1878,6 +1932,10 @@ export class LancerHUD {
         const children = [];
         const activationTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
         const sysActions = sys.actions ?? [];
+        const status = getItemStatus(item);
+        const childBadge = status.badge ?? null;
+        const childBadgeColor = status.badgeColor ?? null;
+        const childStatusKind = status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null;
         if (sysActions.length <= 1) {
             const single = sysActions[0] ?? null;
             const actStr = single?.activation ?? (activationTag ? activationTag.lid.replace('tg_', '').replace('_action', ' action') : 'Activation');
@@ -1892,6 +1950,9 @@ export class LancerHUD {
                     }
                         : ap({ name: item.name, activation: 'Activation', detail: 'Default system activation.' }),
                 hoverData: { actor, item, action: { name: item.name, activation: actStr }, category: 'Systems' },
+                badge: childBadge,
+                badgeColor: childBadgeColor,
+                statusKind: childStatusKind,
             });
         } else {
             sysActions.forEach((action, idx) => {
@@ -1901,6 +1962,9 @@ export class LancerHUD {
                     onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
                     onRightClick: ap(action),
                     hoverData: { actor, item, action, category: 'Systems' },
+                    badge: childBadge,
+                    badgeColor: childBadgeColor,
+                    statusKind: childStatusKind,
                 });
             });
         }
@@ -3268,7 +3332,7 @@ export class LancerHUD {
         const row = $(`<div class="la-hud-row" style="${S_ITEM}">${iconHtml}<span class="la-hud-clip" style="flex:1;overflow:hidden;min-width:0;"><span class="la-hud-pan" style="display:inline-block;white-space:nowrap;padding-right:8px;">${label}${actHtml}</span></span>${badgeHtml}${countHtml}${arrow}</div>`);
         row.on('mouseenter', () => {
             if (!row.hasClass('la-hud-active'))
-                row.css({ background: row.data('hoverBg') ?? BG_HOVER, color: TEXT_DEFAULT });
+                row.css({ background: row.data('hoverBg') ?? BG_HOVER, color: row.data('hoverColor') ?? TEXT_DEFAULT });
             const clip = row.find('.la-hud-clip')[0];
             const pan  = row.find('.la-hud-pan')[0];
             if (clip && pan) {
@@ -3279,7 +3343,7 @@ export class LancerHUD {
         });
         row.on('mouseleave', () => {
             if (!row.hasClass('la-hud-active')) {
-                const css = { background: row.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT };
+                const css = { background: row.data('restingBg') ?? BG_DEFAULT, color: row.data('restingColor') ?? TEXT_DEFAULT };
                 const rb  = row.data('restingBorder');
                 if (rb)
                     css.borderLeftColor = rb;
@@ -3293,7 +3357,7 @@ export class LancerHUD {
     _setActive(col, activeRow, isCategory = false) {
         col.find('.la-hud-row').each(function() {
             const r = $(this);
-            const css = { background: r.data('restingBg') ?? BG_DEFAULT, color: TEXT_DEFAULT };
+            const css = { background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT };
             const rb  = r.data('restingBorder');
             if (rb)
                 css.borderLeftColor = rb;
@@ -3302,6 +3366,6 @@ export class LancerHUD {
         if (isCategory)
             activeRow.css({ background: BG_ACTIVE, color: TEXT_ACTIVE }).addClass('la-hud-active');
         else
-            activeRow.css({ background: activeRow.data('hoverBg') ?? BG_HOVER, color: TEXT_DEFAULT }).addClass('la-hud-active');
+            activeRow.css({ background: activeRow.data('hoverBg') ?? BG_HOVER, color: activeRow.data('hoverColor') ?? TEXT_DEFAULT }).addClass('la-hud-active');
     }
 }

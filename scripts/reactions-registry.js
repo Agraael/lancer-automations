@@ -97,6 +97,32 @@ export function getDefaultItemReactionRegistry() {
     builtInDefaults["npc-rebake_npcf_limitless_ultra"] = limitlessOvercharge;
     builtInDefaults["npc-rebake_npcf_limitless_veteran"] = limitlessOvercharge;
 
+    /** @type {ReactionGroup} */
+    const treadsOrHover = {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                if (!api || !token.actor)
+                    return;
+                if (token.actor.statuses?.has('terrain_immunity'))
+                    return;
+                await api.applyEffectsToTokens({
+                    tokens: [token],
+                    effectNames: ['terrain_immunity'],
+                    note: "Treads or Hover",
+                    duration: { label: 'unlimited' }
+                }, { treadsOrHoverSourceId: item.id });
+            }
+        }]
+    };
+    builtInDefaults["npcf_treads_or_hover_vehicle"] = treadsOrHover;
+
     return { ...builtInDefaults, ...externalItemReactions };
 }
 
@@ -1496,6 +1522,66 @@ export function getDefaultGeneralReactionRegistry() {
 
             await actionFX.playOverchargeNpcFX(reactorToken);
         }
+    };
+
+    const _bulwarkAuraPending = new Set();
+    builtInDefaults["Bulwark Aura"] = {
+        category: "Automation",
+        reactions: [
+            {
+                triggers: ["onStatusApplied"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'bulwark';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    if (api.findAura(reactorToken, "LA_Bulwark") || _bulwarkAuraPending.has(reactorToken.id))
+                        return;
+                    _bulwarkAuraPending.add(reactorToken.id);
+                    try {
+                        await api.createAura(reactorToken, api.scaleAuraStroke({
+                            name: "LA_Bulwark",
+                            unified: false,
+                            radius: "0",
+                            lineType: 1,
+                            lineWidth: 6,
+                            lineColor: "#000000",
+                            lineOpacity: 0.85,
+                            fillType: 0,
+                            animation: false,
+                            nonOwnerVisibility: { default: true }
+                        }));
+                    } finally {
+                        _bulwarkAuraPending.delete(reactorToken.id);
+                    }
+                }
+            },
+            {
+                triggers: ["onStatusRemoved"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'bulwark';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    _bulwarkAuraPending.delete(reactorToken.id);
+                    for (let i = 0; i < 10; i++) {
+                        await api.deleteAuras(reactorToken, { name: "LA_Bulwark" });
+                        if (!api.findAura(reactorToken, "LA_Bulwark"))
+                            break;
+                    }
+                }
+            }
+        ]
     };
 
     return { ...builtInDefaults, ...externalGeneralReactions };

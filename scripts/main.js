@@ -1082,7 +1082,9 @@ async function processEffectConsumption(triggerType, data) {
 
         const consumableEffects = actor.effects.filter(e => {
             const consumption = e.flags?.['lancer-automations']?.consumption;
-            return consumption && consumption.trigger === triggerType;
+            const t = consumption?.trigger;
+            if (!t) return false;
+            return Array.isArray(t) ? t.includes(triggerType) : t === triggerType;
         });
 
         if (consumableEffects.length === 0)
@@ -4438,6 +4440,8 @@ Hooks.on('init', () => {
                     return true;
                 if (token?.actor?.statuses?.has("terrain_immunity"))
                     return true;
+                if (token?.actor?.statuses?.has("surefoot"))
+                    return true;
                 if (getImmunityBonuses(token?.actor, "terrain").length > 0)
                     return true;
                 return false;
@@ -4445,51 +4449,6 @@ Hooks.on('init', () => {
         });
     }
 
-    if (game.modules.get("templatemacro")?.active) {
-        Hooks.once("ready", () => {
-            const tmApi = game.modules.get("templatemacro")?.api;
-            if (!tmApi?.triggerDangerousZoneFlow)
-                return;
-            const orig = tmApi.triggerDangerousZoneFlow;
-            tmApi.triggerDangerousZoneFlow = async function(token, ...args) {
-                const immunityBonuses = getImmunityBonuses(token?.actor, "terrain");
-                const hasStatusImmunity = token?.actor?.statuses.has("terrain_immunity");
-                if (!hasStatusImmunity && immunityBonuses.length === 0)
-                    return orig.call(this, token, ...args);
-
-                const sources = [
-                    ...immunityBonuses.map(b => b.name || b.id),
-                    ...(hasStatusImmunity ? ["Terrain Immunity"] : [])
-                ];
-                const tokenObj = token?.object ?? token;
-                const actorName = token?.actor?.name ?? "Token";
-                await startChoiceCard({
-                    title: "TERRAIN IMMUNITY",
-                    description: `<b>${actorName}</b> entered dangerous terrain.<hr>Immunity from: <i>${sources.join(", ")}</i>`,
-                    icon: "mdi mdi-boot",
-                    mode: "or",
-                    relatedToken: tokenObj,
-                    userIdControl: getActiveGMId(),
-                    choices: [
-                        {
-                            text: "Activate (Ignore Terrain)",
-                            icon: "fas fa-shield-alt",
-                            callback: async () => {
-                                ui.notifications.info(`${actorName} ignored dangerous terrain.`);
-                            }
-                        },
-                        {
-                            text: "No (Apply Effect)",
-                            icon: "fas fa-times",
-                            callback: async () => {
-                                await orig.call(this, token, ...args);
-                            }
-                        }
-                    ]
-                });
-            };
-        });
-    }
 
     game.keybindings.register('lancer-automations', 'resetMovement', {
         name: 'Reset Movement',
@@ -4767,6 +4726,15 @@ Hooks.on('lancer.statusesReady', () => {
         });
     }
 
+    if (!CONFIG.statusEffects.find(s => s.id === 'bulwark')) {
+        CONFIG.statusEffects.push({
+            id: "bulwark",
+            name: "Bulwark",
+            img: "modules/lancer-automations/icons/brick-wall.svg",
+            description: "This character is treated as hard cover and blocks line of sight."
+        });
+    }
+
     // Register QoL status effects if csm-lancer-qol module is not active.
     // These effects are normally provided by csm-lancer-qol; we add them as a fallback
     // so users without that module still get them. Skips any that already exist.
@@ -4865,6 +4833,11 @@ Hooks.on('lancer.statusesReady', () => {
         name: "Terrain Immunity",
         img: "modules/lancer-automations/icons/metal-boot.svg",
         description: "You ignore difficult and dangerous terrain"
+    }, {
+        id: "surefoot",
+        name: "Surefoot",
+        img: "modules/lancer-automations/icons/running-shoe.svg",
+        description: "You ignore difficult terrain. Dangerous terrain still applies."
     }, {
         id: "reactor_meltdown",
         name: "Reactor Meltdown",

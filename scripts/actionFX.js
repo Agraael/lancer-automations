@@ -1,7 +1,7 @@
 /* global game, Sequence, Sequencer, Hooks, canvas, foundry */
 
 import { isActionFXEnabled } from './statusFX.js';
-import { playStatsSound } from './tah/sound.js';
+import { playStatsSound, playStatusSfxSound } from './tah/sound.js';
 
 /**
  * Action FX sequences for built-in general reactions.
@@ -1906,6 +1906,49 @@ export async function playDamageImpactFX(type, target) {
 }
 
 /** Failure ping on a target — red miss + border inpulse + deny sound. */
+function _isFriendlyTo(origin, target) {
+    const tf = game.modules.get('token-factions');
+    if (tf?.active && typeof tf.api?.getDisposition === 'function') {
+        try {
+            return tf.api.getDisposition(origin, target) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+        } catch { /* fall through */ }
+    }
+    const oDisp = origin?.document?.disposition ?? 0;
+    const tDisp = target?.document?.disposition ?? 0;
+    const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
+    const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
+    const isBad = (d) => d === HOSTILE || d === SECRET;
+    return isBad(oDisp) === isBad(tDisp);
+}
+
+export async function playBonusAddedFX(token, origin = null) {
+    if (!_canPlay() || !token)
+        return;
+    const arrow = origin
+        ? (_isFriendlyTo(origin, token)
+            ? 'jb2a.zoning.directional.once.bluegreen.line400.03'
+            : 'jb2a.zoning.directional.once.redyellow.line400.03')
+        : null;
+    const preload = ['jb2a.extras.tmfx.inpulse.circle.04'];
+    if (arrow)
+        preload.push(arrow);
+    await Sequencer.Preloader.preloadForClients(preload);
+    const seq = new Sequence();
+    if (arrow && origin && origin.id !== token.id) {
+        seq.effect()
+            .file(arrow)
+            .atLocation(origin)
+            .stretchTo(token)
+            .playbackRate(2.5);
+    }
+    seq.effect()
+        .file('jb2a.extras.tmfx.inpulse.circle.04')
+        .atLocation(token)
+        .scaleToObject(2);
+    seq.play();
+    playStatusSfxSound('bonus');
+}
+
 export async function playTargetFailFX(token) {
     if (!_canPlay())
         return;
@@ -1980,11 +2023,12 @@ const _missCritOverlayHandler = async (flow) => {
         return;
     try {
         const hitResults = flow?.state?.data?.hit_results ?? [];
-        if (!hitResults.length || !hitResults.some(hr => hr.crit || !hr.hit))
+        if (!hitResults.length)
             return;
         await Sequencer.Preloader.preloadForClients([
             'jb2a.ui.miss.red',
             'jb2a.ui.critical.yellow',
+            'jb2a.ui.hit.blue',
         ]);
         const sourceToken = flow?.state?.actor?.getActiveTokens?.()?.[0];
         await _waitForSourceEffectsToEnd(sourceToken);
@@ -1994,18 +2038,24 @@ const _missCritOverlayHandler = async (flow) => {
             const tokenObj = hr?.target?.object ?? hr?.target;
             if (!tokenObj)
                 continue;
-            const file = hr.crit ? 'jb2a.ui.critical.yellow'
-                : !hr.hit ? 'jb2a.ui.miss.red'
-                    : null;
-            if (!file)
-                continue;
+            let file;
+            let soundKey;
+            if (hr.crit) {
+                file = 'jb2a.ui.critical.yellow';
+                soundKey = 'crit';
+            } else if (hr.hit) {
+                file = 'jb2a.ui.hit.blue';
+                soundKey = 'hit';
+            } else {
+                file = 'jb2a.ui.miss.red';
+                soundKey = 'miss';
+            }
             const delay = i++ * 250;
             seq.effect()
                 .file(file)
                 .attachTo(tokenObj)
                 .scale(0.5)
                 .delay(delay);
-            const soundKey = hr.crit ? 'crit' : 'miss';
             setTimeout(() => playStatsSound(soundKey), delay);
         }
         seq.play();
@@ -2016,3 +2066,32 @@ const _missCritOverlayHandler = async (flow) => {
 Hooks.on('lancer.postFlow.BasicAttackFlow', _missCritOverlayHandler);
 Hooks.on('lancer.postFlow.WeaponAttackFlow', _missCritOverlayHandler);
 Hooks.on('lancer.postFlow.TechAttackFlow', _missCritOverlayHandler);
+
+const _statRollOverlayHandler = async (flow) => {
+    if (!isActionFXEnabled() || typeof Sequencer === 'undefined')
+        return;
+    try {
+        const total = flow?.state?.data?.result?.roll?.total;
+        if (typeof total !== 'number')
+            return;
+        const success = total >= 10;
+        const file = success ? 'jb2a.ui.success.green' : 'jb2a.ui.failure.red';
+        const soundKey = success ? 'success' : 'fail';
+        await Sequencer.Preloader.preloadForClients([file]);
+        const sourceToken = flow?.state?.actor?.getActiveTokens?.()?.[0];
+        if (!sourceToken)
+            return;
+        await _waitForSourceEffectsToEnd(sourceToken);
+        await new Promise((r) => setTimeout(r, 600));
+        new Sequence()
+            .effect()
+            .file(file)
+            .attachTo(sourceToken)
+            .scale(0.5)
+            .play();
+        playStatsSound(soundKey);
+    } catch (e) {
+        console.error('lancer-automations | stat roll overlay failed:', e);
+    }
+};
+Hooks.on('lancer.postFlow.StatRollFlow', _statRollOverlayHandler);

@@ -175,8 +175,11 @@ export class StatusPanel {
                 const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const sc = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
                 let label = 'Base Effect';
-                if (la?.consumption)
-                    label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (la.consumption?.trigger ?? la.consumption?.type ?? 'Effect')}`;
+                if (la?.consumption) {
+                    const t = la.consumption?.trigger;
+                    const triggerLabel = Array.isArray(t) ? t.join(', ') : t;
+                    label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (triggerLabel ?? la.consumption?.type ?? 'Effect')}`;
+                }
                 else if (la?.linkedBonusId)
                     label = 'Bonus Effect';
                 const stackStr = sc && sc > 1 ? ` ×${sc}` : '';

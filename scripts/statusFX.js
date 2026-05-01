@@ -1047,6 +1047,9 @@ function reconcileStatusFX(actor) {
     if (!actor?.id) {
         return;
     }
+    if (!actor.isOwner) {
+        return;
+    }
     const prev = _reconcileTimers.get(actor.id);
     if (prev) {
         clearTimeout(prev);

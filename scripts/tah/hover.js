@@ -52,7 +52,8 @@ const RANGE_PREVIEW_TEMPLATE = {
 
 function hasGAAFork() {
     const mod = game.modules.get('grid-aware-auras');
-    if (!mod) return false;
+    if (!mod)
+        return false;
     const url = /** @type {any} */ (mod).url ?? '';
     const version = /** @type {any} */ (mod).version ?? '';
     return (typeof url === 'string' && url.includes('Agraael'))
@@ -62,7 +63,9 @@ function hasGAAFork() {
 let _warnedMissingFork = false;
 function getTHTConfig() {
     let useAlt = false;
-    try { useAlt = !!game.settings.get('lancer-automations', 'tah.auraUseAltKey'); } catch { /* settings not ready */ }
+    try {
+        useAlt = !!game.settings.get('lancer-automations', 'tah.auraUseAltKey');
+    } catch { /* settings not ready */ }
     // Default off (or opt-in without the fork): disable THT rulers entirely to avoid always-drawn on upstream.
     if (!useAlt || !hasGAAFork()) {
         if (useAlt && !_warnedMissingFork) {
@@ -229,7 +232,8 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
     // Item present → use its range if it has one, otherwise fall through to category rules
     if (item) {
         const reach = await getItemMaxReach(item, actor);
-        if (reach > 0) return Math.max(1, reach);
+        if (reach > 0)
+            return Math.max(1, reach);
     }
 
     // No item range (or no item) — category/action-specific rules
@@ -257,7 +261,8 @@ const AURA_DEFS = {
         settingOpacity: 'tah.auraOpacityThreat',
         settingDefault: 'tah.auraDefaultThreat',
         defaultColor: '#9514ff',
-        lineDashSize: 15, lineGapSize: 15,
+        lineDashSize: 15,
+        lineGapSize: 15,
         getRadius: (actor) => getActorMaxThreat(actor),
     },
     LA_Sensor: {
@@ -265,7 +270,8 @@ const AURA_DEFS = {
         settingOpacity: 'tah.auraOpacitySensor',
         settingDefault: 'tah.auraDefaultSensor',
         defaultColor: '#549eff',
-        lineDashSize: 11, lineGapSize: 11,
+        lineDashSize: 11,
+        lineGapSize: 11,
         getRadius: (actor) => actor?.system?.sensor_range ?? (actor?.type === 'pilot' ? 5 : 10),
     },
     LA_max_range: {
@@ -273,7 +279,8 @@ const AURA_DEFS = {
         settingOpacity: 'tah.auraOpacityRange',
         settingDefault: 'tah.auraDefaultRange',
         defaultColor: '#ff0000',
-        lineDashSize: 13, lineGapSize: 13,
+        lineDashSize: 13,
+        lineGapSize: 13,
         getRadius: (actor, token) => {
             const overrideId = token?.document?.getFlag?.('lancer-automations', 'weaponRangeItemId');
             if (overrideId) {
@@ -294,7 +301,8 @@ const AURA_DEFS = {
         settingOpacity: 'tah.auraOpacityCustom',
         settingDefault: null,
         defaultColor: '#ff8800',
-        lineDashSize: 8, lineGapSize: 8,
+        lineDashSize: 8,
+        lineGapSize: 8,
         getRadius: (_actor, token) => {
             const val = token?.document?.getFlag?.('lancer-automations', 'customMeasureSize');
             return val ?? 10;
@@ -302,9 +310,54 @@ const AURA_DEFS = {
     },
 };
 
-function _buildPersistentTemplate(auraName) {
+function _teamKey(token) {
+    if (game.modules.get('token-factions')?.active) {
+        const teamId = token?.document?.getFlag?.('token-factions', 'team')
+            ?? token?.actor?.prototypeToken?.flags?.['token-factions']?.team
+            ?? token?.actor?.getFlag?.('token-factions', 'team');
+        if (teamId)
+            return `tf_${teamId}`;
+    }
+    return `d${token?.document?.disposition ?? 0}`;
+}
+
+function _teamSuffixedName(baseName, token) {
+    return `${baseName}__t${_teamKey(token)}`;
+}
+
+async function _renameStaleTeamAuras(tokenDoc) {
+    if (!hasGAA() || !tokenDoc)
+        return;
+    const token = tokenDoc.object ?? canvas.tokens?.get?.(tokenDoc.id);
+    if (!token)
+        return;
+    const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
+    if (!auras.length)
+        return;
+    let changed = false;
+    const next = auras.map(a => {
+        for (const baseName of Object.keys(AURA_DEFS)) {
+            const prefix = `${baseName}__t`;
+            const isMatch = a.name === baseName || (typeof a.name === 'string' && a.name.startsWith(prefix));
+            if (!isMatch)
+                continue;
+            const expected = _teamSuffixedName(baseName, token);
+            if (a.name !== expected) {
+                changed = true;
+                return { ...a, name: expected };
+            }
+            break;
+        }
+        return a;
+    });
+    if (changed)
+        await tokenDoc.setFlag('grid-aware-auras', 'auras', next);
+}
+
+function _buildPersistentTemplate(auraName, token) {
     const def = AURA_DEFS[auraName];
-    if (!def) return null;
+    if (!def)
+        return null;
     let color = def.defaultColor;
     let opacity = 1;
     try {
@@ -315,7 +368,7 @@ function _buildPersistentTemplate(auraName) {
     const tpl = {
         _v: 1,
         unified: true,
-        name: auraName,
+        name: token ? _teamSuffixedName(auraName, token) : auraName,
         enabled: false,
         onlyEnabledInCombat: false,
         animation: false,
@@ -338,12 +391,20 @@ function _buildPersistentTemplate(auraName) {
         fillTextureOffset: { x: 0, y: 0 },
         fillTextureScale: { x: 100, y: 100 },
         ownerVisibility: {
-            default: false, hovered: true, controlled: true,
-            dragging: true, targeted: false, turn: false,
+            default: false,
+            hovered: true,
+            controlled: true,
+            dragging: true,
+            targeted: false,
+            turn: false,
         },
         nonOwnerVisibility: {
-            default: false, hovered: false, controlled: false,
-            dragging: false, targeted: false, turn: false,
+            default: false,
+            hovered: false,
+            controlled: false,
+            dragging: false,
+            targeted: false,
+            turn: false,
         },
         effects: [],
         macros: [],
@@ -354,11 +415,26 @@ function _buildPersistentTemplate(auraName) {
 }
 
 async function ensurePersistentAura(tokenDoc, auraName) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
+    const token = tokenDoc.object ?? canvas.tokens?.get?.(tokenDoc.id);
+    const suffixed = token ? _teamSuffixedName(auraName, token) : auraName;
+    const prefix = `${auraName}__t`;
     const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
-    if (auras.some(a => a.name === auraName)) return;
-    const template = _buildPersistentTemplate(auraName);
-    if (!template) return;
+
+    if (auras.some(a => a.name === suffixed))
+        return;
+
+    const stale = auras.find(a => a.name === auraName || (typeof a.name === 'string' && a.name.startsWith(prefix)));
+    if (stale) {
+        const renamed = auras.map(a => a === stale ? { ...a, name: suffixed } : a);
+        await tokenDoc.setFlag('grid-aware-auras', 'auras', renamed);
+        return;
+    }
+
+    const template = _buildPersistentTemplate(auraName, token);
+    if (!template)
+        return;
     template.id = foundry.utils.randomID();
     template.radius = '1';
     await tokenDoc.setFlag('grid-aware-auras', 'auras', [...auras, template]);
@@ -366,9 +442,16 @@ async function ensurePersistentAura(tokenDoc, auraName) {
 
 function _getAuraFromCanvas(token, auraName) {
     const auraLayer = canvas.gaaAuraLayer;
-    if (!auraLayer) return null;
+    if (!auraLayer)
+        return null;
     const auras = auraLayer._auraManager?.getTokenAuras?.(token);
-    return auras?.find(a => a.config?.name === auraName) ?? null;
+    if (!auras?.length)
+        return null;
+    const suffixed = _teamSuffixedName(auraName, token);
+    const prefix = `${auraName}__t`;
+    return auras.find(a => a.config?.name === suffixed)
+        ?? auras.find(a => a.config?.name === auraName || (typeof a.config?.name === 'string' && a.config.name.startsWith(prefix)))
+        ?? null;
 }
 
 export function isPersistentAuraActive(token, auraName) {
@@ -377,20 +460,26 @@ export function isPersistentAuraActive(token, auraName) {
 }
 
 async function _persistAuraState(tokenDoc, auraName, enabled, radius) {
+    const token = tokenDoc.object ?? canvas.tokens?.get?.(tokenDoc.id);
+    const suffixed = token ? _teamSuffixedName(auraName, token) : auraName;
+    const prefix = `${auraName}__t`;
     const auras = (tokenDoc.getFlag('grid-aware-auras', 'auras') ?? []).map(a => {
-        if (a.name !== auraName) return a;
-        return { ...a, enabled, radius: String(Math.max(1, radius)) };
+        if (a.name !== suffixed && a.name !== auraName && !(typeof a.name === 'string' && a.name.startsWith(prefix)))
+            return a;
+        return { ...a, name: suffixed, enabled, radius: String(Math.max(1, radius)) };
     });
     await tokenDoc.setFlag('grid-aware-auras', 'auras', auras);
 }
 
 export async function togglePersistentAura(token, auraName, radius) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
     let aura = _getAuraFromCanvas(token, auraName);
     if (!aura) {
         await ensurePersistentAura(token.document, auraName);
         aura = _getAuraFromCanvas(token, auraName);
-        if (!aura) return;
+        if (!aura)
+            return;
     }
     const cfg = foundry.utils.deepClone(aura.config);
     cfg.enabled = !cfg.enabled;
@@ -402,15 +491,18 @@ export async function togglePersistentAura(token, auraName, radius) {
 }
 
 export async function setPersistentAura(token, auraName, enabled, radius) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
     let aura = _getAuraFromCanvas(token, auraName);
     if (!aura) {
         await ensurePersistentAura(token.document, auraName);
         aura = _getAuraFromCanvas(token, auraName);
-        if (!aura) return;
+        if (!aura)
+            return;
     }
     const cfg = foundry.utils.deepClone(aura.config);
-    if (cfg.enabled === enabled && (!enabled || cfg.radiusCalculated === radius)) return;
+    if (cfg.enabled === enabled && (!enabled || cfg.radiusCalculated === radius))
+        return;
     cfg.enabled = enabled;
     cfg.radiusCalculated = Math.max(1, radius);
     aura.update(cfg, { force: true });
@@ -418,13 +510,17 @@ export async function setPersistentAura(token, auraName, enabled, radius) {
 }
 
 export function updatePersistentAuraRadii(token) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
     const actor = token?.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
     for (const [name, def] of Object.entries(AURA_DEFS)) {
-        if (!isPersistentAuraActive(token, name)) continue;
+        if (!isPersistentAuraActive(token, name))
+            continue;
         const aura = _getAuraFromCanvas(token, name);
-        if (!aura) continue;
+        if (!aura)
+            continue;
         const radius = def.getRadius(actor, token);
         if (radius > 0 && aura.config.radiusCalculated !== radius) {
             const cfg = foundry.utils.deepClone(aura.config);
@@ -436,7 +532,8 @@ export function updatePersistentAuraRadii(token) {
 
 export function getAuraDefaultMode(auraName) {
     const def = AURA_DEFS[auraName];
-    if (!def) return 'none';
+    if (!def)
+        return 'none';
     try {
         return game.settings.get('lancer-automations', def.settingDefault) || 'none';
     } catch {
@@ -445,14 +542,18 @@ export function getAuraDefaultMode(auraName) {
 }
 
 export async function applyDefaultAuras(token) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
     const actor = token?.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
     for (const [name, def] of Object.entries(AURA_DEFS)) {
         const mode = getAuraDefaultMode(name);
-        if (mode === 'none') continue;
+        if (mode === 'none')
+            continue;
         const inCombat = !!game.combat?.combatants?.find(c => c.token?.id === token.id);
-        if (mode === 'combat' && !inCombat) continue;
+        if (mode === 'combat' && !inCombat)
+            continue;
         const radius = def.getRadius(actor, token);
         if (radius > 0) {
             await setPersistentAura(token, name, true, radius);
@@ -461,9 +562,11 @@ export async function applyDefaultAuras(token) {
 }
 
 export async function disableCombatAuras(token) {
-    if (!hasGAA()) return;
+    if (!hasGAA())
+        return;
     for (const name of Object.keys(AURA_DEFS)) {
-        if (getAuraDefaultMode(name) !== 'combat') continue;
+        if (getAuraDefaultMode(name) !== 'combat')
+            continue;
         if (isPersistentAuraActive(token, name)) {
             await setPersistentAura(token, name, false, 1);
         }
@@ -483,6 +586,39 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
     if (!['mech', 'npc', 'pilot', 'deployable'].includes(actorType))
         return;
     await ensureRangePreviewAura(tokenDoc);
+});
+
+Hooks.on('updateToken', async (tokenDoc, change, _options, userId) => {
+    if (userId !== game.user.id)
+        return;
+    if (!('disposition' in (change ?? {})))
+        return;
+    await _renameStaleTeamAuras(tokenDoc);
+    for (const t of canvas.tokens?.placeables ?? []) {
+        if (t.id === tokenDoc.id)
+            continue;
+        await _renameStaleTeamAuras(t.document);
+    }
+});
+
+Hooks.on('updateActor', async (actor, change) => {
+    if (!actor || !change?.flags?.['token-factions'])
+        return;
+    if (!game.user.isGM)
+        return;
+    for (const t of canvas.tokens?.placeables ?? []) {
+        if (t.actor?.id === actor.id)
+            await _renameStaleTeamAuras(t.document);
+    }
+});
+
+Hooks.on('updateSetting', async (setting) => {
+    if (setting?.key !== 'token-factions.team-setup' && setting?.key !== 'token-factions.disposition-matrix')
+        return;
+    if (!game.user.isGM)
+        return;
+    for (const t of canvas.tokens?.placeables ?? [])
+        await _renameStaleTeamAuras(t.document);
 });
 
 // ── HUD row hover ──────────────────────────────────────────────────────────────

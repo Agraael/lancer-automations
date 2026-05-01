@@ -89,8 +89,15 @@ const STAT_SOUNDS = {
     hp_loss:    { src: `${STATS_BASE}/hp_loss.wav`,    scale: 0.2 },
     hp_heal:    { src: `${STATS_BASE}/hp_heal.wav`,    scale: 0.2 },
     heat_clean: { src: `${STATS_BASE}/heat_clean.wav`, scale: 0.05 },
-    miss:       { src: `${STATS_BASE}/miss.wav`, scale: 0.5 },
-    crit:       { src: `${STATS_BASE}/crit.mp3`, scale: 0.4 },
+    miss:       { src: `${STATS_BASE}/miss.wav`, scale: 0.7 },
+    crit:       { src: `${STATS_BASE}/crit.mp3`, scale: 0.5 },
+    hit:        { src: `${STATS_BASE}/hit.mp3`,  scale: 0.2 },
+    success:    { src: `${STATS_BASE}/success.wav`, scale: 0.4 },
+    fail:       { src: `${STATS_BASE}/fail.mp3`,    scale: 0.4 },
+};
+
+const STATUS_SFX_SOUNDS = {
+    bonus: { src: `${STATS_BASE}/bonus.wav`, scale: 0.4 },
 };
 
 /** folder path -> array of full file paths (cached after first browse). */
@@ -161,6 +168,19 @@ export function playStatsSound(key, { force = false } = {}) {
     if (!force) {
         try {
             if (game.settings.get('lancer-automations', `tah.statSound.${key}`) === false)
+                return;
+        } catch { /* not ready */ }
+    }
+    _playDamageAudio(cfg.src, cfg.scale);
+}
+
+export function playStatusSfxSound(key, { force = false } = {}) {
+    const cfg = STATUS_SFX_SOUNDS[key];
+    if (!cfg)
+        return;
+    if (!force) {
+        try {
+            if (game.settings.get('lancer-automations', `tah.statusSfx.${key}`) === false)
                 return;
         } catch { /* not ready */ }
     }

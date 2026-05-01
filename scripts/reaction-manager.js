@@ -781,6 +781,17 @@ export class ReactionConfig extends FormApplication {
         html.find('.copy-default').click(this._onCopyDefault.bind(this));
         html.find('.reaction-enabled').change(this._onToggleEnabled.bind(this));
         html.find('.help-btn').click(this._onHelp.bind(this));
+        html.find('.item-find-btn').click(async () => {
+            const result = await openItemBrowserDialog();
+            if (result?.lid) {
+                try {
+                    await navigator.clipboard.writeText(result.lid);
+                    ui.notifications.info(`Copied LID: ${result.lid}`);
+                } catch {
+                    ui.notifications.info(`LID: ${result.lid}`);
+                }
+            }
+        });
         html.find('.add-script').click(this._onAddScript.bind(this));
         html.find('.edit-script').click(this._onEditScript.bind(this));
         html.find('.delete-script').click(this._onDeleteScript.bind(this));

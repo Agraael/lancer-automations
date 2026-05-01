@@ -1583,6 +1583,23 @@ export function findItemByLid(actorOrToken, lid) {
 }
 
 /**
+ * Returns true if the actor (mech / pilot / npc / deployable) has any item whose LID matches.
+ * Accepts a single LID string or an array of LIDs (any-match).
+ * @param {Actor|Token|TokenDocument} actorOrToken
+ * @param {string|string[]} lidOrLids
+ * @returns {boolean}
+ */
+export function hasItem(actorOrToken, lidOrLids) {
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor?.items || !lidOrLids)
+        return false;
+    const lids = Array.isArray(lidOrLids) ? lidOrLids : [lidOrLids];
+    if (lids.length === 0)
+        return false;
+    return actor.items.some(i => lids.includes(i.system?.lid));
+}
+
+/**
  * Prompts the user to pick an unloaded weapon from an actor and reloads it.
  * @param {Actor|Token|TokenDocument} actorOrToken - The actor or token to reload weapons for.
  * @param {string} [targetName] - Optional target name for the UI notification.

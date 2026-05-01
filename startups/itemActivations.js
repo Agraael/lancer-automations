@@ -2444,6 +2444,32 @@ api.registerDefaultItemReactions({
     }]))
 });
 
+api.registerDefaultItemReactions({
+    "moving_building": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                if (!api || !token.actor)
+                    return;
+                if (token.actor.statuses?.has('bulwark'))
+                    return;
+                await api.applyEffectsToTokens({
+                    tokens: [token],
+                    effectNames: ['bulwark'],
+                    note: "Moving Building",
+                    duration: { label: 'unlimited' }
+                }, { movingBuildingSourceId: item.id });
+            }
+        }]
+    }
+});
+
 // ─── CQB Training (Strider) ───────────────────────────────────────────────────
 api.registerDefaultItemReactions({
     "nrfaw-npc_npcf_cqb_training_strider": {
@@ -3520,6 +3546,145 @@ api.registerDefaultGeneralReactions({
             }
             ui.notifications.info(`${reactorToken.name} breaks free from the Sealant Blend!`);
         }
+    }
+});
+
+api.registerDefaultItemReactions({
+    "npcf_quick_march_commander": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            actionType: "Protocol",
+            frequency: "1/Round",
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const targets = await api.chooseToken(reactorToken, {
+                    range: reactorToken.actor?.system?.sensor_range ?? 10,
+                    count: 1,
+                    filter: t => api.isFriendly(reactorToken, t) && t.id !== reactorToken.id,
+                    title: "QUICK MARCH",
+                    description: `Select an ally within line of sight. They may Boost.`,
+                    icon: "fas fa-running"
+                });
+                const target = targets?.[0];
+                if (!target)
+                    return;
+
+                await api.executeSimpleActivation(target.actor, {
+                    action: { name: "Boost", activation: "Quick" }
+                });
+            }
+        }]
+    },
+    "npcf_press_on_commander": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            actionType: "Quick Action",
+            frequency: "Unlimited",
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const targets = await api.chooseToken(reactorToken, {
+                    count: 1,
+                    filter: t => api.isFriendly(reactorToken, t)
+                        && t.id !== reactorToken.id
+                        && (t.actor?.statuses?.has('stunned') || t.actor?.statuses?.has('jammed')),
+                    title: "PRESS ON",
+                    description: "Select an ally (Stunned or Jammed) within line of sight.",
+                    icon: "fas fa-bullhorn"
+                });
+                const target = targets?.[0];
+                if (!target)
+                    return;
+
+                const hasStunned = target.actor?.statuses?.has('stunned');
+                const hasJammed = target.actor?.statuses?.has('jammed');
+
+                const clear = async (statusId) => {
+                    await api.removeEffectsByNameFromTokens({
+                        tokens: [target],
+                        effectNames: [statusId]
+                    });
+                    ui.notifications.info(`${target.name}: ${statusId} cleared.`);
+                };
+
+                if (hasStunned && !hasJammed) {
+                    await clear('stunned');
+                    return;
+                }
+                if (hasJammed && !hasStunned) {
+                    await clear('jammed');
+                    return;
+                }
+
+                await api.startChoiceCard({
+                    title: "PRESS ON",
+                    description: `Clear which condition from <b>${target.name}</b>?`,
+                    item,
+                    originToken: reactorToken,
+                    relatedToken: target,
+                    userIdControl: api.getTokenOwnerUserId(reactorToken),
+                    choices: [
+                        { text: "Stunned", icon: "fas fa-bolt", callback: async () => clear('stunned') },
+                        { text: "Jammed", icon: "fas fa-radiation", callback: async () => clear('jammed') }
+                    ]
+                });
+            }
+        }]
+    },
+    "npc_sergeant_PourItOn": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            actionType: "Quick Action",
+            frequency: "Unlimited",
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const targets = await api.chooseToken(reactorToken, {
+                    range: reactorToken.actor?.system?.sensor_range ?? 10,
+                    count: 1,
+                    filter: t => api.isFriendly(reactorToken, t) && t.id !== reactorToken.id,
+                    title: "POUR IT ON",
+                    description: "Select an ally within Sensors. Their next ranged or melee attack deals +1d6 bonus damage on hit.",
+                    icon: "fas fa-fire"
+                });
+                const target = targets?.[0];
+                if (!target)
+                    return;
+
+                await api.addGlobalBonus(target.actor, {
+                    name: "Pour It On",
+                    type: "damage",
+                    damage: [{ val: "1d6", type: "Variable" }],
+                    rollTypes: ["melee", "ranged"],
+                    uses: 1
+                }, {
+                    origin: reactorToken,
+                    consumption: { trigger: "onDamage" }
+                });
+            }
+        }]
     }
 });
 

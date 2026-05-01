@@ -1,6 +1,8 @@
 import { applyEffectsToTokens } from "./flagged-effects.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "./reaction-manager.js";
+import { getWeaponType } from "./misc-tools.js";
+import { playBonusAddedFX } from "./actionFX.js";
 
 /**
  * Session cache for compiled lambda conditions.
@@ -364,20 +366,27 @@ function createGenericBonusStep(flowType) {
 
             // Apply a single target modifier to a single target
             const applyOneModifier = (t, mod) => {
-                if (mod.subtype === 'invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 1;
-                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 0;
-                else if (mod.subtype === 'no_cover') t.cover = 0;
-                else if (mod.subtype === 'soft_cover') t.cover = Math.max(t.cover || 0, 1);
-                else if (mod.subtype === 'hard_cover') t.cover = 2;
+                if (mod.subtype === 'invisible' && t.plugins?.invisibility)
+                    t.plugins.invisibility.data = 1;
+                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
+                    t.plugins.invisibility.data = 0;
+                else if (mod.subtype === 'no_cover')
+                    t.cover = 0;
+                else if (mod.subtype === 'soft_cover')
+                    t.cover = Math.max(t.cover || 0, 1);
+                else if (mod.subtype === 'hard_cover')
+                    t.cover = 2;
             };
 
             // Apply target modifiers to matching targets in acc_diff or damage_hud_data
             const applyTargetModifiers = (hudData) => {
-                if (r.targetModifiers.length === 0) return;
+                if (r.targetModifiers.length === 0)
+                    return;
                 for (const t of (hudData.targets || [])) {
                     for (const mod of r.targetModifiers) {
                         if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0) {
-                            if (!mod.applyTo.includes(t.target?.id)) continue;
+                            if (!mod.applyTo.includes(t.target?.id))
+                                continue;
                         }
                         if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
                             continue;
@@ -423,31 +432,45 @@ function createGenericBonusStep(flowType) {
                 for (const mod of dmgMods) {
                     const isPerTarget = Array.isArray(mod.applyTo) && mod.applyTo.length > 0;
                     if (isPerTarget) {
-                        if (targetCount > 1) continue;
+                        if (targetCount > 1)
+                            continue;
                         // Single target: only set global if the target matches applyTo
-                        if (targetCount === 1 && !mod.applyTo.includes(currentTargets[0]?.id)) continue;
+                        if (targetCount === 1 && !mod.applyTo.includes(currentTargets[0]?.id))
+                            continue;
                     }
-                    if (mod.subtype === 'ap') state.data.ap = true;
-                    else if (mod.subtype === 'half_damage') state.data.half_damage = true;
-                    else if (mod.subtype === 'paracausal') state.data.paracausal = true;
+                    if (mod.subtype === 'ap')
+                        state.data.ap = true;
+                    else if (mod.subtype === 'half_damage')
+                        state.data.half_damage = true;
+                    else if (mod.subtype === 'paracausal')
+                        state.data.paracausal = true;
                 }
                 // Hook replaceTargets once damage_hud_data exists + apply per-target mods to initial targets
                 const applyDmgModsToTargets = (targets) => {
                     for (const t of targets) {
                         for (const mod of dmgMods) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id)) continue;
-                            if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state))) continue;
-                            if (mod.subtype === 'ap') t.ap = true;
-                            else if (mod.subtype === 'half_damage') t.halfDamage = true;
-                            else if (mod.subtype === 'paracausal') t.paracausal = true;
-                            else if (mod.subtype === 'crit') t.quality = 2;
-                            else if (mod.subtype === 'hit') t.quality = Math.max(t.quality, 1);
-                            else if (mod.subtype === 'miss') t.quality = 0;
+                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id))
+                                continue;
+                            if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
+                                continue;
+                            if (mod.subtype === 'ap')
+                                t.ap = true;
+                            else if (mod.subtype === 'half_damage')
+                                t.halfDamage = true;
+                            else if (mod.subtype === 'paracausal')
+                                t.paracausal = true;
+                            else if (mod.subtype === 'crit')
+                                t.quality = 2;
+                            else if (mod.subtype === 'hit')
+                                t.quality = Math.max(t.quality, 1);
+                            else if (mod.subtype === 'miss')
+                                t.quality = 0;
                         }
                     }
                 };
                 const hookDamageReplaceTargets = () => {
-                    if (!state.data.damage_hud_data?.replaceTargets) return;
+                    if (!state.data.damage_hud_data?.replaceTargets)
+                        return;
                     // Apply per-target mods to initial targets
                     applyDmgModsToTargets(state.data.damage_hud_data.targets || []);
                     const origReplace = state.data.damage_hud_data.replaceTargets.bind(state.data.damage_hud_data);
@@ -461,14 +484,17 @@ function createGenericBonusStep(flowType) {
                 // Click per-target checkboxes in the damage HUD to trigger Svelte reactivity
                 const clickDmgPerTargetButtons = () => {
                     const $form = $('#damage-hud');
-                    if ($form.length === 0) return;
+                    if ($form.length === 0)
+                        return;
                     const $allCards = $form.find('.damage-hud-target-card');
                     const hudTargets = state.data.damage_hud_data?.targets || [];
                     for (const mod of dmgMods) {
-                        if (!Array.isArray(mod.applyTo) || mod.applyTo.length === 0) continue;
+                        if (!Array.isArray(mod.applyTo) || mod.applyTo.length === 0)
+                            continue;
                         $allCards.each(function (cardIndex) {
                             const hudTarget = hudTargets[cardIndex];
-                            if (!hudTarget || !mod.applyTo.includes(hudTarget.target?.id)) return;
+                            if (!hudTarget || !mod.applyTo.includes(hudTarget.target?.id))
+                                return;
                             const $card = $(this);
                             // Find and click the matching checkbox in the target card.
                             // The Lancer damage HUD renders per-target checkboxes for AP, paracausal, 1/2.
@@ -479,9 +505,12 @@ function createGenericBonusStep(flowType) {
                                 const text = $(this).text().trim().toLowerCase();
                                 const hasIcon = $(this).find('i, img').attr('class') || '';
                                 let match = false;
-                                if (mod.subtype === 'half_damage' && (text.includes('½') || text.includes('half') || hasIcon.includes('half'))) match = true;
-                                if (mod.subtype === 'ap' && (text.includes('ap') || text.includes('armor') || hasIcon.includes('armor'))) match = true;
-                                if (mod.subtype === 'paracausal' && (text.includes('paracausal') || text.includes('reduce') || hasIcon.includes('paracausal'))) match = true;
+                                if (mod.subtype === 'half_damage' && (text.includes('½') || text.includes('half') || hasIcon.includes('half')))
+                                    match = true;
+                                if (mod.subtype === 'ap' && (text.includes('ap') || text.includes('armor') || hasIcon.includes('armor')))
+                                    match = true;
+                                if (mod.subtype === 'paracausal' && (text.includes('paracausal') || text.includes('reduce') || hasIcon.includes('paracausal')))
+                                    match = true;
                                 if (match) {
                                     const $cb = $(this).find('input[type="checkbox"]');
                                     if ($cb.length > 0 && !$cb.is(':checked')) {
@@ -534,14 +563,17 @@ function createGenericBonusStep(flowType) {
                 for (const t of (state.data.acc_diff?.targets || [])) {
                     for (const mod of attackMods) {
                         const key = `${t.target?.id}::${mod.subtype}`;
-                        if ((mod.subtype === 'invisible' || mod.subtype === 'no_invisible') && t.plugins?.invisibility) originals.set(key, t.plugins.invisibility.data);
-                        else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype)) originals.set(key, t.cover);
+                        if ((mod.subtype === 'invisible' || mod.subtype === 'no_invisible') && t.plugins?.invisibility)
+                            originals.set(key, t.plugins.invisibility.data);
+                        else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype))
+                            originals.set(key, t.cover);
                     }
                 }
 
                 const injectModToggles = () => {
                     const $form = $('form#accdiff');
-                    if ($form.length === 0) return;
+                    if ($form.length === 0)
+                        return;
                     $form.find('.la-target-modifier-section, .la-tmod-row').remove();
 
                     // Get Svelte classes from Prone section or use hardcoded defaults
@@ -565,15 +597,20 @@ function createGenericBonusStep(flowType) {
                         modEnabled.set(mKey, on);
                         const reactorToken = resolveReactorToken(mod, state);
                         for (const t of (state.data.acc_diff?.targets || [])) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id)) continue;
-                            if (!evaluateApplyToCondition(mod, t, state, reactorToken)) continue;
+                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id))
+                                continue;
+                            if (!evaluateApplyToCondition(mod, t, state, reactorToken))
+                                continue;
                             if (on) {
                                 applyOneModifier(t, mod);
                             } else {
                                 const oKey = `${t.target?.id}::${mod.subtype}`;
-                                if (mod.subtype === 'invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = 0;
-                                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) t.plugins.invisibility.data = originals.get(oKey) ?? 0;
-                                else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype)) t.cover = originals.get(oKey) ?? 0;
+                                if (mod.subtype === 'invisible' && t.plugins?.invisibility)
+                                    t.plugins.invisibility.data = 0;
+                                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
+                                    t.plugins.invisibility.data = originals.get(oKey) ?? 0;
+                                else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype))
+                                    t.cover = originals.get(oKey) ?? 0;
                             }
                         }
                     };
@@ -596,7 +633,8 @@ function createGenericBonusStep(flowType) {
                                 const $row = $(this).closest('.la-tmod-row');
                                 const mKey = String($row.data('mkey'));
                                 const mod = globalMods.find(m => (m.id || m.subtype) === mKey);
-                                if (!mod) return;
+                                if (!mod)
+                                    return;
                                 const on = $(this).is(':checked');
                                 $row.css('opacity', on ? '1' : '0.5');
                                 onToggle(mod, on);
@@ -612,11 +650,14 @@ function createGenericBonusStep(flowType) {
                         $allCards.each(function () {
                             const $card = $(this);
                             const tokenId = (mod.applyTo || []).find(id => $card.find(`label.target-name[for="${id}"]`).length > 0);
-                            if (!tokenId) return;
+                            if (!tokenId)
+                                return;
                             const guardClass = `la-tmod-${mKey}-${tokenId}`;
-                            if ($card.find(`.${guardClass}`).length > 0) return;
+                            if ($card.find(`.${guardClass}`).length > 0)
+                                return;
                             const $body = $card.find('.accdiff-target-body').first();
-                            if ($body.length === 0) return;
+                            if ($body.length === 0)
+                                return;
                             const $siblingLabel = $form.find('.accdiff-grid__column label').first();
                             const $row = $(`<label class="${$siblingLabel.attr('class') || lClass} la-tmod-row ${guardClass}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;${checked ? '' : 'opacity:0.5;'}">
                                 <input type="checkbox" class="${$siblingLabel.find('input').attr('class') || iClass}" ${checked ? 'checked' : ''}>
@@ -633,7 +674,10 @@ function createGenericBonusStep(flowType) {
                 };
                 setTimeout(injectModToggles, 100);
                 const _prevReinject = reinjectCallback;
-                reinjectCallback = () => { if (_prevReinject) _prevReinject(); injectModToggles(); };
+                reinjectCallback = () => {
+                    if (_prevReinject)
+                        _prevReinject(); injectModToggles();
+                };
             }
 
             if (flowType === 'damage') {
@@ -858,14 +902,30 @@ function getFlowTags(flowType, state) {
     const tags = new Set(["all"]);
     const itemType = state.item?.system?.type?.toLowerCase();
 
+    const addWeaponClassTags = () => {
+        const wt = getWeaponType(state.item);
+        if (wt) {
+            if (wt === "Melee")
+                tags.add("melee");
+            else if (wt === "Nexus")
+                tags.add("nexus");
+            else
+                tags.add("ranged");
+        }
+        if (state.item?.system?.type === "Tech")
+            tags.add("tech");
+    };
+
     if (["attack", "basic_attack", "weapon_attack"].includes(flowType)) {
         tags.add("attack");
         if (itemType) {
             tags.add(itemType);
         }
+        addWeaponClassTags();
     } else if (flowType === "tech_attack") {
         tags.add("attack");
         tags.add("tech_attack");
+        tags.add("tech");
     } else if (flowType === "stat_roll") {
         tags.add("check");
         const path = state.data?.path?.toLowerCase() || "";
@@ -879,8 +939,10 @@ function getFlowTags(flowType, state) {
         }
     } else if (["structure", "overheat", "damage"].includes(flowType)) {
         tags.add(flowType);
-        if (flowType === "damage" && itemType) {
-            tags.add(itemType);
+        if (flowType === "damage") {
+            if (itemType)
+                tags.add(itemType);
+            addWeaponClassTags();
         }
     }
     return tags;
@@ -1448,8 +1510,10 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
         const currentTargetIds = (state.data.damage_hud_data?.targets || []).map(t => t.target?.id);
         const globalTMods = targetModifiers.filter(m => {
-            if (!Array.isArray(m.applyTo) || m.applyTo.length === 0) return true;
-            if (targetCount <= 1) return currentTargetIds.some(id => m.applyTo.includes(id));
+            if (!Array.isArray(m.applyTo) || m.applyTo.length === 0)
+                return true;
+            if (targetCount <= 1)
+                return currentTargetIds.some(id => m.applyTo.includes(id));
             return false;
         });
         const perTargetTMods = targetCount > 1 ? targetModifiers.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
@@ -1494,9 +1558,11 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                     // Match by card index -> hudTargets[index].target.id
                     const hudTarget = hudTargets[cardIndex];
                     const tokenId = hudTarget && (mod.applyTo || []).includes(hudTarget.target?.id) ? hudTarget.target.id : null;
-                    if (!tokenId) return;
+                    if (!tokenId)
+                        return;
                     const guardClass = `la-tmod-dmg-${mod.id || mod.subtype}-${tokenId}`;
-                    if ($card.find(`.${guardClass}`).length > 0) return;
+                    if ($card.find(`.${guardClass}`).length > 0)
+                        return;
                     const $row = $(`<label class="container svelte-wt0sk2 ${guardClass}" style="cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 4px;">
                         <input type="checkbox" class="svelte-wt0sk2" checked>
                         <span style="text-wrap:wrap;font-size:0.85em;line-height:1.1;">${name}</span>
@@ -2088,6 +2154,12 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 }
                 await token.actor.update({ [extraOptions.statDirect.key]: newVal });
             }
+            const originRaw = options.origin;
+            const originId = originRaw?.id ?? originRaw;
+            const originToken = typeof originId === 'string'
+                ? canvas.tokens?.get?.(originId) ?? null
+                : (originRaw && originRaw.document ? originRaw : null);
+            playBonusAddedFX(token, originToken);
         }
     }
 

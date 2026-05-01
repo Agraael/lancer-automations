@@ -459,7 +459,7 @@ type TriggerType =
 // ─── Shared subtypes ─────────────────────────────────────────────────────────
 
 interface ConsumptionConfig {
-    trigger?: TriggerType;
+    trigger?: TriggerType | TriggerType[];
     originId?: string;
     grouped?: boolean;
     groupId?: string;

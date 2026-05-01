@@ -121,8 +121,13 @@ Hooks.on('init', () => {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'crit']) {
+    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'hit', 'crit', 'success', 'fail']) {
         game.settings.register(MODULE, `tah.statSound.${e}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const e of ['bonus']) {
+        game.settings.register(MODULE, `tah.statusSfx.${e}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }

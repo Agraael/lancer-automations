@@ -6,6 +6,105 @@ const NS = 'lancer-automations';
 const ROOT = '#lancer-automations-config';
 const RM_ROOT = '#reaction-manager-config';
 const TAH_ROOT = '#la-hud';
+const EM_ROOT = '.lancer-effect-manager';
+
+function _emTabClick(tab) {
+    return async () => {
+        const t = document.querySelector(`${EM_ROOT} .te-tab[data-tab="${tab}"]`);
+        if (t instanceof HTMLElement)
+            t.click();
+        for (let i = 0; i < 20; i++) {
+            if (document.querySelector(`${EM_ROOT} #tab-${tab}.active`))
+                return;
+            await new Promise(r => setTimeout(r, 25));
+        }
+    };
+}
+
+const EFFECT_MANAGER_STEPS = [
+    {
+        id: 'em-intro',
+        title: 'Effect Manager',
+        content: "Coding and automation can feel rough, and mid-game you need stuff fast. Here's a UI on top of the Lancer Automations systems, no code.",
+        selector: `${EM_ROOT} .lancer-dialog-header`,
+    },
+    {
+        id: 'em-std',
+        title: 'Standard',
+        content: "The standard effect page. Pick a status, a duration, optionally an auto-consume trigger.",
+        selector: `${EM_ROOT} #tab-standard`,
+        action: _emTabClick('standard'),
+    },
+    {
+        id: 'em-std-pick',
+        title: 'Standard - Effect',
+        content: "Pick a status and a stack count. Target is up top.",
+        selector: `${EM_ROOT} #std-effect-grid`,
+    },
+    {
+        id: 'em-std-duration',
+        title: 'Standard - Duration',
+        content: "How long it sticks: end/start of turn, indefinite, etc.",
+        selector: `${EM_ROOT} #std-duration`,
+    },
+    {
+        id: 'em-std-trigger',
+        title: 'Standard - Consume on',
+        content: "Optional auto-consume trigger (on hit, on damage, on turn end...). Picking some triggers reveals extra filters: item LID, action name, status, check type.",
+        selector: `${EM_ROOT} #std-trigger`,
+    },
+    {
+        id: 'em-custom',
+        title: 'Custom',
+        content: "Registering every possible status from NPC stuff is tedious and noisy on the status list. This tab lets you create temporary statuses on the fly. With my <b>temporary-custom-statuses</b> module some can be saved and reused.",
+        selector: `${EM_ROOT} #tab-custom`,
+        action: _emTabClick('custom'),
+    },
+    {
+        id: 'em-custom-build',
+        title: 'Custom - Build',
+        content: "Name, icon, duration, note. Same shape as Standard but for ad-hoc statuses.",
+        selector: `${EM_ROOT} #cust-name`,
+    },
+    {
+        id: 'em-custom-saved',
+        title: 'Custom - Saved',
+        content: "Statuses saved through temporary-custom-statuses show up here for reuse, and on a separate Statuses tab in TAH.",
+        selector: `${EM_ROOT} #cust-saved`,
+    },
+    {
+        id: 'em-bonus',
+        title: 'Bonus',
+        content: "The advanced stuff, and one of the core features of the Lancer Automations engine. Many many things go through here: accuracy, damage on next attack, immunities, rerolls, target modifiers. They inject into the regular Lancer system cards seamlessly. Read <code>doc/API_EFFECTS.md</code> for the full menu.",
+        selector: `${EM_ROOT} #tab-bonus`,
+        action: _emTabClick('bonus'),
+    },
+    {
+        id: 'em-bonus-type',
+        title: 'Bonus - Type',
+        content: "The bonus type. Each one reveals its own fields below.",
+        selector: `${EM_ROOT} #bonus-type`,
+    },
+    {
+        id: 'em-bonus-trigger',
+        title: 'Bonus - Consume',
+        content: "Same trigger picker as Standard. Combined with Uses, this is how you build things like <i>3 stacks of +1d6 damage on next attack, consumed on damage roll</i>.",
+        selector: `${EM_ROOT} #bonus-trigger`,
+    },
+    {
+        id: 'em-bonus-add',
+        title: 'Bonus - Add',
+        content: "Adds the bonus to the target.",
+        selector: `${EM_ROOT} #bonus-add`,
+    },
+    {
+        id: 'em-manage',
+        title: 'Manage',
+        content: "Everything currently on a token, including passive bonuses you can't see otherwise (Veterancy adding a passive on a HASE check, etc.).",
+        selector: `${EM_ROOT} #tab-manage`,
+        action: _emTabClick('manage'),
+    },
+];
 
 const CONFIG_STEPS = [
     {
@@ -498,6 +597,7 @@ class _RootTour extends Tour {
 
 let _configTour;
 let _activationTour;
+let _effectManagerTour;
 
 function _ensureConfigOpen() {
     const open = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).id === 'lancer-automations-config');
@@ -519,6 +619,27 @@ function _ensureActivationManagerOpen() {
     });
 }
 
+async function _ensureEffectManagerOpen() {
+    if (document.querySelector(EM_ROOT))
+        return true;
+    const { executeEffectManager } = await import('./effectManager.js');
+    executeEffectManager();
+    for (let i = 0; i < 40; i++) {
+        if (document.querySelector(EM_ROOT))
+            return true;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+    return !!document.querySelector(EM_ROOT);
+}
+
+function _closeEffectManager() {
+    const el = document.querySelector(EM_ROOT);
+    if (!el)
+        return;
+    const dlg = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).element?.[0] === el || /** @type {any} */ (w).element?.[0]?.contains(el));
+    try { /** @type {any} */ (dlg)?.close?.(); } catch { /* ignore */ }
+}
+
 export async function startConfigTour() {
     await _ensureConfigOpen();
     if (_configTour)
@@ -532,6 +653,16 @@ export async function startActivationManagerTour() {
     await _ensureActivationManagerOpen();
     if (_activationTour)
         await _activationTour.start();
+    try {
+        await game.settings.set(NS, SETTING_TOUR_DONE, true);
+    } catch { /* not ready */ }
+}
+
+export async function startEffectManagerTour() {
+    if (!(await _ensureEffectManagerOpen()))
+        return;
+    if (_effectManagerTour)
+        await _effectManagerTour.start();
     try {
         await game.settings.set(NS, SETTING_TOUR_DONE, true);
     } catch { /* not ready */ }
@@ -622,16 +753,21 @@ async function _maybeShowMovementWarning() {
     } catch { /* not ready */ }
 }
 
-// Run all three tours back to back: configuration, activation manager, TAH.
+// Run all four tours back to back: configuration, activation manager, TAH, effect manager.
 async function _runFullTour() {
     await _ensureConfigOpen();
     if (!_configTour)
         return;
     _configTour.onComplete(async () => {
-        if (_activationTour)
+        if (_activationTour) {
             _activationTour.onComplete(async () => {
+                if (_tahTour)
+                    _tahTour.onComplete(async () => {
+                        await startEffectManagerTour();
+                    });
                 await startTahTour();
             });
+        }
         await startActivationManagerTour();
     });
     await _configTour.start();
@@ -705,6 +841,13 @@ export function registerTourBootstrap() {
                 canBeResumed: false,
                 steps: TAH_STEPS,
             }, TAH_ROOT);
+            _effectManagerTour = new _RootTour({
+                title: 'Lancer Automations: Effect Manager',
+                description: 'Walks through the Effect Manager dialog (standard, custom, bonus, manage).',
+                display: true,
+                canBeResumed: false,
+                steps: EFFECT_MANAGER_STEPS,
+            }, EM_ROOT);
             const cfgStart = _configTour.start.bind(_configTour);
             _configTour.start = async () => {
                 await _ensureConfigOpen();
@@ -720,6 +863,28 @@ export function registerTourBootstrap() {
                 if (!(await _ensureTAHOpen()))
                     return;
                 await tahStart();
+            };
+            const emStart = _effectManagerTour.start.bind(_effectManagerTour);
+            _effectManagerTour.start = async () => {
+                if (!(await _ensureEffectManagerOpen()))
+                    return;
+                await emStart();
+            };
+            const emExit = _effectManagerTour.exit.bind(_effectManagerTour);
+            _effectManagerTour.exit = async () => {
+                try {
+                    await emExit();
+                } finally {
+                    _closeEffectManager();
+                }
+            };
+            const emComplete = _effectManagerTour.complete.bind(_effectManagerTour);
+            _effectManagerTour.complete = async () => {
+                try {
+                    await emComplete();
+                } finally {
+                    _closeEffectManager();
+                }
             };
             const tahExit = _tahTour.exit.bind(_tahTour);
             _tahTour.exit = async () => {
@@ -740,6 +905,7 @@ export function registerTourBootstrap() {
             game.tours.register(NS, 'config-tour', _configTour);
             game.tours.register(NS, 'activation-manager-tour', _activationTour);
             game.tours.register(NS, 'tah-tour', _tahTour);
+            game.tours.register(NS, 'effect-manager-tour', _effectManagerTour);
             console.log('lancer-automations | tours registered OK', game.tours.get(`${NS}.config-tour`), game.tours.get(`${NS}.activation-manager-tour`), game.tours.get(`${NS}.tah-tour`));
         } catch (e) {
             console.error('lancer-automations | failed to register tours', e);

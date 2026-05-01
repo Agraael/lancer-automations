@@ -50,38 +50,36 @@ export function getItemStatus(item) {
     const parts = [];
     let badgeColor = '#3a9e6e'; // green = ready
 
-    if (!destroyed && !unavailable) {
-        const hasLoading  = tags.some(t => t.lid === 'tg_loading');
-        const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
-        const hasLimited  = tags.some(t => t.lid === 'tg_limited');
+    const hasLoading  = tags.some(t => t.lid === 'tg_loading');
+    const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
+    const hasLimited  = tags.some(t => t.lid === 'tg_limited');
 
-        if (hasLoading) {
-            if (sys.loaded === false) {
-                parts.push('⬡'); unavailable = true; badgeColor = '#c33';
+    if (hasLoading) {
+        if (sys.loaded === false) {
+            parts.push('⬡'); unavailable = true; badgeColor = '#c33';
+        } else {
+            parts.push('⬢');
+        }
+    }
+    if (hasRecharge) {
+        if (sys.charged === false) {
+            parts.push('□'); unavailable = true; badgeColor = '#c33';
+        } else {
+            parts.push('▣');
+        }
+    }
+    if (hasLimited) {
+        let val = 0, max = 0;
+        if (sys.uses != null) {
+            if (typeof sys.uses === 'number') {
+                val = sys.uses;
             } else {
-                parts.push('⬢');
+                val = sys.uses.value ?? 0; max = sys.uses.max ?? 0;
             }
         }
-        if (hasRecharge) {
-            if (sys.charged === false) {
-                parts.push('□'); unavailable = true; badgeColor = '#c33';
-            } else {
-                parts.push('▣');
-            }
-        }
-        if (hasLimited) {
-            let val = 0, max = 0;
-            if (sys.uses != null) {
-                if (typeof sys.uses === 'number') {
-                    val = sys.uses;
-                } else {
-                    val = sys.uses.value ?? 0; max = sys.uses.max ?? 0;
-                }
-            }
-            if (val <= 0) { unavailable = true; badgeColor = '#c33'; }
-            else if (val < max && badgeColor !== '#c33') { badgeColor = '#cc7700'; }
-            parts.push(`${val}/${max}`);
-        }
+        if (val <= 0) { unavailable = true; badgeColor = '#c33'; }
+        else if (val < max && badgeColor !== '#c33') { badgeColor = '#cc7700'; }
+        parts.push(`${val}/${max}`);
     }
 
     const badge = parts.length ? parts.join(' ') : null;

@@ -222,7 +222,8 @@ const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
-const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'crit'];
+const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'hit', 'crit', 'success', 'fail'];
+const STATUS_SFX_EVENTS = ['bonus'];
 
 function _toLabel(s) {
     return s.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1')
@@ -248,6 +249,9 @@ const SOUNDS_FIELDS = [
 
     { type: 'section', label: 'Stat feedback (mute toggles)', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STAT_EVENTS.map((e) => ({ key: `tah.statSound.${e}`, label: _toLabel(e), preview: true })) },
+
+    { type: 'section', label: 'Status SFX (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
 
     { type: 'section', label: 'Action FX audio (mute toggles)', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: ACTION_FX_KEYS.map((a) => ({ key: `tah.actionFxSound.${a}`, label: _toLabel(a), preview: true })) },
@@ -575,6 +579,8 @@ async function _previewSettingSound(key) {
         await sound.playDamageSound(key.slice('tah.damageSound.'.length), { force: true });
     } else if (key.startsWith('tah.statSound.')) {
         sound.playStatsSound(key.slice('tah.statSound.'.length), { force: true });
+    } else if (key.startsWith('tah.statusSfx.')) {
+        sound.playStatusSfxSound(key.slice('tah.statusSfx.'.length), { force: true });
     } else if (key.startsWith('tah.actionFxSound.')) {
         fx.previewActionFxSound(key.slice('tah.actionFxSound.'.length));
     }

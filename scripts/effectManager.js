@@ -94,31 +94,92 @@ function openStatusPicker(targetInput) {
     dialog.render(true);
 }
 
-const CONSUMPTION_TRIGGER_OPTIONS = `
-    <option value="">None</option>
-    <option value="onAttack">On Attack</option>
-    <option value="onHit">On Hit</option>
-    <option value="onMiss">On Miss</option>
-    <option value="onDamage">On Damage</option>
-    <option value="onTechAttack">On Tech Attack</option>
-    <option value="onTechHit">On Tech Hit</option>
-    <option value="onMove">On Move</option>
-    <option value="onPreMove">On Pre Move</option>
-    <option value="onInitActivation">On Init Activation</option>
-    <option value="onActivation">On Activation</option>
-    <option value="onDeploy">On Deploy</option>
-    <option value="onCheck">On Check</option>
-    <option value="onHeatGain">On Heat</option>
-    <option value="onHpLoss">On HP Loss</option>
-    <option value="onTurnStart">On Turn Start</option>
-    <option value="onTurnEnd">On Turn End</option>
-    <option value="onEnterCombat">On Enter Combat</option>
-    <option value="onExitCombat">On Exit Combat</option>
-    <option value="onPreStatusApplied">On Pre Status Applied</option>
-    <option value="onPreStatusRemoved">On Pre Status Removed</option>
-    <option value="onStatusApplied">On Status Applied</option>
-    <option value="onStatusRemoved">On Status Removed</option>
-`;
+const CONSUMPTION_TRIGGER_LIST = [
+    { value: 'onAttack', label: 'On Attack' },
+    { value: 'onHit', label: 'On Hit' },
+    { value: 'onMiss', label: 'On Miss' },
+    { value: 'onDamage', label: 'On Damage' },
+    { value: 'onTechAttack', label: 'On Tech Attack' },
+    { value: 'onTechHit', label: 'On Tech Hit' },
+    { value: 'onMove', label: 'On Move' },
+    { value: 'onPreMove', label: 'On Pre Move' },
+    { value: 'onInitActivation', label: 'On Init Activation' },
+    { value: 'onActivation', label: 'On Activation' },
+    { value: 'onDeploy', label: 'On Deploy' },
+    { value: 'onCheck', label: 'On Check' },
+    { value: 'onHeatGain', label: 'On Heat' },
+    { value: 'onHpLoss', label: 'On HP Loss' },
+    { value: 'onTurnStart', label: 'On Turn Start' },
+    { value: 'onTurnEnd', label: 'On Turn End' },
+    { value: 'onEnterCombat', label: 'On Enter Combat' },
+    { value: 'onExitCombat', label: 'On Exit Combat' },
+    { value: 'onPreStatusApplied', label: 'On Pre Status Applied' },
+    { value: 'onPreStatusRemoved', label: 'On Pre Status Removed' },
+    { value: 'onStatusApplied', label: 'On Status Applied' },
+    { value: 'onStatusRemoved', label: 'On Status Removed' }
+];
+
+function consumptionTriggerCheckboxesHtml() {
+    return CONSUMPTION_TRIGGER_LIST
+        .map(o => `<label><input type="checkbox" value="${o.value}"> ${o.label}</label>`)
+        .join('');
+}
+
+/**
+ * Hoisted la-multi-select initializer (button-trigger + checkbox panel).
+ * @param {JQuery} html
+ * @param {string} containerId
+ */
+function initLaMultiSelect(html, containerId) {
+    const container = html.find(`#${containerId}`);
+    const trigger = container.find('.la-multi-select-trigger');
+    const panel = container.find('.la-multi-select-panel');
+    const updateTriggerLabel = () => {
+        const checked = panel.find('input:checked');
+        if (checked.length === 0) {
+            trigger.text('— Select —');
+        } else {
+            trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
+        }
+    };
+    const panelHome = panel.parent();
+    const positionPanel = () => {
+        const rect = trigger[0].getBoundingClientRect();
+        const el = panel[0].style;
+        el.setProperty('position', 'fixed', 'important');
+        el.setProperty('top', `${rect.bottom + 2}px`, 'important');
+        el.setProperty('left', `${rect.left}px`, 'important');
+        el.setProperty('right', 'auto', 'important');
+        el.setProperty('bottom', 'auto', 'important');
+        el.setProperty('width', `${rect.width}px`, 'important');
+        el.setProperty('min-width', '0', 'important');
+        el.setProperty('max-width', `${rect.width}px`, 'important');
+    };
+    const closePanel = () => {
+        panel.removeClass('open');
+        panel[0].style.cssText = '';
+        if (panel.parent().is('body'))
+            panelHome.append(panel);
+    };
+    trigger.on('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = panel.hasClass('open');
+        $('.la-multi-select-panel.open').each(function () {
+            $(this).removeClass('open');
+        });
+        if (!wasOpen) {
+            $('body').append(panel);
+            positionPanel();
+            panel.addClass('open');
+        } else {
+            closePanel();
+        }
+    });
+    panel.on('click', (e) => e.stopPropagation());
+    panel.find('input[type=checkbox]').on('change', updateTriggerLabel);
+    $(document).on('click.la-multiselect', closePanel);
+    updateTriggerLabel();
+}
 
 const CONSUMPTION_FILTER_MAP = {
     onAttack: ['cfilter-itemLid', 'cfilter-itemId'],
@@ -146,7 +207,12 @@ function triggerFieldsHtml(prefix, tokensHtml) {
     return `
         <div class="form-group">
             <label>Consume on:</label>
-            <select id="${prefix}-trigger">${CONSUMPTION_TRIGGER_OPTIONS}</select>
+            <div class="la-multi-select" id="${prefix}-trigger">
+                <button type="button" class="la-multi-select-trigger">— Select —</button>
+                <div class="la-multi-select-panel">
+                    ${consumptionTriggerCheckboxesHtml()}
+                </div>
+            </div>
         </div>
         <div id="${prefix}-trigger-fields" style="display:none;">
             <div class="form-group">
@@ -199,20 +265,25 @@ function triggerFieldsHtml(prefix, tokensHtml) {
  * Setup trigger field toggle + item browser buttons for a given prefix
  */
 function setupTriggerUI(html, prefix) {
-    html.find(`#${prefix}-trigger`).on('change', function () {
-        const trigger = $(this).val();
+    initLaMultiSelect(html, `${prefix}-trigger`);
+
+    const updateTriggerFilterFields = () => {
+        const triggers = html.find(`#${prefix}-trigger input:checked`)
+            .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
         const $fields = html.find(`#${prefix}-trigger-fields`);
         $fields.find('.form-group').hide();
-        if (trigger && CONSUMPTION_FILTER_MAP[trigger]) {
+        if (triggers.length > 0) {
             $fields.show();
-            // Always show origin when trigger is set
+            // Always show origin when at least one trigger is selected
             $fields.find('.form-group').first().show();
-            CONSUMPTION_FILTER_MAP[trigger].forEach(cls => $fields.find(`.${cls}`).show());
+            const classes = new Set(triggers.flatMap(t => CONSUMPTION_FILTER_MAP[t] ?? []));
+            classes.forEach(cls => $fields.find(`.${cls}`).show());
         } else {
             $fields.hide();
         }
         html.closest('.dialog').css('height', 'auto');
-    });
+    };
+    html.find(`#${prefix}-trigger input[type=checkbox]`).on('change', updateTriggerFilterFields);
 
     html.find(`#${prefix}-trigger-fields .find-lid-btn`).on('click', function (e) {
         e.preventDefault();
@@ -299,12 +370,13 @@ function setupTriggerUI(html, prefix) {
  * Collect trigger/consumption config from form fields (no more 'uses')
  */
 function getTriggerConfig(html, prefix) {
-    const trigger = html.find(`#${prefix}-trigger`).val();
-    if (!trigger)
+    const triggers = html.find(`#${prefix}-trigger input:checked`)
+        .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+    if (triggers.length === 0)
         return null;
 
     const consumption = {
-        trigger
+        trigger: triggers.length === 1 ? triggers[0] : triggers
     };
     const origin = html.find(`#${prefix}-trigger-origin`).val();
     if (origin)
@@ -478,88 +550,6 @@ export async function executeEffectManager(options = {}) {
     // Bonus tab: duration options (includes "None" for permanent bonuses with no icon)
     const bonusDurationOptionsHtml = '<option value="">None (Permanent, no Icon)</option>' +
         durations.map(d => `<option value="${d.label}" ${d.label === 'indefinite' ? 'selected' : ''}>${d.name}</option>`).join('');
-
-    const bonusTriggerOptionsHtml = [{
-        value: "",
-        label: "None"
-    },
-    {
-        value: "onAttack",
-        label: "On Attack"
-    }, {
-        value: "onHit",
-        label: "On Hit"
-    },
-    {
-        value: "onMiss",
-        label: "On Miss"
-    }, {
-        value: "onDamage",
-        label: "On Damage"
-    },
-    {
-        value: "onTechAttack",
-        label: "On Tech Attack"
-    }, {
-        value: "onTechHit",
-        label: "On Tech Hit"
-    },
-    {
-        value: "onMove",
-        label: "On Move"
-    }, {
-        value: "onPreMove",
-        label: "On Pre Move"
-    }, {
-        value: "onInitActivation",
-        label: "On Init Activation"
-    }, {
-        value: "onActivation",
-        label: "On Activation"
-    },
-    {
-        value: "onDeploy",
-        label: "On Deploy"
-    },
-    {
-        value: "onCheck",
-        label: "On Check"
-    }, {
-        value: "onHeatGain",
-        label: "On Heat"
-    },
-    {
-        value: "onHpLoss",
-        label: "On HP Loss"
-    }, {
-        value: "onTurnStart",
-        label: "On Turn Start"
-    },
-    {
-        value: "onTurnEnd",
-        label: "On Turn End"
-    },
-    {
-        value: "onEnterCombat",
-        label: "On Enter Combat"
-    },
-    {
-        value: "onExitCombat",
-        label: "On Exit Combat"
-    }, {
-        value: "onPreStatusApplied",
-        label: "On Pre Status Applied"
-    }, {
-        value: "onPreStatusRemoved",
-        label: "On Pre Status Removed"
-    }, {
-        value: "onStatusApplied",
-        label: "On Status Applied"
-    }, {
-        value: "onStatusRemoved",
-        label: "On Status Removed"
-    }
-    ].map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
     const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
         .map(t => `<option value="${t}">${t}</option>`).join('');
@@ -796,7 +786,12 @@ export async function executeEffectManager(options = {}) {
             </div>
             <div class="form-group">
                 <label>Consume on:</label>
-                <select id="bonus-trigger">${bonusTriggerOptionsHtml}</select>
+                <div class="la-multi-select" id="bonus-trigger">
+                    <button type="button" class="la-multi-select-trigger">— Select —</button>
+                    <div class="la-multi-select-panel">
+                        ${consumptionTriggerCheckboxesHtml()}
+                    </div>
+                </div>
             </div>
             <div id="bonus-trigger-fields" style="display:none;">
                 <div class="form-group">
@@ -1109,6 +1104,28 @@ export async function executeEffectManager(options = {}) {
         content: content,
         buttons: {},
         render: (html) => {
+            const root = html[0] ?? html.get(0);
+            if (root && typeof ResizeObserver !== 'undefined' && !dialog._laResizeObserver) {
+                let lastH = 0;
+                let raf = 0;
+                const refit = () => {
+                    raf = 0;
+                    if (!dialog.element?.length)
+                        return;
+                    const h = root.scrollHeight;
+                    if (h === lastH || h === 0)
+                        return;
+                    lastH = h;
+                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                };
+                const ro = new ResizeObserver(() => {
+                    if (raf) cancelAnimationFrame(raf);
+                    raf = requestAnimationFrame(refit);
+                });
+                ro.observe(root);
+                dialog._laResizeObserver = ro;
+            }
+
             // Tabs
             html.find('.te-tab').click(e => {
                 const tab = $(e.currentTarget).data('tab');
@@ -1425,7 +1442,9 @@ export async function executeEffectManager(options = {}) {
 
                     let consumptionText = '';
                     if (consumption?.trigger) {
-                        let cLabel = consumption.trigger;
+                        let cLabel = Array.isArray(consumption.trigger)
+                            ? consumption.trigger.join(', ')
+                            : consumption.trigger;
                         if (consumption.itemId)
                             cLabel += ` ID:${consumption.itemId}`;
                         else if (consumption.itemLid)
@@ -1582,14 +1601,17 @@ export async function executeEffectManager(options = {}) {
                 onStatusRemoved: ['bonus-filter-statusId']
             };
 
-            html.find('#bonus-trigger').on('change', function () {
-                const trigger = $(this).val();
+            initLaMultiSelect(html, 'bonus-trigger');
+            html.find('#bonus-trigger input[type=checkbox]').on('change', function () {
+                const triggers = html.find('#bonus-trigger input:checked')
+                    .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
                 const $fields = html.find('#bonus-trigger-fields');
                 $fields.find('.form-group').hide();
-                if (trigger && bonusFilterMap[trigger]) {
+                if (triggers.length > 0) {
                     $fields.show();
                     $fields.find('.form-group').first().show();
-                    bonusFilterMap[trigger].forEach(cls => $fields.find(`.${cls}`).show());
+                    const classes = new Set(triggers.flatMap(t => bonusFilterMap[t] ?? []));
+                    classes.forEach(cls => $fields.find(`.${cls}`).show());
                 } else {
                     $fields.hide();
                 }
@@ -1817,10 +1839,11 @@ export async function executeEffectManager(options = {}) {
                 };
 
                 // Build consumption config
-                const consumptionTrigger = html.find('#bonus-trigger').val();
-                if (consumptionTrigger) {
+                const consumptionTriggers = html.find('#bonus-trigger input:checked')
+                    .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+                if (consumptionTriggers.length > 0) {
                     const consumption = {
-                        trigger: consumptionTrigger
+                        trigger: consumptionTriggers.length === 1 ? consumptionTriggers[0] : consumptionTriggers
                     };
                     const cOrigin = html.find('#bonus-trigger-origin').val();
                     if (cOrigin)
@@ -1900,58 +1923,9 @@ export async function executeEffectManager(options = {}) {
             });
 
             // Multi-select dropdowns for roll types
-            const initMultiSelect = (containerId) => {
-                const container = html.find(`#${containerId}`);
-                const trigger = container.find('.la-multi-select-trigger');
-                const panel = container.find('.la-multi-select-panel');
-                const updateTriggerLabel = () => {
-                    const checked = panel.find('input:checked');
-                    if (checked.length === 0) {
-                        trigger.text('— Select —');
-                    } else {
-                        trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
-                    }
-                };
-                const panelHome = panel.parent();
-                const positionPanel = () => {
-                    const rect = trigger[0].getBoundingClientRect();
-                    const el = panel[0].style;
-                    el.setProperty('position', 'fixed', 'important');
-                    el.setProperty('top', `${rect.bottom + 2}px`, 'important');
-                    el.setProperty('left', `${rect.left}px`, 'important');
-                    el.setProperty('right', 'auto', 'important');
-                    el.setProperty('bottom', 'auto', 'important');
-                    el.setProperty('width', `${rect.width}px`, 'important');
-                    el.setProperty('min-width', '0', 'important');
-                    el.setProperty('max-width', `${rect.width}px`, 'important');
-                };
-                const closePanel = () => {
-                    panel.removeClass('open');
-                    panel[0].style.cssText = '';
-                    if (panel.parent().is('body'))
-                        panelHome.append(panel);
-                };
-                trigger.on('click', (e) => {
-                    e.stopPropagation();
-                    const wasOpen = panel.hasClass('open');
-                    $('.la-multi-select-panel.open').each(function () {
-                        $(this).removeClass('open');
-                    });
-                    if (!wasOpen) {
-                        $('body').append(panel);
-                        positionPanel();
-                        panel.addClass('open');
-                    } else {
-                        closePanel();
-                    }
-                });
-                panel.on('click', (e) => e.stopPropagation());
-                panel.find('input[type=checkbox]').on('change', updateTriggerLabel);
-                $(document).on('click.la-multiselect', closePanel);
-            };
-            initMultiSelect('bonus-rollTypes-roll');
-            initMultiSelect('bonus-rollTypes-damage');
-            initMultiSelect('bonus-reroll-rollTypes');
+            initLaMultiSelect(html, 'bonus-rollTypes-roll');
+            initLaMultiSelect(html, 'bonus-rollTypes-damage');
+            initLaMultiSelect(html, 'bonus-reroll-rollTypes');
 
             html.find('#bonus-add').click(() => {
                 const type = html.find('#bonus-type').val();
@@ -2020,6 +1994,13 @@ export async function executeEffectManager(options = {}) {
         top: 60,
         classes: ['lancer-effect-manager', 'lancer-dialog-base', 'lancer-no-title']
     }));
+
+    const _origClose = dialog.close.bind(dialog);
+    dialog.close = (...args) => {
+        try { dialog._laResizeObserver?.disconnect(); } catch { /* noop */ }
+        dialog._laResizeObserver = null;
+        return _origClose(...args);
+    };
 
     dialog.render(true);
 }

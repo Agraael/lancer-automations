@@ -1,4 +1,6 @@
 import { getOccupiedOffsets } from "./grid-helpers.js";
+import { getImmunityBonuses } from "./genericBonuses.js";
+import { startChoiceCard, getActiveGMId } from "./interactive/network.js";
 
 /**
  * Get all grid cells occupied by a token.
@@ -67,7 +69,7 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
  * @param {number | string} [damageValue=5]
  * @returns {Promise<void>}
  */
-export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
+async function _runDangerousZone(token, damageType, damageValue) {
     const actor = token?.actor;
     if (!actor) return;
     const curRound = game.combat?.round || 0;
@@ -106,6 +108,57 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
         });
         await dmgFlow.begin();
     }
+}
+
+/**
+ * Roll an ENG check; on a result below 10 target the token and roll damage.
+ * If the actor is terrain-immune (status or `terrain` immunity bonus) shows a
+ * choice card to ignore the trigger or apply it anyway.
+ * Dedupes to once per combat round per actor.
+ * @param {Token | TokenDocument} token
+ * @param {string} [damageType="kinetic"] kinetic, energy, explosive, burn, heat, variable
+ * @param {number | string} [damageValue=5]
+ * @returns {Promise<void>}
+ */
+export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
+    const actor = token?.actor;
+    if (!actor) return;
+
+    const immunityBonuses = getImmunityBonuses(actor, "terrain");
+    const hasStatusImmunity = !!actor.statuses?.has?.("terrain_immunity");
+    if (!hasStatusImmunity && immunityBonuses.length === 0)
+        return _runDangerousZone(token, damageType, damageValue);
+
+    const sources = [
+        ...immunityBonuses.map(b => b.name || b.id),
+        ...(hasStatusImmunity ? ["Terrain Immunity"] : [])
+    ];
+    const tokenObj = /** @type {any} */ (token).object ?? token;
+    const actorName = actor.name ?? "Token";
+    await startChoiceCard({
+        title: "TERRAIN IMMUNITY",
+        description: `<b>${actorName}</b> entered dangerous terrain.<hr>Immunity from: <i>${sources.join(", ")}</i>`,
+        icon: "mdi mdi-boot",
+        mode: "or",
+        relatedToken: tokenObj,
+        userIdControl: getActiveGMId(),
+        choices: [
+            {
+                text: "Activate (Ignore Terrain)",
+                icon: "fas fa-shield-alt",
+                callback: async () => {
+                    ui.notifications.info(`${actorName} ignored dangerous terrain.`);
+                }
+            },
+            {
+                text: "No (Apply Effect)",
+                icon: "fas fa-times",
+                callback: async () => {
+                    await _runDangerousZone(token, damageType, damageValue);
+                }
+            }
+        ]
+    });
 }
 
 export const TerrainAPI = {
