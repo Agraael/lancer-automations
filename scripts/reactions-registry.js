@@ -1524,9 +1524,73 @@ export function getDefaultGeneralReactionRegistry() {
         }
     };
 
+    const _guardianAuraPending = new Set();
+    builtInDefaults["Guardian Aura"] = {
+        category: "Automation",
+        comments: "Just for visual indication",
+        reactions: [
+            {
+                triggers: ["onStatusApplied"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'guardian';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    if (api.findAura(reactorToken, "LA_Guardian") || _guardianAuraPending.has(reactorToken.id))
+                        return;
+                    _guardianAuraPending.add(reactorToken.id);
+                    try {
+                        await api.createAura(reactorToken, api.scaleAuraStroke({
+                            name: "LA_Guardian",
+                            unified: false,
+                            radiusOffset: -5,
+                            radius: "0",
+                            lineWidth: 4,
+                            lineColor: "#757575",
+                            lineOpacity: 0.8,
+                            lineDashSize: 10,
+                            lineGapSize: 5,
+                            fillType: 0,
+                            animation: false,
+                            nonOwnerVisibility: { default: true }
+                        }));
+                    } finally {
+                        _guardianAuraPending.delete(reactorToken.id);
+                    }
+                }
+            },
+            {
+                triggers: ["onStatusRemoved"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: true,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData) {
+                    return triggerData.statusId === 'guardian';
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    _guardianAuraPending.delete(reactorToken.id);
+                    for (let i = 0; i < 10; i++) {
+                        await api.deleteAuras(reactorToken, { name: "LA_Guardian" });
+                        if (!api.findAura(reactorToken, "LA_Guardian"))
+                            break;
+                    }
+                }
+            }
+        ]
+    };
+
     const _bulwarkAuraPending = new Set();
     builtInDefaults["Bulwark Aura"] = {
         category: "Automation",
+        comments: "Just for visual indication",
         reactions: [
             {
                 triggers: ["onStatusApplied"],
@@ -1547,11 +1611,13 @@ export function getDefaultGeneralReactionRegistry() {
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Bulwark",
                             unified: false,
+                            radiusOffset: -5,
                             radius: "0",
-                            lineType: 1,
-                            lineWidth: 6,
+                            lineWidth: 4,
                             lineColor: "#000000",
-                            lineOpacity: 0.85,
+                            lineOpacity: 0.8,
+                            lineDashSize: 10,
+                            lineGapSize: 5,
                             fillType: 0,
                             animation: false,
                             nonOwnerVisibility: { default: true }
