@@ -22,7 +22,6 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
-    { key: 'dragVisionMultiplier', type: 'number' },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
@@ -310,6 +309,38 @@ const DEBUG_FIELDS = [
     { key: 'debugOutOfCombat', type: 'boolean' },
 ];
 
+const VISION_FIELDS = [
+    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]' },
+    { key: 'visionFromEdgeEnabled', type: 'boolean' },
+    { key: 'visionFromEdgeSampleMode', type: 'select' },
+    { key: 'visionFromEdgeDebug', type: 'boolean' },
+
+    { type: 'section', label: 'Lancer Vision Modes' },
+    { key: 'lancerVisionAutoAdd', type: 'boolean' },
+    { type: 'compactBooleans',
+        items: [
+            { key: 'lancerSensorCombatOnly', label: 'Sensor: Combat Only' },
+            { key: 'lancerAwarenessCombatOnly', label: 'Awareness: Combat Only' },
+            { key: 'lancerSensorUseModeRange', label: 'Sensor: Use Mode Range' },
+            { key: 'lancerAwarenessUseModeRange', label: 'Awareness: Use Mode Range' }
+        ]
+    },
+    { type: 'button',
+        key: 'refreshLancerVisionTokens',
+        label: 'Refresh Tokens (Active Scene)',
+        icon: 'fas fa-sync',
+        hint: 'Apply Lancer detection modes (Sensors, Awareness, Basic Vision range) to every token on the active scene without overwriting existing per-token entries.',
+        onClick: () => globalThis.lancerAutoVisionSetup?.(true),
+    },
+
+    { type: 'section', label: 'Basic Vision' },
+    { key: 'basicSightTo999', type: 'boolean' },
+
+    { type: 'section', label: 'Drag Vision' },
+    { key: 'dragVisionMode', type: 'select' },
+    { key: 'dragVisionMultiplier', type: 'number' },
+];
+
 const TOOLS_FIELDS = [
     { type: 'section', label: 'Optional content packs' },
     { key: 'enableLaSossisItems', type: 'boolean' },
@@ -356,6 +387,7 @@ const TAB_DEFS = [
     { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
+    { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
 ];
 
 /** @param {string} sub */

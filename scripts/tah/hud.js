@@ -2986,6 +2986,8 @@ export class LancerHUD {
     }
 
     _getInvadeOptions(actor) {
+        if (!actor)
+            return [];
         const isNPC = actor.type === 'npc';
         const fragDetail = isNPC
             ? 'Target becomes IMPAIRED until the end of their next turn.'
@@ -3082,6 +3084,8 @@ export class LancerHUD {
     }
 
     _getActionsByActivation(actor, activationType, category = null) {
+        if (!actor)
+            return [];
         const coreUsed = actor.system?.core_energy === 0;
         return getActorActionItems(actor, activationType).map((/** @type {any} */ { action, sourceItem, rankIdx, _coreActive }) => {
             const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };

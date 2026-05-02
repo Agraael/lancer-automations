@@ -1487,7 +1487,7 @@ export async function updateTokenSystem(token, data) {
  * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
  * @returns {Promise<void>}
  */
-export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null) {
+export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null, opts = {}) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
     if (!actor) {
@@ -1500,7 +1500,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             ? actorOrToken
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
-    if (sourceToken) {
+    if (sourceToken && !opts.noFX) {
         await playSkirmishFX(sourceToken);
     }
 

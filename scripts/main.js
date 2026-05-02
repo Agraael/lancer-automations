@@ -80,6 +80,10 @@ import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHU
 import './filters/customFilters.js';
 import { checkCompatibility } from "./checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
+import { initVisionFromEdge } from "./visionFromEdge.js";
+import { initLancerDetectionModes } from "./lancerDetectionModes.js";
+
+initLancerDetectionModes();
 
 let reactionDebounceTimer = null;
 let reactionQueue = [];
@@ -4378,6 +4382,7 @@ Hooks.on('init', () => {
     registerTourBootstrap();
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
     registerFlowStatePersistence();
+    initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField(); // Add system.infection field to actor schemas
@@ -4577,10 +4582,20 @@ Hooks.once('ready', async () => {
             function (wrapped, ...args) {
                 const data = wrapped(...args);
                 if (this.isPreview) {
-                    const multiplier = game.settings.get('lancer-automations', 'dragVisionMultiplier');
-                    if (multiplier < 1) {
-                        data.radius *= multiplier;
-                        data.lightRadius *= multiplier;
+                    const value = game.settings.get('lancer-automations', 'dragVisionMultiplier');
+                    let mode = 'ratio';
+                    try {
+                        mode = game.settings.get('lancer-automations', 'dragVisionMode');
+                    } catch (e) {
+                        mode = 'ratio';
+                    }
+                    if (mode === 'flat' && value > 0) {
+                        const px = this.getLightRadius(value);
+                        data.radius = Math.min(data.radius, px);
+                        data.lightRadius = Math.min(data.lightRadius, px);
+                    } else if (value < 1) {
+                        data.radius *= value;
+                        data.lightRadius *= value;
                     }
                 }
                 return data;

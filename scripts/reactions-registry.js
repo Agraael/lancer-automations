@@ -110,11 +110,11 @@ export function getDefaultItemReactionRegistry() {
             onInit: async function (token, item, api) {
                 if (!api || !token.actor)
                     return;
-                if (token.actor.statuses?.has('terrain_immunity'))
+                if (token.actor.statuses?.has('surefoot'))
                     return;
                 await api.applyEffectsToTokens({
                     tokens: [token],
-                    effectNames: ['terrain_immunity'],
+                    effectNames: ['surefoot'],
                     note: "Treads or Hover",
                     duration: { label: 'unlimited' }
                 }, { treadsOrHoverSourceId: item.id });
@@ -238,7 +238,7 @@ export function getDefaultGeneralReactionRegistry() {
                 triggers: ["onActivation"],
                 triggerSelf: true,
                 triggerOther: false,
-                outOfCombat: false,
+                outOfCombat: true,
                 enabled: false,
                 actionType: "Reaction",
                 frequency: "Other",
@@ -256,7 +256,7 @@ export function getDefaultGeneralReactionRegistry() {
                             return (ranges.Threat || 1) >= distance;
                         }
                         : null;
-                    await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter);
+                    await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter, { noFX: true });
                 }
             }]
         },

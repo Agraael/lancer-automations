@@ -192,6 +192,13 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="tools"]`,
     },
     {
+        id: 'vision',
+        tab: 'experimental',
+        title: 'Vision',
+        content: "Vision-from-edge for big tokens, the Lancer Sensors and Battlefield Awareness detection modes (auto-add, combat-only, range source), basic-sight overrides, and drag-vision behavior all live here.",
+        selector: `${ROOT} .tab[data-tab="experimental"]`,
+    },
+    {
         id: 'save',
         title: 'Save',
         content: "One Save commits every tab at once. Some changes need a reload, you'll be prompted on close.",

@@ -545,22 +545,26 @@ export async function executeEffectManager(options = {}) {
     const hasCustomStatus = customStatusModule?.active;
     const savedStatuses = hasCustomStatus ? (game.settings.get("temporary-custom-statuses", "savedStatuses") || []) : [];
 
-    const durationOptionsHtml = durations.map(d => `<option value="${d.label}" ${d.label === 'indefinite' ? 'selected' : ''}>${d.name}</option>`).join('');
+    const defaultDuration = game.combat ? 'end' : 'indefinite';
+    const durationOptionsHtml = durations.map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
 
     // Bonus tab: duration options (includes "None" for permanent bonuses with no icon)
     const bonusDurationOptionsHtml = '<option value="">None (Permanent, no Icon)</option>' +
-        durations.map(d => `<option value="${d.label}" ${d.label === 'indefinite' ? 'selected' : ''}>${d.name}</option>`).join('');
+        durations.map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
 
     const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
         .map(t => `<option value="${t}">${t}</option>`).join('');
 
     const statusEffectIconsHtml = [...CONFIG.statusEffects]
         .sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name))
-        .map(e => `
-        <div class="bonus-immunity-effect-option te-icon-option" data-effect="${e.name}" title="${game.i18n.localize(e.name) || e.name}">
-            <img src="${e.img || e.icon}" width="24" height="24">
-        </div>
-    `).join('');
+        .map(e => {
+            const label = game.i18n.localize(e.name) || e.name;
+            return `
+        <div class="bonus-immunity-effect-option" data-effect="${e.name}" data-name="${label}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:#f5f5f5; color:#000; font-size:0.75em; min-width:0;">
+            <img src="${e.img || e.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;">
+            <span class="la-hud-clip" style="flex:1; overflow:hidden; min-width:0; pointer-events:none;"><span class="la-hud-pan" style="display:inline-block; white-space:nowrap; padding-right:6px;">${label}</span></span>
+        </div>`;
+        }).join('');
 
     const damageTypes = [
         { name: 'Kinetic', icon: 'systems/lancer/assets/icons/white/damage_kinetic.svg' },
@@ -577,7 +581,7 @@ export async function executeEffectManager(options = {}) {
 
     const content = `
     <style>
-        .te-dialog { min-width: 440px; font-family: var(--font-primary); }
+        .te-dialog { min-width: 560px; font-family: var(--font-primary); }
         .te-tabs { display: flex; border-bottom: 3px solid var(--primary-color); margin-bottom: 8px; cursor: pointer; }
         .te-tab { padding: 8px 14px; font-weight: 600; opacity: 0.5; font-size: 0.9em; transition: all 0.2s ease; color: #000; border-bottom: 3px solid transparent; margin-bottom: -3px; }
         .te-tab:hover { opacity: 0.8; }
@@ -645,12 +649,14 @@ export async function executeEffectManager(options = {}) {
                     </div>
                 </div>
                 <input type="hidden" id="std-effect" value="Bolster">
-                <div id="std-effect-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+                <input type="text" id="std-effect-search" placeholder="Search effects..." style="height:24px; font-size:0.85em; padding:0 6px;">
+                <div id="std-effect-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:#f5f5f5; border-radius:4px; border:1px solid #ccc;">
                      ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(s => {
         const label = game.i18n.localize(s.name);
         return `
-                        <div class="std-effect-option" data-id="${s.name}" data-name="${label}" data-icon="${s.img || s.icon}" title="${label}" style="cursor:pointer; width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ccc; border-radius:4px; background:#1a1a1a; transition: all 0.2s;">
-                            <img src="${s.img || s.icon}" width="28" height="28" style="object-fit: contain; pointer-events:none;" title="${label}">
+                        <div class="std-effect-option" data-id="${s.name}" data-name="${label}" data-icon="${s.img || s.icon}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:#f5f5f5; color:#000; font-size:0.75em; min-width:0;">
+                            <img src="${s.img || s.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;" title="${label}">
+                            <span class="la-hud-clip" style="flex:1; overflow:hidden; min-width:0; pointer-events:none;"><span class="la-hud-pan" style="display:inline-block; white-space:nowrap; padding-right:6px;">${label}</span></span>
                         </div>`;
     }).join('')}
                 </div>
@@ -658,14 +664,14 @@ export async function executeEffectManager(options = {}) {
             <div class="form-group">
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="std-duration">${durationOptionsHtml}</select>
-                    <span class="dur-opts"> of </span>
-                    <div class="dur-opts" style="flex:1; display:flex; gap:3px; max-width: 130px;">
-                        <select id="std-origin" style="flex:1;">${tokensHtml}</select>
+                    <select id="std-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
+                    <span class="dur-opts" style="flex-shrink:0;"> of </span>
+                    <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                        <select id="std-origin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="std-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="dur-opts" style="margin-left:5px;">Turns:</span>
-                    <input type="number" id="std-turns" value="1" min="1" class="dur-opts" style="max-width: 40px;">
+                    <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <input type="number" id="std-turns" value="1" min="1" class="dur-opts" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
             <div class="form-group">
@@ -704,22 +710,23 @@ export async function executeEffectManager(options = {}) {
             </div>
             <div class="form-group">
                 <label>Icon:</label>
-                <div style="flex:1; display:flex; gap:5px;">
-                    <input type="text" id="cust-icon" value="systems/lancer/assets/icons/d20-framed.svg">
+                <div style="flex:1; display:flex; gap:5px; align-items:center;">
+                    <img id="cust-icon-preview" src="systems/lancer/assets/icons/white/d20-framed.svg" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid #999; border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
+                    <input type="text" id="cust-icon" value="systems/lancer/assets/icons/white/d20-framed.svg" style="flex:1; min-width:0;">
                     <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
             </div>
             <div class="form-group">
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="cust-duration">${durationOptionsHtml}</select>
-                    <span class="dur-opts"> of </span>
-                    <div class="dur-opts" style="flex:1; display:flex; gap:3px; max-width: 130px;">
-                        <select id="cust-origin" style="flex:1;">${tokensHtml}</select>
+                    <select id="cust-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
+                    <span class="dur-opts" style="flex-shrink:0;"> of </span>
+                    <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                        <select id="cust-origin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="cust-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="dur-opts" style="margin-left:5px;">Turns:</span>
-                    <input type="number" id="cust-turns" value="1" min="1" class="dur-opts" style="max-width: 40px;">
+                    <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <input type="number" id="cust-turns" value="1" min="1" class="dur-opts" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
             <div class="form-group">
@@ -770,19 +777,23 @@ export async function executeEffectManager(options = {}) {
             <div class="form-group">
                 <label>Duration:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="bonus-duration">${bonusDurationOptionsHtml}</select>
-                    <span class="bonus-dur-opts"> of </span>
-                    <div class="bonus-dur-opts" style="flex:1; display:flex; gap:3px; max-width:130px;">
-                        <select id="bonus-durOrigin" style="flex:1;">${tokensHtml}</select>
+                    <select id="bonus-duration" style="flex:0 0 120px !important; width:120px !important; max-width:120px !important;">${bonusDurationOptionsHtml}</select>
+                    <span class="bonus-dur-opts" style="flex-shrink:0;"> of </span>
+                    <div class="bonus-dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                        <select id="bonus-durOrigin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="bonus-durOrigin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="bonus-dur-opts" style="margin-left:3px;">Turns:</span>
-                    <input type="number" id="bonus-durTurns" value="1" min="1" class="bonus-dur-opts" style="max-width:40px;">
+                    <span class="bonus-dur-opts" style="margin-left:3px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <input type="number" id="bonus-durTurns" value="1" min="1" class="bonus-dur-opts" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
             <div class="form-group">
                 <label>Uses:</label>
-                <input type="number" id="bonus-uses" placeholder="Infinite" min="1">
+                <div style="flex:1; display:flex; gap:4px; align-items:center;">
+                    <button type="button" class="bonus-uses-step" data-step="-1" title="Decrement" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                    <input type="number" id="bonus-uses" placeholder="Infinite" min="1" style="flex:0 0 70px; min-width:70px; max-width:70px; text-align:center;">
+                    <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                </div>
             </div>
             <div class="form-group">
                 <label>Consume on:</label>
@@ -890,9 +901,13 @@ export async function executeEffectManager(options = {}) {
                         </optgroup>
                     </select>
                 </div>
-                <div class="form-group" style="justify-content:center;">
+                <div class="form-group">
                     <label>Value:</label>
-                    <input type="number" id="bonus-statVal" value="1" style="width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                    <div style="flex:1; display:flex; gap:4px; align-items:center;">
+                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="-1" title="Decrement" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                        <input type="number" id="bonus-statVal" value="1" style="flex:0 0 60px; min-width:60px; max-width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="1" title="Increment" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
             </div>
             <div id="bonus-type-roll" style="display:none;">
@@ -903,9 +918,13 @@ export async function executeEffectManager(options = {}) {
                         <option value="difficulty">Difficulty</option>
                     </select>
                 </div>
-                <div class="form-group" style="justify-content:center;">
+                <div class="form-group">
                     <label>Value:</label>
-                    <input type="number" id="bonus-accDiffVal" value="1" min="1" style="width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                    <div style="flex:1; display:flex; gap:4px; align-items:center;">
+                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="-1" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                        <input type="number" id="bonus-accDiffVal" value="1" min="1" style="flex:0 0 60px; min-width:60px; max-width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="1" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
             </div>
             <div id="bonus-type-damage" style="display:none;">
@@ -927,14 +946,16 @@ export async function executeEffectManager(options = {}) {
                         ${availableTags.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
                     </select>
                 </div>
-                <div class="form-group" style="justify-content:center;">
+                <div class="form-group" style="justify-content:flex-start;">
                     <label>Mode:</label>
                     <select id="bonus-tagMode" style="flex:0.6;">
                         <option value="add">Add Value</option>
                         <option value="override">Override Value</option>
                     </select>
                     <label style="margin-left: 10px;">Value:</label>
-                    <input type="number" id="bonus-tagVal" value="1" style="width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                    <button type="button" class="la-num-step" data-target="bonus-tagVal" data-step="-1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                    <input type="number" id="bonus-tagVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                    <button type="button" class="la-num-step" data-target="bonus-tagVal" data-step="1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                 </div>
                 <div class="form-group" style="justify-content:flex-start;">
                     <label style="width: auto; margin-right: 5px;">Remove Tag instead:</label>
@@ -953,7 +974,7 @@ export async function executeEffectManager(options = {}) {
                         <option value="Line">Line</option>
                     </select>
                 </div>
-                <div class="form-group" style="justify-content:center;">
+                <div class="form-group" style="justify-content:flex-start;">
                     <label>Mode:</label>
                     <select id="bonus-rangeMode" style="flex:0.6;">
                         <option value="add">Add Value</option>
@@ -961,7 +982,9 @@ export async function executeEffectManager(options = {}) {
                         <option value="change">Change All Ranges</option>
                     </select>
                     <label style="margin-left: 10px;">Value:</label>
-                    <input type="number" id="bonus-rangeVal" value="1" style="width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                    <button type="button" class="la-num-step" data-target="bonus-rangeVal" data-step="-1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                    <input type="number" id="bonus-rangeVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; border:2px solid #999; border-radius:4px;">
+                    <button type="button" class="la-num-step" data-target="bonus-rangeVal" data-step="1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                 </div>
             </div>
             <div id="bonus-type-immunity" style="display:none;">
@@ -981,7 +1004,8 @@ export async function executeEffectManager(options = {}) {
                 </div>
                 <div id="bonus-immunity-effects-row">
                     <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Status Effects:</label>
-                    <div class="te-icon-grid" id="bonus-immunity-effects">
+                    <input type="text" id="bonus-immunity-effect-search" placeholder="Search effects..." style="width:100%; height:24px; font-size:0.85em; padding:0 6px; margin-bottom:4px;">
+                    <div id="bonus-immunity-effects" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:#f5f5f5; border-radius:4px; border:1px solid #ccc;">
                         ${statusEffectIconsHtml}
                     </div>
                 </div>
@@ -1085,9 +1109,9 @@ export async function executeEffectManager(options = {}) {
                         <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers.">Apply to Targetter:</label>
-                    <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content;">
+                <div class="form-group" style="justify-content:flex-start;">
+                    <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers." style="flex:0 0 auto; margin-right:6px;">Apply to Targetter:</label>
+                    <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content; flex:0 0 auto;">
                 </div>
             </div>
             <div style="margin-top:8px;">
@@ -1105,25 +1129,56 @@ export async function executeEffectManager(options = {}) {
         buttons: {},
         render: (html) => {
             const root = html[0] ?? html.get(0);
-            if (root && typeof ResizeObserver !== 'undefined' && !dialog._laResizeObserver) {
+            const dlg = /** @type {any} */ (dialog);
+
+            const _rebuildDurationSelects = () => {
+                const inCombat = !!game.combat;
+                const def = inCombat ? 'end' : 'indefinite';
+                const opts = inCombat
+                    ? '<option value="end">End of Turn</option><option value="start">Start of Turn</option><option value="indefinite">Indefinite</option>'
+                    : '<option value="indefinite">Indefinite</option>';
+                for (const id of ['#std-duration', '#cust-duration']) {
+                    const $sel = html.find(id);
+                    if (!$sel.length)
+                        continue;
+                    const cur = String($sel.val() ?? '');
+                    $sel.html(opts);
+                    $sel.val(opts.includes(`value="${cur}"`) ? cur : def);
+                    $sel.trigger('change');
+                }
+                const $bonusSel = html.find('#bonus-duration');
+                if ($bonusSel.length) {
+                    const bonusCur = String($bonusSel.val() ?? '');
+                    $bonusSel.html('<option value="">None (Permanent, no Icon)</option>' + opts);
+                    $bonusSel.val(($bonusSel.find(`option[value="${bonusCur}"]`).length ? bonusCur : def));
+                    $bonusSel.trigger('change');
+                }
+            };
+            const _onCombatChange = () => _rebuildDurationSelects();
+            Hooks.on('createCombat', _onCombatChange);
+            Hooks.on('deleteCombat', _onCombatChange);
+            Hooks.on('combatStart', _onCombatChange);
+            dlg._laCombatHooks = _onCombatChange;
+
+            if (root && typeof ResizeObserver !== 'undefined' && !dlg._laResizeObserver) {
                 let lastH = 0;
                 let raf = 0;
                 const refit = () => {
                     raf = 0;
-                    if (!dialog.element?.length)
+                    if (!dlg.element?.length)
                         return;
                     const h = root.scrollHeight;
                     if (h === lastH || h === 0)
                         return;
                     lastH = h;
-                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
+                    dlg.setPosition(/** @type {any} */ ({ height: 'auto', left: dlg.position.left, top: dlg.position.top }));
                 };
                 const ro = new ResizeObserver(() => {
                     if (raf) cancelAnimationFrame(raf);
                     raf = requestAnimationFrame(refit);
                 });
                 ro.observe(root);
-                dialog._laResizeObserver = ro;
+                dlg._laResizeObserver = ro;
             }
 
             // Tabs
@@ -1166,13 +1221,54 @@ export async function executeEffectManager(options = {}) {
             // Close button
             html.find('.manage-close').click(() => dialog.close());
 
+            const _syncCustIconPreview = () => {
+                const path = String(html.find('#cust-icon').val() ?? '');
+                const $img = html.find('#cust-icon-preview');
+                if ($img.length) {
+                    $img.attr('src', path);
+                    $img[0].style.opacity = '1';
+                }
+            };
+
             // File Picker
             html.find('.file-picker').click(ev => {
                 const input = html.find('#cust-icon');
                 new FilePicker({
                     type: "image",
-                    callback: (path) => input.val(path)
+                    callback: (path) => {
+                        input.val(path);
+                        _syncCustIconPreview();
+                    }
                 }).browse(String(input.val()));
+            });
+
+            html.find('#cust-icon').on('input change', _syncCustIconPreview);
+
+            html.find('.bonus-uses-step').on('click', function () {
+                const step = Number($(this).data('step')) || 0;
+                const $input = html.find('#bonus-uses');
+                const cur = Number.parseInt(String($input.val() ?? ''));
+                const next = Number.isFinite(cur) ? cur + step : (step > 0 ? 1 : 0);
+                if (next < 1)
+                    $input.val('');
+                else
+                    $input.val(next);
+            });
+
+            html.find('.la-num-step').on('click', function () {
+                const target = String($(this).data('target') ?? '');
+                if (!target)
+                    return;
+                const step = Number($(this).data('step')) || 0;
+                const $input = html.find(`#${target}`);
+                if (!$input.length)
+                    return;
+                const min = Number($input.attr('min'));
+                const cur = Number.parseInt(String($input.val() ?? '0'));
+                let next = (Number.isFinite(cur) ? cur : 0) + step;
+                if (Number.isFinite(min) && next < min)
+                    next = min;
+                $input.val(next).trigger('change');
             });
 
             // Saved Status
@@ -1184,6 +1280,7 @@ export async function executeEffectManager(options = {}) {
                     if (icon) {
                         html.find('#cust-icon').val(icon);
                         html.find('#cust-saved-icon').attr('src', icon).show();
+                        _syncCustIconPreview();
                     } else {
                         html.find('#cust-saved-icon').hide();
                     }
@@ -1203,8 +1300,18 @@ export async function executeEffectManager(options = {}) {
                 html.find('#std-effect').val(id);
                 html.find('#std-effect-label').text(name);
                 html.find('#std-effect-icon').attr('src', icon).attr('title', name).show();
-                html.find('.std-effect-option').css('border-color', '#ccc').css('box-shadow', 'none');
-                $(this).css('border-color', 'var(--primary-color)').css('box-shadow', '0 0 5px color-mix(in srgb, var(--primary-color), transparent 50%)');
+                html.find('.std-effect-option').css({ background: '#f5f5f5', borderLeftColor: 'transparent' });
+                $(this).css({ background: '#b8d4f0', borderLeftColor: '#1a4a7a' });
+            }).on('mouseenter', function () {
+                const clip = this.querySelector('.la-hud-clip');
+                const pan = this.querySelector('.la-hud-pan');
+                if (clip && pan) {
+                    const overflow = pan.scrollWidth - clip.clientWidth;
+                    if (overflow > 4)
+                        $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' });
+                }
+            }).on('mouseleave', function () {
+                $(this).find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
             });
 
             // Set initial state for standard grid
@@ -1219,6 +1326,14 @@ export async function executeEffectManager(options = {}) {
                 }
             };
             initStdGrid();
+
+            html.find('#std-effect-search').on('input', function () {
+                const q = String($(this).val() ?? '').toLowerCase().trim();
+                html.find('.std-effect-option').each(function () {
+                    const name = String($(this).data('name') ?? '').toLowerCase();
+                    $(this).toggle(!q || name.includes(q));
+                });
+            });
 
             // Apply Button
             html.find('.apply-btn').click(async (e) => {
@@ -1918,8 +2033,35 @@ export async function executeEffectManager(options = {}) {
                 }
             });
 
-            html.find('.bonus-immunity-effect-option, .bonus-immunity-damage-option').on('click', function() {
+            html.find('.bonus-immunity-damage-option').on('click', function() {
                 $(this).toggleClass('selected');
+            });
+
+            html.find('.bonus-immunity-effect-option').on('click', function() {
+                const $el = $(this);
+                $el.toggleClass('selected');
+                if ($el.hasClass('selected'))
+                    $el.css({ background: '#b8d4f0', borderLeftColor: '#1a4a7a' });
+                else
+                    $el.css({ background: '#f5f5f5', borderLeftColor: 'transparent' });
+            }).on('mouseenter', function () {
+                const clip = this.querySelector('.la-hud-clip');
+                const pan = this.querySelector('.la-hud-pan');
+                if (clip && pan) {
+                    const overflow = pan.scrollWidth - clip.clientWidth;
+                    if (overflow > 4)
+                        $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' });
+                }
+            }).on('mouseleave', function () {
+                $(this).find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
+            });
+
+            html.find('#bonus-immunity-effect-search').on('input', function () {
+                const q = String($(this).val() ?? '').toLowerCase().trim();
+                html.find('.bonus-immunity-effect-option').each(function () {
+                    const name = String($(this).data('name') ?? '').toLowerCase();
+                    $(this).toggle(!q || name.includes(q));
+                });
             });
 
             // Multi-select dropdowns for roll types
@@ -1988,7 +2130,7 @@ export async function executeEffectManager(options = {}) {
             updateManageTabCount();
         }
     }, /** @type {any} */ ({
-        width: 'auto',
+        width: 560,
         height: 'auto',
         left: 100,
         top: 60,
@@ -1997,8 +2139,23 @@ export async function executeEffectManager(options = {}) {
 
     const _origClose = dialog.close.bind(dialog);
     dialog.close = (...args) => {
-        try { dialog._laResizeObserver?.disconnect(); } catch { /* noop */ }
-        dialog._laResizeObserver = null;
+        const dlg = /** @type {any} */ (dialog);
+        try {
+            dlg._laResizeObserver?.disconnect();
+        } catch {
+            /* noop */
+        }
+        dlg._laResizeObserver = null;
+        if (dlg._laCombatHooks) {
+            try {
+                Hooks.off('createCombat', dlg._laCombatHooks);
+                Hooks.off('deleteCombat', dlg._laCombatHooks);
+                Hooks.off('combatStart', dlg._laCombatHooks);
+            } catch {
+                /* noop */
+            }
+            dlg._laCombatHooks = null;
+        }
         return _origClose(...args);
     };
 
