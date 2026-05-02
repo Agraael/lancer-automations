@@ -315,6 +315,9 @@ const VISION_FIELDS = [
     { key: 'visionFromEdgeSampleMode', type: 'select' },
     { key: 'visionFromEdgeDebug', type: 'boolean' },
 
+    { type: 'section', label: 'Token Blocks Line of Sight' },
+    { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
+
     { type: 'section', label: 'Lancer Vision Modes' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { type: 'compactBooleans',

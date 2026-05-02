@@ -95,18 +95,20 @@ function _getTokenVisionLOS(token) {
     return elev + tokenHeight;
 }
 
-function _wallBlocksAtLOS(wall, los) {
-    if ((wall.document.sight ?? 0) <= 0) {
+function _edgeBlocksAtLOS(edge, los) {
+    if ((edge.sight ?? 0) <= 0) {
         return false;
     }
-    const flags = wall.document.flags?.['wall-height'] ?? {};
+    const flags = edge.object?.document?.flags?.['wall-height']
+        ?? edge.object?.flags?.['wall-height']
+        ?? {};
     const wallBottom = flags.bottom ?? Number.NEGATIVE_INFINITY;
     const wallTop = flags.top ?? Number.POSITIVE_INFINITY;
     return wallBottom <= los && los <= wallTop;
 }
 
 function _nudgePastWall(sample, center, token) {
-    if (!canvas?.walls?.placeables || !token) {
+    if (!canvas?.edges || !token) {
         return sample;
     }
     const los = _getTokenVisionLOS(token);
@@ -117,19 +119,23 @@ function _nudgePastWall(sample, center, token) {
         return sample;
     }
 
+    const ownPrefix = `la-block-los-${token.id}-`;
     let closest = null;
     let closestT = Infinity;
-    for (const wall of canvas.walls.placeables) {
-        if (!_wallBlocksAtLOS(wall, los)) {
+    for (const edge of canvas.edges.values()) {
+        if (edge.type !== 'wall') {
             continue;
         }
-        const c = wall.document.c;
-        const a = { x: c[0], y: c[1] };
-        const b = { x: c[2], y: c[3] };
-        if (!foundry.utils.lineSegmentIntersects(sample, center, a, b)) {
+        if (edge.id?.startsWith(ownPrefix)) {
             continue;
         }
-        const inter = foundry.utils.lineLineIntersection(sample, center, a, b);
+        if (!_edgeBlocksAtLOS(edge, los)) {
+            continue;
+        }
+        if (!foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b)) {
+            continue;
+        }
+        const inter = foundry.utils.lineLineIntersection(sample, center, edge.a, edge.b);
         if (!inter) {
             continue;
         }
@@ -324,6 +330,9 @@ function _onDeleteToken(tokenDoc) {
 
 function _onCanvasReady() {
     _rebuildAll();
+    if (game.settings.get(MODULE_ID, 'visionFromEdgeDebug')) {
+        /** @type {any} */ (globalThis).lancerVisionDebug?.show?.();
+    }
 }
 
 function _cleanOrphanEdgeSources() {

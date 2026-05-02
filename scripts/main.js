@@ -81,6 +81,7 @@ import './filters/customFilters.js';
 import { checkCompatibility } from "./checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
 import { initVisionFromEdge } from "./visionFromEdge.js";
+import { initTokenBlocksVision } from "./tokenBlocksVision.js";
 import { initLancerDetectionModes } from "./lancerDetectionModes.js";
 
 initLancerDetectionModes();
@@ -4383,6 +4384,7 @@ Hooks.on('init', () => {
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
     registerFlowStatePersistence();
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
+    initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField(); // Add system.infection field to actor schemas

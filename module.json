@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.12.12",
+    "version": "2.13.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -114,6 +114,11 @@
                 "id": "lancer-weapon-fx",
                 "type": "module",
                 "url": "https://github.com/BoltsJ/lancer-weapon-fx"
+            },
+            {
+                "id": "wall-height",
+                "type": "module",
+                "reason": "Required for elevation-aware Token Blocks Line of Sight (lets same-height tokens peek over each other)."
             },
             {
                 "id": "jb2a_patreon",
