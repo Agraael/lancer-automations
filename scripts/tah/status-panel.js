@@ -213,10 +213,14 @@ export class StatusPanel {
 
         // ── Tooltip helper ─────────────────────────────────────────────────────
         const showTooltip = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
-            const tip = buildStatusTooltip(s);
-            if (!tip)
+            const body = buildStatusTooltip(s);
+            if (!body)
                 return null;
-            const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">${tip}</div>`);
+            const label = game.i18n.localize(s.name ?? s.id);
+            const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">
+                <div style="font-weight:bold;color:#fff;margin-bottom:4px;">${label}</div>
+                <div style="color:#bbb;line-height:1.4;">${body}</div>
+            </div>`);
             $('body').append(tt);
             const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
             const ttH = tt.outerHeight() ?? 0;

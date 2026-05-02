@@ -1244,6 +1244,56 @@ export async function executeEffectManager(options = {}) {
 
             html.find('#cust-icon').on('input change', _syncCustIconPreview);
 
+            const _findStatusDesc = (id) => {
+                const s = (CONFIG.statusEffects ?? []).find(x => x.id === id || x.name === id);
+                if (!s)
+                    return '';
+                const desc = /** @type {any} */ (s).description;
+                return typeof desc === 'string' && desc.trim() ? desc : '';
+            };
+            let _laHoverTip = null;
+            const _hideEffectTooltip = () => {
+                _laHoverTip?.remove();
+                _laHoverTip = null;
+            };
+            const _showEffectTooltip = (anchor, label, desc) => {
+                _hideEffectTooltip();
+                if (!desc)
+                    return;
+                const tip = $(`<div class="la-status-tooltip" style="position:fixed;z-index:9999;background:#1a1a1a;color:#eee;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:280px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);">
+                    <div style="font-weight:bold;color:#fff;margin-bottom:4px;">${label}</div>
+                    <div style="color:#bbb;line-height:1.4;">${desc}</div>
+                </div>`);
+                $('body').append(tip);
+                const rect = anchor.getBoundingClientRect();
+                const ttH = tip.outerHeight() ?? 0;
+                const top = Math.min(rect.top, window.innerHeight - ttH - 8);
+                tip.css({ top, left: rect.right + 6 });
+                _laHoverTip = tip;
+            };
+            const _attachEffectHoverTooltip = (selector, idAttr) => {
+                let timer = null;
+                html.find(selector)
+                    .on('mouseenter', function () {
+                        const id = $(this).attr(idAttr) ?? $(this).data('name');
+                        const label = String($(this).data('name') ?? id ?? '');
+                        const desc = _findStatusDesc(String(id));
+                        if (!desc)
+                            return;
+                        const el = this;
+                        timer = setTimeout(() => _showEffectTooltip(el, label, desc), 500);
+                    })
+                    .on('mouseleave', function () {
+                        if (timer) {
+                            clearTimeout(timer);
+                            timer = null;
+                        }
+                        _hideEffectTooltip();
+                    });
+            };
+            _attachEffectHoverTooltip('.std-effect-option', 'data-id');
+            _attachEffectHoverTooltip('.bonus-immunity-effect-option', 'data-effect');
+
             html.find('.bonus-uses-step').on('click', function () {
                 const step = Number($(this).data('step')) || 0;
                 const $input = html.find('#bonus-uses');
