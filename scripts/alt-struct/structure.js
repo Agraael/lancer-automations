@@ -1,9 +1,9 @@
 /* global game, ui, canvas, $ */
 
-import { applyEffectsToTokens } from "../flagged-effects.js";
+import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
-import { getWeaponProfiles_WithBonus } from "../misc-tools.js";
+import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
 
 const structTableTitles = [
     "Crushing Hit",

@@ -1,4 +1,4 @@
-/*global game, Sequencer, canvas, ui, ChatMessage, Roll, api */
+/*global game, Sequencer, Sequence, canvas, ui, ChatMessage, Roll, api */
 
 /** @type {ReactionGroup} */
 const suppressArcherReaction = {
@@ -502,6 +502,7 @@ const restockDroneSupportReaction = {
             await api.createAura(deployedToken, {
                 name: "Restock Drone Zone",
                 radius: 1,
+                elevationAware: true,
                 disposition: 1, // Allied
                 height: { top: null, bottom: null },
                 shape: {
@@ -815,6 +816,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                 const aura = await api.createAura(reactorToken, {
                     name: 'Defense Net',
                     radius,
+                    elevationAware: true,
                     macros: [{ function: buildDefenseNetAuraCallback() }]
                 });
 
@@ -2463,7 +2465,7 @@ api.registerDefaultItemReactions({
                     tokens: [token],
                     effectNames: ['bulwark'],
                     note: "Moving Building",
-                    duration: { label: 'unlimited' }
+                    duration: { label: 'permanent' }
                 }, { movingBuildingSourceId: item.id });
             }
         }]
@@ -2752,7 +2754,7 @@ api.registerDefaultItemReactions({
                         tokens: [token],
                         effectNames: ['terrain_immunity'],
                         note: "Architect Protector",
-                        duration: { label: 'unlimited' }
+                        duration: { label: 'permanent' }
                     }, { architectProtectorSourceId: item.id });
                 }
 
@@ -2762,7 +2764,7 @@ api.registerDefaultItemReactions({
                         tokens: [token],
                         effectNames: ['guardian'],
                         note: "Architect Protector",
-                        duration: { label: 'unlimited' }
+                        duration: { label: 'permanent' }
                     }, { architectProtectorSourceId: item.id });
                 }
             }
@@ -2790,7 +2792,7 @@ const guardianTraitReaction = {
                 tokens: [token],
                 effectNames: ['guardian'],
                 note: item.name,
-                duration: { label: 'unlimited' }
+                duration: { label: 'permanent' }
             }, { guardianSourceItemId: item.id });
         }
     }]
@@ -3787,6 +3789,116 @@ api.registerDefaultItemReactions({
                 }
             }
         ]
+    }
+});
+
+api.registerDefaultItemReactions({
+    "npcf_volley_rainmaker": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            actionType: "Full Action",
+            autoActivate: true,
+            awaitActivationCompletion: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const tier = reactorToken.actor?.system?.tier ?? 1;
+                const damageVal = [4, 6, 8][Math.max(0, Math.min(2, tier - 1))];
+
+                const targets = await api.chooseToken(reactorToken, {
+                    range: 20,
+                    count: 2,
+                    filter: (t) => t.id !== reactorToken.id,
+                    title: "VOLLEY — RAINMAKER",
+                    icon: item.img,
+                    item,
+                    originToken: reactorToken
+                });
+                if (!targets || !targets.length)
+                    return;
+
+                const wfx = game.modules.get("lancer-weapon-fx")?.api;
+                if (wfx && globalThis.Sequencer) {
+                    await Sequencer.Preloader.preloadForClients([
+                        "modules/lancer-weapon-fx/soundfx/Missile_Launch.ogg",
+                        "modules/lancer-weapon-fx/soundfx/Missile_Travel.ogg",
+                        "jb2a.pack_hound_missile",
+                        "jb2a.explosion.01.orange",
+                        "modules/lancer-weapon-fx/soundfx/Missile_Impact.ogg"
+                    ]);
+                    const sequence = new Sequence();
+                    for (let i = 0; i < targets.length; i++) {
+                        const target = targets[i];
+                        sequence
+                            .sound()
+                            .file("modules/lancer-weapon-fx/soundfx/Missile_Launch.ogg")
+                            .volume(wfx.getEffectVolume(0.5));
+                        sequence
+                            .sound()
+                            .file("modules/lancer-weapon-fx/soundfx/Missile_Travel.ogg")
+                            .volume(wfx.getEffectVolume(0.5))
+                            .timeRange(700, 2000);
+                        sequence
+                            .effect()
+                            .xray(wfx.isEffectIgnoreFogOfWar())
+                            .aboveInterface(wfx.isEffectIgnoreLightingColoration())
+                            .file("jb2a.pack_hound_missile")
+                            .atLocation(reactorToken)
+                            .stretchTo(target)
+                            .name(`rainmakerImpact${i}`)
+                            .waitUntilFinished(-3200);
+                        sequence
+                            .effect()
+                            .xray(wfx.isEffectIgnoreFogOfWar())
+                            .aboveInterface(wfx.isEffectIgnoreLightingColoration())
+                            .file("jb2a.explosion.01.orange")
+                            .atLocation(`rainmakerImpact${i}`)
+                            .scale(0.8)
+                            .zIndex(1)
+                            .waitUntilFinished(-1300);
+                        sequence
+                            .sound()
+                            .file("modules/lancer-weapon-fx/soundfx/Missile_Impact.ogg")
+                            .volume(wfx.getEffectVolume(0.5))
+                            .waitUntilFinished(-8500);
+                    }
+                    await sequence.play();
+                }
+
+                const saveResults = await Promise.all(targets.map(async (target) => {
+                    const result = await api.executeStatRoll(
+                        target.actor, "AGI", "Rainmaker — Agility Save", reactorToken,
+                        { sendToOwner: true,
+                            cardTitle: "RAINMAKER — AGILITY SAVE",
+                            cardDescription: `<b>${target.name}</b> takes <b>${damageVal} Explosive</b>, half on a successful Agility save.` }
+                    );
+                    return { target, saved: !!(result?.completed && result?.passed) };
+                }));
+
+                const savedIds = saveResults.filter(r => r.saved).map(r => r.target.id);
+                const flowBonuses = savedIds.map(id => ({
+                    id: `volley-rainmaker-half-${id}-${foundry.utils.randomID()}`,
+                    name: "Rainmaker Save",
+                    type: "target_modifier",
+                    subtype: "half_damage",
+                    applyTo: [id]
+                }));
+
+                game.user.updateTokenTargets(targets.map(t => t.id));
+                await api.executeDamageRoll(
+                    reactorToken, targets, damageVal, "Explosive",
+                    `${item.name} — Rainmaker Volley`,
+                    {},
+                    flowBonuses.length ? { flow_bonus: flowBonuses } : {}
+                );
+            }
+        }]
     }
 });
 

@@ -8,11 +8,14 @@ import { playUiSound } from './sound.js';
 
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
-import { getActivationIcon } from '../misc-tools.js';
-export { getActivationIcon } from '../misc-tools.js';
+import { getActivationIcon } from '../tools/misc-tools.js';
+export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
 const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
+
+export const rechargeIcon = (/** @type {boolean} */ charged) =>
+    `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
 
 export function activationTheme(/** @type {string|null|undefined} */ activation) {
     const a = (activation ?? '').toLowerCase().replaceAll(/[\s-]+/g, '_');
@@ -63,9 +66,9 @@ export function getItemStatus(item) {
     }
     if (hasRecharge) {
         if (sys.charged === false) {
-            parts.push('□'); unavailable = true; badgeColor = '#c33';
+            parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33';
         } else {
-            parts.push('▣');
+            parts.push(rechargeIcon(true));
         }
     }
     if (hasLimited) {
@@ -218,7 +221,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
         }
         if (hasRecharge) {
             const charged = s.charged !== false;
-            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
+            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
                 await /** @type {any} */ (item).update({ 'system.charged': !item.system.charged });
@@ -261,7 +264,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             eaWrap.find('.la-ea-recharge-row').remove();
             const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
             row.append($(`<span style="${S_LBL}">Charged</span>`));
-            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};">${charged ? '▣' : '□'}</span>`);
+            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
                 const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];

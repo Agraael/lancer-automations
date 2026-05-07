@@ -1,6 +1,6 @@
 /* global game, foundry, Hooks, $, fromUuidSync, FilePicker, canvas */
 
-import { playDamageImpactFX } from '../actionFX.js';
+import { playDamageImpactFX } from '../fx/actionFX.js';
 
 const _lastSoundAt = new Map();
 

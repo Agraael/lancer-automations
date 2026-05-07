@@ -8,7 +8,7 @@ export * from './combat.js';
 
 import { chooseToken, placeZone, knockBackToken, moveToken, placeToken, getGridDistance, drawRangeHighlight, drawMovementTrace } from './canvas.js';
 import { startChoiceCard, showUserIdControlledChoiceCard, resolveGMChoiceCard, showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard, startVoteCard, showVoteCardOnVoter, receiveVoteSubmission, updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter, getTokenOwnerUserId } from './network.js';
-import { deployWeaponToken, pickupWeaponToken, resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable, addItemFlags, addExtraDeploymentLids, addExtraActions, getItemDeployables, getItemActions, getItemFlags, setItemAsActivated, getActivatedItems, endItemActivation, openEndActivationMenu, pickItem, reloadOneWeapon, rechargeSystem, getWeapons, findItemByLid, hasItem, getActorActions, removeExtraActions, spawnHardCover } from './deployables.js';
+import { deployWeaponToken, pickupWeaponToken, resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable, addItemFlags, addExtraDeploymentLids, addExtraActions, getItemDeployables, getItemActions, getItemFlags, setItemAsActivated, getActivatedItems, endItemActivation, openEndActivationMenu, pickItem, reloadOneWeapon, rechargeSystem, getWeapons, findItemByLid, hasItem, getActorActions, removeExtraActions, spawnHardCover, findDeployableInCompendium, resolveDeployableSourceItem } from './deployables.js';
 import { openThrowMenu, revertMovement, clearMovementHistory, openChoiceMenu, choseMount, chooseInvade, choseSystem, choseTrait } from './combat.js';
 
 export const InteractiveAPI = {
@@ -66,5 +66,7 @@ export const InteractiveAPI = {
     getActorActions,
     removeExtraActions,
     spawnHardCover,
-    moveToken
+    moveToken,
+    findDeployableInCompendium,
+    resolveDeployableSourceItem
 };

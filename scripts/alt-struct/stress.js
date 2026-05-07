@@ -1,7 +1,7 @@
 /* global ui */
 
-import { applyEffectsToTokens } from "../flagged-effects.js";
-import { executeReactorMeltdown } from "../misc-tools.js";
+import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
+import { executeReactorMeltdown } from "../tools/misc-tools.js";
 
 const stressTableTitles = [
     "Critical Reactor Failure",

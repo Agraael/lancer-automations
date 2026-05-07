@@ -10,11 +10,11 @@ import {
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
-import { playActionFxByActivation, playDeployableFX } from "../actionFX.js";
+import { playActionFxByActivation, playDeployableFX } from "../fx/actionFX.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
-} from "../grid-helpers.js";
+} from "../combat/grid-helpers.js";
 
 /**
  * Deploy a weapon as a token on the ground using interactive placement.
@@ -337,6 +337,110 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
 }
 
 /**
+ * Compendium-only deployable finder. Skips world actors entirely; useful for callers
+ * that need the canonical template rather than an existing instance.
+ * Cached for the session; cleared on the `lancer-automations.clearCaches` hook.
+ * @param {string} lid e.g. "dep_moonlight_drone"
+ * @returns {Promise<Actor|null>}
+ */
+const _compendiumDeployableCache = new Map();
+export async function findDeployableInCompendium(lid) {
+    if (!lid)
+        return null;
+    if (_compendiumDeployableCache.has(lid))
+        return _compendiumDeployableCache.get(lid);
+    for (const pack of game.packs.filter(p => p.documentName === 'Actor')) {
+        const index = await pack.getIndex();
+        const entry = index.find(e => e.system?.lid === lid);
+        if (!entry)
+            continue;
+        const doc = await pack.getDocument(entry._id);
+        if (doc?.type === 'deployable') {
+            _compendiumDeployableCache.set(lid, doc);
+            return doc;
+        }
+    }
+    _compendiumDeployableCache.set(lid, null);
+    return null;
+}
+
+/**
+ * Resolve the item that a deployable actor originated from. Walks the owner actor's
+ * items for one whose `system.deployables[]` contains the deployable LID; falls back
+ * to scanning Item compendiums (npc_feature, mech_system, weapon_mod, frame).
+ * Frames are special: also walks `core_system.deployables` and `traits[].deployables`.
+ * Cached by deployable LID; cleared on `lancer-automations.clearCaches`.
+ * @param {Actor} deployableActor
+ * @returns {Promise<Item|null>}
+ */
+const _sourceItemCache = new Map();
+export async function resolveDeployableSourceItem(deployableActor) {
+    if (deployableActor?.type !== 'deployable')
+        return null;
+    const lid = deployableActor.system?.lid;
+    if (!lid)
+        return null;
+
+    const itemHasDeployable = (item) => {
+        if (!item)
+            return false;
+        const sys = item.system;
+        if (Array.isArray(sys?.deployables) && sys.deployables.includes(lid))
+            return true;
+        if (Array.isArray(sys?.core_system?.deployables) && sys.core_system.deployables.includes(lid))
+            return true;
+        for (const tr of (sys?.traits ?? [])) {
+            if (Array.isArray(tr?.deployables) && tr.deployables.includes(lid))
+                return true;
+        }
+        return false;
+    };
+
+    // Owner-actor walk first.
+    try {
+        const ownerVal = deployableActor.system?.owner;
+        const ownerUuid = typeof ownerVal === 'string' ? ownerVal : ownerVal?.id ?? null;
+        if (ownerUuid) {
+            const ownerActor = /** @type {any} */ (await fromUuid(ownerUuid));
+            if (ownerActor?.items) {
+                for (const item of ownerActor.items) {
+                    if (itemHasDeployable(item))
+                        return item;
+                }
+            }
+        }
+    } catch (e) { /* fall through */ }
+
+    if (_sourceItemCache.has(lid))
+        return _sourceItemCache.get(lid);
+
+    // Compendium fallback. Restrict to item types that can hold deployables.
+    const interestingTypes = new Set(['npc_feature', 'mech_system', 'weapon_mod', 'frame']);
+    for (const pack of game.packs.filter(p => p.documentName === 'Item')) {
+        const idx = await pack.getIndex({ fields: ['type', 'system.deployables', 'system.core_system.deployables', 'system.traits'] });
+        const entry = idx.find(e => interestingTypes.has(e.type) && (
+            (Array.isArray(e.system?.deployables) && e.system.deployables.includes(lid))
+            || (Array.isArray(e.system?.core_system?.deployables) && e.system.core_system.deployables.includes(lid))
+            || (Array.isArray(e.system?.traits) && e.system.traits.some(tr => Array.isArray(tr?.deployables) && tr.deployables.includes(lid)))
+        ));
+        if (entry) {
+            const doc = await pack.getDocument(entry._id);
+            if (doc) {
+                _sourceItemCache.set(lid, doc);
+                return doc;
+            }
+        }
+    }
+    _sourceItemCache.set(lid, null);
+    return null;
+}
+
+Hooks.on('lancer-automations.clearCaches', () => {
+    _compendiumDeployableCache.clear();
+    _sourceItemCache.clear();
+});
+
+/**
  * Module-level cache: lid → { name, img }.
  * Populated lazily by `getDeployableInfo`. Benefits the whole module.
  * @type {Map<string, { name: string, img: string, activation: string | null } | null>}
@@ -450,6 +554,7 @@ export async function placeDeployable(options = /** @type {any} */({})) {
     const itemFlags = systemItem ? getItemFlags(systemItem) : {};
     const range = rangeOpt ?? itemFlags.deployRange ?? 1;
     const count = countOpt ?? itemFlags.deployCount ?? 1;
+    const elevationOffset = options.elevationOffset ?? itemFlags.deployElevationOffset ?? 0;
 
     if (!ownerActor) {
         ui.notifications.error("No owner actor specified.");
@@ -551,6 +656,7 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         ? actorEntries[0].extraData
         : {};
 
+    const baseElevation = originToken?.document?.elevation ?? 0;
     const result = await placeToken({
         actor: actorParam,
         range,
@@ -562,7 +668,8 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         extraData: extraDataParam,
         noCard: noCard,
         disposition,
-        team
+        team,
+        elevation: baseElevation + elevationOffset
     });
 
     if (result && systemItem) {

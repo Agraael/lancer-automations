@@ -13,6 +13,7 @@ export const _cardDefaults = {
 };
 
 // --- Card queue: serialise all interactive cards so they never overwrite each other ---
+const INTER_CARD_DELAY_MS = 400;
 let _cardQueue = Promise.resolve();
 let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
 
@@ -33,21 +34,70 @@ export async function _runCardCallback(fn) {
     }
 }
 
+function _injectCardQueueStyles() {
+    if (document.getElementById('la-card-queue-styles'))
+        return;
+    const style = document.createElement('style');
+    style.id = 'la-card-queue-styles';
+    style.textContent = `
+        .la-card-queue-banner {
+            background: var(--primary-color, #b13a30);
+            color: #ffffff;
+            padding: 4px 12px;
+            font-family: inherit;
+            font-size: 0.82em;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-bottom: 1px solid #000;
+            cursor: help;
+        }
+        .la-card-queue-banner i {
+            color: #ffffff;
+            animation: la-card-queue-pulse 1.6s ease-in-out infinite;
+        }
+        .la-card-queue-banner b {
+            color: #ffeb99;
+            font-weight: 800;
+            margin-right: 2px;
+        }
+        @keyframes la-card-queue-pulse {
+            0%, 100% { opacity: 0.7; transform: rotate(0deg); }
+            50%      { opacity: 1.0; transform: rotate(180deg); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 export function _updatePendingBadge() {
+    _injectCardQueueStyles();
     const pendingTitles = _cardQueueTitles.slice(1);
-    const badge = $('.la-info-card .la-queue-badge');
+    const banner = $('.la-info-card .la-card-queue-banner');
     if (pendingTitles.length > 0) {
-        const text = `+${pendingTitles.length}`;
-        const tooltip = pendingTitles.join('\n');
-        if (badge.length) {
-            badge.text(text).attr('title', tooltip);
+        const n = pendingTitles.length;
+        const tooltip = pendingTitles.map((t, i) => `${i + 1}. ${t || 'Card'}`).join('<br>');
+        const html = `<i class="fas fa-hourglass-half"></i><span><b>${n}</b> card${n === 1 ? '' : 's'} queued</span>`;
+        if (banner.length) {
+            banner.html(html).attr('data-tooltip', tooltip);
         } else {
-            $('.la-info-card').last().append(
-                `<span class="la-queue-badge" title="${tooltip}">${text}</span>`
-            );
+            const div = document.createElement('div');
+            div.className = 'la-card-queue-banner';
+            div.dataset.tooltip = tooltip;
+            div.dataset.tooltipDirection = 'UP';
+            div.innerHTML = html;
+            // Prepend INSIDE the visible card body (before the lancer-header).
+            const hud = $('.la-info-card').last().find('.lancer-hud').first();
+            if (hud.length)
+                hud.prepend(div);
+            else
+                $('.la-info-card').last().prepend(div);
         }
     } else {
-        badge.remove();
+        banner.remove();
     }
 }
 
@@ -60,9 +110,12 @@ export function _queueCard(fn, title = '') {
     }
 
     // --- Out-of-scope: normal queue behaviour ---
+    const wasIdle = _cardQueueTitles.length === 0;
     _cardQueueTitles.push(title);
     _updatePendingBadge(); // badge on currently visible card, if any
-    const next = _cardQueue.then(() => {
+    const next = _cardQueue.then(async () => {
+        if (!wasIdle)
+            await new Promise(r => setTimeout(r, INTER_CARD_DELAY_MS));
         const promise = fn(); // card DOM created synchronously here
         _updatePendingBadge(); // badge on newly shown card
         return promise;
@@ -151,6 +204,7 @@ export function _createInfoCard(type, opts) {
         dynamicHtml = `
             ${selectorHtml}
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
+            <div style="font-size:0.78em; opacity:0.75; margin:-4px 0 4px 0;">Use <kbd>[</kbd> / <kbd>]</kbd> to adjust the last placed token's elevation.</div>
             <div class="la-placed-tokens" data-role="token-list">
                 <div class="la-empty-state">No tokens placed</div>
             </div>`;
@@ -350,10 +404,13 @@ export function _updateInfoCard(cardEl, type, data) {
                            ${warns.map(w => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${w}</div>`).join('')}
                        </div>`
                     : '';
+                const elev = typeof placement.elevation === 'number' ? placement.elevation : 0;
+                const elevHtml = `<span class="la-selected-target-elev" title="Elevation (use [ / ] keys)" style="margin-left:auto; margin-right:6px; font-size:0.85em; opacity:0.9; white-space:nowrap;"><i class="fas fa-arrows-alt-v"></i> ${elev}</span>`;
                 listEl.append(`
                     <div class="la-selected-target" data-placement-index="${idx}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
                         ${imgHtml}
                         <span class="la-selected-target-name">${tokenName} #${idx + 1}</span>
+                        ${elevHtml}
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
                         ${warnHtml}
                     </div>`);

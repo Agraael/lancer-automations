@@ -138,8 +138,14 @@ export function initAltStructReady() {
     const hasConflict = game.modules.get('lancer-alt-structure')?.active;
     const isEnabled = game.settings.get('lancer-automations', 'enableAltStruct');
 
-    if (!isEnabled)
+    // One-struct NPCs is its own opt-in, independent of the full alt-struct rules.
+    if (!isEnabled) {
+        if (game.settings.get('lancer-automations', 'enableOneStructNpc')) {
+            _flowSteps?.set('npcOneStructStep', npcOneStructStep);
+            _flows?.get('StructureFlow')?.insertStepBefore?.('preStructureRollChecks', 'npcOneStructStep');
+        }
         return;
+    }
 
     if (hasConflict) {
         ui.notifications.warn(

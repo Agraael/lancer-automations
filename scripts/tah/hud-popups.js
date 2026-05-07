@@ -1,7 +1,7 @@
 /* global $ */
 
 import { laDetailPopup, laBindPopupBehavior } from '../interactive/detail-renderers.js';
-import { ReactionManager } from '../reaction-manager.js';
+import { ReactionManager } from '../activations/reaction-manager.js';
 import { playUiSound } from './sound.js';
 
 function hasAutomation(itemOrName) {

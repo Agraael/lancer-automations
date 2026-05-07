@@ -1,6 +1,6 @@
 /* global $, game, CONFIG */
 
-import { removeGlobalBonus, removeConstantBonus } from '../genericBonuses.js';
+import { removeGlobalBonus, removeConstantBonus } from '../bonuses/genericBonuses.js';
 import { playUiSound } from './sound.js';
 
 function getBonusDetailStr(/** @type {any} */ b) {
@@ -31,7 +31,7 @@ function getBonusDetailStr(/** @type {any} */ b) {
 }
 
 const BG_DEFAULT = '#f5f5f5';
-const BG_HOVER   = '#ffe0e0';
+const BG_HOVER   = 'color-mix(in srgb, var(--primary-color) 18%, #f5f5f5)';
 const S_COL_LABEL = [
     'padding:3px 12px 4px',
     'background:var(--primary-color)',

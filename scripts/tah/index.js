@@ -162,31 +162,49 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraColorThreat', {
         name: 'Threat Aura Color',
         hint: 'Color of the Max Threat range aura.',
-        scope: 'client', config: false, type: String, default: '#9514ff',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: '#9514ff',
     });
     game.settings.register(MODULE, 'tah.auraColorSensor', {
         name: 'Sensor Aura Color',
         hint: 'Color of the Sensor range aura.',
-        scope: 'client', config: false, type: String, default: '#549eff',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: '#549eff',
     });
     game.settings.register(MODULE, 'tah.auraColorRange', {
         name: 'Weapon Range Aura Color',
         hint: 'Color of the Weapon Range aura.',
-        scope: 'client', config: false, type: String, default: '#ff0000',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: '#ff0000',
     });
     game.settings.register(MODULE, 'tah.auraOpacityThreat', {
         name: 'Threat Aura Opacity',
-        scope: 'client', config: false, type: Number, default: 1,
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.auraOpacitySensor', {
         name: 'Sensor Aura Opacity',
-        scope: 'client', config: false, type: Number, default: 1,
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.auraOpacityRange', {
         name: 'Weapon Range Aura Opacity',
-        scope: 'client', config: false, type: Number, default: 1,
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     // Default toggle mode per aura
@@ -194,29 +212,44 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraDefaultThreat', {
         name: 'Threat Aura Default',
         hint: 'When to auto-enable the Threat aura.',
-        scope: 'client', config: false, type: String, default: 'none',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraDefaultSensor', {
         name: 'Sensor Aura Default',
         hint: 'When to auto-enable the Sensor aura.',
-        scope: 'client', config: false, type: String, default: 'none',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraDefaultRange', {
         name: 'Weapon Range Aura Default',
         hint: 'When to auto-enable the Weapon Range aura.',
-        scope: 'client', config: false, type: String, default: 'none',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: 'none',
         choices: auraDefaultChoices,
     });
     game.settings.register(MODULE, 'tah.auraColorCustom', {
         name: 'Custom Measure Aura Color',
         hint: 'Color of the custom measure aura.',
-        scope: 'client', config: false, type: String, default: '#ff8800',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: '#ff8800',
     });
     game.settings.register(MODULE, 'tah.auraOpacityCustom', {
         name: 'Custom Measure Aura Opacity',
-        scope: 'client', config: false, type: Number, default: 1,
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
         range: { min: 0, max: 1, step: 0.1 },
     });
     game.settings.register(MODULE, 'tah.position', {
@@ -270,7 +303,9 @@ Hooks.once('ready', () => {
         return set;
     };
     let boundKeys = getBoundKeys();
-    Hooks.on('renderKeybindingsConfig', () => { boundKeys = getBoundKeys(); });
+    Hooks.on('renderKeybindingsConfig', () => {
+        boundKeys = getBoundKeys();
+    });
     document.addEventListener('keydown', (ev) => {
         if (ev.repeat)
             return;
@@ -449,29 +484,33 @@ Hooks.on('deleteCombat', () => {
 // ── Persistent range auras — combat auto-toggle + data refresh ─────────────
 
 import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview } from './hover.js';
-import { getMaxItemRanges_WithBonus } from '../misc-tools.js';
+import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
 
 Hooks.on('combatStart', (combat) => {
     for (const c of combat.combatants) {
         const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
-        if (tok) applyDefaultAuras(tok);
+        if (tok)
+            applyDefaultAuras(tok);
     }
 });
 
 Hooks.on('createCombatant', (combatant) => {
     const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
-    if (tok) applyDefaultAuras(tok);
+    if (tok)
+        applyDefaultAuras(tok);
 });
 
 Hooks.on('createToken', (tokenDoc) => {
     const tok = canvas.tokens?.get(tokenDoc.id);
-    if (tok) applyDefaultAuras(tok);
+    if (tok)
+        applyDefaultAuras(tok);
 });
 
 Hooks.on('deleteCombat', (combat) => {
     for (const c of combat.combatants) {
         const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
-        if (tok) disableCombatAuras(tok);
+        if (tok)
+            disableCombatAuras(tok);
     }
 });
 
@@ -495,8 +534,10 @@ Hooks.on('forceUpdateTokenActionHud', () => {
 const BASIC_MELEE_NAMES = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pickup weapon', 'pick up weapon']);
 
 function _getSensorRange(actor) {
-    if (!actor) return 10;
-    if (actor.type === 'pilot') return 5;
+    if (!actor)
+        return 10;
+    if (actor.type === 'pilot')
+        return 5;
     return actor.system?.sensor_range ?? 10;
 }
 
@@ -509,22 +550,26 @@ async function _computeAttackHudRange(state) {
         const ranges = await getMaxItemRanges_WithBonus(item, actor);
         const ALL = ['Range', 'Line', 'Cone', 'Blast', 'Burst', 'Threat', 'Thrown'];
         const max = Math.max(0, ...ALL.map(t => ranges[t] ?? 0));
-        if (max > 0) return Math.max(1, max);
+        if (max > 0)
+            return Math.max(1, max);
     }
 
-    if (BASIC_MELEE_NAMES.has(actionName)) return 1;
+    if (BASIC_MELEE_NAMES.has(actionName))
+        return 1;
 
     const isTech = !!state.data?.invade
         || /invade|tech/i.test(state.data?.action?.activation ?? '')
         || /invade|tech/i.test(actionName);
-    if (isTech) return _getSensorRange(actor);
+    if (isTech)
+        return _getSensorRange(actor);
 
     return null;
 }
 
 Hooks.once('ready', () => {
     const original = game.lancer?.flowSteps?.get?.('showAttackHUD');
-    if (!original) return;
+    if (!original)
+        return;
     game.lancer.flowSteps.set('showAttackHUD', async function(state, options) {
         let token = null;
         let activated = false;
@@ -533,9 +578,18 @@ Hooks.once('ready', () => {
             if (activated && token)
                 setTimeout(() => activateRangePreview(token, range), 0);
         };
-        const onControl = (t) => { if (t?.id === token?.id) reassert(); };
-        const onTarget = (_u, t) => { if (t?.id === token?.id) reassert(); };
-        const onHover = (t) => { if (t?.id === token?.id) reassert(); };
+        const onControl = (t) => {
+            if (t?.id === token?.id)
+                reassert();
+        };
+        const onTarget = (_u, t) => {
+            if (t?.id === token?.id)
+                reassert();
+        };
+        const onHover = (t) => {
+            if (t?.id === token?.id)
+                reassert();
+        };
         try {
             if (enabled()
                 && game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')
@@ -558,7 +612,8 @@ Hooks.once('ready', () => {
                 Hooks.off('controlToken', onControl);
                 Hooks.off('targetToken', onTarget);
                 Hooks.off('hoverToken', onHover);
-                if (token) deactivateRangePreview(token);
+                if (token)
+                    deactivateRangePreview(token);
             }
         }
     });

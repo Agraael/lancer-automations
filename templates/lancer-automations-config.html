@@ -4,13 +4,22 @@
         <div class="lancer-dialog-subtitle">Module configuration</div>
     </header>
 
-    <nav class="sheet-tabs tabs" data-group="primary" style="flex-wrap: wrap;">
+    <nav class="sheet-tabs tabs la-config-tabs" data-group="primary" style="flex-wrap: wrap; position: relative; padding-right: 32px;">
         {{#each tabs}}
         <a class="item {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
             <i class="{{this.icon}}"></i> {{this.label}}
         </a>
         {{/each}}
+        <a class="la-config-search-toggle" title="Search settings" style="position: absolute; top: 50%; right: 6px; transform: translateY(-50%); padding: 4px 9px; cursor: pointer; color: #782e22; font-size: 1.05em; border: 1px solid #782e22; background: rgba(255,255,255,0.5); transition: color 0.15s, border-color 0.15s, background 0.15s;">
+            <i class="fas fa-search"></i>
+        </a>
     </nav>
+
+    <div class="la-config-search" style="display: none; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 2px solid #782e22;">
+        <i class="fas fa-search" style="color: #782e22; font-size: 0.9em;"></i>
+        <input type="text" class="la-config-search-input" placeholder="Search settings…" style="flex: 1; background: rgba(255,255,255,0.6); color: #2b2b2b; border: 1px solid #782e22; padding: 4px 8px; font-family: inherit; font-size: 0.9em; outline: none;" />
+        <span class="la-config-search-clear" style="cursor: pointer; color: #782e22; font-size: 0.9em; display: none; padding: 0 4px;" title="Clear"><i class="fas fa-times"></i></span>
+    </div>
 
     <div class="content la-config-content" style="padding: 6px 12px;">
         {{#each tabs}}
@@ -27,10 +36,10 @@
             {{else if this.isCompactBooleans}}
             <div class="la-compact-bools la-section-body" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 6px;">
                 {{#each this.items}}
-                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px;">
-                    <label style="display: flex; align-items: center; gap: 6px; flex: 1; cursor: pointer; min-width: 0;">
-                        <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} style="margin: 0; flex-shrink: 0;" />
-                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{this.label}}</span>
+                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
+                    <label style="display: flex; align-items: center; gap: 6px; flex: 1; {{#unless this.isLocked}}cursor: pointer;{{/unless}} min-width: 0;">
+                        <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} style="margin: 0; flex-shrink: 0;" />
+                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{this.label}}{{#if this.isLocked}} 🔒{{/if}}</span>
                     </label>
                     {{#if this.preview}}
                     <button type="button" class="la-preview-btn" data-preview-key="{{this.key}}" title="Preview" style="flex-shrink: 0; width: 22px; height: 20px; padding: 0; line-height: 1; font-size: 0.7em; cursor: pointer;">
@@ -41,9 +50,9 @@
                 {{/each}}
             </div>
             {{else if this.isButton}}
-            <div class="form-group" style="margin: 6px 0;">
-                <button type="button" data-action-key="{{this.key}}" style="width:100%;">
-                    {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}
+            <div class="form-group" style="margin: 6px 0; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
+                <button type="button" data-action-key="{{this.key}}" {{#if this.isLocked}}disabled{{/if}} style="width:100%;">
+                    {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}{{#if this.isLocked}} 🔒{{/if}}
                 </button>
                 {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
             </div>
@@ -61,22 +70,22 @@
                     <tr style="border-bottom:1px solid rgba(0,0,0,0.08);">
                         <td style="padding:3px 6px; font-weight:bold;">{{this.label}}</td>
                         {{#each this.cells}}
-                        <td style="padding:3px 6px;">
+                        <td style="padding:3px 6px; {{#if this.isLocked}}opacity:0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
                             {{#if this.isSelect}}
-                            <select name="{{this.name}}" style="width:100%;">
+                            <select name="{{this.name}}" {{#if this.isLocked}}disabled{{/if}} style="width:100%;">
                                 {{#each this.choices}}
                                 <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
                                 {{/each}}
                             </select>
                             {{/if}}
                             {{#if this.isBoolean}}
-                            <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} />
+                            <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
                             {{/if}}
                             {{#if this.isColor}}
-                            <input type="color" name="{{this.name}}" value="{{this.value}}" style="width:36px;height:24px;padding:1px;cursor:pointer;" />
+                            <input type="color" name="{{this.name}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width:36px;height:24px;padding:1px;cursor:pointer;" />
                             {{/if}}
                             {{#if this.isNumber}}
-                            <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" style="width:50px;" />
+                            <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" {{#if this.isLocked}}disabled{{/if}} style="width:50px;" />
                             {{/if}}
                         </td>
                         {{/each}}
@@ -85,33 +94,33 @@
                 </tbody>
             </table>
             {{else}}
-            <div class="form-group" style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.08);">
+            <div class="form-group" style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.08); {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <label style="font-weight: bold; flex: 1;">{{this.label}}</label>
+                    <label style="font-weight: bold; flex: 1;">{{this.label}}{{#if this.isLocked}} 🔒{{/if}}</label>
                     <div style="flex-shrink: 0; margin-left: 8px;">
                         {{#if this.isBoolean}}
-                            <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} />
+                            <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
                         {{/if}}
                         {{#if this.isNumber}}
-                            <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" style="width: 80px;" />
+                            <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 80px;" />
                         {{/if}}
                         {{#if this.isString}}
-                            <input type="text" name="{{this.key}}" value="{{this.value}}" style="width: 200px;" />
+                            <input type="text" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 200px;" />
                         {{/if}}
                         {{#if this.isFolder}}
-                            <file-picker name="{{this.key}}" type="folder" value="{{this.value}}"></file-picker>
+                            <file-picker name="{{this.key}}" type="folder" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
                         {{/if}}
                         {{#if this.isColor}}
-                            <input type="color" name="{{this.key}}" value="{{this.value}}" style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
+                            <input type="color" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
                         {{/if}}
                         {{#if this.isSlider}}
                             <div style="display:flex;align-items:center;gap:6px;">
-                                <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" style="width:120px;" oninput="this.nextElementSibling.textContent=this.value" />
+                                <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" {{#if this.isLocked}}disabled{{/if}} style="width:120px;" oninput="this.nextElementSibling.textContent=this.value" />
                                 <span style="min-width:28px;text-align:center;font-size:0.9em;">{{this.value}}</span>
                             </div>
                         {{/if}}
                         {{#if this.isSelect}}
-                            <select name="{{this.key}}">
+                            <select name="{{this.key}}" {{#if this.isLocked}}disabled{{/if}}>
                                 {{#each this.choices}}
                                 <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
                                 {{/each}}

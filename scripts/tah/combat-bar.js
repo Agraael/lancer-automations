@@ -1,6 +1,7 @@
 /* global game, canvas, $ */
 
 import { revertMovement, clearMovementHistory } from '../interactive/combat.js';
+import { modifyAction } from '../tools/misc-tools.js';
 import { playUiSound } from './sound.js';
 
 const ACTION_DEFS = [
@@ -46,6 +47,19 @@ export function buildCombatBar(actor, token) {
     const isMyTurn = game.combat.combatant?.id === combatant.id;
     const canClick = _canMod();
 
+    if (!document.getElementById('la-combat-bar-styles')) {
+        const style = document.createElement('style');
+        style.id = 'la-combat-bar-styles';
+        style.textContent = `
+            @keyframes la-end-turn-pulse {
+                0%, 100% { filter: brightness(1);   transform: scale(1);   }
+                50%      { filter: brightness(1.7); transform: scale(1.15); }
+            }
+            .la-end-turn { animation: la-end-turn-pulse 1.4s ease-in-out infinite; }
+            .la-end-turn:hover { animation: none; }
+        `;
+        document.head.appendChild(style);
+    }
     const bar = $(`<div id="la-combat-bar" style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:#111;border-left:3px solid var(--primary-color);min-height:30px;box-sizing:border-box;width:max-content;"></div>`);
 
     // Activation diamonds + end turn
@@ -59,9 +73,9 @@ export function buildCombatBar(actor, token) {
         // Replace the first spent diamond with end-turn button when active
         if (!filled && isMyTurn && !endTurnPlaced) {
             endTurnPlaced = true;
-            const endBtn = $(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:#c33;transition:color 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`);
-            endBtn.on('mouseenter', () => { playUiSound('statusHover'); endBtn.css('color', '#ff5555'); });
-            endBtn.on('mouseleave', () => endBtn.css('color', '#c33'));
+            const endBtn = $(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:var(--primary-color);transition:filter 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`);
+            endBtn.on('mouseenter', () => { playUiSound('statusHover'); endBtn.css('filter', 'brightness(1.6)'); });
+            endBtn.on('mouseleave', () => endBtn.css('filter', ''));
             endBtn.on('click', async () => {
                 await game.combat.deactivateCombatant(combatant.id);
             });
@@ -111,49 +125,7 @@ export function buildCombatBar(actor, token) {
 
         if (canClick) {
             icon.on('click', async () => {
-                if (def.isMove) {
-                    const speed = actor.system?.speed ?? 0;
-                    const newVal = val > 0 ? 0 : speed;
-                    await actor.update({ [`system.action_tracker.${def.key}`]: newVal });
-                    return;
-                }
-                // Mirror Lancer system's modAction cascade (lancer.mjs ~30727).
-                const at = /** @type {any} */ ({ ...(actor.system?.action_tracker ?? {}) });
-                const spend = !!val;
-                switch (def.key) {
-                    case 'free':
-                        at.free = !spend;
-                        break;
-                    case 'quick':
-                        if (spend) {
-                            if (at.full)
-                                at.full = false;
-                            else
-                                at.quick = false;
-                        } else {
-                            at.quick = true;
-                        }
-                        break;
-                    case 'full':
-                        if (spend) {
-                            at.full = false;
-                            at.quick = false;
-                        } else {
-                            at.full = true;
-                        }
-                        break;
-                    case 'protocol':
-                        at.protocol = !spend;
-                        break;
-                    case 'reaction':
-                        at.reaction = !spend;
-                        break;
-                    default:
-                        at[def.key] = !val;
-                }
-                if (spend)
-                    at.protocol = false;
-                await actor.update(/** @type {any} */ ({ 'system.action_tracker': at }));
+                await modifyAction(actor, def.key, !!val);
             });
         }
         bar.append(icon);

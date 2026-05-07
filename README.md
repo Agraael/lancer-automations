@@ -6,11 +6,13 @@
 [![GitHub downloads (total)](https://img.shields.io/github/downloads/Agraael/lancer-automations/module.zip?style=for-the-badge&label=downloads%20(total))](https://github.com/Agraael/lancer-automations/releases/latest)
 [![GitHub downloads (latest version)](https://img.shields.io/github/downloads/Agraael/lancer-automations/latest/module.zip?style=for-the-badge&label=downloads%20(latest))](https://github.com/Agraael/lancer-automations/releases/latest)
 
+[![Total Uses (GM) ](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.counterapi.dev%2Fv2%2Fcedric-cescuttis-team-3920%2Ffirst-counter-3920&query=%24.data.up_count&label=World%20Install%20by%20Gm%20(Aproximate)&style=for-the-badge&color=blue)](https://api.counterapi.dev/v2/cedric-cescuttis-team-3920/first-counter-3920)
+
 
 <details>
 <summary>patreon...</summary>
 
-I'm a bit shy about that, but one day someone asked if they could give me money, feels good. Anyway, here's the thing.
+Well, project became bigger, now there's more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
 
 In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
 
@@ -27,6 +29,10 @@ At its core, this module is an event-driven automation engine. Almost anything t
 The end goal is to move everything I need for my campaign into this module, so it functions as a full extension of the Lancer system for FoundryVTT v12.
 
 > Some features may overlap or not fully integrate with each other. This is a work in progress.
+
+Full API docs: [doc/API_REFERENCE.md](doc/API_REFERENCE.md)
+
+It's pretty tedious to maintain this big readme file, so keep in mind there are way way way more features (especially if you take the forked versions of some modules) in the release you'll get. Be sure to read the tours/tutorial and explore a bit, or ask questions on Discord.
 
 ---
 

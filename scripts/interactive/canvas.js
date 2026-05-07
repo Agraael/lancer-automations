@@ -1,12 +1,13 @@
 /* global canvas, PIXI, game, ui, $, Ray */
 
 import {
-    isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
-    getHexesInRange, getHexCenter, pixelToOffset,
-    getTokenCenterOffset, drawHexAt, getOccupiedOffsets,
-    getMinGridDistance, getDistanceTokenToPoint, isColumnarHex, getHexVertices,
-    snapTokenCenter, getOccupiedGridSpaces
-} from "../grid-helpers.js";
+    isHexGrid, offsetToCube, cubeDistance,
+    getHexCenter, pixelToOffset,
+    drawHexAt, getOccupiedOffsets,
+    getMinGridDistance, getDistanceTokenToPoint,
+    snapTokenCenter, getOccupiedGridSpaces, getInRangeOffsets, isPositionInRange
+} from "../combat/grid-helpers.js";
+import { getHexGroundElevation } from "../combat/terrain-utils.js";
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard
@@ -28,89 +29,28 @@ export function pointerToWorld(event) {
 /** @returns {PIXI.Graphics} */
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
     const highlight = new PIXI.Graphics();
-
-    // Support plain {x, y} point as origin (single cell) in addition to Token objects
-    const isPoint = casterToken && !casterToken.document && typeof casterToken.x === 'number' && typeof casterToken.y === 'number';
+    const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
 
     if (isHexGrid()) {
-        const offsets = isPoint ? [pixelToOffset(casterToken.x, casterToken.y)] : getOccupiedOffsets(casterToken);
-        const hexesInRange = new Set();
-        const selfHexes = new Set();
-
-        if (!includeSelf) {
-            for (const o of offsets) {
-                const cube = offsetToCube(o.col, o.row);
-                selfHexes.add(`${cube.q},${cube.r},${cube.s}`);
-            }
-        }
-
-        for (const o of offsets) {
-            const cube = offsetToCube(o.col, o.row);
-            const inRange = getHexesInRange(cube, range);
-            for (const h of inRange) {
-                const key = `${h.q},${h.r},${h.s}`;
-                if (!includeSelf && selfHexes.has(key))
-                    continue;
-                hexesInRange.add(key);
-            }
-        }
-
         highlight.lineStyle(2, color, 0.4);
         highlight.beginFill(color, alpha);
-
-        for (const key of hexesInRange) {
-            const [q, r, s] = key.split(',').map(Number);
-            const offset = cubeToOffset({ q, r, s });
-            drawHexAt(highlight, offset.col, offset.row);
+        for (const key of inRange) {
+            const [col, row] = key.split(',').map(Number);
+            drawHexAt(highlight, col, row);
         }
-
         highlight.endFill();
     } else {
         const gridSize = canvas.grid.size;
-        const offsets = isPoint ? [pixelToOffset(casterToken.x, casterToken.y)] : getOccupiedOffsets(casterToken);
-        const squaresInRange = new Set();
-        const selfSquares = new Set();
-
-        if (!includeSelf) {
-            for (const o of offsets) {
-                selfSquares.add(`${o.col},${o.row}`);
-            }
-        }
-
-        for (const o of offsets) {
-            for (let dx = -range; dx <= range; dx++) {
-                for (let dy = -range; dy <= range; dy++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
-                        const col = o.col + dx;
-                        const row = o.row + dy;
-                        const key = `${col},${row}`;
-                        if (!includeSelf && selfSquares.has(key))
-                            continue;
-                        squaresInRange.add(key);
-                    }
-                }
-            }
-        }
-
         highlight.lineStyle(2, color, 0.7);
         highlight.beginFill(color, alpha);
-
-        for (const key of squaresInRange) {
+        for (const key of inRange) {
             const [col, row] = key.split(',').map(Number);
             const center = getHexCenter(col, row);
-            highlight.drawRect(
-                center.x - gridSize / 2,
-                center.y - gridSize / 2,
-                gridSize,
-                gridSize
-            );
+            highlight.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
-
         highlight.endFill();
     }
 
-
-    // Add to stage below tokens
     if (canvas.tokens?.parent) {
         canvas.tokens.parent.addChildAt(highlight, canvas.tokens.parent.getChildIndex(canvas.tokens));
     } else {
@@ -239,12 +179,68 @@ export function chooseToken(casterToken, options = {}) {
         const selectedTokens = new Set();
         const selectionHighlights = [];
 
+        const pulseGraphic = new PIXI.Graphics();
+        if (canvas.tokens?.parent)
+            canvas.tokens.parent.addChildAt(pulseGraphic, canvas.tokens.parent.getChildIndex(canvas.tokens));
+        else
+            canvas.stage.addChild(pulseGraphic);
+        let wavePulse = null;
         if (range !== null && casterToken) {
             rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, includeSelf);
+
+            const inRangeSetForPulse = getInRangeOffsets(casterToken, range, { includeSelf: true });
+            const originOffsets = getOccupiedOffsets(casterToken);
+            const hexesByDist = new Map();
+            for (const key of inRangeSetForPulse) {
+                const [col, row] = key.split(',').map(Number);
+                let minDist = Infinity;
+                for (const o of originOffsets) {
+                    const d = isHexGrid()
+                        ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                        : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+                    if (d < minDist)
+                        minDist = d;
+                }
+                if (minDist === 0)
+                    continue;
+                if (!hexesByDist.has(minDist))
+                    hexesByDist.set(minDist, []);
+                hexesByDist.get(minDist).push({ col, row });
+            }
+            const periodMs = 3200;
+            const ringWidth = 1.1;
+            const gridSize = canvas.grid.size;
+            wavePulse = () => {
+                pulseGraphic.clear();
+                const t = (performance.now() % periodMs) / periodMs;
+                const cur = t * (range + 1);
+                for (const [dist, list] of hexesByDist) {
+                    const delta = Math.abs(dist - cur);
+                    if (delta > ringWidth)
+                        continue;
+                    const alpha = 0.035 * (1 - delta / ringWidth);
+                    pulseGraphic.lineStyle(0);
+                    pulseGraphic.beginFill(0x929292, alpha);
+                    for (const { col, row } of list) {
+                        if (isHexGrid()) {
+                            drawHexAt(pulseGraphic, col, row);
+                        } else {
+                            const c = getHexCenter(col, row);
+                            pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                        }
+                    }
+                    pulseGraphic.endFill();
+                }
+            };
+            canvas.app.ticker.add(wavePulse);
         }
 
         const cursorPreview = new PIXI.Graphics();
         canvas.stage.addChild(cursorPreview);
+        const cursorPulse = () => {
+            cursorPreview.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
+        };
+        canvas.app.ticker.add(cursorPulse);
 
         const selectionIds = selection ? new Set(selection.map(t => t.id)) : null;
         const selectionHighlightGraphics = [];
@@ -280,7 +276,7 @@ export function chooseToken(casterToken, options = {}) {
         const passesAdvisory = (token) => {
             if (filter && !filter(token))
                 return false;
-            if (range !== null && casterToken && getMinGridDistance(casterToken, token) > range)
+            if (range !== null && casterToken && !isPositionInRange(casterToken, token, range))
                 return false;
             return true;
         };
@@ -296,6 +292,9 @@ export function chooseToken(casterToken, options = {}) {
         canvas.tokens.interactiveChildren = false;
 
         const doCleanup = () => {
+            canvas.app.ticker.remove(cursorPulse);
+            if (wavePulse)
+                canvas.app.ticker.remove(wavePulse);
             canvas.stage.off('click', clickHandler);
             canvas.stage.off('rightdown', abortHandler);
             canvas.stage.off('pointermove', moveHandler);
@@ -306,6 +305,9 @@ export function chooseToken(casterToken, options = {}) {
                 }
                 rangeHighlight.destroy();
             }
+            if (pulseGraphic.parent)
+                pulseGraphic.parent.removeChild(pulseGraphic);
+            pulseGraphic.destroy();
             if (cursorPreview) {
                 if (cursorPreview.parent) {
                     cursorPreview.parent.removeChild(cursorPreview);
@@ -346,10 +348,9 @@ export function chooseToken(casterToken, options = {}) {
 
         const computeWarnings = (token) => {
             const msgs = [];
-            if (range !== null && casterToken) {
+            if (range !== null && casterToken && !isPositionInRange(casterToken, token, range)) {
                 const dist = getMinGridDistance(casterToken, token);
-                if (dist > range)
-                    msgs.push(`Out of range (${dist} > ${range})`);
+                msgs.push(`Out of range (${dist} > ${range})`);
             }
             if (filter && !filter(token))
                 msgs.push(filterWarning ?? 'Invalid target');
@@ -438,10 +439,8 @@ export function chooseToken(casterToken, options = {}) {
             let hoveredToken = allTokens.find(token => {
                 const bounds = token.bounds;
                 if (tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom) {
-                    if (!soft && range !== null && casterToken) {
-                        const dist = getMinGridDistance(casterToken, token);
-                        return dist <= range;
-                    }
+                    if (!soft && range !== null && casterToken)
+                        return isPositionInRange(casterToken, token, range);
                     return true;
                 }
                 return false;
@@ -508,11 +507,8 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const toggleTokenSelection = (token) => {
-            if (!soft && range !== null && casterToken) {
-                const dist = getMinGridDistance(casterToken, token);
-                if (dist > range)
-                    return;
-            }
+            if (!soft && range !== null && casterToken && !isPositionInRange(casterToken, token, range))
+                return;
             if (selectedTokens.has(token)) {
                 selectedTokens.delete(token);
                 removeSelectionHighlight(token);
@@ -730,19 +726,79 @@ export async function placeZone(casterToken, options = {}) {
         let cancelled = false;
         let confirmed = false;
 
+        const pulseGraphic = new PIXI.Graphics();
+        if (canvas.tokens?.parent)
+            canvas.tokens.parent.addChildAt(pulseGraphic, canvas.tokens.parent.getChildIndex(canvas.tokens));
+        else
+            canvas.stage.addChild(pulseGraphic);
+        let wavePulse = null;
+
         // Draw range highlight if range is specified (low grey, very transparent)
         // rangeOrigin can be a {x, y} point to override the default casterToken origin
         if (range !== null && (casterToken || rangeOrigin)) {
-            rangeHighlight = drawRangeHighlight(rangeOrigin || casterToken, range, 0x888888, 0.1, false);
+            const rangeAnchor = rangeOrigin || casterToken;
+            rangeHighlight = drawRangeHighlight(rangeAnchor, range, 0x888888, 0.1, false);
+
+            const inRangeSetForPulse = getInRangeOffsets(rangeAnchor, range, { includeSelf: true });
+            const isPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
+            const originOffsets = isPoint ? [pixelToOffset(rangeAnchor.x, rangeAnchor.y)] : getOccupiedOffsets(rangeAnchor);
+            const hexesByDist = new Map();
+            for (const key of inRangeSetForPulse) {
+                const [col, row] = key.split(',').map(Number);
+                let minDist = Infinity;
+                for (const o of originOffsets) {
+                    const d = isHexGrid()
+                        ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                        : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+                    if (d < minDist)
+                        minDist = d;
+                }
+                if (minDist === 0)
+                    continue;
+                if (!hexesByDist.has(minDist))
+                    hexesByDist.set(minDist, []);
+                hexesByDist.get(minDist).push({ col, row });
+            }
+            const periodMs = 3200;
+            const ringWidth = 1.1;
+            const gridSize = canvas.grid.size;
+            wavePulse = () => {
+                pulseGraphic.clear();
+                const t = (performance.now() % periodMs) / periodMs;
+                const cur = t * (range + 1);
+                for (const [dist, list] of hexesByDist) {
+                    const delta = Math.abs(dist - cur);
+                    if (delta > ringWidth)
+                        continue;
+                    const alpha = 0.035 * (1 - delta / ringWidth);
+                    pulseGraphic.lineStyle(0);
+                    pulseGraphic.beginFill(0x929292, alpha);
+                    for (const { col, row } of list) {
+                        if (isHexGrid()) {
+                            drawHexAt(pulseGraphic, col, row);
+                        } else {
+                            const c = getHexCenter(col, row);
+                            pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                        }
+                    }
+                    pulseGraphic.endFill();
+                }
+            };
+            canvas.app.ticker.add(wavePulse);
         }
 
         const doCleanup = () => {
+            if (wavePulse)
+                canvas.app.ticker.remove(wavePulse);
             if (rangeHighlight) {
                 if (rangeHighlight.parent) {
                     rangeHighlight.parent.removeChild(rangeHighlight);
                 }
                 rangeHighlight.destroy();
             }
+            if (pulseGraphic.parent)
+                pulseGraphic.parent.removeChild(pulseGraphic);
+            pulseGraphic.destroy();
             _removeInfoCard(cardEl);
         };
 
@@ -966,30 +1022,26 @@ export function cancelRulerDrag(token, moveInfo = null) {
 }
 
 /**
- * Interactive tool to apply knockback to tokens.
- * @param {Array<Token>} tokens - List of tokens to knock back
- * @param {number} distance - Max knockback distance in grid units
- * @param {Object} options - UI options
- * @param {string} [options.title="KNOCKBACK"] - Card title
- * @param {string} [options.description] - Card description
- * @param {string} [options.icon] - Card icon class
- * @param {string} [options.headerClass=""] - Card header CSS class
- * @param {Token} [options.triggeringToken=null] - Token triggering the knockback
- * @param {string} [options.actionName=""] - Name of the action
- * @param {Item} [options.item=null] - Item used for knockback
- * @returns {Promise<Array<{token: Token, x: number, y: number}>|null>} List of moves or null if cancelled
- */
-/**
- * Apply token moves with elevationruler integration. Used by knockBackToken and socket handler.
- * @param {Array<{tokenId: string, updateData: {x: number, y: number}}>} moveList
- * @param {Token|null} triggeringToken
- * @param {number} distance
+ * Apply pre-resolved knockback moves to tokens with elevationruler integration.
+ * Used by knockBackToken (after the destination picker resolves) and the socket handler.
+ * @param {Array<{tokenId: string, updateData: {x: number, y: number}}>} moveList - Per-token resolved destinations.
+ * @param {Token|null} triggeringToken - Token that caused the knockback. Required for `triggerSelf` reactions; warns when null.
+ * @param {number} distance - Max knockback distance in grid units (used by the `onInvoluntaryMove` trigger).
+ * @param {string} [actionName=""] - Name of the action that produced the knockback.
+ * @param {Item} [item=null] - Source item, if any.
+ * @param {Object} [options]
+ * @param {boolean} [options.asVoluntary=false] - If true, skip the `onInvoluntaryMove` trigger and the
+ *   `forceUnintentional` move flag (treat the displacement as a voluntary move).
+ * @param {boolean} [options.setElevation=false] - If true (and Terrain Height Tools is active), snap each
+ *   token to the max solid-terrain height under its destination footprint. Off by default.
+ * @returns {Promise<void>}
  */
 export async function applyKnockbackMoves(moveList, triggeringToken, distance, actionName = "", item = null, options = {}) {
     if (!triggeringToken)
         console.warn("lancer-automations | applyKnockbackMoves called without a triggeringToken. Reactions using triggerSelf will not work correctly.");
 
     const asVoluntary = !!options.asVoluntary;
+    const setElevation = !!options.setElevation;
     const api = game.modules.get('lancer-automations').api;
 
     const extraOpts = {
@@ -998,6 +1050,8 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         _skipBoostOffer: true,
         ...(asVoluntary ? {} : { forceUnintentional: true })
     };
+
+    const terrainAPI = globalThis.terrainHeightTools;
 
     // Sequential — ER.moveTokenTo uses the singleton canvas.controls.ruler; parallel runs corrupt it.
     for (const { tokenId, updateData } of moveList) {
@@ -1025,7 +1079,16 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
                 continue;
         }
 
-        await _rulerMove(t, { x: updateData.x, y: updateData.y }, extraOpts);
+        const dest = { x: updateData.x, y: updateData.y };
+        if (setElevation && terrainAPI) {
+            let maxH = 0;
+            for (const o of getOccupiedOffsets(t, dest)) {
+                const h = getHexGroundElevation(o.col, o.row, terrainAPI);
+                if (h > maxH) maxH = h;
+            }
+            dest.elevation = maxH;
+        }
+        await _rulerMove(t, dest, extraOpts);
     }
 }
 
@@ -1065,11 +1128,26 @@ export async function moveToken(token, options = {}) {
 
             let rangeHighlight = null;
             const cursorPreview = new PIXI.Graphics();
+            const pulseGraphic = new PIXI.Graphics();
             let trace = null;
             let selectedPos = null;
             canvas.stage.addChild(cursorPreview);
+            if (canvas.tokens?.parent)
+                canvas.tokens.parent.addChildAt(pulseGraphic, canvas.tokens.parent.getChildIndex(canvas.tokens));
+            else
+                canvas.stage.addChild(pulseGraphic);
+
+            // Cursor pulse (alpha breathes 0.5..1.0) + circular wave from origin out to range edge.
+            const cursorPulse = () => {
+                cursorPreview.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
+            };
+            canvas.app.ticker.add(cursorPulse);
+            let wavePulse = null;
 
             const doCleanup = () => {
+                canvas.app.ticker.remove(cursorPulse);
+                if (wavePulse)
+                    canvas.app.ticker.remove(wavePulse);
                 canvas.stage.off('click', clickHandler);
                 canvas.stage.off('rightdown', abortHandler);
                 canvas.stage.off('pointermove', moveHandler);
@@ -1081,6 +1159,9 @@ export async function moveToken(token, options = {}) {
                 if (cursorPreview.parent)
                     cursorPreview.parent.removeChild(cursorPreview);
                 cursorPreview.destroy();
+                if (pulseGraphic.parent)
+                    pulseGraphic.parent.removeChild(pulseGraphic);
+                pulseGraphic.destroy();
                 if (trace) {
                     if (trace.parent)
                         trace.parent.removeChild(trace); trace.destroy();
@@ -1102,8 +1183,61 @@ export async function moveToken(token, options = {}) {
                 }
             });
 
+            const inRangeSet = range >= 0 ? getInRangeOffsets(token, range, { includeSelf: true }) : null;
+            const isDestInRange = (snappedX, snappedY) => {
+                if (!inRangeSet) return true;
+                return getOccupiedOffsets(token, { x: snappedX, y: snappedY })
+                    .some(o => inRangeSet.has(`${o.col},${o.row}`));
+            };
             if (range >= 0) {
                 rangeHighlight = drawRangeHighlight(token, range, 0x888888, 0.1, true);
+
+                // Group in-range hexes by min planar distance from origin token's footprint.
+                const originOffsets = getOccupiedOffsets(token);
+                const hexesByDist = new Map();
+                for (const key of inRangeSet) {
+                    const [col, row] = key.split(',').map(Number);
+                    let minDist = Infinity;
+                    for (const o of originOffsets) {
+                        const d = isHexGrid()
+                            ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                            : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+                        if (d < minDist)
+                            minDist = d;
+                    }
+                    if (minDist === 0)
+                        continue;
+                    if (!hexesByDist.has(minDist))
+                        hexesByDist.set(minDist, []);
+                    hexesByDist.get(minDist).push({ col, row });
+                }
+
+                const periodMs = 3200;
+                const ringWidth = 1.1;
+                const gridSize = canvas.grid.size;
+                wavePulse = () => {
+                    pulseGraphic.clear();
+                    const t = (performance.now() % periodMs) / periodMs;
+                    const cur = t * (range + 1);
+                    for (const [dist, list] of hexesByDist) {
+                        const delta = Math.abs(dist - cur);
+                        if (delta > ringWidth)
+                            continue;
+                        const alpha = 0.035 * (1 - delta / ringWidth);
+                        pulseGraphic.lineStyle(0);
+                        pulseGraphic.beginFill(0x929292, alpha);
+                        for (const { col, row } of list) {
+                            if (isHexGrid()) {
+                                drawHexAt(pulseGraphic, col, row);
+                            } else {
+                                const c = getHexCenter(col, row);
+                                pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                            }
+                        }
+                        pulseGraphic.endFill();
+                    }
+                };
+                canvas.app.ticker.add(wavePulse);
             }
 
             const drawTeleportTrace = (targetX, targetY) => {
@@ -1143,11 +1277,10 @@ export async function moveToken(token, options = {}) {
             const moveHandler = (event) => {
                 const { x: tx, y: ty } = pointerToWorld(event);
                 const snapped = snapTokenCenter(token, { x: tx, y: ty });
-                const dist = getDistanceTokenToPoint({ x: snapped.x + token.w / 2, y: snapped.y + token.h / 2 }, token);
-                const inRange = range < 0 || dist <= range;
+                const inRange = isDestInRange(snapped.x, snapped.y);
                 cursorPreview.clear();
                 const offsets = getOccupiedOffsets(token, { x: snapped.x, y: snapped.y });
-                const color = inRange ? 0x00cc66 : 0x555555;
+                const color = inRange ? 0x00cc66 : 0xff0000;
                 const alpha = inRange ? 0.4 : 0.5;
                 cursorPreview.lineStyle(2, color, 0.8);
                 cursorPreview.beginFill(color, alpha);
@@ -1164,8 +1297,7 @@ export async function moveToken(token, options = {}) {
             const clickHandler = (event) => {
                 const { x: tx, y: ty } = pointerToWorld(event);
                 const snapped = snapTokenCenter(token, { x: tx, y: ty });
-                const dist = getDistanceTokenToPoint({ x: snapped.x + token.w / 2, y: snapped.y + token.h / 2 }, token);
-                if (range >= 0 && dist > range) {
+                if (!isDestInRange(snapped.x, snapped.y)) {
                     ui.notifications.warn("Destination is out of range!"); return;
                 }
                 selectedPos = { x: snapped.x, y: snapped.y };
@@ -1264,23 +1396,15 @@ export async function moveToken(token, options = {}) {
             .play();
     }
 
-    // Calculate ground elevation at destination
+    // Calculate ground elevation at destination (max solid terrain under footprint)
     const updateData = { ...destTopLeft };
     const terrainAPI = globalThis.terrainHeightTools;
     if (terrainAPI) {
-        const destOffsets = getOccupiedOffsets(token, destTopLeft);
         let maxHeight = 0;
-        const types = terrainAPI.getTerrainTypes?.() || [];
-        const solidTypes = new Set(types.filter(t => t.usesHeight && t.isSolid).map(t => t.id));
-        for (const o of destOffsets) {
-            const cellData = terrainAPI.getCell(o.row, o.col) || [];
-            for (const terrain of cellData) {
-                if (solidTypes.has(terrain.terrainTypeId)) {
-                    const h = (terrain.elevation || 0) + (terrain.height || 0);
-                    if (h > maxHeight)
-                        maxHeight = h;
-                }
-            }
+        for (const o of getOccupiedOffsets(token, destTopLeft)) {
+            const h = getHexGroundElevation(o.col, o.row, terrainAPI);
+            if (h > maxHeight)
+                maxHeight = h;
         }
         updateData.elevation = maxHeight;
     }
@@ -1567,11 +1691,12 @@ export function knockBackToken(tokens, distance, options = {}) {
 
             // Check validity (distance; -1 = infinite)
             const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
-            const inRange = distance < 0 || dist <= distance;
+            const offsets = getOccupiedOffsets(activeToken, { x: snappedX, y: snappedY });
+            const inRangeSet = distance < 0 ? null : getInRangeOffsets(activeToken, distance, { includeSelf: true });
+            const inRange = distance < 0 || (dist <= distance && offsets.some(o => inRangeSet.has(`${o.col},${o.row}`)));
 
             // Check overlap
             const otherOccupied = getOccupiedGridSpaces([activeToken.id]);
-            const offsets = getOccupiedOffsets(activeToken, { x: snappedX, y: snappedY });
 
             // Draw Cursor
             cursorPreview.clear();
@@ -1623,7 +1748,10 @@ export function knockBackToken(tokens, distance, options = {}) {
             const snappedY = snapped.y;
 
             const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
-            if (distance >= 0 && dist > distance) {
+            const dstOffsets = getOccupiedOffsets(activeToken, { x: snappedX, y: snappedY });
+            const dstInRangeSet = distance < 0 ? null : getInRangeOffsets(activeToken, distance, { includeSelf: true });
+            const dstInRange = distance < 0 || (dist <= distance && dstOffsets.some(o => dstInRangeSet.has(`${o.col},${o.row}`)));
+            if (!dstInRange) {
                 ui.notifications.warn("Destination is out of range!");
                 return;
             }
@@ -1722,7 +1850,8 @@ export function placeToken(options = {}) {
             headerClass = "",
             noCard = false,
             disposition = null,
-            team = null
+            team = null,
+            elevation = null
         } = /** @type {any} */ (options);
 
         // --- Normalize actor input into actorEntries ---
@@ -1770,6 +1899,7 @@ export function placeToken(options = {}) {
 
         const isMultiActor = actorEntries.length > 1;
         let activeActorIndex = 0;
+        const defaultElevation = (typeof elevation === 'number') ? elevation : 0;
 
         const getActiveEntry = () => actorEntries[activeActorIndex];
 
@@ -1791,44 +1921,94 @@ export function placeToken(options = {}) {
         const placements = [];
         let rangeHighlight = null;
 
-        if (range !== null && origin) {
-            if (originToken) {
-                rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.1, false);
-            } else if (originOffset) {
-                const hl = new PIXI.Graphics();
-                hl.lineStyle(2, 0x888888, 0.3);
-                hl.beginFill(0x888888, 0.1);
+        const pulseGraphic = new PIXI.Graphics();
+        if (canvas.tokens?.parent)
+            canvas.tokens.parent.addChildAt(pulseGraphic, canvas.tokens.parent.getChildIndex(canvas.tokens));
+        else
+            canvas.stage.addChild(pulseGraphic);
+        let wavePulse = null;
 
-                if (isHexGrid()) {
-                    const originCube = offsetToCube(originOffset.col, originOffset.row);
-                    for (const h of getHexesInRange(originCube, range)) {
-                        const offset = cubeToOffset(h);
-                        drawHexAt(hl, offset.col, offset.row);
-                    }
+        let inRangeSet = null;
+        if (range !== null && origin) {
+            const originForRange = originToken ?? (originOffset ? getHexCenter(originOffset.col, originOffset.row) : null);
+            if (originForRange) {
+                inRangeSet = getInRangeOffsets(originForRange, range, { includeSelf: true });
+                if (originToken) {
+                    rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.1, false);
                 } else {
-                    for (let dx = -range; dx <= range; dx++) {
-                        for (let dy = -range; dy <= range; dy++) {
-                            if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
-                                const center = getHexCenter(originOffset.col + dx, originOffset.row + dy);
-                                hl.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
-                            }
+                    const hl = new PIXI.Graphics();
+                    hl.lineStyle(2, 0x888888, 0.3);
+                    hl.beginFill(0x888888, 0.1);
+                    for (const key of inRangeSet) {
+                        const [col, row] = key.split(',').map(Number);
+                        if (isHexGrid()) {
+                            drawHexAt(hl, col, row);
+                        } else {
+                            const center = getHexCenter(col, row);
+                            hl.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
                         }
                     }
+                    hl.endFill();
+                    if (canvas.tokens?.parent)
+                        canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
+                    else
+                        canvas.stage.addChild(hl);
+                    rangeHighlight = hl;
                 }
 
-                hl.endFill();
-
-                if (canvas.tokens?.parent) {
-                    canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
-                } else {
-                    canvas.stage.addChild(hl);
+                // Wave pulse (subtle outward ripple over the range hexes).
+                const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
+                const hexesByDist = new Map();
+                for (const key of inRangeSet) {
+                    const [col, row] = key.split(',').map(Number);
+                    let minDist = Infinity;
+                    for (const o of originOffsetsForPulse) {
+                        const d = isHexGrid()
+                            ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                            : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+                        if (d < minDist)
+                            minDist = d;
+                    }
+                    if (minDist === 0)
+                        continue;
+                    if (!hexesByDist.has(minDist))
+                        hexesByDist.set(minDist, []);
+                    hexesByDist.get(minDist).push({ col, row });
                 }
-                rangeHighlight = hl;
+                const periodMs = 3200;
+                const ringWidth = 1.1;
+                wavePulse = () => {
+                    pulseGraphic.clear();
+                    const t = (performance.now() % periodMs) / periodMs;
+                    const cur = t * (range + 1);
+                    for (const [dist, list] of hexesByDist) {
+                        const delta = Math.abs(dist - cur);
+                        if (delta > ringWidth)
+                            continue;
+                        const alpha = 0.035 * (1 - delta / ringWidth);
+                        pulseGraphic.lineStyle(0);
+                        pulseGraphic.beginFill(0x929292, alpha);
+                        for (const { col, row } of list) {
+                            if (isHexGrid()) {
+                                drawHexAt(pulseGraphic, col, row);
+                            } else {
+                                const c = getHexCenter(col, row);
+                                pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                            }
+                        }
+                        pulseGraphic.endFill();
+                    }
+                };
+                canvas.app.ticker.add(wavePulse);
             }
         }
 
         const cursorPreview = new PIXI.Graphics();
         canvas.stage.addChild(cursorPreview);
+        const cursorPulse = () => {
+            cursorPreview.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
+        };
+        canvas.app.ticker.add(cursorPulse);
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
@@ -1850,19 +2030,7 @@ export function placeToken(options = {}) {
         const checkInRange = (col, row) => {
             if (range === null || !origin)
                 return true;
-            if (originToken) {
-                const targetCube = offsetToCube(col, row);
-                return getOccupiedOffsets(originToken).some(o =>
-                    cubeDistance(offsetToCube(o.col, o.row), targetCube) <= range
-                );
-            }
-            if (isHexGrid()) {
-                return cubeDistance(
-                    offsetToCube(originOffset.col, originOffset.row),
-                    offsetToCube(col, row)
-                ) <= range;
-            }
-            return Math.max(Math.abs(col - originOffset.col), Math.abs(row - originOffset.row)) <= range;
+            return inRangeSet ? inRangeSet.has(`${col},${row}`) : true;
         };
 
         const getSpawnPosition = (centerCol, centerRow) => {
@@ -1895,6 +2063,9 @@ export function placeToken(options = {}) {
         };
 
         const doCleanup = () => {
+            canvas.app.ticker.remove(cursorPulse);
+            if (wavePulse)
+                canvas.app.ticker.remove(wavePulse);
             canvas.stage.off('click', clickHandler);
             canvas.stage.off('rightdown', rightHandler);
             canvas.stage.off('pointermove', moveHandler);
@@ -1905,6 +2076,9 @@ export function placeToken(options = {}) {
                     rangeHighlight.parent.removeChild(rangeHighlight);
                 rangeHighlight.destroy();
             }
+            if (pulseGraphic.parent)
+                pulseGraphic.parent.removeChild(pulseGraphic);
+            pulseGraphic.destroy();
             if (cursorPreview.parent)
                 cursorPreview.parent.removeChild(cursorPreview);
             cursorPreview.destroy();
@@ -1972,6 +2146,7 @@ export function placeToken(options = {}) {
 
                 tokenData.x = pos.x;
                 tokenData.y = pos.y;
+                tokenData.elevation = (typeof p.elevation === 'number') ? p.elevation : defaultElevation;
                 if (entry.actor)
                     tokenData.actorId = entry.actor.id;
                 allTokenData.push(tokenData);
@@ -2042,19 +2217,36 @@ export function placeToken(options = {}) {
             }
         });
 
-        const drawPlacementMarker = (centerCol, centerRow) => {
+        const drawPlacementMarker = (centerCol, centerRow, elev) => {
+            const container = new PIXI.Container();
             const graphics = new PIXI.Graphics();
             graphics.lineStyle(2, 0xff6400, 0.8);
             graphics.beginFill(0xff6400, 0.3);
             drawOffsets(graphics, getProtoOffsets(centerCol, centerRow));
             graphics.endFill();
+            container.addChild(graphics);
+
+            const center = getHexCenter(centerCol, centerRow);
+            const label = new PIXI.Text(elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`, {
+                fontFamily: 'Arial',
+                fontSize: Math.max(14, gridSize * 0.22),
+                fill: 0xffffff,
+                stroke: 0x000000,
+                strokeThickness: 4,
+                fontWeight: 'bold'
+            });
+            label.anchor.set(0.5);
+            label.x = center.x;
+            label.y = center.y - gridSize * 0.45;
+            container.addChild(label);
+            container._labelText = label;
 
             if (canvas.tokens?.parent) {
-                canvas.tokens.parent.addChildAt(graphics, canvas.tokens.parent.getChildIndex(canvas.tokens));
+                canvas.tokens.parent.addChildAt(container, canvas.tokens.parent.getChildIndex(canvas.tokens));
             } else {
-                canvas.stage.addChild(graphics);
+                canvas.stage.addChild(container);
             }
-            return graphics;
+            return container;
         };
 
         const moveHandler = (event) => {
@@ -2082,8 +2274,15 @@ export function placeToken(options = {}) {
             }
 
             const warning = !checkInRange(cursorOffset.col, cursorOffset.row) ? 'Out of range' : null;
-            const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row);
-            placements.push({ col: cursorOffset.col, row: cursorOffset.row, graphics, actorIndex: activeActorIndex, warning });
+            const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row, defaultElevation);
+            placements.push({
+                col: cursorOffset.col,
+                row: cursorOffset.row,
+                graphics,
+                actorIndex: activeActorIndex,
+                warning,
+                elevation: defaultElevation
+            });
             refreshCard();
 
             if (noCard && (count === -1 || placements.length >= count)) {
@@ -2105,6 +2304,18 @@ export function placeToken(options = {}) {
             if (event.key === "Escape") {
                 doCleanup();
                 resolve(null);
+                return;
+            }
+            if ((event.key === '[' || event.key === ']') && placements.length > 0) {
+                const last = placements[placements.length - 1];
+                const step = event.key === ']' ? 1 : -1;
+                last.elevation = (typeof last.elevation === 'number' ? last.elevation : 0) + step;
+                if (last.graphics?._labelText) {
+                    const e = last.elevation;
+                    last.graphics._labelText.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+                }
+                refreshCard();
+                event.preventDefault();
             }
         };
 

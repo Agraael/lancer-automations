@@ -108,6 +108,16 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 - The `item` argument to your callbacks is `null` (general activations are not tied to an item).
 - `onlyOnSourceMatch: true` means: *the activation only fires if the triggering action's name matches the activation's registered name*. Useful for general activations attached to a named action like Overwatch.
 
+### Deployable activation
+
+- Registered under a **deployable LID**, the value of `actor.system.lid` on the deployable actor (e.g. `"dep_moonlight_drone"`). The engine matches any LID against the deployable's actor LID — there is no required prefix.
+- The reactor is the deployable actor itself: any deployable on the scene whose `actor.system.lid === <registered LID>` is a candidate.
+- The engine auto-resolves the **source item** (the item whose `system.deployables[]` contains the deployable's LID — for frames, also `core_system.deployables` and `traits[].deployables`) and surfaces it as `triggerData.item` so authors can read effect/tag context.
+- `triggerData.deployable = { actor, lid }` is also set, providing the explicit deployable identity.
+- `triggerData.actionData.action.name` is the action's name (e.g. `"Move"`, `"Combine"`); for the top-level deploy click it's the deployable actor's name. `triggerData.actionData.action.activation` is the activation type (`"Protocol"`, `"Quick"`).
+- `onlyOnSourceMatch: true` means: *only fire when the activation source is the matching deployable* — i.e. one of this exact deployable's actions was the trigger.
+- `reactionPath`: empty string matches the top-level deploy itself (`actor.system.activation`); `"actions.<name>"` matches a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern).
+
 ### Picking one
 
 | If you want to... | Use |
@@ -116,6 +126,7 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 | React when any hostile starts moving in your threat | General, no source match |
 | Apply a passive effect at scene-load to anyone with a feature | Item, `onInit` only (no triggers) |
 | Build a one-off rule that applies to all tokens | General |
+| React on a specific deployable's action (or its deploy) | Deployable LID (`actor.system.lid`), with `onlyOnSourceMatch: true` |
 
 ---
 

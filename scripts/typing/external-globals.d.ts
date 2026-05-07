@@ -133,6 +133,7 @@ interface Item {
 
 interface Actor {
     sheet?: any;
+    actor?: undefined;
 }
 
 interface Token {

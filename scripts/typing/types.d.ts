@@ -285,6 +285,10 @@ interface TriggerDataOnActivation extends TriggerDataBase {
     actionName: string;
     item: any;
     actionData: ActionData;
+    /** Set when the activator is a deployable actor. `lid` is the deployable's `system.lid`
+     * (e.g. "dep_moonlight_drone"). `triggerData.item` is auto-resolved to the source item
+     * (the parent item whose `system.deployables[]` contains this LID). */
+    deployable?: { actor: any; lid: string | null } | null;
     endActivation: boolean;
     /** Extra data injected via startRelatedFlowToReactor(userId, extraData), sourced from flow.state.la_extraData. */
     extraData: Record<string, any>;
@@ -750,6 +754,33 @@ interface LancerAutomationsAPI {
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;
     getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;
     executeStatRoll(actor: any, stat: string, title: string, target?: number | Token | TokenDocument | "token", extraData?: { targetStat?: string; sendToOwner?: boolean; cardTitle?: string; cardDescription?: string;[key: string]: any }): Promise<{ completed: boolean; total?: number; roll?: any; passed?: boolean }>;
+
+    executeDamageRoll(
+        attacker: Token | TokenDocument | any,
+        targets: Array<Token | TokenDocument> | null,
+        damageValue?: string | number | null,
+        damageType?: string | null,
+        title?: string,
+        options?: {
+            tags?: any[];
+            hit_results?: any[];
+            has_normal_hit?: boolean;
+            has_crit_hit?: boolean;
+            ap?: boolean;
+            paracausal?: boolean;
+            half_damage?: boolean;
+            overkill?: boolean;
+            reliable?: boolean;
+            add_burn?: boolean;
+            invade?: boolean;
+            bonus_damage?: any[];
+            [key: string]: any;
+        },
+        extraData?: {
+            flow_bonus?: any[];
+            [key: string]: any;
+        }
+    ): Promise<{ completed: boolean; flow?: any }>;
 
     [key: string]: any;
 }

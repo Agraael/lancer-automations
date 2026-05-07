@@ -3,7 +3,7 @@
 import { startChoiceCard, startVoteCard } from "./network.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
 import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
-import { getWeaponProfiles_WithBonus } from "../misc-tools.js";
+import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
 
 /**
  * Opens a dialog to select and throw a weapon.

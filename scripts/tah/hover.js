@@ -1,20 +1,17 @@
 /*global game, canvas, Hooks, foundry */
 
-import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus, getWeaponProfiles_WithBonus } from '../misc-tools.js';
-import { scaleAuraStroke as _scaleAuraStroke } from '../aura.js';
+import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus, getWeaponProfiles_WithBonus } from '../tools/misc-tools.js';
+import { scaleAuraStroke as _scaleAuraStroke } from '../tools/aura.js';
 
 // ── LA_range_preview aura ────────────────────────────────────────────────────────
 
 const RANGE_PREVIEW_NAME = 'LA_range_preview';
 
 const RANGE_PREVIEW_TEMPLATE = {
-    _v: 1,
     unified: false,
     name: RANGE_PREVIEW_NAME,
     enabled: false,
     onlyEnabledInCombat: false,
-    fillAnimation: true,
-    fillAnimationSpeed: 0.3,
     keyPressMode: 'DISABLED',
     keyToPress: 'AltLeft',
     lineType: 1,
@@ -28,6 +25,7 @@ const RANGE_PREVIEW_TEMPLATE = {
     fillOpacity: 0.05,
     fillTexture: 'modules/terrain-height-tools/textures/hatching.png',
     fillTextureOffset: { x: 0, y: 0 },
+    fillTextureOffsetAnimation: { x: 30, y: 30 },
     fillTextureScale: { x: 500, y: 500 },
     ownerVisibility: {
         default: true,
@@ -48,6 +46,7 @@ const RANGE_PREVIEW_TEMPLATE = {
     effects: [],
     macros: [],
     terrainHeightTools: getTHTConfig(),
+    elevationAware: true,
 };
 
 function hasGAAFork() {
@@ -366,16 +365,10 @@ function _buildPersistentTemplate(auraName, token) {
     } catch { /* use defaults */ }
 
     const tpl = {
-        _v: 1,
         unified: true,
         name: token ? _teamSuffixedName(auraName, token) : auraName,
         enabled: false,
         onlyEnabledInCombat: false,
-        animation: false,
-        animationType: 'scroll',
-        pulseToMax: false,
-        animationWhenSelected: true,
-        animationSpeed: 0.1,
         keyPressMode: 'DISABLED',
         keyToPress: 'AltLeft',
         lineType: 2,
@@ -408,7 +401,8 @@ function _buildPersistentTemplate(auraName, token) {
         },
         effects: [],
         macros: [],
-        terrainHeightTools: getTHTConfig()
+        terrainHeightTools: getTHTConfig(),
+        elevationAware: auraName !== 'LA_custom_measure'
     };
     _scaleAuraStroke(tpl);
     return tpl;
@@ -463,10 +457,11 @@ async function _persistAuraState(tokenDoc, auraName, enabled, radius) {
     const token = tokenDoc.object ?? canvas.tokens?.get?.(tokenDoc.id);
     const suffixed = token ? _teamSuffixedName(auraName, token) : auraName;
     const prefix = `${auraName}__t`;
+    const elevationAware = auraName !== 'LA_custom_measure';
     const auras = (tokenDoc.getFlag('grid-aware-auras', 'auras') ?? []).map(a => {
         if (a.name !== suffixed && a.name !== auraName && !(typeof a.name === 'string' && a.name.startsWith(prefix)))
             return a;
-        return { ...a, name: suffixed, enabled, radius: String(Math.max(1, radius)) };
+        return { ...a, name: suffixed, enabled, radius: String(Math.max(1, radius)), elevationAware };
     });
     await tokenDoc.setFlag('grid-aware-auras', 'auras', auras);
 }
@@ -483,6 +478,7 @@ export async function togglePersistentAura(token, auraName, radius) {
     }
     const cfg = foundry.utils.deepClone(aura.config);
     cfg.enabled = !cfg.enabled;
+    cfg.elevationAware = auraName !== 'LA_custom_measure';
     if (cfg.enabled) {
         cfg.radiusCalculated = Math.max(1, radius);
     }
@@ -501,9 +497,11 @@ export async function setPersistentAura(token, auraName, enabled, radius) {
             return;
     }
     const cfg = foundry.utils.deepClone(aura.config);
-    if (cfg.enabled === enabled && (!enabled || cfg.radiusCalculated === radius))
+    const wantElevAware = auraName !== 'LA_custom_measure';
+    if (cfg.enabled === enabled && cfg.elevationAware === wantElevAware && (!enabled || cfg.radiusCalculated === radius))
         return;
     cfg.enabled = enabled;
+    cfg.elevationAware = wantElevAware;
     cfg.radiusCalculated = Math.max(1, radius);
     aura.update(cfg, { force: true });
     await _persistAuraState(token.document, auraName, enabled, radius);

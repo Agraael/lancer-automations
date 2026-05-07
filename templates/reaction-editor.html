@@ -52,9 +52,9 @@
     <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
         <div class="form-fields flexrow" style="gap: 10px;">
             <div style="flex: 2;">
-                <label style="font-weight: bold;">Item LID</label>
+                <label style="font-weight: bold;">Item or Deployable LID</label>
                 <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
-                <p class="notes">Item system.lid to attach to.</p>
+                <p class="notes">`system.lid` to attach to. Matches an item's LID, or a deployable actor's LID.</p>
             </div>
             <div style="flex: 3;">
                 <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
@@ -337,7 +337,8 @@
             <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
         </div>
         <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
-            <code>item</code>, <code>activationName</code>, <code>api</code></p>
+            <code>item</code>, <code>activationName</code>, <code>api</code>
+        </p>
     </div>
 
     <!-- Activation Code (shown when activationType = code) -->
@@ -350,7 +351,8 @@
                     style="font-family: monospace; white-space: pre;">{{activationCode}}</textarea>
             </div>
             <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
-                <code>item</code>, <code>activationName</code>, <code>api</code></p>
+                <code>item</code>, <code>activationName</code>, <code>api</code>
+            </p>
         </div>
     </details>
 
@@ -363,7 +365,8 @@
                 <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
             </div>
             <p class="notes">Runs when a token enters the scene. Variables: <code>token</code>, <code>item</code>,
-                <code>api</code></p>
+                <code>api</code>
+            </p>
         </div>
     </details>
 
@@ -378,7 +381,8 @@
             </div>
             <p class="notes">Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables:
                 <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>,
-                <code>activationName</code>, <code>api</code></p>
+                <code>activationName</code>, <code>api</code>
+            </p>
         </div>
     </details>
 

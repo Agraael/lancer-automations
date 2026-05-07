@@ -107,7 +107,7 @@ export class GlossaryPanel {
                 row.on('mouseenter', () => {
                     this._cancelCollapse();
                     playUiSound('statusHover');
-                    row.css('background', '#ffe0e0');
+                    row.css('background', 'color-mix(in srgb, var(--primary-color) 18%, #f5f5f5)');
                     const clip = row.find('.la-hud-clip')[0];
                     const pan  = row.find('.la-hud-pan')[0];
                     if (clip && pan) {

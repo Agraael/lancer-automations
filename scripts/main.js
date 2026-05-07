@@ -1,35 +1,30 @@
 /*global PIXI, libWrapper */
 
-import { OverwatchAPI, getTokenDistance } from "./overwatch.js";
-import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./reaction-manager.js";
-import { CompendiumToolsAPI } from "./compendium-tools.js";
-import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
-import { ReactionsAPI } from "./reactions-registry.js";
+import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
+import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
+import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
+import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
+import { ReactionsAPI } from "./activations/reactions-registry.js";
 import { cancelRulerDrag ,
     InteractiveAPI,
-    chooseToken, knockBackToken, applyKnockbackMoves,
+    chooseToken, knockBackToken,
     startChoiceCard, deployWeaponToken,
     revertMovement, clearMovementHistory,
-    showUserIdControlledChoiceCard, resolveGMChoiceCard,
-    showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard,
     drawMovementTrace,
     getActiveGMId, getTokenOwnerUserId,
-    showVoteCardOnVoter, receiveVoteSubmission,
-    updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
-    handleManualDeployLink, startWaitCard
+    handleManualDeployLink, startWaitCard,
+    resolveDeployableSourceItem
 } from './interactive/index.js';
 import {
     EffectsAPI,
-    setEffect,
-    removeEffectsByName,
     consumeEffectCharge,
     processDurationEffects,
     initCollapseHook,
     findEffectOnToken,
-} from "./flagged-effects.js";
+} from "./bonuses/flagged-effects.js";
 import {
     getMovementPathHexes, drawDebugPath
-} from "./grid-helpers.js";
+} from "./combat/grid-helpers.js";
 import {
     genericBonusStepDamage,
     injectKnockbackCheckbox,
@@ -50,39 +45,43 @@ import {
     genericAccuracyStepWeaponAttack,
     genericAccuracyStepStatRoll,
     BonusesAPI
-} from "./genericBonuses.js";
-import { EffectManagerAPI } from "./effectManager.js";
-import { TerrainAPI } from "./terrain-utils.js";
+} from "./bonuses/genericBonuses.js";
+import { EffectManagerAPI } from "./bonuses/effectManager.js";
+import { TerrainAPI } from "./combat/terrain-utils.js";
 
-import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, executeStatRoll } from "./misc-tools.js";
-import { checkModuleUpdate } from "./version-check.js";
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, consumeAction } from "./tools/misc-tools.js";
+import { checkModuleUpdate } from "./setup/version-check.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
     bindChatMessageStateInterceptor,
     ActiveFlowState,
     forceTechHUDStep
-} from "./flows.js";
-import { DowntimeAPI } from "./downtime.js";
-import { RestAPI } from "./rest.js";
-import { ScanAPI, performSystemScan, performGMInputScan } from "./scan.js";
-import { LAAuras, AurasAPI } from "./aura.js";
-import { initDelayedAppearanceHook, delayedTokenAppearance } from "./reinforcement.js";
+} from "./activations/flows.js";
+import { DowntimeAPI } from "./tools/downtime.js";
+import { RestAPI } from "./tools/rest.js";
+import { ScanAPI } from "./tools/scan.js";
+import { LAAuras, AurasAPI } from "./tools/aura.js";
+import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
+import { FlowQueueTests } from "../tests/flow-queue.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./lancer-modif.js";
-import { registerStatusFXSettings, initStatusFX } from "./statusFX.js";
-import { registerRerollFlowSteps } from "./reroll.js";
-import { LA_INLINE_ATTACK_FX, playDefaultThrowFX } from "./actionFX.js";
-import { registerSettingsMenus, LancerAutomationsConfig } from "./settingsMenus.js";
-import { installJb2aHooks } from "./jb2a-fallback.js";
-import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./tour.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
+import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
+import { registerRerollFlowSteps } from "./activations/reroll.js";
+import { initFlowQueue } from "./activations/flow-queue.js";
+import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
+import { initSocket, setTokenFlag, unsetTokenFlag, awaitPendingAck } from "./socket.js";
+export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js";
+import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
+import { installJb2aHooks } from "./fx/jb2a-fallback.js";
+import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
-import { updateStructure, preWreck, canvasReadyWreck, preLoadImageForAll, tileHUDButton, resurrect, initWreckTokenConfig } from "./wreck.js";
+import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import './filters/customFilters.js';
-import { checkCompatibility } from "./checkCompatibility.js";
-import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./infection.js";
-import { initVisionFromEdge } from "./visionFromEdge.js";
-import { initTokenBlocksVision } from "./tokenBlocksVision.js";
-import { initLancerDetectionModes } from "./lancerDetectionModes.js";
+import { checkCompatibility } from "./setup/checkCompatibility.js";
+import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./bonuses/infection.js";
+import { initVisionFromEdge } from "./vision/visionFromEdge.js";
+import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
+import { initLancerDetectionModes } from "./vision/lancerDetectionModes.js";
 
 initLancerDetectionModes();
 
@@ -92,8 +91,6 @@ const REACTION_DEBOUNCE_MS = 100;
 let cachedFlatGeneralReactions = null;
 /** @type {Map<string, Array>} triggerType → filtered non-action reactions; cleared with cachedFlatGeneralReactions */
 const cachedNonActionReactionsByTrigger = new Map();
-/** @type {Map<string, (value?: unknown) => void>} requestId → resolve — for awaiting remote startRelatedFlow completion */
-const _pendingFlowWaits = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd']);
 let deployableConnectionsGraphic = null;
 
@@ -152,7 +149,7 @@ function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter
     return false;
 }
 
-function getReactionItems(token) {
+export function getReactionItems(token) {
     const actor = token.actor;
     if (!actor)
         return [];
@@ -177,6 +174,25 @@ function getReactionItems(token) {
             const pilotItems = pilot.items.filter(item => itemTypes.has(item.type));
             items = items.concat(pilotItems);
         }
+    }
+
+    // Deployable actors have no items. Surface a synthetic surrogate keyed by the
+    // deployable's actor LID so reactions registered against `dep_*` LIDs resolve.
+    if (actor.type === "deployable" && actor.system?.lid) {
+        items = items.concat([{
+            name: actor.name,
+            type: "deployable_surrogate",
+            system: {
+                lid: actor.system.lid,
+                tags: [],
+                destroyed: actor.system.destroyed === true,
+                disabled: actor.system.disabled === true,
+                actions: actor.system.actions || []
+            },
+            getFlag: () => null,
+            _deployableSurrogate: true,
+            _deployableActor: actor
+        }]);
     }
 
     return items;
@@ -264,7 +280,7 @@ async function checkOnInitReactions(token, filterItem = null) {
 }
 
 
-async function checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data) {
+export async function checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data) {
     const api = game.modules.get('lancer-automations').api;
     if (itemLid) {
         // Item-based: find the item on the token, then the reaction by reactionPath
@@ -339,7 +355,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
     const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
     if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
         if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
-            ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered — out of combat.`);
+            ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered, out of combat.`);
         return null;
     }
     if (isSelf && !reaction.triggerSelf)
@@ -412,7 +428,7 @@ async function _beginFlow(flowName, target, options = {}, extraData = {}) {
 
 /**
  * Builds a no-arg `startRelatedFlow` function for a specific reaction context.
- * Closes over token, item, reaction config, and activationName — no arguments needed at call time.
+ * Closes over token, item, reaction config, and activationName, no arguments needed at call time.
  * @param {object} [extraData] - Extra data to inject into the triggered flow's la_extraData / triggerData.extraData.
  */
 /**
@@ -452,7 +468,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
                 })
                 : null;
             try {
-                return await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+                return await awaitPendingAck(requestId);
             } finally {
                 waitCard?.remove();
             }
@@ -460,7 +476,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
     };
 }
 
-function _buildStartRelatedFlow(token, item, reaction, activationName, extraData = {}) {
+export function _buildStartRelatedFlow(token, item, reaction, activationName, extraData = {}) {
     return async () => {
         if (item) {
             const reactionPath = reaction?.reactionPath;
@@ -482,7 +498,7 @@ function _buildStartRelatedFlow(token, item, reaction, activationName, extraData
             return executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item, ...extraData });
         }
 
-        // General reaction — no item
+        // General reaction (no item)
         const actor = token?.actor;
         if (!actor) {
             ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
@@ -506,7 +522,7 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName) 
     const reactionPath = reaction?.reactionPath || "";
     const actionType = reaction?.actionType || 'Reaction';
     const effectDescription = reaction?.effectDescription || '';
-    return async (userId = null, extraData = {}, { wait = false } = {}) => {
+    return async (userId = null, extraData = {}, { wait = false, waitTitle = null, waitDescription = null, waitItem = null, waitOriginToken = null, waitRelatedToken = null } = {}) => {
         let targetUserId = userId;
         if (!targetUserId) {
             const ownerIds = getTokenOwnerUserId(token);
@@ -524,7 +540,21 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName) 
             payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, actionType, effectDescription, extraData: extraData ?? {}, requestId }
         });
         if (wait && requestId) {
-            await new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
+            const waitCard = (waitTitle || waitDescription)
+                ? startWaitCard({
+                    title: waitTitle ?? 'WAITING',
+                    description: waitDescription ?? '',
+                    waitMessage: `Waiting for ${game.users.get(targetUserId)?.name ?? 'remote user'}…`,
+                    item: waitItem ?? item,
+                    originToken: waitOriginToken ?? token,
+                    relatedToken: waitRelatedToken
+                })
+                : null;
+            try {
+                await awaitPendingAck(requestId);
+            } finally {
+                waitCard?.remove();
+            }
         }
     };
 }
@@ -556,7 +586,6 @@ async function checkReactions(triggerType, data) {
             }
         }
     };
-    // Change 4: hoist api lookup out of the inner loop
     const api = game.modules.get('lancer-automations').api;
 
     // Flatten general reactions: entries with a "reactions" array are expanded into individual sub-reactions
@@ -575,7 +604,6 @@ async function checkReactions(triggerType, data) {
     }
     const flatGeneralReactions = cachedFlatGeneralReactions;
 
-    // Change 3: compute actionBasedReaction with a single .find()
     let actionBasedReaction = null;
     if (data.actionName) {
         const found = flatGeneralReactions.find(([name, r]) =>
@@ -584,7 +612,6 @@ async function checkReactions(triggerType, data) {
             actionBasedReaction = { name: found[0], reaction: found[1] };
     }
 
-    // Change 2: cache nonActionBasedReactions per triggerType
     if (!cachedNonActionReactionsByTrigger.has(triggerType)) {
         const filtered = [];
         for (const [reactionName, reaction] of flatGeneralReactions) {
@@ -617,12 +644,11 @@ async function checkReactions(triggerType, data) {
 
     for (const token of orderedTokens) {
         const isSelf = data.triggeringToken?.id === token.id;
-        // Hidden triggering tokens don't provoke reactions from others — only self-reactions fire.
+        // Hidden triggering tokens don't provoke reactions from others; only self-reactions fire.
         if (triggeringTokenHidden && !isSelf)
             continue;
         const isInCombat = token.inCombat;
 
-        // Change 5: compute distance and enrichedData once per token, not per item/reaction
         const sourceToken = data.triggeringToken;
         const distanceToTrigger = sourceToken ? getTokenDistance(token, sourceToken) : null;
         const canTriggerReaction = api.canProvokeReaction(sourceToken, token);
@@ -646,15 +672,15 @@ async function checkReactions(triggerType, data) {
 
                 if (reaction.onlyOnSourceMatch) {
                     const triggeringItem = data.weapon || data.techItem || data.item;
-                    const triggeringItemLid = triggeringItem?.system?.lid;
-                    if (!triggeringItemLid || triggeringItemLid !== lid)
+                    const triggeringItemLid = triggeringItem?.system?.lid ?? null;
+                    const triggeringDepLid = data.deployable?.lid ?? null;
+                    if (triggeringItemLid !== lid && triggeringDepLid !== lid)
                         continue;
                 }
 
-                // Change 1: use module-level Set instead of inline array
                 if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType)) {
                     if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
-                        ui.notifications.warn(`${item.name} (${token.name}): not triggered — out of combat.`);
+                        ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
                     continue;
                 }
 
@@ -701,6 +727,12 @@ async function checkReactions(triggerType, data) {
                             const actionName = reactionPath.slice("extraActions.".length);
                             const extraActions = item.getFlag?.('lancer-automations', 'extraActions') || [];
                             actionData = extraActions.find(a => a.name === actionName) ?? null;
+                        } else if (reactionPath.startsWith("actions.")) {
+                            // Lookup-by-name in system.actions[]. Useful for deployables
+                            // whose action LIDs are empty strings (action.name is the only key).
+                            const actionName = reactionPath.slice("actions.".length);
+                            const list = item.system?.actions ?? [];
+                            actionData = list.find(a => a.name === actionName) ?? null;
                         } else {
                             // Standard path navigation into item.system
                             const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
@@ -765,16 +797,22 @@ async function checkReactions(triggerType, data) {
                     }
 
                     if (shouldTrigger) {
-                        const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, item, reaction, activationName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, item, reaction, activationName), sendMessageToReactor: _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType) };
+                        const reactionTriggerData = { ...enrichedData,
+                            startRelatedFlow: _buildStartRelatedFlow(token, item, reaction, activationName),
+                            startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, item, reaction, activationName),
+                            sendMessageToReactor: _buildSendMessageToReactor(token, item, reactionPath, activationName, triggerType)
+                        };
                         // Inject reactor identity on all cancel functions so _buildCancelFn can record who cancelled
                         const reactorIdentity = { tokenId: token.id, lid, reactionPath: reaction.reactionPath || "" };
                         const defaultCancelContext = { item, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
+
                         for (const key of Object.keys(reactionTriggerData)) {
                             if ((key.startsWith('cancel') || key.startsWith('change') || key.startsWith('reroll') || key.startsWith('modify')) && typeof reactionTriggerData[key] === 'function') {
                                 reactionTriggerData[key]._reactorIdentity = reactorIdentity;
                                 reactionTriggerData[key]._defaultContext = defaultCancelContext;
                             }
                         }
+
                         if (reaction.autoActivate) {
                             if (isCancellable) {
                                 deferredFactories.push(() => {
@@ -817,7 +855,12 @@ async function checkReactions(triggerType, data) {
             const reaction = actionBasedReaction.reaction;
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
-                const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
+                const reactionTriggerData = { ...enrichedData,
+                    startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName),
+                    startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName),
+                    sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType)
+                };
+
                 const reactorIdentity = { tokenId: token.id, reactionName };
                 const defaultCancelContext = { item: null, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
                 for (const key of Object.keys(reactionTriggerData)) {
@@ -826,6 +869,7 @@ async function checkReactions(triggerType, data) {
                         reactionTriggerData[key]._defaultContext = defaultCancelContext;
                     }
                 }
+
                 if (reaction.autoActivate) {
                     if (isCancellable) {
                         deferredFactories.push(() => {
@@ -863,7 +907,12 @@ async function checkReactions(triggerType, data) {
         for (const [reactionName, reaction] of nonActionBasedReactions) {
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isInCombat);
             if (enrichedData) {
-                const reactionTriggerData = { ...enrichedData, startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName), startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName), sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType) };
+                const reactionTriggerData = { ...enrichedData,
+                    startRelatedFlow: _buildStartRelatedFlow(token, null, reaction, reactionName),
+                    startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, null, reaction, reactionName),
+                    sendMessageToReactor: _buildSendMessageToReactor(token, null, null, reactionName, triggerType)
+                };
+
                 const reactorIdentity = { tokenId: token.id, reactionName };
                 const defaultCancelContext = { item: null, originToken: token, relatedToken: enrichedData.triggeringToken ?? null };
                 for (const key of Object.keys(reactionTriggerData)) {
@@ -872,6 +921,7 @@ async function checkReactions(triggerType, data) {
                         reactionTriggerData[key]._defaultContext = defaultCancelContext;
                     }
                 }
+
                 if (reaction.autoActivate) {
                     if (isCancellable) {
                         deferredFactories.push(() => {
@@ -1025,7 +1075,7 @@ function passesBuiltInFilters(consumption, triggerType, data) {
         if (!currentLid)
             return false;
 
-        const validLids = consumption.itemLid.split(',').map(s => s.trim()).filter(s => s);
+        const validLids = consumption.itemLid.split(',').map(s => s.trim()).filter(Boolean);
         if (!validLids.includes(currentLid))
             return false;
     }
@@ -1088,7 +1138,8 @@ async function processEffectConsumption(triggerType, data) {
         const consumableEffects = actor.effects.filter(e => {
             const consumption = e.flags?.['lancer-automations']?.consumption;
             const t = consumption?.trigger;
-            if (!t) return false;
+            if (!t)
+                return false;
             return Array.isArray(t) ? t.includes(triggerType) : t === triggerType;
         });
 
@@ -1206,10 +1257,19 @@ function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'consumeAction', {
+        name: 'Consume Action on Activation',
+        hint: 'Auto-spend the token\'s Quick / Full action when an activation flow succeeds.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'showBonusHudButton', {
         name: 'Token HUD Bonus Button',
         hint: 'Adds a button on the Token HUD to open the Effect Manager.',
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: true
@@ -1239,7 +1299,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false
@@ -1248,7 +1308,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'enableThrowFlow', {
         name: 'Automate Throw Choice for Thrown Weapons',
         hint: 'Thrown-tagged weapons prompt Attack or Throw at the start of the flow.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false
@@ -1257,7 +1317,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'statRollTargeting', {
         name: 'Enable Stat Roll Target Selection',
         hint: 'Stat rolls prompt for a target to auto-calculate difficulty.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false
@@ -1342,7 +1402,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'dragVisionMultiplier', {
         name: 'Drag Vision Radius Multiplier',
         hint: '1 = full vision while dragging, 0.5 = half, 0 = none.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Number,
         range: { min: 0, max: 1, step: 0.05 },
@@ -1399,7 +1459,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'enableWreckAnimation', {
         name: 'Wreck Explosion Effects',
         hint: 'Play explosion effects when tokens are wrecked.',
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: true,
@@ -1407,7 +1467,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'enableWreckAudio', {
         name: 'Wreck Explosion Audio',
         hint: 'Play explosion sounds when tokens are wrecked.',
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: true,
@@ -1431,7 +1491,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'wreckMasterVolume', {
         name: 'Wreck Master Volume',
         hint: 'Volume of wreck explosion sounds (0 = mute, 1 = full).',
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Number,
         default: 1,
@@ -1440,7 +1500,7 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'disableHumanDeathSound', {
         name: 'Disable Human Death Sound',
         hint: 'Mute wreck sounds for human/pilot/squad deaths.',
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: false,
@@ -1516,7 +1576,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'count3DDistance', {
         name: 'Count Elevation in Combat Distance',
-        hint: 'Add elevation to distance for overwatch, engagement, range checks, distanceToTrigger, and getTokenDistance / getMinGridDistance defaults.',
+        hint: 'Distance = max(horizontal, elevation). Off = 2D only. Affects overwatch, engagement, range checks.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1564,7 +1624,7 @@ function serializeTriggerData(data, depth = 0) {
     return result;
 }
 
-function deserializeTriggerData(data) {
+export function deserializeTriggerData(data) {
     if (!data)
         return null;
     const deserialize = (value) => {
@@ -1589,435 +1649,6 @@ function deserializeTriggerData(data) {
     return deserialize(data);
 }
 
-/**
- * Send a GM-delegated socket request and await an `<action>Ack` response.
- * Times out after `timeoutMs` (default 5s) and resolves anyway with a warn.
- */
-export async function socketRequestWithAck(action, payload, { timeoutMs = 5000 } = {}) {
-    const requestId = `${action}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const ackPromise = new Promise((resolve) => {
-        _pendingFlowWaits.set(requestId, resolve);
-        setTimeout(() => {
-            if (_pendingFlowWaits.has(requestId)) {
-                _pendingFlowWaits.delete(requestId);
-                console.warn(`lancer-automations | ${action} GM ack timed out after ${timeoutMs}ms`);
-                resolve();
-            }
-        }, timeoutMs);
-    });
-    game.socket.emit('module.lancer-automations', { action, payload: { ...payload, requestId } });
-    await ackPromise;
-}
-
-/**
- * setFlag on a token, falling back to GM-delegated socket call when the user
- * lacks write perms. `value === undefined` unsets. Awaits the GM ack so callers
- * can rely on `getFlag` returning the new value after this resolves.
- */
-export async function setTokenFlag(tokenDoc, ns, key, value) {
-    if (!tokenDoc)
-        return;
-    const td = tokenDoc.document ?? tokenDoc;
-    if (game.user.isGM || td?.isOwner) {
-        if (value === undefined)
-            await td.unsetFlag(ns, key).catch(() => {});
-        else
-            await td.setFlag(ns, key, value);
-        return;
-    }
-    await socketRequestWithAck('setTokenFlag', {
-        sceneId: td.parent?.id ?? canvas?.scene?.id,
-        tokenId: td.id,
-        ns,
-        key,
-        value,
-    });
-}
-
-export async function unsetTokenFlag(tokenDoc, ns, key) {
-    return setTokenFlag(tokenDoc, ns, key, undefined);
-}
-
-async function handleSocketEvent({ action, payload }) {
-    if (action === 'showReactionPopup') {
-        if (payload.targetUserId && payload.targetUserId !== game.userId)
-            return;
-
-        const { triggerType, reactions } = payload;
-
-        const reconstructed = [];
-        for (const r of reactions) {
-            const token = canvas.tokens.get(r.tokenId);
-            if (!token)
-                continue;
-
-            let item = null;
-            if (r.itemId) {
-                item = token.actor?.items.get(r.itemId);
-            }
-
-            reconstructed.push({
-                token,
-                item,
-                reactionName: r.reactionName,
-                itemName: r.itemName,
-                isGeneral: r.isGeneral,
-                triggerData: deserializeTriggerData(r.triggerData),
-            });
-        }
-
-        if (reconstructed.length > 0) {
-            displayReactionPopup(triggerType, reconstructed);
-        }
-    } else if (action === 'setActorFlag') {
-        if (!game.user.isGM)
-            return;
-        const actor = game.actors.get(payload.actorId);
-        if (actor)
-            await actor.setFlag(payload.ns, payload.key, payload.value);
-    } else if (action === 'setTokenFlag') {
-        if (!game.user.isGM)
-            return;
-        const scene = game.scenes.get(payload.sceneId) ?? canvas.scene;
-        const tokenDoc = scene?.tokens.get(payload.tokenId);
-        if (tokenDoc) {
-            try {
-                if (payload.value === undefined)
-                    await tokenDoc.unsetFlag(payload.ns, payload.key);
-                else
-                    await tokenDoc.setFlag(payload.ns, payload.key, payload.value);
-            } catch (e) {
-                console.warn('lancer-automations | setTokenFlag GM-side failed:', e);
-            }
-        }
-        if (payload.requestId) {
-            game.socket.emit('module.lancer-automations', {
-                action: 'setTokenFlagAck',
-                payload: { requestId: payload.requestId }
-            });
-        }
-    } else if (action === 'setTokenFlagAck') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve();
-        }
-    } else if (action === 'setEffect' || action === 'setFlaggedEffect') {
-        if (!game.user.isGM)
-            return;
-        try {
-            await setEffect(payload.targetID, payload.effect, payload.duration, payload.note, payload.originID, payload.extraOptions);
-        } catch (e) {
-            console.warn('lancer-automations | setEffect GM-side failed:', e);
-        }
-        if (payload.requestId) {
-            game.socket.emit('module.lancer-automations', {
-                action: 'setEffectAck',
-                payload: { requestId: payload.requestId }
-            });
-        }
-    } else if (action === 'setEffectAck') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve();
-        }
-    } else if (action === 'removeEffect' || action === 'removeFlaggedEffect') {
-        if (!game.user.isGM)
-            return;
-        try {
-            await removeEffectsByName(payload.targetID, payload.effect, payload.originID, payload.extraFlags ?? null);
-        } catch (e) {
-            console.warn('lancer-automations | removeEffect GM-side failed:', e);
-        }
-        if (payload.requestId) {
-            game.socket.emit('module.lancer-automations', {
-                action: 'removeEffectAck',
-                payload: { requestId: payload.requestId }
-            });
-        }
-    } else if (action === 'removeEffectAck') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve();
-        }
-    } else if (action === 'removeEffectById') {
-        if (!game.user.isGM)
-            return;
-        const target = canvas.tokens.get(payload.targetID);
-        if (target?.actor) {
-            try {
-                await target.actor.deleteEmbeddedDocuments('ActiveEffect', [payload.effectID]);
-            } catch (e) {
-                console.warn('lancer-automations | removeEffectById GM-side failed:', e);
-            }
-        }
-        if (payload.requestId) {
-            game.socket.emit('module.lancer-automations', {
-                action: 'removeEffectByIdAck',
-                payload: { requestId: payload.requestId }
-            });
-        }
-    } else if (action === 'removeEffectByIdAck') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve();
-        }
-    } else if (action === 'preLoadImageForAll') {
-        if (payload)
-            await preLoadImageForAll(payload);
-    } else if (action === 'moveTokens') {
-        if (!game.user.isGM)
-            return;
-        const trigToken = payload.triggeringTokenId ? canvas.tokens.get(payload.triggeringTokenId) : null;
-        const kbItem = payload.itemId
-            ? (canvas.tokens.placeables.find(t => t.actor?.items?.get(payload.itemId))?.actor?.items?.get(payload.itemId) ?? null)
-            : null;
-        applyKnockbackMoves(payload.moves, trigToken, payload.distance, payload.actionName || "", kbItem, { asVoluntary: !!payload.asVoluntary });
-    } else if (action === 'createTokens') {
-        if (!game.user.isGM)
-            return;
-        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
-        const created = await scene.createEmbeddedDocuments("Token", payload.tokenDataArray);
-        const tokenIds = created.map(d => d.id);
-        game.socket.emit('module.lancer-automations', {
-            action: "createTokensResponse",
-            payload: { requestId: payload.requestId, tokenIds }
-        });
-    } else if (action === 'pickupWeapon') {
-        if (!game.user.isGM)
-            return;
-        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
-        if (!scene)
-            return;
-        const token = scene.tokens.get(payload.tokenId);
-        if (token)
-            await token.delete();
-        const ownerActor = /** @type {Actor} */(await fromUuid(payload.ownerActorUuid));
-        if (ownerActor) {
-            const weapon = ownerActor.items.get(payload.weaponId);
-            if (weapon)
-                await weapon.update(/** @type {any} */({ 'system.disabled': false }));
-        }
-    } else if (action === 'recallDeployable') {
-        if (!game.user.isGM)
-            return;
-        const scene = game.scenes.get(payload.sceneId) || canvas.scene;
-        if (!scene)
-            return;
-        const token = scene.tokens.get(payload.tokenId);
-        if (token)
-            await token.delete();
-    } else if (action === 'scanInfoRequest') {
-        if (!game.user.isGM)
-            return;
-        const target = canvas.tokens.get(payload.targetId);
-        if (!target)
-            return;
-        await performGMInputScan([target], payload.scanTitle, payload.requestingUserName);
-    } else if (action === 'scanSystemJournalRequest') {
-        if (!game.user.isGM)
-            return;
-        const target = canvas.tokens.get(payload.targetId);
-        if (!target)
-            return;
-        new Dialog({
-            title: "Journal Entry Request",
-            content: `
-                <div class="lancer-dialog-header">
-                    <h2 class="lancer-dialog-title">Journal Entry Request</h2>
-                    <p class="lancer-dialog-subtitle">Requested by: ${payload.requestingUserName}</p>
-                </div>
-                <form>
-                    <div class="form-group">
-                        <p style="margin-bottom: 12px;"><strong>${payload.requestingUserName}</strong> wants to create a journal entry for the scan of <strong>${payload.targetName}</strong>.</p>
-                        <p style="color: #666; margin-bottom: 12px;">Do you want to create this journal entry?</p>
-                    </div>
-                    <div class="form-group">
-                        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Custom Journal Name (optional):</label>
-                        <input type="text" id="custom-journal-name" name="custom-journal-name" value="${payload.customName || ''}" placeholder="Leave empty for auto-generated name" style="width: 100%; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px;" />
-                    </div>
-                </form>
-            `,
-            buttons: {
-                yes: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: "Create Journal Entry",
-                    callback: async (html) => {
-                        const customName = (String)(html.find('[name="custom-journal-name"]').val()).trim();
-                        await performSystemScan(target, true, customName, payload.ownership ?? null);
-                        ui.notifications.info(`Journal entry created for ${payload.targetName}`);
-                    }
-                },
-                no: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: "Decline",
-                    callback: () => {
-                        ui.notifications.info(`Journal entry request declined`);
-                    }
-                }
-            },
-            default: "yes"
-        }, { classes: ["lancer-dialog-base", "lancer-no-title"], width: 450 }).render(true);
-    } else if (action === 'choiceCardGMRequest') {
-        if (payload.targetUserId !== game.user.id)
-            return;
-        let gmTrace = null;
-        if (payload.traceData) {
-            const { tokenId, endPos, newEndPos } = payload.traceData;
-            const traceToken = canvas.tokens.get(tokenId);
-            if (traceToken)
-                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
-        }
-        await showUserIdControlledChoiceCard(payload);
-        if (gmTrace?.parent)
-            gmTrace.parent.removeChild(gmTrace);
-        if (gmTrace)
-            gmTrace.destroy();
-    } else if (action === 'choiceCardBroadcastRequest') {
-        if (!payload.allTargetUserIds?.includes(game.user.id))
-            return;
-        let gmTrace = null;
-        if (payload.traceData) {
-            const { tokenId, endPos, newEndPos } = payload.traceData;
-            const traceToken = canvas.tokens.get(tokenId);
-            if (traceToken)
-                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
-        }
-        await showMultiUserControlledChoiceCard(payload);
-        if (gmTrace?.parent)
-            gmTrace.parent.removeChild(gmTrace);
-        if (gmTrace)
-            gmTrace.destroy();
-    } else if (action === 'choiceCardBroadcastCancel') {
-        if (!payload.otherTargetUserIds?.includes(game.user.id))
-            return;
-        cancelBroadcastChoiceCard(payload.cardId, payload.responderName, payload.isCancellation);
-    } else if (action === 'choiceCardGMResponse') {
-        if (payload.requestingUserId !== game.user.id)
-            return;
-        resolveGMChoiceCard(payload.cardId, payload.choiceIdx, payload.responderName, payload.responderUserId);
-    } else if (action === 'updateActorSystem') {
-        if (!game.user.isGM)
-            return;
-        const actor = game.actors.get(payload.actorId);
-        if (actor)
-            await actor.update(payload.data);
-    } else if (action === 'voteCardRequest') {
-        if (!payload.allVoterUserIds?.includes(game.user.id))
-            return;
-        showVoteCardOnVoter(payload);
-    } else if (action === 'voteCardSubmit') {
-        if (payload.requestingUserId !== game.user.id)
-            return;
-        receiveVoteSubmission(payload);
-    } else if (action === 'voteCardUpdate') {
-        if (!payload.allVoterUserIds?.includes(game.user.id))
-            return;
-        updateVoteCardOnVoter(payload);
-    } else if (action === 'voteCardConfirm') {
-        if (!payload.allVoterUserIds?.includes(game.user.id))
-            return;
-        confirmVoteCardOnVoter(payload);
-    } else if (action === 'voteCardCancel') {
-        if (!payload.allVoterUserIds?.includes(game.user.id))
-            return;
-        cancelVoteCardOnVoter(payload);
-    } else if (action === 'onMessage') {
-        if (payload.userId && payload.userId !== game.userId)
-            return;
-        const msgToken = canvas.tokens.get(payload.reactorTokenId);
-        if (!msgToken)
-            return;
-        checkOnMessageReactions(msgToken, payload.itemLid ?? null, payload.reactionPath ?? null, payload.activationName ?? null, payload.triggerType, payload.data ?? {})
-            .then(returnData => {
-                if (payload.requestId) {
-                    game.socket.emit('module.lancer-automations', {
-                        action: 'onMessageDone',
-                        payload: { requestId: payload.requestId, returnData: returnData ?? null }
-                    });
-                }
-            })
-            .catch(e => console.error('lancer-automations | onMessage socket error:', e));
-    } else if (action === 'onMessageDone') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve(payload.returnData ?? null);
-        }
-    } else if (action === 'startRelatedFlow') {
-        if (payload.userId && payload.userId !== game.user.id)
-            return;
-        const flowToken = canvas.tokens.get(payload.reactorTokenId);
-        if (!flowToken)
-            return;
-        const flowItem = payload.itemLid ? getReactionItems(flowToken).find(i => getItemLID(i) === payload.itemLid) ?? null : null;
-        const fakeReaction = { reactionPath: payload.reactionPath, actionType: payload.actionType, effectDescription: payload.effectDescription };
-        _buildStartRelatedFlow(flowToken, flowItem, fakeReaction, payload.activationName, payload.extraData ?? {})()
-            .catch(e => console.error('lancer-automations | startRelatedFlow socket error:', e))
-            .finally(() => {
-                if (payload.requestId) {
-                    game.socket.emit('module.lancer-automations', {
-                        action: 'startRelatedFlowDone',
-                        payload: { requestId: payload.requestId }
-                    });
-                }
-            });
-    } else if (action === 'startRelatedFlowDone') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve();
-        }
-    } else if (action === 'statRollRequest') {
-        // Remote client: player rolls on their side, sends result back.
-        if (payload.targetUserId !== game.user.id)
-            return;
-        (async () => {
-            const rollActor = await fromUuid(payload.actorUuid);
-            if (!rollActor) {
-                game.socket.emit('module.lancer-automations', {
-                    action: 'statRollResponse', payload: { requestId: payload.requestId, result: { completed: false } }
-                });
-                return;
-            }
-            const rollToken = rollActor.token?.object ?? rollActor.getActiveTokens()?.[0];
-            const upperStat = payload.stat.toUpperCase();
-            const cardResult = await startChoiceCard({
-                title: payload.cardTitle || payload.title,
-                description: payload.cardDescription || `<b>${rollToken?.name ?? rollActor.name}</b> must roll a ${upperStat} save.`,
-                relatedToken: rollToken,
-                choices: [{ text: `Roll ${upperStat} Save`, icon: "fas fa-dice" }]
-            });
-            let result = { completed: false };
-            if (cardResult?.choiceIdx === 0) {
-                result = await executeStatRoll(rollActor, payload.stat, payload.title, payload.targetVal ?? 10);
-            }
-            game.socket.emit('module.lancer-automations', {
-                action: 'statRollResponse', payload: { requestId: payload.requestId, result }
-            });
-        })().catch(e => console.error('lancer-automations | statRollRequest error:', e));
-    } else if (action === 'statRollResponse') {
-        const resolve = _pendingFlowWaits.get(payload.requestId);
-        if (resolve) {
-            _pendingFlowWaits.delete(payload.requestId);
-            resolve(payload.result ?? { completed: false });
-        }
-    } else if (action === 'syncPlaceholderVideos') {
-        setTimeout(() => {
-            for (let tokenId of payload.placeholderIds) {
-                const token = canvas.tokens.get(tokenId);
-                const video = token?.mesh?.texture?.baseTexture?.resource?.["source"];
-                if (video instanceof HTMLVideoElement) {
-                    video.currentTime = 0;
-                    video.play().catch(() => {});
-                }
-            }
-        }, 200);
-    }
-}
 
 // Move history flags on token document:
 //   lancer-automations.moveHistory  = { moves: Array<{ distanceMoved, isDrag, isFreeMovement, boostSet, startPos }> }
@@ -2028,14 +1659,29 @@ const _moveHistoryCache = new Map();
 
 // Per-mover action stack for chained move/activation sequences (e.g. Boost & Move).
 // Only one stack exists at a time. A new push wipes the previous one.
-// Frame: { kind: 'awaitMove' | 'awaitActivation', matchActionName?: string, onSatisfy?: () => Promise<void> }
+/**
+ * @typedef {Object} MoveStackFrame
+ * @property {'awaitMove'|'awaitActivation'} kind
+ * @property {string} [matchActionName]
+ * @property {() => Promise<void>} [onSatisfy]
+ */
+/**
+ * @typedef {Object} MoveStack
+ * @property {string} tokenId
+ * @property {number} cursor
+ * @property {MoveStackFrame[]} frames
+ * @property {ReturnType<typeof setTimeout>} [_timer]
+ */
+/** @type {MoveStack | null} */
 let _activeMoveStack = null;
 const _MOVE_STACK_TIMEOUT_MS = 5000;
 const _MOVE_STACK_INTER_DELAY_MS = 1000;
 
 function _wipeMoveStack() {
-    if (!_activeMoveStack) return;
-    if (_activeMoveStack._timer) clearTimeout(_activeMoveStack._timer);
+    if (!_activeMoveStack)
+        return;
+    if (_activeMoveStack._timer)
+        clearTimeout(_activeMoveStack._timer);
     _activeMoveStack = null;
 }
 
@@ -2047,25 +1693,33 @@ function _pushMoveStack(tokenId, frames) {
 
 async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {}) {
     const s = _activeMoveStack;
-    if (!s || s.tokenId !== tokenId) return;
+    if (!s || s.tokenId !== tokenId)
+        return;
     const frame = s.frames[s.cursor];
-    if (!frame || frame.kind !== kind) return;
-    if (frame.matchActionName && ctx.actionName !== frame.matchActionName) return;
-    if (cancelled) { _wipeMoveStack(); return; }
+    if (!frame || frame.kind !== kind)
+        return;
+    if (frame.matchActionName && ctx.actionName !== frame.matchActionName)
+        return;
+    if (cancelled) {
+        _wipeMoveStack(); return;
+    }
     const onSatisfy = frame.onSatisfy;
     s.cursor++;
-    // Reset the wall-clock safety timer — this frame matched, so the chain is making progress.
-    if (s._timer) clearTimeout(s._timer);
+    // Reset the wall-clock safety timer: this frame matched, so the chain is making progress.
+    if (s._timer)
+        clearTimeout(s._timer);
     s._timer = setTimeout(() => _wipeMoveStack(), _MOVE_STACK_TIMEOUT_MS);
-    if (s.cursor >= s.frames.length) _wipeMoveStack();
+    if (s.cursor >= s.frames.length)
+        _wipeMoveStack();
     if (onSatisfy) {
         try {
             // Inter-action grace period: lets async side-effects (cap bumps, action-tracker
             // updates) from the just-completed frame propagate before the next one fires.
             await new Promise(r => setTimeout(r, _MOVE_STACK_INTER_DELAY_MS));
             await onSatisfy();
+        } catch (err) {
+            console.error('lancer-automations | move stack onSatisfy failed', err); _wipeMoveStack();
         }
-        catch (err) { console.error('lancer-automations | move stack onSatisfy failed', err); _wipeMoveStack(); }
     }
 }
 
@@ -2329,7 +1983,8 @@ function _handleMovementCapExceeded(token, ctx) {
                 await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
                 return;
             }
-            if (choiceIdx !== 0) return; // Card cancelled: do nothing.
+            if (choiceIdx !== 0)
+                return; // Card cancelled: do nothing.
             const fireFinalLeg = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
             if (snapMid) {
                 // Cap not yet exhausted: leg1 -> Boost -> leg2.
@@ -2371,7 +2026,8 @@ function _handleMovementCapExceeded(token, ctx) {
                 await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
                 return;
             }
-            if (choiceIdx !== 0) return; // Card cancelled: do nothing.
+            if (choiceIdx !== 0)
+                return; // Card cancelled: do nothing.
             const mid2Move = () => _rulerMove(token, mid2, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
             const finalMove = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
             const tailFrames = [
@@ -2400,22 +2056,14 @@ function _handleMovementCapExceeded(token, ctx) {
     }
 }
 
+// Move a token from code. Plain `tokenDoc.update` by default so the destination
+// lands exactly where asked (ER's moveTokenTo simulates a drag and mis-snaps
+// non-size-1 tokens). Pass `useElevationRuler: true` to go through ER's pipeline
+// (only safe for size-1 tokens that need cost tracking).
 /**
- * Compute move distances from preUpdateToken options.
- * Uses ElevationRuler segment data when available, falls back to 2D grid measurement.
- * @param {object} options           preUpdateToken options
- * @param {object} startPos          {x, y}
- * @param {object} endPos            {x, y}
- * @param {number} [elevationFallback=0]  elevation value used only in fallback path
- * @returns {{ distanceMoved: number, movementCost: number, isFreeMovement: boolean }}
- *   distanceMoved — physical squares traveled (no terrain penalty overhead)
- *   movementCost  — squares consumed from movement cap (includes terrain penalty)
- */
-/**
- * Programmatic token move. Uses raw `tokenDoc.update` so placement matches the
- * caller's snapped destination exactly — ER's `moveTokenTo` simulates a drag
- * whose internal snap misplaces non-size-1 tokens. Pass `useElevationRuler: true`
- * to opt into the ER pipeline (only safe for size-1 tokens needing cost tracking).
+ * @param {any} token
+ * @param {{x: number, y: number, elevation?: number}} destination
+ * @param {Record<string, any>} [extraOpts]
  */
 export async function _rulerMove(token, destination, extraOpts = {}) {
     const { useElevationRuler, ...passthroughOpts } = extraOpts;
@@ -2453,6 +2101,17 @@ export async function _rulerMove(token, destination, extraOpts = {}) {
     }
 }
 
+/**
+ * Compute move distances from preUpdateToken options.
+ * Uses ElevationRuler segment data when available, falls back to 2D grid measurement.
+ * @param {Record<string, any>} options
+ * @param {{x: number, y: number}} startPos
+ * @param {{x: number, y: number}} endPos
+ * @param {number} [elevationFallback]
+ * @returns {{ distanceMoved: number, movementCost: number, isFreeMovement: boolean }}
+ *   distanceMoved: physical squares traveled (no terrain penalty overhead)
+ *   movementCost:  squares consumed from movement cap (includes terrain penalty)
+ */
 function _computeMoveData(options, startPos, endPos, elevationFallback = 0) {
     const isFreeMovement = options.lancerFreeMovement
         ?? (game.modules.get('elevationruler')?.api?.Settings?.FORCE_FREE_MOVEMENT || false);
@@ -2543,7 +2202,7 @@ async function handleTokenMove(document, change, options, userId) {
         }
     }
 
-    // Build updated move history and persist (only in combat — outside combat, keep in-memory only for the trigger call)
+    // Build updated move history and persist (only in combat; outside combat, keep in-memory only for the trigger call)
     const newData = {
         ...existingData,
         moves: [...existingMoves, {
@@ -2562,6 +2221,9 @@ async function handleTokenMove(document, change, options, userId) {
         if (tokenDoc.isOwner && isLastSegment) {
             tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
         }
+        // First regular intentional move of the turn consumes the move action.
+        if (isDrag && !isFreeMovement && !isTeleport && prevIntentional === 0)
+            consumeAction(token, 'move');
     }
 
     if (!isDrag || options.IgnoreOnMove)
@@ -2670,7 +2332,7 @@ async function onHitMissStep(state) {
                     state.data.attack_results[i].hit = false;
                     state.data.attack_results[i].crit = false;
                 }
-                ui.notifications.info(`${targetToken.name} is immune to Hits — attack misses!`);
+                ui.notifications.info(`${targetToken.name} is immune to Hits: attack misses!`);
             }
         }
         if (hitResult?.hit) {
@@ -3079,6 +2741,7 @@ async function onCheckStep(state) {
  * Builds a cancel handler with shared boilerplate: reason collection, preConfirm gating, choice card.
  * @param {Object} opts
  * @param {() => void} opts.setFlag
+ * @param {any[]} opts.cancelledBy
  * @param {() => (() => Promise<void>)} opts.getIgnoreCallback - Returns the "ignore" action; called lazily.
  * @param {string} opts.defaultReason
  * @param {string} opts.defaultTitle
@@ -3087,7 +2750,7 @@ async function onCheckStep(state) {
  * @param {((uc: string|null) => Object)|null} [opts.getExtraCardOptions]
  * @param {(() => Promise<void>)|null} [opts.onBefore] - Called before card, after preConfirms.
  * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
- * @returns {Function & { wait: () => Promise<any>|null }}
+ * @returns {any}
  */
 function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null }) {
     if (!cancelledBy)
@@ -3097,6 +2760,7 @@ function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason
     let cardPending = false;
     let _promise = null;
 
+    /** @type {any} */
     const fn = (reasonText = defaultReason, title = defaultTitle, allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
         setFlag();
         if (!fn._reactorIdentity && !fn._engineCancel)
@@ -3373,6 +3037,18 @@ async function onActivationStep(state) {
             state.item = item;
     }
 
+    // Deployable: surface the actor's LID and resolve the source item (the parent
+    // item whose system.deployables[] contains this LID) so reactions can match.
+    let deployable = null;
+    if (actor?.type === 'deployable') {
+        deployable = { actor, lid: actor.system?.lid ?? null };
+        if (!item) {
+            item = await resolveDeployableSourceItem(actor) ?? null;
+            if (item)
+                state.item = item;
+        }
+    }
+
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     let actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
 
@@ -3413,7 +3089,8 @@ async function onActivationStep(state) {
         },
         detail: state.data?.detail || item?.system?.effect || "",
         tags: tags,
-        flowState: state
+        flowState: state,
+        deployable
     };
 
     await handleTrigger('onActivation', {
@@ -3422,6 +3099,7 @@ async function onActivationStep(state) {
         actionName: actionName,
         item,
         actionData,
+        deployable,
         endActivation: state.la_extraData?.endActivation || false,
         extraData: state.la_extraData ?? {},
         flowState: state
@@ -3430,7 +3108,7 @@ async function onActivationStep(state) {
     if (token) {
         state.actor = token.actor;
         // Advance the move stack now that the activation is fully complete (post-effects).
-        // Fire-and-forget — same reason as in the onMove handler.
+        // Fire-and-forget, same reason as in the onMove handler.
         _advanceMoveStack('awaitActivation', token.id, false, { actionName });
     }
 
@@ -3469,11 +3147,22 @@ async function onActivationStep(state) {
 async function onInitActivationStep(state) {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const item = state.item;
+    let item = state.item;
     if (!state.data)
         state.data = {};
     if (!state.data._cancelledBy)
         state.data._cancelledBy = [];
+
+    // Deployable: surface the actor's LID and resolve the source item.
+    let deployable = null;
+    if (actor?.type === 'deployable') {
+        deployable = { actor, lid: actor.system?.lid ?? null };
+        if (!item) {
+            item = await resolveDeployableSourceItem(actor) ?? null;
+            if (item)
+                state.item = item;
+        }
+    }
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
@@ -3501,7 +3190,8 @@ async function onInitActivationStep(state) {
         action: state.data?.action || { name: actionName, activation: actionType },
         detail: state.data?.detail || state.data?.effect || item?.system?.effect || "",
         tags: tags,
-        flowState: state
+        flowState: state,
+        deployable
     };
 
     let cancelActivation = false;
@@ -3529,13 +3219,14 @@ async function onInitActivationStep(state) {
         defaultTitle: "ACTIVATION CANCELED",
     });
 
-    // Called WITHOUT await — only synchronous evaluate functions work correctly with cancelAction.
+    // Called WITHOUT await; only synchronous evaluate functions work correctly with cancelAction.
     handleTrigger('onInitActivation', {
         triggeringToken: token,
         actionType,
         actionName,
         item,
         actionData,
+        deployable,
         cancelAction,
         _cancelledBy: state.data._cancelledBy,
         flowState: state
@@ -3710,7 +3401,6 @@ async function throwDeployStep(state) {
 
 /**
  * Flow step that injects the Knockback checkbox into the damage HUD.
- * Runs before showDamageHUD in DamageRollFlow.
  */
 async function knockbackInjectStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
@@ -3721,7 +3411,6 @@ async function knockbackInjectStep(state) {
 
 /**
  * Flow step that triggers knockback after damage is rolled in DamageRollFlow.
- * Reads the checkbox state from state.data._csmKnockback (set by knockbackInjectStep).
  */
 async function knockbackDamageStep(state) {
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
@@ -3799,8 +3488,6 @@ async function playThrowFXIfNeeded(state) {
 
 /**
  * Flow step: for damage flows spawned from a basic attack that carried injected tags
- * (via executeBasicAttack's `tags` option), pull those tags from ActiveFlowState into
- * state.data.tags so downstream steps (setDamageTags, knockbackInject, etc.) see them.
  */
 async function pullInjectedTagsFromAttack(state) {
     const tags = ActiveFlowState.current?.injectedTags;
@@ -3833,8 +3520,6 @@ async function noBonusDmgInjectStep(state) {
 /**
  * Wraps rollNormalDamage and rollCritDamage so that when No Bonus Dmg is active,
  * bonus_damage is cleared immediately before each roll step executes.
- * This is more reliable than insertStepAfter because it runs synchronously
- * inside the same call frame as _collectBonusDamage.
  */
 function wrapRollDamageForNoBonusDmg(flowSteps) {
     for (const stepName of ['rollNormalDamage', 'rollCritDamage']) {
@@ -3858,21 +3543,23 @@ function wrapRollDamageForNoBonusDmg(flowSteps) {
 }
 
 // Allow 0.5-size tokens instead of Lancer's Math.max(1, size).
-// Directly replaces the Lancer _preCreate and _onRelatedUpdate methods
+// Replaces the Lancer _preCreate and _onRelatedUpdate methods
 // so Math.max(1, size) becomes just size, preventing any revert loop.
 function patchHalfSizeTokens() {
-    const docClass = CONFIG.Token.documentClass;
+    const docClass = /** @type {any} */ (CONFIG.Token.documentClass);
     if (!docClass)
         return;
 
     docClass.prototype._preCreate = async function (...[data, options, user]) {
         const LANCER_ACTOR_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
-        const isLancerActor = LANCER_ACTOR_TYPES.includes(this.actor?.type);
+        const self = /** @type {any} */ (this);
+        const isLancerActor = LANCER_ACTOR_TYPES.includes(self.actor?.type);
         if (isLancerActor
             && game.settings.get(game.system.id, 'automationOptions')?.token_size
-            && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const rawSize = this.actor?.system?.size;
+            && !self.getFlag(game.system.id, 'manual_token_size')) {
+            const rawSize = self.actor?.system?.size;
             const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : 1;
+            /** @type {Record<string, number>} */
             const updates = { width: newSize, height: newSize };
             // Center sub-1 tokens within their grid cell (hex-aware: hex bbox is taller
             // or wider than gs depending on orientation, so the offset isn't symmetric).
@@ -3885,29 +3572,32 @@ function patchHalfSizeTokens() {
                 const bbW = isFlat ? gs * HEX : gs;
                 const bbH = isPointy ? gs * HEX : gs;
                 const cc = canvas.grid.getCenterPoint
-                    ? canvas.grid.getCenterPoint({ x: this.x + bbW / 2, y: this.y + bbH / 2 })
-                    : { x: this.x + gs / 2, y: this.y + gs / 2 };
+                    ? canvas.grid.getCenterPoint({ x: self.x + bbW / 2, y: self.y + bbH / 2 })
+                    : { x: self.x + gs / 2, y: self.y + gs / 2 };
                 updates.x = cc.x - (newSize * bbW) / 2;
                 updates.y = cc.y - (newSize * bbH) / 2;
             }
-            this.updateSource(updates);
+            self.updateSource(updates);
         }
         // Skip Lancer's _preCreate (which has Math.max(1)), call grandparent directly
-        return TokenDocument.prototype._preCreate.call(this, data, options, user);
+        const grandparent = /** @type {any} */ (TokenDocument.prototype);
+        return grandparent._preCreate.call(this, data, options, user);
     };
 
     docClass.prototype._onRelatedUpdate = function (update, options) {
         // Call grandparent _onRelatedUpdate (skip Lancer's which has Math.max(1))
-        TokenDocument.prototype._onRelatedUpdate.call(this, update, options);
+        const grandparent = /** @type {any} */ (TokenDocument.prototype);
+        grandparent._onRelatedUpdate.call(this, update, options);
         const LANCER_ACTOR_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
-        if (LANCER_ACTOR_TYPES.includes(this.actor?.type)
+        const self = /** @type {any} */ (this);
+        if (LANCER_ACTOR_TYPES.includes(self.actor?.type)
             && game.settings.get(game.system.id, 'automationOptions')?.token_size
-            && !this.getFlag(game.system.id, 'manual_token_size')) {
-            const rawSize = this.actor?.system?.size;
+            && !self.getFlag(game.system.id, 'manual_token_size')) {
+            const rawSize = self.actor?.system?.size;
             const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : undefined;
-            if (this.isOwner && this.id && newSize !== undefined
-                && (this.width !== newSize || this.height !== newSize)) {
-                this.update({ width: newSize, height: newSize });
+            if (self.isOwner && self.id && newSize !== undefined
+                && (self.width !== newSize || self.height !== newSize)) {
+                self.update({ width: newSize, height: newSize });
             }
         }
     };
@@ -3956,13 +3646,13 @@ function wrapStatRollFlatModifier(flowSteps) {
 
 // Builds DOM matching the Lancer system's Svelte accdiff-flat-bonus structure.
 function _injectStatFlatModRow(dialog, bonus, onChange) {
-    // Label — identical to the attack dialog's "Flat Modifier" header.
+    // Label: identical to the attack dialog's "Flat Modifier" header.
     const label = document.createElement('label');
     label.className = 'flexrow accdiff-weight lancer-border-primary';
     label.setAttribute('for', 'accdiff-flat-bonus');
     label.textContent = 'Flat Modifier';
 
-    // Container grid — matches accdiff-grid accdiff-flat-bonus.
+    // Container grid: matches accdiff-grid accdiff-flat-bonus.
     const grid = document.createElement('div');
     grid.className = 'la-stat-flat-mod accdiff-grid accdiff-flat-bonus svelte-k5ear2';
 
@@ -4022,11 +3712,11 @@ function _injectStatFlatModRow(dialog, bonus, onChange) {
     };
     input.addEventListener('input', update);
     plusBtn.addEventListener('click', () => {
-        input.value = (Number(input.value) || 0) + 1;
+        input.value = String((Number(input.value) || 0) + 1);
         update();
     });
     minusBtn.addEventListener('click', () => {
-        input.value = (Number(input.value) || 0) - 1;
+        input.value = String((Number(input.value) || 0) - 1);
         update();
     });
 }
@@ -4039,7 +3729,7 @@ function wrapRollReliable(flowSteps) {
     flowSteps.set('rollReliable', async function wrappedRollReliable(state) {
         const result = await origRollReliable(state);
         if (result === false && state.data?._csmKnockback?.enabled) {
-            // No damage configured but knockback is pending — let the flow continue
+            // No damage configured but knockback is pending; let the flow continue
             return true;
         }
         return result;
@@ -4208,7 +3898,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Register Knockback steps
     flowSteps.set('lancer-automations:knockbackInject', knockbackInjectStep);
     flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
-    // Register range injection steps (two IDs, same function — one fires before showAttackHUD,
+    // Register range injection steps (two IDs, same function: one fires before showAttackHUD,
     // one fires before printAttackCard; each self-destructs after its single use)
     // Register No Bonus Dmg steps
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
@@ -4322,7 +4012,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('SystemFlow')?.insertStepAfter('initSystemUseData', 'lancer-automations:onInitActivation');
     flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onInitActivation');
     flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onInitActivation');
-    // OverchargeFlow / StabilizeFlow have no init step — insert at the start so they're cancellable.
+    // OverchargeFlow / StabilizeFlow have no init step; insert at the start so they're cancellable.
     flows.get('OverchargeFlow')?.insertStepBefore('initOverchargeData', 'lancer-automations:onInitActivation');
     flows.get('StabilizeFlow')?.insertStepBefore('initializeStabilize', 'lancer-automations:onInitActivation');
 
@@ -4478,11 +4168,33 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     insertModuleFlowSteps(flowSteps, flows);
     registerAltStructFlowSteps(flowSteps, flows);
     registerDisabledFlowSteps(flowSteps, flows); // Item Disabled system
+    registerPermanentStatusFlowSteps(flowSteps, flows); // Permanent statuses survive Full Repair
     registerMeleeCoverFix(flowSteps, flows);
     registerUseAmmoFlow(flowSteps, flows); // Ammo flow
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
     registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
 });
+
+async function _consumeFlowAction(flow, success) {
+    if (!success)
+        return;
+    if (!game.settings.get('lancer-automations', 'consumeAction'))
+        return;
+    const token = _flowSourceToken(flow);
+    if (!token)
+        return;
+    const label = _flowResolveActivationLabel(flow);
+    if (label === 'Quick' || label === 'Quick Tech' || label === 'Invade')
+        await consumeAction(token, 'quick');
+    else if (label === 'Full' || label === 'Full Tech')
+        await consumeAction(token, 'full');
+}
+Hooks.on('lancer.postFlow.ActivationFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.SystemFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.TechAttackFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.SimpleActivationFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.CoreActiveFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.TalentFlow', _consumeFlowAction);
 
 Hooks.once('ready', async () => {
     installJb2aHooks();
@@ -4723,7 +4435,7 @@ Hooks.on('deleteToken', () => {
 });
 
 Hooks.on('lancer.statusesReady', () => {
-    // Always register infection — it's needed by the StatusFX auto-status logic
+    // Always register infection; it's needed by the StatusFX auto-status logic
     // even when the broader additionalStatuses pack is disabled.
     if (!CONFIG.statusEffects.find(s => s.id === 'infection')) {
         CONFIG.statusEffects.push({
@@ -4881,7 +4593,7 @@ Hooks.on('lancer.statusesReady', () => {
         ])
     });
 
-    // Dazed — only add if not already registered (e.g. by a status compendium)
+    // Dazed: only add if not already registered (e.g. by a status compendium)
     if (!CONFIG.statusEffects.find(s => s.id === 'dazed')) {
         CONFIG.statusEffects.push({
             id: "dazed",
@@ -5033,10 +4745,12 @@ Hooks.on('ready', async () => {
         delayedTokenAppearance,
         // Tests
         tests: {
-            cardStack: CardStackTests
+            cardStack: CardStackTests,
+            flowQueue: FlowQueueTests,
         }
     });
-    game.socket.on('module.lancer-automations', handleSocketEvent);
+    initSocket();
+    initFlowQueue();
 
     initDelayedAppearanceHook();
     await syncBuiltinStartups();
@@ -5049,24 +4763,15 @@ Hooks.on('ready', async () => {
     // Custom flow dispatch (handles module-registered flows from chat buttons)
     initCustomFlowDispatch();
 
-    // StatusFX — TokenMagic visual effects for statuses
     initStatusFX();
-
-    // Token stat bar — custom multi-bar token hub (Bar Brawl alternative)
     initTokenStatBar();
-
-    // Infection — turn-end hooks
     initInfectionHooks();
-
-    // Wreck system — token config tab
     initWreckTokenConfig();
 
-    // Allow 0.5-size tokens instead of forcing minimum 1.
     if (game.settings.get('lancer-automations', 'allowHalfSizeTokens')) {
         patchHalfSizeTokens();
     }
 
-    // Compatibility checker — detect and offer to fix conflicts with other modules
     checkCompatibility();
 });
 
@@ -5082,7 +4787,21 @@ Hooks.on('renderActorSheet', (app, html, data) => {
 // Ammo editor on mech_system item sheets – uncomment to activate
 Hooks.on('renderItemSheet', onRenderItemSheet);
 
+function _isLikelyWhiteIcon(src) {
+    if (!src)
+        return false;
+    if (/\/assets\/icons\/white\//.test(src))
+        return true;
+    if (/\/lancer-automations\/icons\/[^/]+\.svg$/i.test(src))
+        return true;
+    return false;
+}
+
 Hooks.on('renderChatMessage', (app, html, data) => {
+    html.find('img').each((_, el) => {
+        if (_isLikelyWhiteIcon(el.getAttribute('src')))
+            el.classList.add('la-invert-icon');
+    });
     bindChatMessageStateInterceptor(app, html);
     // Process damage cards for immunities and resistances
     if (html.find('.lancer-damage-targets').length) {
@@ -5274,7 +4993,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
 });
 
 // Init movement cap for all combatants when combat starts.
-// Either feature needs the cap initialized — boost offer reads it to know what's exceeded.
+// Either feature needs the cap initialized: boost offer reads it to know what's exceeded.
 Hooks.on('combatStart', (combat) => {
     if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')
         && !game.settings.get('lancer-automations', 'enableBoostOffer')) {
@@ -5337,7 +5056,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) => {
     if (!statusId)
         return true;
 
-    // Immunity check — block before the effect is ever created
+    // Immunity check: block before the effect is ever created
     const effectData = effect.toObject();
     const immunitySources = checkEffectImmunities(actor, statusId, effect);
     if (immunitySources.length > 0) {
@@ -5581,6 +5300,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                 defaultTitle: "HP CHANGE PREVENTED",
             });
 
+            /** @type {any} */
             const modifyHpChange = (newValue, reasonText = "HP change has been modified.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
                 cancelHpTriggered = true;
                 const identity = modifyHpChange._reactorIdentity;
@@ -5621,14 +5341,18 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                         relatedToken,
                         userIdControl: userIdControl ?? getActiveGMId(),
                         choices: [
-                            { text: "Confirm", icon: "fas fa-check", callback: async () => {
-                                await executeModify();
-                                await postChoice?.(true);
-                            } },
-                            { text: "Ignore", icon: "fas fa-times", callback: async () => {
-                                await postChoice?.(false);
-                                await executeOriginal();
-                            } }
+                            { text: "Confirm",
+                                icon: "fas fa-check",
+                                callback: async () => {
+                                    await executeModify();
+                                    await postChoice?.(true);
+                                } },
+                            { text: "Ignore",
+                                icon: "fas fa-times",
+                                callback: async () => {
+                                    await postChoice?.(false);
+                                    await executeOriginal();
+                                } }
                         ]
                     });
                 })();
@@ -5676,6 +5400,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                 defaultTitle: "HEAT CHANGE PREVENTED",
             });
 
+            /** @type {any} */
             const modifyHeatChange = (newValue, reasonText = "Heat change has been modified.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, { item = null, originToken = null, relatedToken = null } = {}) => {
                 cancelHeatTriggered = true;
                 const identity = modifyHeatChange._reactorIdentity;
@@ -5716,14 +5441,18 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) => {
                         relatedToken,
                         userIdControl: userIdControl ?? getActiveGMId(),
                         choices: [
-                            { text: "Confirm", icon: "fas fa-check", callback: async () => {
-                                await executeModify();
-                                await postChoice?.(true);
-                            } },
-                            { text: "Ignore", icon: "fas fa-times", callback: async () => {
-                                await postChoice?.(false);
-                                await executeOriginal();
-                            } }
+                            { text: "Confirm",
+                                icon: "fas fa-check",
+                                callback: async () => {
+                                    await executeModify();
+                                    await postChoice?.(true);
+                                } },
+                            { text: "Ignore",
+                                icon: "fas fa-times",
+                                callback: async () => {
+                                    await postChoice?.(false);
+                                    await executeOriginal();
+                                } }
                         ]
                     });
                 })();
@@ -5857,9 +5586,9 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
         console.warn('lancer-automations | could not add provoke immunity to template token:', e);
     }
 });
-Hooks.on('renderTileHUD', (app, html, context) => {
+Hooks.on('renderTileHUD', (app, html) => {
     if (game.settings.get('lancer-automations', 'enableWrecks')) {
-        tileHUDButton(app, html, context);
+        tileHUDButton(app, html);
     }
 });
 

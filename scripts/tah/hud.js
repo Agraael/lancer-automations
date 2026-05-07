@@ -1,14 +1,14 @@
 /* global $, window, game, CONFIG */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../misc-tools.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, hasItem } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
-import { delayedTokenAppearance } from '../reinforcement.js';
-import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips } from './item-helpers.js';
+import { delayedTokenAppearance } from '../combat/reinforcement.js';
+import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
 import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview } from './hover.js';
-import { resurrect } from '../wreck.js';
+import { resurrect } from '../tools/wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { buildCombatBar } from './combat-bar.js';
 import { collectSearchResults, openSearchResults } from './search.js';
@@ -17,7 +17,7 @@ import { StatusPanel } from './status-panel.js';
 import { LogPanel } from './log-panel.js';
 import { GlossaryPanel } from './glossary-panel.js';
 import { playUiSound } from './sound.js';
-import { executeGenerateScan } from '../scan.js';
+import { executeGenerateScan } from '../tools/scan.js';
 
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
@@ -1181,12 +1181,13 @@ export class LancerHUD {
 
         // Main activation action (the deployable itself)
         if (sys.activation) {
+            const deployAction = { name: actor.name, activation: sys.activation, detail: sys.detail ?? '' };
             items.push({
                 label: 'Activation',
                 icon: getActivationIcon(sys.activation),
-                hoverData: { actor, item: null, action: { name: sys.activation, activation: sys.activation }, category: 'Actions' },
-                onClick: () => executeSimpleActivation(actor, { title: sys.activation, action: { name: sys.activation, activation: sys.activation }, detail: sys.detail ?? '' }),
-                onRightClick: this._actionPopup({ name: sys.activation, activation: sys.activation, detail: sys.detail ?? '' }),
+                hoverData: { actor, item: null, action: deployAction, category: 'Actions' },
+                onClick: () => executeSimpleActivation(actor, { title: actor.name, action: deployAction, detail: sys.detail ?? '' }),
+                onRightClick: this._actionPopup(deployAction),
             });
         }
 
@@ -2322,7 +2323,7 @@ export class LancerHUD {
                         // Extra actions (from addExtraActions)
                         for (const action of extraActions) {
                             const charged = !action.recharge || action.charged !== false;
-                            const eaBadge = action.recharge ? (charged ? '▣' : '□') : null;
+                            const eaBadge = action.recharge ? rechargeIcon(charged) : null;
                             const eaBadgeColor = action.recharge ? (charged ? '#3a9e6e' : '#c33') : null;
                             baseRows.push({
                                 label: `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}`,
@@ -2950,7 +2951,9 @@ export class LancerHUD {
                 onActivate,
             })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] }), ...rangeToggle()];
         }
-        const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy';
+        // Mech: sys.size === "Superheavy". NPC weapons store it in sys.weapon_type ("Superheavy Rifle", etc.).
+        const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy'
+            || String(sys.weapon_type || '').toLowerCase().startsWith('superheavy');
         const bypassMount = mount ?? { slots: [{ weapon: { value: weapon } }] };
         const attackLabel = isSuperHeavy ? 'BARRAGE' : 'SKIRMISH';
         return [...addRightClicks(addHover(laHudItemChildren(weapon, {
@@ -3095,7 +3098,7 @@ export class LancerHUD {
             // Extra-action recharge: overlay action-level charged state onto item status
             if (action.recharge && !status.destroyed) {
                 const charged = action.charged !== false;
-                status.badge = (status.badge ? status.badge + ' ' : '') + (charged ? '▣' : '□');
+                status.badge = (status.badge ? status.badge + ' ' : '') + rechargeIcon(charged);
                 status.badgeColor = charged ? (status.badgeColor ?? '#3a9e6e') : '#c33';
                 if (!charged)
                     status.unavailable = true;
@@ -3131,7 +3134,7 @@ export class LancerHUD {
                         } else {
                             const ri = rankIdx ?? 0;
                             const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ a => a.name === action.name);
-                            si.beginActivationFlow(`system.ranks.${ri}.actions.${ai >= 0 ? ai : 0}`);
+                            si.beginActivationFlow(`system.ranks.${ri}.actions.${Math.max(ai, 0)}`);
                         }
                     } else
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });

@@ -342,9 +342,19 @@ await api.addConstantBonus(actor, {
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
+| <kbd>subtype</kbd> | `string` | `"retry"` (default), `"highest"`, `"lowest"`, or `"choose"`. See resolution table below. |
 | <kbd>rollTypes</kbd> | `Array<string>` | `"attackRoll"`, `"techAttackRoll"`, `"damageRoll"`, `"skillRoll"`, `"structureRoll"`, `"stressRoll"`. Empty = all. |
 
-Offered via a choice card before `onRoll` fires. Consumed on Use.
+Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep leaves the charge).
+
+| Subtype | Resolution after the alt roll runs |
+|:--------|:-----------------------------------|
+| `"retry"` | Replace original with the alt (current default behavior). |
+| `"highest"` | Auto-keep `max(originalTotal, altTotal)`. Stacking gives best-of-N+1. |
+| `"lowest"`  | Auto-keep `min(originalTotal, altTotal)`. Stacking gives worst-of-N+1. |
+| `"choose"`  | Second card prompts `Original (X)` / `Alt (Y)` and the user picks. |
+
+**Stacking:** when an actor has multiple `reroll` bonuses matching a roll, they fire sequentially — each operates on the *current* total. Candidates are sorted by subtype priority (`retry` → `highest`/`lowest` → `choose`) so the choose prompt always sees the running best total. Damage rolls deep-snapshot `damage_results`/`reliable_results`/`targets` so a "keep original" decision restores the full damage breakdown, not just the total.
 
 </details>
 
