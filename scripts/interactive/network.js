@@ -124,9 +124,10 @@ export function startWaitCard({ title = 'WAITING', description = '', waitMessage
  * @returns {string[]}
  */
 export function getTokenOwnerUserId(token) {
-    const playerIds = game.users
-        .filter(u => u.active && !u.isGM && token.document.testUserPermission(u, "OWNER"))
-        .map(u => u.id);
+    const doc = token?.document;
+    const playerIds = doc
+        ? game.users.filter(u => u.active && !u.isGM && doc.testUserPermission(u, "OWNER")).map(u => u.id)
+        : [];
     if (playerIds.length > 0)
         return playerIds;
     const gm = game.users.find(u => u.active && u.isGM);
