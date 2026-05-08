@@ -1,248 +1,197 @@
 const SUPABASE_URL = "https://exglsurpdbmpkvqdfvid.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2xzdXJwZGJtcGt2cWRmdmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MTcyNzAsImV4cCI6MjA5MzQ5MzI3MH0.p6oLn61mhe9hxThh-bwkVIADvSU6oyG4VnAkhkJmHJU";
-const HASH_SALT = "a-random-secret-string-change-this";
 const MODULE_NAMESPACE = "lancer-automations";
+const INSTALL_ID_SETTING = "dataInstallId";
 const CONSENT_SETTING = "dataConsent";
-const CONSENT_ALLOWED = "allowed";
-const CONSENT_DENIED = "denied";
 
-async function hashUserId(userId, salt) {
-    const data = new TextEncoder().encode(userId + salt);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+const ROLE_GM = "gm";
+const ROLE_PLAYER = "player";
+const CONSENT_DECLINED = "declined";
+const CONSENT_PENDING = "pending";
 
-async function _countThisUser() {
-    if (!game.user?.id)
-        return;
+const TABLE = "seen_users";
 
-    const isGM = game.user.isGM;
-    const userHash = await hashUserId(game.user.id, HASH_SALT);
-
-    const moduleInfo = game.modules.get(MODULE_NAMESPACE);
-    const moduleVersion = moduleInfo?.version || "unknown";
+async function _upsertUser(userHash, role) {
+    const moduleVersion = game.modules.get(MODULE_NAMESPACE)?.version || "unknown";
     const language = game.i18n.lang || "unknown";
 
     const { createClient } = window.supabase;
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     try {
-        if (isGM) {
-            const { data: existing, error: selectErr } = await supabase
-                .from("seen_gms")
-                .select("user_hash")
-                .eq("user_hash", userHash)
-                .maybeSingle();
-            if (selectErr)
-                throw selectErr;
-
-            if (!existing) {
-                const { data: counter, error: getErr } = await supabase
-                    .from("counters")
-                    .select("gm_count")
-                    .eq("id", 1)
-                    .single();
-                if (getErr)
-                    throw getErr;
-
-                const newCount = counter.gm_count + 1;
-                const { error: updateErr } = await supabase
-                    .from("counters")
-                    .update({ gm_count: newCount })
-                    .eq("id", 1);
-                if (updateErr)
-                    throw updateErr;
-
-                const { error: insertErr } = await supabase
-                    .from("seen_gms")
-                    .insert({
-                        user_hash: userHash,
-                        module_version: moduleVersion,
-                        language: language
-                    });
-                if (insertErr)
-                    throw insertErr;
-            } else {
-                // Refresh version + language for an already-counted GM.
-                const { error: updateErr } = await supabase
-                    .from("seen_gms")
-                    .update({
-                        module_version: moduleVersion,
-                        language: language
-                    })
-                    .eq("user_hash", userHash);
-                if (updateErr)
-                    throw updateErr;
-            }
-        } else {
-            const { data: existing, error: selectErr } = await supabase
-                .from("seen_players")
-                .select("user_hash")
-                .eq("user_hash", userHash)
-                .maybeSingle();
-            if (selectErr)
-                throw selectErr;
-
-            if (!existing) {
-                const { data: counter, error: getErr } = await supabase
-                    .from("counters")
-                    .select("player_count")
-                    .eq("id", 1)
-                    .single();
-                if (getErr)
-                    throw getErr;
-
-                const newCount = counter.player_count + 1;
-                const { error: updateErr } = await supabase
-                    .from("counters")
-                    .update({ player_count: newCount })
-                    .eq("id", 1);
-                if (updateErr)
-                    throw updateErr;
-
-                const { error: insertErr } = await supabase
-                    .from("seen_players")
-                    .insert({
-                        user_hash: userHash,
-                        module_version: moduleVersion,
-                        language: language
-                    });
-                if (insertErr)
-                    throw insertErr;
-            } else {
-                const { error: updateErr } = await supabase
-                    .from("seen_players")
-                    .update({
-                        module_version: moduleVersion,
-                        language: language
-                    })
-                    .eq("user_hash", userHash);
-                if (updateErr)
-                    throw updateErr;
-            }
-        }
+        const { error } = await supabase
+            .from(TABLE)
+            .upsert({
+                user_hash: userHash,
+                role,
+                module_version: moduleVersion,
+                language,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: "user_hash" });
+        if (error)
+            throw error;
     } catch (err) {
-        console.error(`Lancer Automation | Supabase error:`, err);
+        console.error("Lancer Automation | Supabase error:", err);
     }
 }
 
-async function _showConsentDialog() {
+// Modal: re-shows itself if dismissed without a button.
+async function _showFirstLaunchPopup() {
     return new Promise((resolve) => {
+        let answered = false;
+        const pick = (value) => {
+            answered = true;
+            resolve(value);
+        };
         new Dialog({
-            title: "Data Collection Consent",
+            title: "Lancer Automations",
             content: `
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">Collecting Data</div>
+                    <div class="lancer-dialog-title">Hi there!</div>
                 </div>
                 <div style="padding: 8px 10px; line-height: 1.5;">
-                    <p>Hi there! As the project grows, I'm curious to know how many users and players are using this module.</p>
-                    <p><strong>To be accurate, I can't do it anonymously.</strong><br>
-                    I take your <code>game.userId</code> and <strong>hash</strong> it before storing it in my database.<br>
-                    I cannot reverse the hash to get your username or any personal data.</p>
-                    <p>I also collect <strong>your module version and Foundry language setting</strong>
-                    <p>No other data (IP, character names, etc.) is ever collected.</p>
-                    <p>You can change your mind later in the module settings.</p>
+                    <p>I'd love to know roughly how many people use this module. If you're up for it, just pick the role you usually play.</p>
+                    <p>What gets sent: a random ID generated here, your module version, and your Foundry language. That's it.</p>
+                    <p>Already counted somewhere else (another world or another machine)? Pick <em>"Don't count me"</em> here so you're not double-counted.</p>
+                    <p>You can change your mind anytime in module settings.</p>
                 </div>
             `,
             buttons: {
-                yes: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: "Yes, allow counting",
-                    callback: () => resolve(true),
+                gm: {
+                    icon: '<i class="fas fa-crown"></i>',
+                    label: "I'm a GM",
+                    callback: () => pick(ROLE_GM),
                 },
-                no: {
+                player: {
+                    icon: '<i class="fas fa-user"></i>',
+                    label: "I'm a Player",
+                    callback: () => pick(ROLE_PLAYER),
+                },
+                decline: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "No, thanks",
-                    callback: () => resolve(false),
+                    label: "Don't count me",
+                    callback: () => pick(CONSENT_DECLINED),
                 },
             },
-            default: "yes",
-            close: () => resolve(false),
+            default: "gm",
+            close: () => {
+                if (!answered)
+                    pick(CONSENT_DECLINED);
+            },
         }, { width: 550, classes: ["lancer-dialog-base", "lancer-no-title"] }).render(true);
     });
 }
 
-async function _requestConsentAndMaybeCount() {
-    const allowed = await _showConsentDialog();
-    const decision = allowed ? CONSENT_ALLOWED : CONSENT_DENIED;
-    await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, decision);
-    if (allowed) {
-        console.log("Lancer Automation | Consent given → counting this user.");
-        await _countThisUser();
-    } else {
-        console.log("Lancer Automation | Consent denied → no data sent.");
+async function _runFirstLaunch() {
+    const role = await _showFirstLaunchPopup();
+    if (role === CONSENT_DECLINED) {
+        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
+        console.log("Lancer Automation | User declined; no data sent.");
+        return;
     }
+    const installId = foundry.utils.randomID();
+    await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
+    await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, role);
+    await _upsertUser(installId, role);
+    console.log(`Lancer Automation | Counted as ${role}.`);
 }
 
-async function _handleConsentAndCounting() {
+async function _handleStartup() {
     if (!game.user?.id)
         return;
 
-    let consent = null;
+    let consent = CONSENT_PENDING;
     try {
-        consent = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING);
-    } catch (err) {
-        // Setting not registered yet; treat as undecided.
-        console.warn("Lancer Automation | Consent setting not ready, defaulting to undecided.");
+        consent = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING) || CONSENT_PENDING;
+    } catch {
+        // Setting not registered yet; treat as pending.
     }
 
-    if (consent === CONSENT_ALLOWED) {
-        await _countThisUser();
-    } else if (consent === CONSENT_DENIED) {
-        console.log("Lancer Automation | User previously denied consent, skipping count.");
-    } else {
-        await _requestConsentAndMaybeCount();
+    // Old scheme had 'allowed'/'denied' tied to a different ID and now-empty Supabase tables.
+    // Re-prompt both groups so the new role-based count starts from a clean baseline.
+    if (consent === "allowed" || consent === "denied")
+        consent = CONSENT_PENDING;
+
+    if (consent === CONSENT_DECLINED)
+        return;
+
+    if (consent === ROLE_GM || consent === ROLE_PLAYER) {
+        let installId = "";
+        try {
+            installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
+        } catch { /* not registered yet */ }
+        if (!installId) {
+            installId = foundry.utils.randomID();
+            await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
+        }
+        await _upsertUser(installId, consent);
+        return;
     }
+
+    await _runFirstLaunch();
 }
 
 class ConsentMenu extends FormApplication {
     render() {
         const current = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING);
-        new Dialog({
-            title: "Change Data Collection Consent",
-            content: `
-                <p>You previously <strong>${current === CONSENT_ALLOWED ? "allowed" : current === CONSENT_DENIED ? "denied" : "not decided"}</strong> sending a hashed user ID for counting unique users.</p>
-                <p>What would you like to do now?</p>
-            `,
-            buttons: {
-                allow: {
-                    label: "Allow counting",
-                    callback: async () => {
-                        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_ALLOWED);
-                        await _countThisUser();
-                        ui.notifications.info("Consent given. Thank you!");
-                    }
-                },
-                deny: {
-                    label: "Deny counting",
-                    callback: async () => {
-                        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DENIED);
-                        ui.notifications.info("Consent denied. No data will be sent.");
-                    }
-                }
+        const label = current === ROLE_GM ? "currently counted as GM"
+            : current === ROLE_PLAYER ? "currently counted as Player"
+                : current === CONSENT_DECLINED ? "currently opted out"
+                    : "not decided";
+
+        const switchTo = async (role) => {
+            let installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
+            if (!installId) {
+                installId = foundry.utils.randomID();
+                await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
             }
-        }, { width: 400 }).render(true);
+            await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, role);
+            await _upsertUser(installId, role);
+            ui.notifications.info(`Now counted as ${role}. Thank you!`);
+        };
+
+        new Dialog({
+            title: "Change Data Consent",
+            content: `<p>You are <strong>${label}</strong>.</p><p>What would you like?</p>`,
+            buttons: {
+                gm: { icon: '<i class="fas fa-crown"></i>', label: "Count me as GM", callback: () => switchTo(ROLE_GM) },
+                player: { icon: '<i class="fas fa-user"></i>', label: "Count me as Player", callback: () => switchTo(ROLE_PLAYER) },
+                decline: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: "Opt out",
+                    callback: async () => {
+                        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
+                        ui.notifications.info("Opted out. No more data will be sent.");
+                    },
+                },
+            },
+        }, { width: 420 }).render(true);
         return this;
     }
     async _updateObject() {}
 }
 
 Hooks.once("setup", () => {
-    // client scope: per user across all worlds.
-    game.settings.register(MODULE_NAMESPACE, CONSENT_SETTING, {
-        name: "Data Collection Consent",
-        hint: "Allow sending a hashed user ID to count unique users of this module.",
+    // client scope: per browser; random per install.
+    game.settings.register(MODULE_NAMESPACE, INSTALL_ID_SETTING, {
         scope: "client",
         config: false,
         type: String,
-        default: null,
+        default: "",
+    });
+    game.settings.register(MODULE_NAMESPACE, CONSENT_SETTING, {
+        name: "Data Collection Consent",
+        hint: "Anonymous count of GM/Player installs (no game.userId, no IP).",
+        scope: "client",
+        config: false,
+        type: String,
+        default: CONSENT_PENDING,
     });
 
     game.settings.registerMenu(MODULE_NAMESPACE, "consentMenu", {
         name: "Change Data Consent",
         label: "Update Consent",
-        hint: "Change your decision about anonymous counting. You can allow or deny at any time.",
+        hint: "Change your role or opt out at any time.",
         icon: "fas fa-user-shield",
         type: ConsentMenu,
         restricted: false,
@@ -252,5 +201,5 @@ Hooks.once("setup", () => {
 Hooks.on("ready", async () => {
     if (!game.user?.id)
         return;
-    await _handleConsentAndCounting();
+    await _handleStartup();
 });
