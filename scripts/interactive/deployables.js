@@ -10,6 +10,7 @@ import {
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
+import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX } from "../fx/actionFX.js";
 
 import {
@@ -769,7 +770,7 @@ export async function addItemFlags(item, flags) {
         return null;
     }
     for (const [key, val] of Object.entries(flags)) {
-        await item.setFlag('lancer-automations', key, val);
+        await setItemFlag(item, 'lancer-automations', key, val);
     }
     return item;
 }
@@ -785,10 +786,44 @@ export async function removeItemFlags(item, flags) {
         ui.notifications.error("removeItemFlags: item and flags object are required.");
         return null;
     }
-    for (const [key, val] of Object.entries(flags)) {
-        await item.unsetFlag('lancer-automations', key);
+    for (const key of Object.keys(flags)) {
+        await unsetItemFlag(item, 'lancer-automations', key);
     }
     return item;
+}
+
+/**
+ * Add or update lancer-automations flags on an actor document.
+ * @param {Actor} actor     The Foundry Actor document to flag
+ * @param {Object} flags    Key/value pairs to set in the lancer-automations namespace
+ * @returns {Promise<Actor>} The updated actor
+ */
+export async function addActorFlags(actor, flags) {
+    if (!actor || typeof flags !== 'object') {
+        ui.notifications.error("addActorFlags: actor and flags object are required.");
+        return null;
+    }
+    for (const [key, val] of Object.entries(flags)) {
+        await setActorFlag(actor, 'lancer-automations', key, val);
+    }
+    return actor;
+}
+
+/**
+ * Removes lancer-automations flags from an actor document.
+ * @param {Actor} actor     The Foundry Actor document
+ * @param {Object} flags    Object whose keys are flags to unset
+ * @returns {Promise<Actor>} The updated actor
+ */
+export async function removeActorFlags(actor, flags) {
+    if (!actor || typeof flags !== 'object') {
+        ui.notifications.error("removeActorFlags: actor and flags object are required.");
+        return null;
+    }
+    for (const key of Object.keys(flags)) {
+        await unsetActorFlag(actor, 'lancer-automations', key);
+    }
+    return actor;
 }
 
 /**
@@ -1097,6 +1132,23 @@ export function getItemFlags(item, flagName = null) {
         return item.getFlag('lancer-automations', flagName);
     }
     return item.flags?.['lancer-automations'] || {};
+}
+
+/**
+ * Retrieve lancer-automations flags from an actor document.
+ * @param {Actor} actor        The Foundry Actor document
+ * @param {string} [flagName]  Optional specific flag key to retrieve.
+ * @returns {any}              The requested flag value, or all lancer-automations flags if no key was provided.
+ */
+export function getActorFlags(actor, flagName = null) {
+    if (!actor) {
+        ui.notifications.error("getActorFlags: actor is required.");
+        return null;
+    }
+    if (flagName) {
+        return actor.getFlag('lancer-automations', flagName);
+    }
+    return actor.flags?.['lancer-automations'] || {};
 }
 
 /**

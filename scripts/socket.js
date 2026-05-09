@@ -66,6 +66,51 @@ export async function unsetTokenFlag(tokenDoc, ns, key) {
     return setTokenFlag(tokenDoc, ns, key, undefined);
 }
 
+export async function setActorFlag(actor, ns, key, value) {
+    if (!actor)
+        return;
+    if (game.user.isGM || actor.isOwner) {
+        if (value === undefined)
+            await actor.unsetFlag(ns, key).catch(() => {});
+        else
+            await actor.setFlag(ns, key, value);
+        return;
+    }
+    await socketRequestWithAck('setActorFlag', {
+        actorId: actor.id,
+        ns,
+        key,
+        value,
+    });
+}
+
+export async function unsetActorFlag(actor, ns, key) {
+    return setActorFlag(actor, ns, key, undefined);
+}
+
+export async function setItemFlag(item, ns, key, value) {
+    if (!item)
+        return;
+    const owner = item.parent ?? item;
+    if (game.user.isGM || owner.isOwner) {
+        if (value === undefined)
+            await item.unsetFlag(ns, key).catch(() => {});
+        else
+            await item.setFlag(ns, key, value);
+        return;
+    }
+    await socketRequestWithAck('setItemFlag', {
+        uuid: item.uuid,
+        ns,
+        key,
+        value,
+    });
+}
+
+export async function unsetItemFlag(item, ns, key) {
+    return setItemFlag(item, ns, key, undefined);
+}
+
 /** Returns a Promise that resolves when an ack arrives for the given requestId. */
 export function awaitPendingAck(requestId) {
     return new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
@@ -113,9 +158,37 @@ const HANDLERS = {
         if (!game.user.isGM)
             return;
         const actor = game.actors.get(payload.actorId);
-        if (actor)
-            await actor.setFlag(payload.ns, payload.key, payload.value);
+        if (actor) {
+            try {
+                if (payload.value === undefined)
+                    await actor.unsetFlag(payload.ns, payload.key);
+                else
+                    await actor.setFlag(payload.ns, payload.key, payload.value);
+            } catch (e) {
+                console.warn('lancer-automations | setActorFlag GM-side failed:', e);
+            }
+        }
+        emitAck('setActorFlagAck', payload.requestId);
     },
+    setActorFlagAck: ({ requestId }) => resolveAck(requestId),
+
+    setItemFlag: async (payload) => {
+        if (!game.user.isGM)
+            return;
+        try {
+            const item = await fromUuid(payload.uuid);
+            if (item) {
+                if (payload.value === undefined)
+                    await item.unsetFlag(payload.ns, payload.key);
+                else
+                    await item.setFlag(payload.ns, payload.key, payload.value);
+            }
+        } catch (e) {
+            console.warn('lancer-automations | setItemFlag GM-side failed:', e);
+        }
+        emitAck('setItemFlagAck', payload.requestId);
+    },
+    setItemFlagAck: ({ requestId }) => resolveAck(requestId),
 
     setTokenFlag: async (payload) => {
         if (!game.user.isGM)

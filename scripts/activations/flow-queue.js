@@ -74,15 +74,14 @@ export function _flowQueueDebug() {
     };
 }
 
-function _flowLabel(flow) {
-    const fname = flow?.constructor?.name ?? 'Flow';
-    const item = flow?.state?.item?.name;
-    const actor = flow?.state?.actor?.name;
+function _hudLabel(stepName, state) {
+    const item = state?.item?.name;
+    const actor = state?.actor?.name;
     if (item)
-        return `${fname}: ${item}`;
+        return `${stepName}: ${item}`;
     if (actor)
-        return `${fname}: ${actor}`;
-    return fname;
+        return `${stepName}: ${actor}`;
+    return stepName;
 }
 
 let _indicatorEl = null;
@@ -162,16 +161,23 @@ function _injectStyles() {
     document.head.appendChild(style);
 }
 
+// Lancer flow steps that open the .lancer-hud roll card. Only these get queued.
+const HUD_STEPS_TO_QUEUE = [
+    'showAttackHUD',
+    'showDamageHUD',
+    'showStatRollHUD',
+];
+
 export function initFlowQueue() {
-    const Flow = game.lancer?.Flow;
-    if (!Flow?.prototype?.begin || typeof libWrapper === 'undefined')
+    const flowSteps = game.lancer?.flowSteps;
+    if (!flowSteps)
         return;
-    libWrapper.register(
-        'lancer-automations',
-        'game.lancer.Flow.prototype.begin',
-        function (wrapped, ...args) {
-            return queue(() => wrapped(...args), _flowLabel(this));
-        },
-        'WRAPPER',
-    );
+    for (const stepName of HUD_STEPS_TO_QUEUE) {
+        const original = flowSteps.get(stepName);
+        if (!original)
+            continue;
+        flowSteps.set(stepName, async function (state, options) {
+            return queue(() => original(state, options), _hudLabel(stepName, state));
+        });
+    }
 }

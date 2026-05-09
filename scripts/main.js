@@ -67,7 +67,7 @@ import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/ind
 import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
-import { initFlowQueue } from "./activations/flow-queue.js";
+import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
 import { initSocket, setTokenFlag, unsetTokenFlag, awaitPendingAck } from "./socket.js";
 export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js";
@@ -1194,41 +1194,44 @@ async function processEffectConsumption(triggerType, data) {
 }
 
 async function handleTrigger(triggerType, data) {
-    data.startRelatedFlow = async () => {
-        const item = data.item ?? data.weapon ?? data.techItem;
-        const actor = data.triggeringToken?.actor;
-        const actionData = data.actionData;
+    // runInFlowBody: child flow.begin() from reactions routes to innerChain, avoids parent-await deadlock.
+    return runInFlowBody(async () => {
+        data.startRelatedFlow = async () => {
+            const item = data.item ?? data.weapon ?? data.techItem;
+            const actor = data.triggeringToken?.actor;
+            const actionData = data.actionData;
 
-        if (item) {
-            const actionPath = actionData?.flowState?.data?.action_path ?? null;
-            return item.beginActivationFlow(actionPath);
-        }
-
-        if (actionData) {
-            const actionType = actionData.action?.activation ?? actionData.type;
-            if (!actionType || ['Automatic', 'Other'].includes(actionType)) {
-                ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" cannot be re-launched as a flow.`);
-                return;
+            if (item) {
+                const actionPath = actionData?.flowState?.data?.action_path ?? null;
+                return item.beginActivationFlow(actionPath);
             }
-            if (!actor) {
-                ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
-                return;
+
+            if (actionData) {
+                const actionType = actionData.action?.activation ?? actionData.type;
+                if (!actionType || ['Automatic', 'Other'].includes(actionType)) {
+                    ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" cannot be re-launched as a flow.`);
+                    return;
+                }
+                if (!actor) {
+                    ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
+                    return;
+                }
+                return executeSimpleActivation(actor, {
+                    title: actionData.title,
+                    action: actionData.action,
+                    detail: actionData.detail,
+                    tags: actionData.tags
+                });
             }
-            return executeSimpleActivation(actor, {
-                title: actionData.title,
-                action: actionData.action,
-                detail: actionData.detail,
-                tags: actionData.tags
-            });
-        }
 
-        ui.notifications.warn('lancer-automations | startRelatedFlow: no item or action data available for this trigger.');
-    };
+            ui.notifications.warn('lancer-automations | startRelatedFlow: no item or action data available for this trigger.');
+        };
 
-    const reactionsPromise = checkReactions(triggerType, data);
-    const consumptionPromise = processEffectConsumption(triggerType, data);
-    await reactionsPromise;
-    await consumptionPromise;
+        const reactionsPromise = checkReactions(triggerType, data);
+        const consumptionPromise = processEffectConsumption(triggerType, data);
+        await reactionsPromise;
+        await consumptionPromise;
+    });
 }
 
 
@@ -4750,7 +4753,9 @@ Hooks.on('ready', async () => {
         }
     });
     initSocket();
-    initFlowQueue();
+    // Defer to next tick so other 'ready' listeners (e.g. TAH's showAttackHUD wrap) finish first;
+    // initFlowQueue must be the outermost wrap on game.lancer.flowSteps.
+    setTimeout(initFlowQueue, 0);
 
     initDelayedAppearanceHook();
     await syncBuiltinStartups();

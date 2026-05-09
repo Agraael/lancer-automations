@@ -145,6 +145,44 @@ async function debugLabels() {
         `snapshot=${JSON.stringify(snapshot)}`);
 }
 
+// ─── Test 7: HUD steps are queue-wrapped at runtime ───────────────────
+async function hudStepsAreWrapped() {
+    console.log('%c── Test: HUD steps wrapped ──', 'color:cyan;');
+    const flowSteps = game.lancer?.flowSteps;
+    if (!flowSteps) {
+        fail('hudStepsAreWrapped', 'game.lancer.flowSteps unavailable');
+        return;
+    }
+    for (const stepName of ['showAttackHUD', 'showDamageHUD', 'showStatRollHUD']) {
+        const step = flowSteps.get(stepName);
+        if (!step) {
+            fail('hudStepsAreWrapped', `${stepName} missing from registry`);
+            continue;
+        }
+        const src = step.toString();
+        assert(src.includes('queue('), `${stepName} routed through queue()`,
+            `body excerpt: ${src.slice(0, 120)}`);
+    }
+}
+
+// ─── Test 8: non-HUD steps are NOT queue-wrapped ──────────────────────
+async function nonHudStepsBypass() {
+    console.log('%c── Test: non-HUD steps bypass queue ──', 'color:cyan;');
+    const flowSteps = game.lancer?.flowSteps;
+    if (!flowSteps) {
+        fail('nonHudStepsBypass', 'game.lancer.flowSteps unavailable');
+        return;
+    }
+    const expected = ['printOverchargeCard', 'printActionUseCard', 'printGenericCard', 'rollAttacks', 'rollOvercharge'];
+    for (const stepName of expected) {
+        const step = flowSteps.get(stepName);
+        if (!step) continue; // step may not exist on a particular Lancer version; skip
+        const src = step.toString();
+        assert(!src.includes('return queue('), `${stepName} not queue-wrapped`,
+            `body excerpt: ${src.slice(0, 120)}`);
+    }
+}
+
 // ─── Run All ──────────────────────────────────────────────────────────
 async function runAll() {
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
@@ -161,6 +199,10 @@ async function runAll() {
     await interFlowDelay();
     await delay(200);
     await debugLabels();
+    await delay(200);
+    await hudStepsAreWrapped();
+    await delay(200);
+    await nonHudStepsBypass();
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
     console.log('%c║   All tests complete!                ║', 'color:gold;');
     console.log('%c╚══════════════════════════════════════╝', 'color:gold;');
@@ -173,5 +215,7 @@ export const FlowQueueTests = {
     topLevelWaitsForParent,
     interFlowDelay,
     debugLabels,
+    hudStepsAreWrapped,
+    nonHudStepsBypass,
     runAll,
 };

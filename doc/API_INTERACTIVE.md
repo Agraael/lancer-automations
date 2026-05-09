@@ -323,14 +323,17 @@ Returns the user ID(s) that own a token. Checks active non-GM players first, fal
 ## Deployment & Thrown Weapons
 
 <details>
-<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>getItemFlags</code></b> → <code>any</code></summary>
+<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>removeItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>getItemFlags</code></b> → <code>any</code></summary>
 
 <br>
 
 ```js
 await api.addItemFlags(item, flags)            // set flags under 'lancer-automations'
-api.getItemFlags(item, flagName?)               // read flags (specific key or all)
+await api.removeItemFlags(item, flags)         // unset the listed keys
+api.getItemFlags(item, flagName?)              // read flags (specific key or all)
 ```
+
+Routes through the GM via socket when the calling user does not own the item, so it is safe to call from any client.
 
 **Known flag keys:**
 
@@ -342,6 +345,40 @@ api.getItemFlags(item, flagName?)               // read flags (specific key or a
 **Example:**
 ```js
 await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
+```
+
+</details>
+
+---
+
+<details>
+<summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code> · <b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code> · <b><code>getActorFlags</code></b> → <code>any</code></summary>
+
+<br>
+
+```js
+await api.addActorFlags(actor, flags)          // set flags under 'lancer-automations'
+await api.removeActorFlags(actor, flags)       // unset the listed keys
+api.getActorFlags(actor, flagName?)            // read flags (specific key or all)
+```
+
+Routes through the GM via socket when the calling user does not own the actor.
+
+**Known flag keys (deployable Mines, read by the `Mine Zone` general reaction):**
+
+| Key | Type | Default | Description |
+|:----|:-----|:--------|:------------|
+| <kbd>mineDetectionRadius</kbd> | `number` | `1` | Aura radius in grid units. |
+| <kbd>mineDetectionDisposition</kbd> | `"ALL"` \| `"FRIENDLY"` \| `"HOSTILE"` \| `"NEUTRAL"` | `"ALL"` | Which disposition triggers the detonation prompt. |
+| <kbd>customMineDetection</kbd> | `boolean` | `false` | Skip the default `LA_MineZone` aura entirely; the per-LID handler installs its own detection. |
+
+**Example:**
+```js
+// Custom mine: 3-space radius, hostile only.
+await api.addActorFlags(mineActor, {
+    mineDetectionRadius: 3,
+    mineDetectionDisposition: "HOSTILE"
+});
 ```
 
 </details>

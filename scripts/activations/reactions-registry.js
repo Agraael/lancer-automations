@@ -1322,6 +1322,7 @@ export function getDefaultGeneralReactionRegistry() {
                 await reactorToken.document.setFlag('lancer-automations', 'wasArmed', true);
             }
         },
+        // Tunable via api.addActorFlags: mineDetectionRadius, mineDetectionDisposition, customMineDetection.
         "Mine Zone": {
             category: "General",
             comments: "Mine trigger zone aura with ENTER macro (Detonate / Disarm / Let pass)",
@@ -1338,15 +1339,19 @@ export function getDefaultGeneralReactionRegistry() {
                         if (triggerData.statusId !== "armed")
                             return false;
                         const actor = reactorToken.actor;
-                        return actor?.type === "deployable" && actor.system?.type === "Mine";
+                        if (actor?.type !== "deployable" || actor.system?.type !== "Mine")
+                            return false;
+                        return !actor.getFlag("lancer-automations", "customMineDetection");
                     },
                     activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         if (api.findAura(reactorToken, "LA_MineZone"))
                             return;
+                        const radius = String(api.getActorFlags(reactorToken.actor, "mineDetectionRadius") ?? 1);
+                        const disposition = api.getActorFlags(reactorToken.actor, "mineDetectionDisposition") ?? "ALL";
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_MineZone",
                             unified: false,
-                            radius: "1",
+                            radius,
                             lineWidth: 3,
                             lineColor: "#ffd600",
                             lineOpacity: 0.9,
@@ -1357,7 +1362,7 @@ export function getDefaultGeneralReactionRegistry() {
                             nonOwnerVisibility: { default: true },
                             macros: [{
                                 mode: "ENTER",
-                                targetTokens: "ALL",
+                                targetTokens: disposition,
                                 function: function (token, parent, aura, options) {
                                     if (options?.isInit || options?.isPreview)
                                         return;
@@ -1434,8 +1439,10 @@ export function getDefaultGeneralReactionRegistry() {
                     outOfCombat: true,
                     activationType: "code",
                     activationMode: "instead",
-                    evaluate: function (triggerType, triggerData) {
-                        return triggerData.statusId === "armed";
+                    evaluate: function (triggerType, triggerData, reactorToken) {
+                        if (triggerData.statusId !== "armed")
+                            return false;
+                        return !reactorToken.actor?.getFlag("lancer-automations", "customMineDetection");
                     },
                     activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         for (let i = 0; i < 10; i++) {
