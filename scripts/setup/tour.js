@@ -929,15 +929,8 @@ export function registerTourBootstrap() {
             done = !!game.settings.get(NS, SETTING_TOUR_DONE);
         } catch { /* not ready */ }
         if (!done) {
-            _pingNewInstallCounter();
             await _runChooser();
         }
         await _maybeShowMovementWarning();
     });
-}
-
-// Anonymous install counter, fired once on first-run.
-function _pingNewInstallCounter() {
-    fetch('https://api.counterapi.dev/v2/cedric-cescuttis-team-3920/first-counter-3920/up')
-        .catch(() => { /* offline / blocked, ignore */ });
 }

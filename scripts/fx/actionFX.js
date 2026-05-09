@@ -2176,6 +2176,7 @@ const _statRollOverlayHandler = async (flow) => {
     const sourceToken = flow?.state?.actor?.getActiveTokens?.()?.[0];
     if (!sourceToken)
         return;
-    await playStatRollOutcomeFX(sourceToken, total >= 10);
+    const targetVal = flow?.state?.la_extraData?.targetVal ?? 10;
+    await playStatRollOutcomeFX(sourceToken, total >= targetVal);
 };
 Hooks.on('lancer.postFlow.StatRollFlow', _statRollOverlayHandler);
