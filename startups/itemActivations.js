@@ -1,5 +1,10 @@
 /*global game, Sequencer, Sequence, canvas, ui, ChatMessage, Roll, api */
 
+const OWNER_ONLY_AURA_VISIBILITY = {
+    ownerVisibility:    { default: true,  hovered: true,  controlled: true,  dragging: true,  targeted: true,  turn: true  },
+    nonOwnerVisibility: { default: false, hovered: false, controlled: false, dragging: false, targeted: false, turn: false }
+};
+
 /** @type {ReactionGroup} */
 const suppressArcherReaction = {
     category: "NPC",
@@ -138,7 +143,7 @@ const movingTargetSniperReaction = {
         triggers: ["onPreMove"],
         triggerSelf: false,
         triggerOther: true,
-        outOfCombat: true,
+        outOfCombat: false,
         actionType: "Reaction",
         frequency: "1/Round",
         autoActivate: true,
@@ -283,7 +288,7 @@ const movingTargetArcherReaction = {
                 });
                 preConfirmResponderIds = result?.responderIds ?? [];
                 if (result?.choiceIdx === 0)
-                    await reactorToken.actor.setFlag('lancer-automations', 'movingTargetArcherMoverId', mover.id);
+                    await api.addActorFlags(reactorToken.actor, { movingTargetArcherMoverId: mover.id });
                 return result?.choiceIdx === 0;
             };
             const postChoice = async (chose) => {
@@ -311,8 +316,8 @@ const movingTargetArcherReaction = {
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const moverId = reactorToken.actor.getFlag('lancer-automations', 'movingTargetArcherMoverId');
-            await reactorToken.actor.unsetFlag('lancer-automations', 'movingTargetArcherMoverId');
+            const moverId = api.getActorFlags(reactorToken.actor, 'movingTargetArcherMoverId');
+            await api.removeActorFlags(reactorToken.actor, { movingTargetArcherMoverId: true });
             const mover = moverId ? canvas.tokens.get(moverId) ?? null : null;
             if (api?.removeEffectsByNameFromTokens && mover) {
                 await api.removeEffectsByNameFromTokens({
@@ -569,7 +574,7 @@ const restockDroneSupportReaction = {
         autoActivate: false,
         activationType: "none",
         onInit: async function (token, item, api) {
-            await item.setFlag("lancer-automations", "deployRange", 5);
+            await api.addItemFlags(item, { deployRange: 5 });
 
             const isRebake = item.system.lid?.includes('rebake') || item.name.toLowerCase().includes("rebake");
             if (isRebake) {
@@ -1620,9 +1625,9 @@ api.registerDefaultItemReactions({
                 }, 2);
 
                 if (result?.template) {
-                    const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
+                    const existing = api.getActorFlags(reactorToken.actor, 'smokeTemplates') || [];
                     existing.push(result.template.id);
-                    await reactorToken.actor.setFlag("lancer-automations", "smokeTemplates", existing);
+                    await api.addActorFlags(reactorToken.actor, { smokeTemplates: existing });
                 }
             }
         }, {
@@ -1632,8 +1637,8 @@ api.registerDefaultItemReactions({
             autoActivate: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-                const templates = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const templates = api.getActorFlags(reactorToken.actor, 'smokeTemplates') || [];
                 if (!templates.length)
                     return;
 
@@ -1643,9 +1648,169 @@ api.registerDefaultItemReactions({
                         await template.delete();
                 }
 
-                await reactorToken.actor.unsetFlag("lancer-automations", "smokeTemplates");
+                await api.removeActorFlags(reactorToken.actor, { smokeTemplates: true });
             }
         }]
+    },
+    ...(function () {
+        /** @type {ReactionGroup} */
+        const nanoRepairCloud = {
+            category: "NPC",
+            itemType: "npc_feature",
+            reactions: [
+                {
+                    triggers: [],
+                    triggerSelf: false,
+                    triggerOther: false,
+                    autoActivate: false,
+                    activationType: "none",
+                    onInit: async function (token, item, api) {
+                        await api.createAura(token, {
+                            name: "Nano-Repair Cloud",
+                            radius: 1,
+                            elevationAware: true,
+                            lineColor: "#7ec0ee",
+                            lineWidth: 2,
+                            lineOpacity: 0.7,
+                            fillColor: "#7ec0ee",
+                            fillOpacity: 0.05,
+                            ...OWNER_ONLY_AURA_VISIBILITY
+                        });
+                    }
+                },
+                {
+                    triggers: ["onRoll"],
+                    triggerSelf: false,
+                    triggerOther: true,
+                    outOfCombat: true,
+                    autoActivate: true,
+                    awaitActivationCompletion: true,
+                    activationType: "code",
+                    activationMode: "instead",
+                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                        if (triggerData.rollType !== 'skillRoll')
+                            return false;
+                        if (triggerData.isReroll)
+                            return false;
+                        const ally = triggerData.triggeringToken;
+                        if (!ally?.actor || ally.actor.type === 'deployable')
+                            return false;
+                        if (!api.isFriendly(reactorToken, ally))
+                            return false;
+                        if (api.getMinGridDistance(reactorToken, ally) > 1)
+                            return false;
+                        return true;
+                    },
+                    activationCode: async function (triggerType, triggerData, reactorToken) {
+                        await triggerData.reroll(`${reactorToken.name} — Nano-Repair Cloud`, 'highest', 'NANO-REPAIR CLOUD', true);
+                    }
+                }
+            ]
+        };
+        return {
+            "npcf_nano_repair_cloud_support": nanoRepairCloud,
+            "npc-rebake_npcf_nano-repair_cloud_support": nanoRepairCloud
+        };
+    })(),
+    "npcf_remote_cloud_support": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [
+            {
+                triggers: ["onActivation"],
+                onlyOnSourceMatch: true,
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: true,
+                actionType: "Quick Action",
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    if (!api?.placeZone)
+                        return;
+                    const tier = reactorToken.actor.system.tier || 1;
+                    const heal = [2, 4, 6][tier - 1] || 2;
+                    const reactorUuid = reactorToken.actor.uuid;
+
+                    const healContained = async (templateDoc, scene, token) => {
+                        if (!token?.actor || token.actor.type === 'deployable')
+                            return;
+                        const lancerApi = game.modules.get('lancer-automations')?.api;
+                        const reactorActor = await fromUuid(reactorUuid);
+                        const reactorTok = reactorActor?.getActiveTokens()?.[0];
+                        if (!reactorTok || !lancerApi?.isFriendly?.(reactorTok, token))
+                            return;
+                        if (lancerApi.getActorFlags(token.actor, 'remoteCloudHealedThisTurn'))
+                            return;
+                        const cur = token.actor.system.hp.value;
+                        const max = token.actor.system.hp.max;
+                        const nv = Math.min(max, cur + heal);
+                        if (nv > cur)
+                            await token.actor.update({ "system.hp.value": nv });
+                        await lancerApi.addActorFlags(token.actor, { remoteCloudHealedThisTurn: true });
+                    };
+
+                    const result = await api.placeZone(reactorToken, {
+                        range: 5,
+                        size: 2,
+                        type: "Blast",
+                        fillColor: "#7ec0ee",
+                        borderColor: "#1e90ff",
+                        title: "REMOTE CLOUD",
+                        description: "Place a Blast 2 nanite cloud within Range 5.",
+                        icon: "fas fa-cloud-meatball",
+                        centerLabel: "Cloud",
+                        hooks: {
+                            entered: { function: healContained, asGM: true },
+                            turnStart: { function: healContained, asGM: true }
+                        }
+                    });
+
+                    const placed = (Array.isArray(result) ? result : [result]).filter(r => r?.template);
+                    if (!placed.length)
+                        return;
+                    await api.addActorFlags(reactorToken.actor, { remoteCloudTemplates: placed.map(p => p.template.id) });
+                }
+            },
+            {
+                triggers: ["onTurnStart"],
+                triggerSelf: true,
+                triggerOther: false,
+                autoActivate: true,
+                outOfCombat: false,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    return (api.getActorFlags(reactorToken.actor, 'remoteCloudTemplates') || []).length > 0;
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const ids = api.getActorFlags(reactorToken.actor, 'remoteCloudTemplates') || [];
+                    for (const id of ids) {
+                        const td = canvas.scene?.templates.get(id);
+                        if (td)
+                            await td.delete();
+                    }
+                    await api.removeActorFlags(reactorToken.actor, { remoteCloudTemplates: true });
+                }
+            },
+            {
+                triggers: ["onTurnStart"],
+                triggerSelf: true,
+                triggerOther: true,
+                autoActivate: true,
+                outOfCombat: false,
+                activationType: "code",
+                activationMode: "instead",
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const t = triggerData.triggeringToken;
+                    return !!(t?.actor && api.getActorFlags(t.actor, 'remoteCloudHealedThisTurn'));
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    await api.removeActorFlags(triggerData.triggeringToken.actor, { remoteCloudHealedThisTurn: true });
+                }
+            }
+        ]
     },
     "npc_sergeant_SquadLeader": {
         category: "NPC",
@@ -1862,7 +2027,7 @@ api.registerDefaultItemReactions({
                     triggerData.flowState.la_extraData = triggerData.flowState.la_extraData || {};
                     triggerData.flowState.la_extraData._voiceOfAuthorityUsed = true;
                 }
-                await triggerData.reroll(`${reactorToken.name} offers a reroll.`);
+                await triggerData.reroll(`${reactorToken.name} offers a reroll.`, 'retry');
             }
         }]
     },
@@ -2043,7 +2208,7 @@ api.registerDefaultItemReactions({
 
                 const round = game.combat?.round ?? 0;
                 const flagKey = `triangulation_ping_round_${round}`;
-                const existingFlags = reactorToken.actor.getFlag("lancer-automations", flagKey) || [];
+                const existingFlags = api.getActorFlags(reactorToken.actor, flagKey) || [];
                 if (existingFlags.includes(triggerer.id))
                     return false;
 
@@ -2055,17 +2220,17 @@ api.registerDefaultItemReactions({
 
                 if (round > 1) {
                     const prevRoundKey = `triangulation_ping_round_${round - 1}`;
-                    if (reactorToken.actor.getFlag("lancer-automations", prevRoundKey)) {
-                        await reactorToken.actor.unsetFlag("lancer-automations", prevRoundKey);
+                    if (api.getActorFlags(reactorToken.actor, prevRoundKey)) {
+                        await api.removeActorFlags(reactorToken.actor, { [prevRoundKey]: true });
                     }
                 }
 
                 const result = await api.executeStatRoll(triggerer.actor, "SYS", "Triangulation Ping Save", reactorToken);
                 if (!result.passed) {
                     const flagKey = `triangulation_ping_round_${round}`;
-                    const existingFlags = reactorToken.actor.getFlag("lancer-automations", flagKey) || [];
+                    const existingFlags = api.getActorFlags(reactorToken.actor, flagKey) || [];
 
-                    await reactorToken.actor.setFlag("lancer-automations", flagKey, [...existingFlags, triggerer.id]);
+                    await api.addActorFlags(reactorToken.actor, { [flagKey]: [...existingFlags, triggerer.id] });
                     await api.applyEffectsToTokens({
                         tokens: [triggerer],
                         effectNames: ["lockon"],
@@ -2614,9 +2779,9 @@ api.registerDefaultItemReactions({
                     });
 
                     if (result?.[0]?.template) {
-                        const existing = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+                        const existing = api.getActorFlags(reactorToken.actor, 'slurryTerrainTemplates') || [];
                         existing.push(result[0].template.id);
-                        await reactorToken.actor.setFlag("lancer-automations", "slurryTerrainTemplates", existing);
+                        await api.addActorFlags(reactorToken.actor, { slurryTerrainTemplates: existing });
                     }
                 }
             }
@@ -2629,11 +2794,11 @@ api.registerDefaultItemReactions({
             activationType: "code",
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const templates = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+                const templates = api.getActorFlags(reactorToken.actor, 'slurryTerrainTemplates') || [];
                 return templates.length > 0;
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                const templates = reactorToken.actor.getFlag("lancer-automations", "slurryTerrainTemplates") || [];
+                const templates = api.getActorFlags(reactorToken.actor, 'slurryTerrainTemplates') || [];
 
                 for (const id of templates) {
                     const template = canvas.scene.templates.get(id);
@@ -2641,7 +2806,7 @@ api.registerDefaultItemReactions({
                         await template.delete();
                 }
 
-                await reactorToken.actor.unsetFlag("lancer-automations", "slurryTerrainTemplates");
+                await api.removeActorFlags(reactorToken.actor, { slurryTerrainTemplates: true });
             }
         }]
     }
@@ -2861,7 +3026,7 @@ api.registerDefaultItemReactions({
                 activationType: "code",
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const extraActions = item.getFlag('lancer-automations', 'extraActions') || [];
+                    const extraActions = api.getItemFlags(item, 'extraActions') || [];
                     const choices = extraActions.map(a => ({
                         text: a.recharge ? `${a.name} ${a.charged !== false ? '▣' : '□'}` : a.name,
                         callback: async () => {
@@ -2944,9 +3109,9 @@ api.registerDefaultItemReactions({
                         centerLabel: "Rift"
                     });
                     if (result?.[0]?.template) {
-                        const existing = reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || [];
+                        const existing = api.getActorFlags(reactorToken.actor, 'riftTemplates') || [];
                         existing.push(result[0].template.id);
-                        await reactorToken.actor.setFlag("lancer-automations", "riftTemplates", existing);
+                        await api.addActorFlags(reactorToken.actor, { riftTemplates: existing });
                     }
                 }
             },
@@ -2962,12 +3127,12 @@ api.registerDefaultItemReactions({
                 activationType: "code",
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const previousId = reactorToken.actor.getFlag("lancer-automations", "sharpenTemplate");
+                    const previousId = api.getActorFlags(reactorToken.actor, 'sharpenTemplate');
                     if (previousId) {
                         const prev = canvas.scene.templates.get(previousId);
                         if (prev)
                             await prev.delete();
-                        await reactorToken.actor.unsetFlag("lancer-automations", "sharpenTemplate");
+                        await api.removeActorFlags(reactorToken.actor, { sharpenTemplate: true });
                     }
                     const sensors = reactorToken.actor.system.sensor_range;
                     const tier = reactorToken.actor.system.tier || 1;
@@ -2984,7 +3149,7 @@ api.registerDefaultItemReactions({
                         centerLabel: "Sharp"
                     });
                     if (result?.[0]?.template) {
-                        await reactorToken.actor.setFlag("lancer-automations", "sharpenTemplate", result[0].template.id);
+                        await api.addActorFlags(reactorToken.actor, { sharpenTemplate: result[0].template.id });
                     }
                 }
             },
@@ -2997,10 +3162,10 @@ api.registerDefaultItemReactions({
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (triggerData.statusId !== 'prone')
                         return false;
-                    const templateId = reactorToken.actor.getFlag("lancer-automations", "sharpenTemplate");
+                    const templateId = api.getActorFlags(reactorToken.actor, 'sharpenTemplate');
                     if (!templateId)
                         return false;
                     const templateDoc = canvas.scene.templates.get(templateId);
@@ -3079,11 +3244,11 @@ api.registerDefaultItemReactions({
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken) {
-                    return (reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || []).length > 0;
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    return (api.getActorFlags(reactorToken.actor, 'riftTemplates') || []).length > 0;
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const riftIds = reactorToken.actor.getFlag("lancer-automations", "riftTemplates") || [];
+                    const riftIds = api.getActorFlags(reactorToken.actor, 'riftTemplates') || [];
                     const tmApi = game.modules.get('templatemacro')?.api;
 
                     for (const templateId of riftIds) {
@@ -3125,7 +3290,7 @@ api.registerDefaultItemReactions({
                         });
                         await templateDoc.delete();
                     }
-                    await reactorToken.actor.unsetFlag("lancer-automations", "riftTemplates");
+                    await api.removeActorFlags(reactorToken.actor, { riftTemplates: true });
                 }
             }]
     }
@@ -3249,10 +3414,10 @@ api.registerDefaultItemReactions({
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     if (triggerData.statusId !== 'immobilized')
                         return false;
-                    const ea = item.getFlag('lancer-automations', 'extraActions') || [];
+                    const ea = api.getItemFlags(item, 'extraActions') || [];
                     return ea.some(a => a.name === 'Throw Ally');
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -3311,13 +3476,13 @@ api.registerDefaultItemReactions({
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 // Delete previous waypoints
-                const prev = reactorToken.actor.getFlag('lancer-automations', 'terrainPrinterWaypoints') || [];
+                const prev = api.getActorFlags(reactorToken.actor, 'terrainPrinterWaypoints') || [];
                 for (const wp of prev) {
                     const t = canvas.scene.templates.get(wp.templateId);
                     if (t)
                         await t.delete();
                 }
-                await reactorToken.actor.unsetFlag('lancer-automations', 'terrainPrinterWaypoints');
+                await api.removeActorFlags(reactorToken.actor, { terrainPrinterWaypoints: true });
 
                 const hookObj = {
                     entered: { function: _terrainPrinterHookFn, asGM: true },
@@ -3371,10 +3536,12 @@ api.registerDefaultItemReactions({
                     otherTemplateId: wp1.template.id,
                     architectTokenId: reactorToken.id
                 });
-                await reactorToken.actor.setFlag('lancer-automations', 'terrainPrinterWaypoints', [
-                    { templateId: wp1.template.id },
-                    { templateId: wp2.template.id }
-                ]);
+                await api.addActorFlags(reactorToken.actor, {
+                    terrainPrinterWaypoints: [
+                        { templateId: wp1.template.id },
+                        { templateId: wp2.template.id }
+                    ]
+                });
             }
         }]
     }
@@ -3437,13 +3604,13 @@ api.registerDefaultItemReactions({
                 activationType: "code",
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const prev = reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || [];
+                    const prev = api.getActorFlags(reactorToken.actor, 'sandblastTemplates') || [];
                     for (const id of prev) {
                         const t = canvas.scene.templates.get(id);
                         if (t)
                             await t.delete();
                     }
-                    await reactorToken.actor.unsetFlag('lancer-automations', 'sandblastTemplates');
+                    await api.removeActorFlags(reactorToken.actor, { sandblastTemplates: true });
 
                     const result = await api.placeZone(reactorToken, {
                         range: reactorToken.actor.system.sensor_range,
@@ -3464,7 +3631,7 @@ api.registerDefaultItemReactions({
                     });
 
                     if (result?.[0]?.template) {
-                        await reactorToken.actor.setFlag('lancer-automations', 'sandblastTemplates', [result[0].template.id]);
+                        await api.addActorFlags(reactorToken.actor, { sandblastTemplates: [result[0].template.id] });
                     }
                 }
             },
@@ -3475,11 +3642,11 @@ api.registerDefaultItemReactions({
                 autoActivate: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken) {
-                    return (reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || []).length > 0;
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    return (api.getActorFlags(reactorToken.actor, 'sandblastTemplates') || []).length > 0;
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    const templates = reactorToken.actor.getFlag('lancer-automations', 'sandblastTemplates') || [];
+                    const templates = api.getActorFlags(reactorToken.actor, 'sandblastTemplates') || [];
                     for (const id of templates) {
                         const tmApi = game.modules.get('templatemacro')?.api;
                         const templateDoc = canvas.scene.templates.get(id);
@@ -3494,7 +3661,7 @@ api.registerDefaultItemReactions({
                         if (templateDoc)
                             await templateDoc.delete();
                     }
-                    await reactorToken.actor.unsetFlag('lancer-automations', 'sandblastTemplates');
+                    await api.removeActorFlags(reactorToken.actor, { sandblastTemplates: true });
                 }
             }]
     }

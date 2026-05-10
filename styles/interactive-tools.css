@@ -1571,3 +1571,23 @@ h2.la-collapsible:hover {
     padding: 1px 0;
     font-size: 11px;
 }
+
+/* ===== Scrollbar — auto-applies to all la-* elements ===== */
+[class^="la-"], [class*=" la-"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+}
+[class^="la-"]::-webkit-scrollbar, [class*=" la-"]::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+}
+[class^="la-"]::-webkit-scrollbar-track, [class*=" la-"]::-webkit-scrollbar-track {
+    background: transparent;
+}
+[class^="la-"]::-webkit-scrollbar-thumb, [class*=" la-"]::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+[class^="la-"]::-webkit-scrollbar-thumb:hover, [class*=" la-"]::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--primary-color), white 20%);
+}

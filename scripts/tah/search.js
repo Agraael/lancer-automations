@@ -1,4 +1,4 @@
-/* global $ */
+/* global $, game */
 
 import { onHudRowHover } from './hover.js';
 import { playUiSound } from './sound.js';
@@ -64,7 +64,9 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
     const colTop = firstRow.length ? firstRow.offset().top - el.offset().top : 0;
     col.css('top', colTop);
 
-    const scrollWrap = $(`<div style="max-height:420px;overflow-y:auto;overflow-x:hidden;"></div>`);
+    const maxItems = game.settings.get('lancer-automations', 'tah.maxColumnItems') ?? 0;
+    const maxHeight = maxItems > 0 ? `${48 * maxItems}px` : '420px';
+    const scrollWrap = $(`<div class="la-hud-search-scroll lancer-scroll" style="max-height:${maxHeight};overflow-y:auto;overflow-x:hidden;"></div>`);
     if (!results.length) {
         scrollWrap.append($(`<div style="${S_MUTED}">No results</div>`));
     } else {

@@ -460,7 +460,7 @@ export function _updateInfoCard(cardEl, type, data) {
         data.choices.forEach((choice, idx) => {
             const isDone = data.chosenSet?.has(idx);
             const doneClass = isDone ? "la-choice-done" : "";
-            const disabledClass = data.disabled ? "la-choice-disabled" : "";
+            const disabledClass = (data.disabled || choice.disabled) ? "la-choice-disabled" : "";
             const iconHtml = choice.icon
                 ? (/[./]/.test(choice.icon)
                     ? `<img src="${choice.icon}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;">`
@@ -469,9 +469,10 @@ export function _updateInfoCard(cardEl, type, data) {
             const statusHtml = isDone
                 ? '<span class="la-choice-status"><i class="fas fa-check"></i></span>'
                 : '';
+            const titleAttr = choice.disabled && choice.disabledReason ? ` title="${choice.disabledReason}"` : '';
 
             listEl.append(`
-                <div class="la-choice-item ${doneClass} ${disabledClass}" data-choice-index="${idx}">
+                <div class="la-choice-item ${doneClass} ${disabledClass}" data-choice-index="${idx}"${titleAttr}>
                     ${iconHtml}
                     <span class="la-choice-text">${choice.text}</span>
                     ${statusHtml}
@@ -479,7 +480,7 @@ export function _updateInfoCard(cardEl, type, data) {
         });
 
         if (!data.disabled) {
-            listEl.find('.la-choice-item:not(.la-choice-done)').on('click', function () {
+            listEl.find('.la-choice-item:not(.la-choice-done):not(.la-choice-disabled)').on('click', function () {
                 const idx = $(this).data('choice-index');
                 if (data.onChoose)
                     data.onChoose(idx);

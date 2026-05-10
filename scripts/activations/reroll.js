@@ -178,24 +178,29 @@ function buildPayload(rollType, def, state, rerollCount, markDirty) {
     const success = def.getSuccess(state);
     const targets = def.getTargets(state);
 
-    const doReroll = async () => {
-        if (def.beforeReroll)
-            def.beforeReroll(state);
-        const primaryStep = game.lancer?.flowSteps?.get(def.rerollStepName);
-        if (typeof primaryStep !== 'function')
-            throw new Error(`${MODULE_ID} | reroll(${rollType}): "${def.rerollStepName}" missing`);
-        await primaryStep(state);
-        for (const extra of def.extraRerollSteps ?? []) {
-            const extraStep = game.lancer?.flowSteps?.get(extra);
-            if (typeof extraStep === 'function')
-                await extraStep(state);
-        }
+    const makeChooseHandler = (titleStr) => async (orig, alt) => {
+        const api = game.modules.get(MODULE_ID)?.api;
+        const def2 = /** @type {any} */ (reroll)._defaultContext ?? {};
+        const userOwners = api?.getTokenOwnerUserId(def2.relatedToken ?? def2.originToken ?? token);
+        const pick = await api.startChoiceCard({
+            title: titleStr,
+            item: def2.item ?? null,
+            originToken: def2.originToken ?? null,
+            relatedToken: def2.relatedToken ?? null,
+            userIdControl: userOwners ?? api?.getActiveGMId(),
+            choices: [
+                { text: `Alt (${alt ?? '?'})`, icon: 'fas fa-dice' },
+                { text: `Original (${orig ?? '?'})`, icon: 'fas fa-undo' }
+            ]
+        });
+        return pick?.choiceIdx === 0;
+    };
+    const doReroll = async (subtype = 'retry', titleForChoose = 'KEEP WHICH?') => {
+        await _runRerollWithSubtype(def, state, _normalizeSubtype(subtype), makeChooseHandler(titleForChoose));
         markDirty();
     };
 
-    // Shared card presentation for reroll() and changeRoll(). Mirrors the cancel pattern:
-    // default opts (item, originToken, relatedToken) come from fn._defaultContext attached
-    // at reactor dispatch. allowConfirm:true pops a choice card; allowConfirm:false runs silently.
+
     const presentCard = async (fn, { reasonText, title, choiceText, apply, preConfirm, postChoice, allowConfirm, userIdControl, opts }) => {
         const api = game.modules.get(MODULE_ID)?.api;
         const def2 = fn._defaultContext ?? {};
@@ -254,12 +259,16 @@ function buildPayload(rollType, def, state, rerollCount, markDirty) {
         return [reasonText, line].filter(Boolean).join('<br>') || null;
     };
 
-    const reroll = async (reasonText = null, title = null, allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+    const reroll = async (reasonText = null, subtype = 'retry', title = null, allowConfirm = true, userIdControl = null, opts = {}) => {
+        const sub = _normalizeSubtype(subtype);
+        const chooseTitle = title ?? autoTitle(reroll, 'KEEP WHICH?');
+        const preConfirm = /** @type {any} */ (opts)?.preConfirm ?? null;
+        const postChoice = /** @type {any} */ (opts)?.postChoice ?? null;
         await presentCard(reroll, {
             reasonText: joinReason(reasonText),
             title: title ?? autoTitle(reroll, 'REROLL?'),
-            choiceText: 'Reroll',
-            apply: doReroll,
+            choiceText: `Reroll (${sub})`,
+            apply: () => doReroll(sub, chooseTitle),
             preConfirm, postChoice, allowConfirm, userIdControl, opts
         });
     };
@@ -304,6 +313,41 @@ const _normalizeSubtype = (st) => {
     return ['retry', 'highest', 'lowest', 'choose'].includes(v) ? v : 'retry';
 };
 
+// Shared executor: snapshot → run alt roll → resolve via subtype.
+// `chooseHandler(originalTotal, altTotal) -> Promise<boolean>` returns true=keep alt, false=keep original.
+async function _runRerollWithSubtype(def, state, subtype, chooseHandler) {
+    const snap = def.snapshot ? def.snapshot(state) : null;
+    const originalTotal = def.getRoll(state)?.total ?? null;
+
+    if (def.beforeReroll)
+        def.beforeReroll(state);
+    const primaryStep = game.lancer?.flowSteps?.get(def.rerollStepName);
+    if (typeof primaryStep !== 'function')
+        throw new Error(`${MODULE_ID} | reroll: "${def.rerollStepName}" missing`);
+    await primaryStep(state);
+    for (const extra of def.extraRerollSteps ?? []) {
+        const fn = game.lancer?.flowSteps?.get(extra);
+        if (typeof fn === 'function')
+            await fn(state);
+    }
+
+    const altTotal = def.getRoll(state)?.total ?? null;
+    let keptOriginal = false;
+
+    if (subtype === 'highest' && typeof originalTotal === 'number' && typeof altTotal === 'number')
+        keptOriginal = originalTotal >= altTotal;
+    else if (subtype === 'lowest' && typeof originalTotal === 'number' && typeof altTotal === 'number')
+        keptOriginal = originalTotal <= altTotal;
+    else if (subtype === 'choose' && typeof chooseHandler === 'function')
+        keptOriginal = !(await chooseHandler(originalTotal, altTotal));
+    // 'retry' default: keep alt — no restore.
+
+    if (keptOriginal && snap && def.restore)
+        def.restore(state, snap);
+
+    return { originalTotal, altTotal, keptOriginal };
+}
+
 async function applyBonusRerolls(state, rollType, def) {
     const api = game.modules.get(MODULE_ID)?.api;
     const actor = state.actor;
@@ -324,7 +368,6 @@ async function applyBonusRerolls(state, rollType, def) {
     const consumed = [];
     const token = actor.token ? actor.token.object : actor.getActiveTokens?.()?.[0] ?? null;
     const userIdControl = api.getTokenOwnerUserId?.(token) ?? api.getActiveGMId?.();
-    const primaryStep = game.lancer?.flowSteps?.get(def.rerollStepName);
 
     for (const entry of candidates) {
         const bonus = entry.b;
@@ -347,44 +390,24 @@ async function applyBonusRerolls(state, rollType, def) {
         if (offer?.choiceIdx !== 0)
             continue;
 
-        if (typeof primaryStep !== 'function')
-            break;
-
-        const snap = def.snapshot ? def.snapshot(state) : null;
-        const originalTotal = currentRoll?.total ?? null;
-
-        if (def.beforeReroll)
-            def.beforeReroll(state);
-        await primaryStep(state);
-        for (const extra of def.extraRerollSteps ?? []) {
-            const extraStep = game.lancer?.flowSteps?.get(extra);
-            if (typeof extraStep === 'function')
-                await extraStep(state);
-        }
-
-        const altTotal = def.getRoll(state)?.total ?? null;
-        let keptOriginal = false;
-
-        if (subtype === 'highest' && typeof originalTotal === 'number' && typeof altTotal === 'number')
-            keptOriginal = originalTotal >= altTotal;
-        else if (subtype === 'lowest' && typeof originalTotal === 'number' && typeof altTotal === 'number')
-            keptOriginal = originalTotal <= altTotal;
-        else if (subtype === 'choose') {
+        const chooseHandler = async (orig, alt) => {
             const pick = await api.startChoiceCard({
                 title: `${upperName} \u2014 KEEP WHICH?`,
                 originToken: token,
                 userIdControl,
                 choices: [
-                    { text: `Original (${originalTotal ?? '?'})`, icon: 'fas fa-undo' },
-                    { text: `Alt (${altTotal ?? '?'})`, icon: 'fas fa-dice' }
+                    { text: `Alt (${alt ?? '?'})`, icon: 'fas fa-dice' },
+                    { text: `Original (${orig ?? '?'})`, icon: 'fas fa-undo' }
                 ]
             });
-            keptOriginal = pick?.choiceIdx === 0;
+            return pick?.choiceIdx === 0;
+        };
+        try {
+            await _runRerollWithSubtype(def, state, subtype, chooseHandler);
+        } catch (e) {
+            console.error(`${MODULE_ID} | bonus reroll failed:`, e);
+            break;
         }
-        // 'retry' (default): keep alt \u2014 already in state, no restore needed.
-
-        if (keptOriginal && snap && def.restore)
-            def.restore(state, snap);
 
         consumed.push(entry);
     }
@@ -392,6 +415,21 @@ async function applyBonusRerolls(state, rollType, def) {
     for (const { b, source } of consumed) {
         if (!b.id)
             continue;
+        const usesCur = typeof b.uses === 'number' ? b.uses : null;
+        if (usesCur !== null && usesCur > 1) {
+            const newUses = usesCur - 1;
+            if (source === 'constant' && api.addConstantBonus) {
+                await api.addConstantBonus(actor, { ...b, uses: newUses });
+            } else if (source === 'global') {
+                const bonuses = actor.getFlag('lancer-automations', 'global_bonuses') || [];
+                const updated = bonuses.map(x => x.id === b.id ? { ...x, uses: newUses } : x);
+                await actor.setFlag('lancer-automations', 'global_bonuses', updated);
+                const effect = actor.effects.find(e => e.getFlag('lancer-automations', 'linkedBonusId') === b.id);
+                if (effect)
+                    await effect.update({ 'flags.statuscounter.value': newUses });
+            }
+            continue;
+        }
         if (source === 'global' && api.removeGlobalBonus)
             await api.removeGlobalBonus(actor, b.id, false);
         else if (source === 'constant' && api.removeConstantBonus)

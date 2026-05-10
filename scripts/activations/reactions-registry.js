@@ -1304,7 +1304,7 @@ export function getDefaultGeneralReactionRegistry() {
                 if (actor?.type !== "deployable" || actor.system?.type !== "Mine")
                     return false;
                 // One-shot per token: skip if already armed before, even if status was removed.
-                if (reactorToken.document.getFlag('lancer-automations', 'wasArmed'))
+                if (api.getTokenFlags(reactorToken.document, 'wasArmed'))
                     return false;
                 return true;
             },
@@ -1319,7 +1319,7 @@ export function getDefaultGeneralReactionRegistry() {
                     note: "Mine Armed",
                     duration: { label: "permanent" }
                 });
-                await reactorToken.document.setFlag('lancer-automations', 'wasArmed', true);
+                await api.addTokenFlags(reactorToken.document, { wasArmed: true });
             }
         },
         // Tunable via api.addActorFlags: mineDetectionRadius, mineDetectionDisposition, customMineDetection.
@@ -1335,13 +1335,13 @@ export function getDefaultGeneralReactionRegistry() {
                     outOfCombat: true,
                     activationType: "code",
                     activationMode: "instead",
-                    evaluate: function (triggerType, triggerData, reactorToken) {
+                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         if (triggerData.statusId !== "armed")
                             return false;
                         const actor = reactorToken.actor;
                         if (actor?.type !== "deployable" || actor.system?.type !== "Mine")
                             return false;
-                        return !actor.getFlag("lancer-automations", "customMineDetection");
+                        return !api.getActorFlags(actor, "customMineDetection");
                     },
                     activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         if (api.findAura(reactorToken, "LA_MineZone"))
@@ -1439,10 +1439,10 @@ export function getDefaultGeneralReactionRegistry() {
                     outOfCombat: true,
                     activationType: "code",
                     activationMode: "instead",
-                    evaluate: function (triggerType, triggerData, reactorToken) {
+                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         if (triggerData.statusId !== "armed")
                             return false;
-                        return !reactorToken.actor?.getFlag("lancer-automations", "customMineDetection");
+                        return !api.getActorFlags(reactorToken.actor, "customMineDetection");
                     },
                     activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                         for (let i = 0; i < 10; i++) {
@@ -1764,6 +1764,7 @@ export function getDefaultGeneralReactionRegistry() {
                             name: "LA_Guardian",
                             unified: false,
                             radiusOffset: -5,
+                            innerRadius: "",
                             radius: "0",
                             lineWidth: 6,
                             lineColor: "#757575",
@@ -1771,7 +1772,7 @@ export function getDefaultGeneralReactionRegistry() {
                             lineDashSize: 15,
                             lineGapSize: 10,
                             fillType: 0,
-                            lineDashOffsetAnimation: -20,
+                            lineDashOffsetAnimation: -5,
                             nonOwnerVisibility: { default: true }
                         }));
                     } finally {
@@ -1827,6 +1828,7 @@ export function getDefaultGeneralReactionRegistry() {
                             name: "LA_Bulwark",
                             unified: false,
                             radiusOffset: -5,
+                            innerRadius: "",
                             radius: "0",
                             lineWidth: 6,
                             lineColor: "#000000",
@@ -1834,7 +1836,7 @@ export function getDefaultGeneralReactionRegistry() {
                             lineDashSize: 15,
                             lineGapSize: 10,
                             fillType: 0,
-                            lineDashOffsetAnimation: -20,
+                            lineDashOffsetAnimation: -5,
                             nonOwnerVisibility: { default: true }
                         }));
                     } finally {

@@ -66,6 +66,9 @@ const S_COL_LABEL = [
     'letter-spacing:1px',
     'text-transform:uppercase',
     'font-weight:bold',
+    'position:sticky',
+    'top:0',
+    'z-index:1',
 ].join(';') + ';';
 
 const BG_DEFAULT   = '#f5f5f5';
@@ -1071,6 +1074,15 @@ export class LancerHUD {
             }
 
             col.append(row);
+        }
+
+        const maxItems = game.settings.get('lancer-automations', 'tah.maxColumnItems') ?? 0;
+        if (maxItems > 0 && filteredItems.length > maxItems) {
+            const ROW_H = 32; // approx row height including 2px gap
+            const LABEL_H = 22;
+            col.css({ maxHeight: `${LABEL_H + ROW_H * maxItems}px`, overflowY: 'auto' });
+        } else {
+            col.css({ maxHeight: '', overflowY: '' });
         }
     }
 
@@ -3323,7 +3335,7 @@ export class LancerHUD {
     }
 
     _makeCol(label) {
-        return $(`<div style="${S_COL}"><div class="la-hud-col-label" style="${S_COL_LABEL}">${label}</div></div>`);
+        return $(`<div class="la-hud-col lancer-scroll" style="${S_COL}"><div class="la-hud-col-label" style="${S_COL_LABEL}">${label}</div></div>`);
     }
 
     _makeRow(label, hasArrow, icon = null, activation = null, badge = null, badgeColor = null, count = 0) {

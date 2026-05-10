@@ -10,7 +10,7 @@ import {
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
-import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag } from "../socket.js";
+import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX } from "../fx/actionFX.js";
 
 import {
@@ -824,6 +824,56 @@ export async function removeActorFlags(actor, flags) {
         await unsetActorFlag(actor, 'lancer-automations', key);
     }
     return actor;
+}
+
+/**
+ * Add or update lancer-automations flags on a token document. Socket-routed for non-owners.
+ * @param {Token|TokenDocument} tokenOrDoc
+ * @param {Object} flags    Key/value pairs to set in the lancer-automations namespace
+ */
+export async function addTokenFlags(tokenOrDoc, flags) {
+    const td = tokenOrDoc?.document ?? tokenOrDoc;
+    if (!td || typeof flags !== 'object') {
+        ui.notifications.error("addTokenFlags: token and flags object are required.");
+        return null;
+    }
+    for (const [key, val] of Object.entries(flags)) {
+        await setTokenFlag(td, 'lancer-automations', key, val);
+    }
+    return td;
+}
+
+/**
+ * Remove lancer-automations flags from a token document. Socket-routed for non-owners.
+ * @param {Token|TokenDocument} tokenOrDoc
+ * @param {Object} flags    Object whose keys are flags to unset
+ */
+export async function removeTokenFlags(tokenOrDoc, flags) {
+    const td = tokenOrDoc?.document ?? tokenOrDoc;
+    if (!td || typeof flags !== 'object') {
+        ui.notifications.error("removeTokenFlags: token and flags object are required.");
+        return null;
+    }
+    for (const key of Object.keys(flags)) {
+        await unsetTokenFlag(td, 'lancer-automations', key);
+    }
+    return td;
+}
+
+/**
+ * Read lancer-automations flag(s) from a token document.
+ * @param {Token|TokenDocument} tokenOrDoc
+ * @param {string} [flagName] If omitted, returns the whole `lancer-automations` namespace object.
+ */
+export function getTokenFlags(tokenOrDoc, flagName = null) {
+    const td = tokenOrDoc?.document ?? tokenOrDoc;
+    if (!td) {
+        ui.notifications.error("getTokenFlags: token is required.");
+        return null;
+    }
+    if (flagName)
+        return td.getFlag('lancer-automations', flagName);
+    return td.flags?.['lancer-automations'] || {};
 }
 
 /**

@@ -263,12 +263,12 @@ Hooks.on('lancer-automations.ready', (api) => {
                                         attack_type: "Melee"
                                     });
                                 }
-                            }
-                        ];
-                        if (isGrappling) {
-                            choices.push({
+                            },
+                            {
                                 text: "End Grapple (Free Action)",
                                 icon: "fas fa-unlink",
+                                disabled: !isGrappling,
+                                disabledReason: "You aren't grappling anyone.",
                                 callback: async () => {
                                     await api.executeSimpleActivation(reactorToken.actor, {
                                         title: "End Grapple",
@@ -276,12 +276,12 @@ Hooks.on('lancer-automations.ready', (api) => {
                                         detail: "End your grapple as a free action."
                                     });
                                 }
-                            });
-                        }
-                        if (isGrappled) {
-                            choices.push({
+                            },
+                            {
                                 text: "Break Free (Quick Action)",
                                 icon: "cci cci-structure",
+                                disabled: !isGrappled,
+                                disabledReason: "You aren't being grappled.",
                                 callback: async () => {
                                     await api.executeSimpleActivation(reactorToken.actor, {
                                         title: "Break Free",
@@ -289,8 +289,8 @@ Hooks.on('lancer-automations.ready', (api) => {
                                         detail: "Attempt to break free from a grapple with a contested HULL check."
                                     });
                                 }
-                            });
-                        }
+                            }
+                        ];
 
                         await api.startChoiceCard({
                             mode: "or",

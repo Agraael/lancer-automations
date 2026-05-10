@@ -12,7 +12,6 @@ const ACTIVATIONS_FIELDS = [
     { key: 'consumeReaction', type: 'boolean' },
     { key: 'consumeAction', type: 'boolean' },
     { key: 'treatGenericPrintAsActivation', type: 'boolean' },
-    { key: 'showBonusHudButton', type: 'boolean' },
 ];
 
 const COMBAT_MOVEMENT_FIELDS = [
@@ -116,6 +115,13 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
     { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
 
+    { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
+    { key: 'showBonusHudButton', type: 'boolean' },
+    { key: 'showStatusEffectsHudButton', type: 'boolean' },
+    { key: 'showRevertMovementHudButton', type: 'boolean' },
+    { type: 'moduleBoolean', module: 'temporary-custom-statuses', key: 'enableHud', label: 'Custom Status HUD Button' },
+    { type: 'moduleBoolean', module: 'elevationruler', key: 'history-hud-button', label: 'Elevation Ruler History HUD Button' },
+
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
     { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
@@ -143,6 +149,7 @@ const TAH_FIELDS = [
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
+    { key: 'tah.maxColumnItems', type: 'number' },
     { key: 'tah.rangePreview', type: 'boolean' },
     { key: 'tah.rangePreviewOnAttackCard', type: 'boolean' },
     { key: 'tah.auraUseAltKey', type: 'boolean' },
@@ -436,6 +443,26 @@ function _buildItem(f) {
             cells: row.cells.map(cell => ({ ...cell, isLocked: _isLockedForUser(cell.name) }))
         }));
         return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows };
+    }
+    if (f.type === 'moduleBoolean') {
+        const mod = game.modules.get(f.module);
+        if (!mod?.active) {
+            return null;
+        }
+        let value = false;
+        try {
+            value = !!game.settings.get(f.module, f.key);
+        } catch { /* setting not registered */ }
+        const setting = game.settings.settings.get(`${f.module}.${f.key}`) ?? {};
+        return {
+            key: `__ext.${f.module}.${f.key}`,
+            type: 'boolean',
+            label: f.label ?? setting.name ?? f.key,
+            hint: f.hint ?? setting.hint ?? '',
+            value,
+            isBoolean: true,
+            isLocked: !game.user.isGM
+        };
     }
     if (f.type === 'compactBooleans') {
         return {
@@ -745,7 +772,7 @@ export class LancerAutomationsConfig extends FormApplication {
             label: tab.label,
             icon: tab.icon,
             active: idx === 0,
-            items: tab.fields.map(_buildItem),
+            items: tab.fields.map(_buildItem).filter(Boolean),
         }));
         return { tabs };
     }
@@ -914,7 +941,48 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     async _updateObject(_event, formData) {
-        // _sfx.* form values fold back into the single statusFXConfig object.
+        for (const formKey of Object.keys(formData)) {
+            if (!formKey.startsWith('__ext.')) {
+                continue;
+            }
+            const rest = formKey.slice('__ext.'.length);
+            const dot = rest.indexOf('.');
+            if (dot < 1) {
+                continue;
+            }
+            const moduleId = rest.slice(0, dot);
+            const settingKey = rest.slice(dot + 1);
+            if (!game.modules.get(moduleId)?.active) {
+                continue;
+            }
+            try {
+                await game.settings.set(moduleId, settingKey, !!formData[formKey]);
+            } catch (e) {
+                console.warn(`${MODULE_ID} | Could not save ${moduleId}.${settingKey}`, e);
+            }
+        }
+        for (const tab of TAB_DEFS) {
+            for (const fRaw of tab.fields) {
+                const f = /** @type {any} */ (fRaw);
+                if (f.type !== 'moduleBoolean') {
+                    continue;
+                }
+                if (!game.modules.get(f.module)?.active) {
+                    continue;
+                }
+                const formKey = `__ext.${f.module}.${f.key}`;
+                if (formKey in formData) {
+                    continue;
+                }
+                try {
+                    await game.settings.set(f.module, f.key, false);
+                } catch (e) {
+                    console.warn(`${MODULE_ID} | Could not save ${f.module}.${f.key}`, e);
+                }
+            }
+        }
+
+
         const sfxSubs = new Set();
         for (const tab of TAB_DEFS) {
             for (const fRaw of tab.fields) {

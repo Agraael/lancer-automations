@@ -51,6 +51,15 @@ Hooks.on('init', () => {
         default: 0.5,
         range: { min: 0, max: 3, step: 0.5 },
     });
+    game.settings.register(MODULE, 'tah.maxColumnItems', {
+        name: 'Max items per column',
+        hint: 'Cap category and sub-columns to this many rows; columns with more items become scrollable. 0 disables the cap. The top menu is never capped.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 50, step: 1 },
+    });
     game.settings.register(MODULE, 'tah.rangePreview', {
         name: 'Weapon Range Preview',
         hint: 'Show weapon range on the map when hovering items in the HUD. Requires Grid Aware Auras.',

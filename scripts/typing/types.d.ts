@@ -391,8 +391,42 @@ interface TriggerDataOnRoll extends TriggerDataBase {
     item: any;
     isReroll: boolean;
     rerollCount: number;
-    reroll: (reason?: string) => Promise<void>;
-    changeRoll: (newTotal: number) => Promise<void>;
+    /**
+     * Re-run the underlying roll step, optionally with subtype-aware resolution.
+     * - `subtype: "retry"` (default) — alt replaces the original.
+     * - `subtype: "highest"` / `"lowest"` — auto-keep the better/worse total.
+     * - `subtype: "choose"` — second card asks the user to pick Original vs Alt.
+     * `allowConfirm: false` skips the "USE REROLL?" prompt and runs silently.
+     * `opts` may carry `{ item, originToken, relatedToken, preConfirm, postChoice }` and is auto-defaulted from the reactor context.
+     */
+    reroll: (
+        reason?: string | null,
+        subtype?: "retry" | "highest" | "lowest" | "choose",
+        title?: string | null,
+        allowConfirm?: boolean,
+        userIdControl?: string | string[] | null,
+        opts?: {
+            item?: any;
+            originToken?: Token | null;
+            relatedToken?: Token | null;
+            preConfirm?: (() => Promise<boolean>) | null;
+            postChoice?: ((chose: boolean) => any) | null;
+        }
+    ) => Promise<void>;
+    /**
+     * Set the roll total directly (recomputes hit/crit for attack flows; structure/stress only update `_total`).
+     * `allowConfirm: false` skips the "CHANGE ROLL?" prompt.
+     */
+    changeRoll: (
+        newTotal: number,
+        reason?: string | null,
+        title?: string | null,
+        allowConfirm?: boolean,
+        userIdControl?: string | string[] | null,
+        preConfirm?: (() => Promise<boolean>) | null,
+        postChoice?: ((chose: boolean) => any) | null,
+        opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }
+    ) => Promise<void>;
     flowState: any;
     canTriggerReaction?: boolean;
 }

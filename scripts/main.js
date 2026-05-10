@@ -1278,6 +1278,24 @@ function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-automations', 'showStatusEffectsHudButton', {
+        name: 'Token HUD Status Effects Button',
+        hint: 'Foundry\'s default "Assign Status Effects" button on the Token HUD.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'showRevertMovementHudButton', {
+        name: 'Revert Movement Button',
+        hint: 'The Revert Last Movement / Reset Movement History button on the Token HUD.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     // ── Features ──
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register('lancer-automations', 'additionalStatuses', {
@@ -4199,9 +4217,32 @@ Hooks.on('lancer.postFlow.SimpleActivationFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.CoreActiveFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.TalentFlow', _consumeFlowAction);
 
+// Workaround for `lancer-alternative-sheets` reading prototypeToken on null compendium actors.
+function patchFromUuidSyncForCompendiumActors() {
+    if (typeof globalThis.fromUuidSync !== 'function')
+        return;
+    const orig = /** @type {any} */ (globalThis.fromUuidSync);
+    if (orig._laCompendiumPatched)
+        return;
+    const patched = function (uuid, ...rest) {
+        const r = orig.call(this, uuid, ...rest);
+        if (r || typeof uuid !== 'string' || !/^Actor\.[A-Za-z0-9]+$/.test(uuid))
+            return r;
+        const id = uuid.split('.').pop();
+        for (const pack of game.packs?.filter(p => p.documentName === 'Actor') ?? []) {
+            const doc = pack.get?.(id);
+            if (doc) return doc;
+        }
+        return r;
+    };
+    patched._laCompendiumPatched = true;
+    globalThis.fromUuidSync = patched;
+}
+
 Hooks.once('ready', async () => {
     installJb2aHooks();
     initAltStructReady();
+    patchFromUuidSyncForCompendiumActors();
 
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
         const flows = game.lancer?.flows;
@@ -4910,6 +4951,10 @@ Hooks.on('renderChatMessage', (app, html, data) => {
 });
 
 Hooks.on('renderTokenHUD', (hud, html, data) => {
+    if (!game.settings.get('lancer-automations', 'showStatusEffectsHudButton')) {
+        html.find('.col.right .control-icon[data-action="effects"]').remove();
+    }
+
     // Existing Bonus Menu Button
     if (game.settings.get('lancer-automations', 'showBonusHudButton')) {
         const token = hud.object;
@@ -4933,6 +4978,10 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         return;
 
     if (!game.combat?.started) {
+        return;
+    }
+
+    if (!game.settings.get('lancer-automations', 'showRevertMovementHudButton')) {
         return;
     }
 
