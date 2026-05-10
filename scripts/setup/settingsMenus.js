@@ -316,6 +316,7 @@ const DEBUG_FIELDS = [
     { key: 'debugBoostDetection', type: 'boolean' },
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
+    { key: 'debugForceJb2aFree', type: 'boolean' },
 ];
 
 const VISION_FIELDS = [

@@ -69,6 +69,7 @@ import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
+import * as actionFX from "./fx/actionFX.js";
 import { initSocket, setTokenFlag, unsetTokenFlag, awaitPendingAck } from "./socket.js";
 export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js";
 import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
@@ -1572,6 +1573,15 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'debugOutOfCombat', {
         name: 'Debug: Out of Combat Warnings',
         hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'debugForceJb2aFree', {
+        name: 'Debug: Force JB2A Free Fallbacks',
+        hint: 'Pretend the JB2A Patreon module is not installed; route all premium assets through the free-version fallback registry. For testing only.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -4780,6 +4790,7 @@ Hooks.on('ready', async () => {
         getMovementCap,
         increaseMovementCap,
         initMovementCap,
+        actionFX,
         processEffectConsumption,
         handleTrigger,
         registerUserHelper,

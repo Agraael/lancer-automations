@@ -739,6 +739,10 @@ interface LancerAutomationsAPI {
     getItemActions(item: any): object[];
     getActorActions(tokenOrActor: Token | any): object[];
     removeExtraActions(target: any, filter?: Function | string | string[] | null): Promise<void>;
+    lockActorAction(target: any, actionName: string, sourceId: string): Promise<any>;
+    unlockActorAction(target: any, actionName: string, sourceId: string): Promise<any>;
+    isActionLocked(target: any, actionName: string): boolean;
+    getLockedActions(target: any): string[];
     getItemDeployables(item: any, actor?: any): string[];
     placeDeployable(options: {
         deployable: any | string | Array<any | string>;

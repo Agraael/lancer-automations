@@ -4069,5 +4069,80 @@ api.registerDefaultItemReactions({
     }
 });
 
+api.registerDefaultItemReactions({
+    ...Object.fromEntries([
+        "npcf_limited_melee_attacks_ship",
+        "npcf_limited_melee_vehicle"
+    ].map(lid => [lid, {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.lockActorAction(token.actor, "Grapple", item.id);
+            }
+        }]
+    }])),
+    ...Object.fromEntries([
+        "npcf_no_manipulators_ship",
+        "npcf_no_manipulators_vehicle"
+    ].map(lid => [lid, {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.lockActorAction(token.actor, "Grapple", item.id);
+                await api.lockActorAction(token.actor, "Handle",  item.id);
+            }
+        }]
+    }])),
+    "npcf_bulky_construction_industrial_mech": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api) {
+                await api.lockActorAction(token.actor, "Boost", item.id);
+                await api.addExtraActions(token.actor, {
+                    name: "Boost (Industrial)",
+                    activation: "Full",
+                    detail: "Move up to your SPEED. Industrial frames Boost as a full action."
+                });
+            }
+        }]
+    }
+});
+
 api.registerDefaultGeneralReactions({
+    "Boost (Industrial)": {
+        category: "NPC",
+        triggers: ["onActivation"],
+        actionType: "Full Action",
+        onlyOnSourceMatch: true,
+        activationType: "code",
+        activationMode: "after",
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const speed = (reactorToken.actor?.system?.speed ?? 0) * canvas.grid.distance;
+            if (speed > 0)
+                api.increaseMovementCap(reactorToken, speed);
+            await api.actionFX?.playBoostFX?.(reactorToken);
+        }
+    }
 });

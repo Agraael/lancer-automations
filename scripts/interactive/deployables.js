@@ -876,6 +876,63 @@ export function getTokenFlags(tokenOrDoc, flagName = null) {
     return td.flags?.['lancer-automations'] || {};
 }
 
+function _resolveActor(target) {
+    if (!target)
+        return null;
+    if (target.documentName === 'Actor')
+        return target;
+    return target.actor ?? target.document?.actor ?? null;
+}
+
+/** Lock a standard action on an actor. Source-tracked: stays locked until every source is removed. */
+export async function lockActorAction(target, actionName, sourceId) {
+    const actor = _resolveActor(target);
+    if (!actor || !actionName || !sourceId) {
+        ui.notifications.error("lockActorAction: actor, actionName and sourceId are required.");
+        return null;
+    }
+    const current = /** @type {Record<string,string[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const sources = Array.isArray(current[actionName]) ? current[actionName].slice() : [];
+    if (!sources.includes(sourceId))
+        sources.push(sourceId);
+    await addActorFlags(actor, { lockedActions: { ...current, [actionName]: sources } });
+    return actor;
+}
+
+/** Inverse of lockActorAction. Unlocks once every source has been removed. */
+export async function unlockActorAction(target, actionName, sourceId) {
+    const actor = _resolveActor(target);
+    if (!actor || !actionName || !sourceId) {
+        ui.notifications.error("unlockActorAction: actor, actionName and sourceId are required.");
+        return null;
+    }
+    const current = /** @type {Record<string,string[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const sources = Array.isArray(current[actionName]) ? current[actionName].filter(s => s !== sourceId) : [];
+    const next = { ...current };
+    if (sources.length)
+        next[actionName] = sources;
+    else
+        delete next[actionName];
+    await addActorFlags(actor, { lockedActions: next });
+    return actor;
+}
+
+export function isActionLocked(target, actionName) {
+    const actor = _resolveActor(target);
+    if (!actor || !actionName)
+        return false;
+    const current = /** @type {Record<string,string[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    return Array.isArray(current[actionName]) && current[actionName].length > 0;
+}
+
+export function getLockedActions(target) {
+    const actor = _resolveActor(target);
+    if (!actor)
+        return [];
+    const current = /** @type {Record<string,string[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    return Object.keys(current).filter(k => Array.isArray(current[k]) && current[k].length > 0);
+}
+
 /**
  * Marks an item as activated.
  * @param {Item} item - The item to mark natively

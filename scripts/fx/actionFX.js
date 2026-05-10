@@ -2116,12 +2116,28 @@ Hooks.on('lancer.postFlow.BasicAttackFlow', _missCritOverlayHandler);
 Hooks.on('lancer.postFlow.WeaponAttackFlow', _missCritOverlayHandler);
 Hooks.on('lancer.postFlow.TechAttackFlow', _missCritOverlayHandler);
 
+const STAT_PULSE_SUCCESS = 'jb2a.template_circle.radar.loop.800px.001.pulse.greenpurple';
+const STAT_PULSE_FAIL    = 'jb2a.template_circle.radar.loop.800px.001.pulse.purplered';
+
 export async function playContestedOutcomeFX(winnerToken, loserToken) {
     if (!isActionFXEnabled() || typeof Sequencer === 'undefined')
         return;
     try {
-        await Sequencer.Preloader.preloadForClients(['jb2a.ui.success.green', 'jb2a.ui.failure.red']);
+        await Sequencer.Preloader.preloadForClients([
+            'jb2a.ui.success.green', 'jb2a.ui.failure.red',
+            STAT_PULSE_SUCCESS, STAT_PULSE_FAIL
+        ]);
         if (winnerToken) {
+            new Sequence()
+                .effect()
+                .file(STAT_PULSE_SUCCESS)
+                .atLocation(winnerToken)
+                .scaleToObject(3)
+                .belowTokens()
+                .duration(1500)
+                .fadeIn(200)
+                .fadeOut(400)
+                .play();
             new Sequence()
                 .effect()
                 .file('jb2a.ui.success.green')
@@ -2131,6 +2147,16 @@ export async function playContestedOutcomeFX(winnerToken, loserToken) {
             playStatsSound('success');
         }
         if (loserToken) {
+            new Sequence()
+                .effect()
+                .file(STAT_PULSE_FAIL)
+                .atLocation(loserToken)
+                .scaleToObject(3)
+                .belowTokens()
+                .duration(1500)
+                .fadeIn(200)
+                .fadeOut(400)
+                .play();
             new Sequence()
                 .effect()
                 .file('jb2a.ui.failure.red')
@@ -2149,12 +2175,23 @@ export async function playStatRollOutcomeFX(token, success, { waitForActiveFX = 
         return;
     try {
         const file = success ? 'jb2a.ui.success.green' : 'jb2a.ui.failure.red';
+        const pulse = success ? STAT_PULSE_SUCCESS : STAT_PULSE_FAIL;
         const soundKey = success ? 'success' : 'fail';
-        await Sequencer.Preloader.preloadForClients([file]);
+        await Sequencer.Preloader.preloadForClients([file, pulse]);
         if (waitForActiveFX) {
             await _waitForSourceEffectsToEnd(token);
             await new Promise((r) => setTimeout(r, 600));
         }
+        new Sequence()
+            .effect()
+            .file(pulse)
+            .atLocation(token)
+            .scaleToObject(3)
+            .belowTokens()
+            .duration(1500)
+            .fadeIn(200)
+            .fadeOut(400)
+            .play();
         new Sequence()
             .effect()
             .file(file)

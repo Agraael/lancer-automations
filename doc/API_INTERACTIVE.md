@@ -434,6 +434,37 @@ await api.removeExtraActions(myToken, "Custom Strike");
 ---
 
 <details>
+<summary><b><code>lockActorAction</code></b> <sup>async</sup> · <b><code>unlockActorAction</code></b> <sup>async</sup> · <b><code>isActionLocked</code></b> · <b><code>getLockedActions</code></b></summary>
+
+<br>
+
+```js
+await api.lockActorAction(actor, actionName, sourceId)
+await api.unlockActorAction(actor, actionName, sourceId)
+api.isActionLocked(actor, actionName)        // → boolean
+api.getLockedActions(actor)                  // → string[]
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>actor</kbd> | `Actor\|Token\|TokenDocument` | Target actor |
+| <kbd>actionName</kbd> | `string` | Standard action display name (`"Boost"`, `"Grapple"`, ...) |
+| <kbd>sourceId</kbd> | `string` | Stable key (typically `item.id`). Source-tracked; stays locked until every source is removed. |
+
+Locked actions are greyed in TAH and clicks are blocked.
+
+```js
+onInit: async function (token, item, api) {
+    await api.lockActorAction(token.actor, "Boost", item.id);
+    await api.addExtraActions(token.actor, { name: "Boost (Industrial)", activation: "Full", detail: "..." });
+}
+```
+
+</details>
+
+---
+
+<details>
 <summary><b><code>getItemDeployables</code></b> → <code>string[]</code></summary>
 
 <br>

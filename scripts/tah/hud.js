@@ -1,9 +1,9 @@
-/* global $, window, game, CONFIG, Hooks, fromUuid, Dialog */
+/* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, hasItem } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked } from '../interactive/deployables.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
@@ -757,11 +757,23 @@ export class LancerHUD {
      * @returns {object}
      */
     _simpleItem(label, icon, action, detail) {
+        const locked = isActionLocked(this._actor, action.name);
         return {
             label,
             icon,
-            onClick:      () => executeSimpleActivation(this._actor, { title: action.name, action, detail }),
-            broadcastFn:  (_t, a) => executeSimpleActivation(a, { title: action.name, action, detail }),
+            softDisabled: locked,
+            onClick: () => {
+                if (isActionLocked(this._actor, action.name)) {
+                    ui.notifications.warn(`${action.name} is locked on ${this._actor.name}.`);
+                    return;
+                }
+                return executeSimpleActivation(this._actor, { title: action.name, action, detail });
+            },
+            broadcastFn: (_t, a) => {
+                if (isActionLocked(a, action.name))
+                    return;
+                return executeSimpleActivation(a, { title: action.name, action, detail });
+            },
             onRightClick: this._actionPopup({ ...action, detail }),
         };
     }
@@ -1323,12 +1335,7 @@ export class LancerHUD {
                     { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
                     { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
                     this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
-                    (() => {
-                        const grappleItem = this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.');
-                        if (hasItem(actor, ['npcf_limited_melee_attacks_ship', 'npcf_limited_melee_vehicle', 'npcf_no_manipulators_ship', 'npcf_no_manipulators_vehicle']))
-                            grappleItem.softDisabled = true;
-                        return grappleItem;
-                    })(),
+                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.'),
                     { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
                 ] : []),
                 ...(actor.type === 'pilot' ? [
@@ -1456,12 +1463,7 @@ export class LancerHUD {
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
                 this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
                 this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
-                (() => {
-                    const handleItem = this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.');
-                    if (hasItem(actor, ['npcf_no_manipulators_ship', 'npcf_no_manipulators_vehicle']))
-                        handleItem.softDisabled = true;
-                    return handleItem;
-                })(),
+                this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.'),
                 this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.')] : []),

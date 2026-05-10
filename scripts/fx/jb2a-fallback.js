@@ -38,7 +38,9 @@ const JB2A_FALLBACKS = {
     'jb2a.template_circle.out_pulse.02.burst.greenorange': { src: 'jb2a.template_circle.out_pulse.02.burst.bluewhite', tint: 0xff8800 },
 
     'jb2a.markers.chain.standard.complete.02.grey': { src: 'jb2a.markers.chain.standard.complete.02.red', tint: 0x888888 },
-    
+    'jb2a.ui.success.green' : {src: ''},
+    'jb2a.ui.failure.red' : {src: '', tint: 0xff3030},
+    'jb2a.ui.hit.blue': {src: ''},
 };
 
 const PLACEHOLDER = 'modules/lancer-automations/FX/Debugempty.png';
@@ -47,6 +49,10 @@ const _runtimeRegistry = new Map();
 const _warnedIds = new Set();
 
 function _hasPatreon() {
+    try {
+        if (game.settings.get('lancer-automations', 'debugForceJb2aFree'))
+            return false;
+    } catch { /* setting not registered yet */ }
     return !!game.modules.get('jb2a_patreon')?.active;
 }
 

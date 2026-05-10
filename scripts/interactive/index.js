@@ -1,79 +1,21 @@
 /* global game */
 
+import * as cards from './cards.js';
+import * as canvas from './canvas.js';
+import * as network from './network.js';
+import * as deployables from './deployables.js';
+import * as combat from './combat.js';
+
 export * from './cards.js';
 export * from './canvas.js';
 export * from './network.js';
 export * from './deployables.js';
 export * from './combat.js';
 
-import { chooseToken, placeZone, knockBackToken, moveToken, placeToken, getGridDistance, drawRangeHighlight, drawMovementTrace } from './canvas.js';
-import { startChoiceCard, showUserIdControlledChoiceCard, resolveGMChoiceCard, showMultiUserControlledChoiceCard, cancelBroadcastChoiceCard, startVoteCard, showVoteCardOnVoter, receiveVoteSubmission, updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter, getTokenOwnerUserId } from './network.js';
-import { deployWeaponToken, pickupWeaponToken, resolveDeployable, placeDeployable, deployDeployable, beginDeploymentCard, openDeployableMenu, recallDeployable, addItemFlags, removeItemFlags, addActorFlags, removeActorFlags, getActorFlags, addTokenFlags, removeTokenFlags, getTokenFlags, addExtraDeploymentLids, addExtraActions, getItemDeployables, getItemActions, getItemFlags, setItemAsActivated, getActivatedItems, endItemActivation, openEndActivationMenu, pickItem, reloadOneWeapon, rechargeSystem, getWeapons, findItemByLid, hasItem, getActorActions, removeExtraActions, spawnHardCover, findDeployableInCompendium, resolveDeployableSourceItem } from './deployables.js';
-import { openThrowMenu, revertMovement, clearMovementHistory, openChoiceMenu, choseMount, chooseInvade, choseSystem, choseTrait } from './combat.js';
-
 export const InteractiveAPI = {
-    chooseToken,
-    placeZone,
-    knockBackToken,
-    placeToken,
-    startChoiceCard,
-    getTokenOwnerUserId,
-    deployWeaponToken,
-    pickupWeaponToken,
-    resolveDeployable,
-    placeDeployable,
-    deployDeployable,
-    beginDeploymentCard,
-    openDeployableMenu,
-    recallDeployable,
-    addItemFlags,
-    removeItemFlags,
-    addActorFlags,
-    removeActorFlags,
-    getActorFlags,
-    addTokenFlags,
-    removeTokenFlags,
-    getTokenFlags,
-    addExtraDeploymentLids,
-    addExtraActions,
-    getItemDeployables,
-    getItemActions,
-    getItemFlags,
-    openThrowMenu,
-    getGridDistance,
-    drawRangeHighlight,
-    revertMovement,
-    clearMovementHistory,
-    showUserIdControlledChoiceCard,
-    resolveGMChoiceCard,
-    showMultiUserControlledChoiceCard,
-    cancelBroadcastChoiceCard,
-    drawMovementTrace,
-    pickItem,
-    reloadOneWeapon,
-    rechargeSystem,
-    getWeapons,
-    findItemByLid,
-    hasItem,
-    setItemAsActivated,
-    getActivatedItems,
-    endItemActivation,
-    openEndActivationMenu,
-    openChoiceMenu,
-    startVoteCard,
-    showVoteCardOnVoter,
-    receiveVoteSubmission,
-    updateVoteCardOnVoter,
-    confirmVoteCardOnVoter,
-    cancelVoteCardOnVoter,
-    choseMount,
-    chooseInvade,
-    choseSystem,
-    choseTrait,
-    getActorActions,
-    removeExtraActions,
-    spawnHardCover,
-    moveToken,
-    findDeployableInCompendium,
-    resolveDeployableSourceItem
+    ...cards,
+    ...canvas,
+    ...network,
+    ...deployables,
+    ...combat,
 };
