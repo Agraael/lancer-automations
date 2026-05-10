@@ -4084,6 +4084,7 @@ api.registerDefaultItemReactions({
             activationType: "none",
             onInit: async function (token, item, api) {
                 await api.lockActorAction(token.actor, "Grapple", item.id);
+                await api.lockActorAction(token.actor, "Improvised Attack", item.id);
             }
         }]
     }])),

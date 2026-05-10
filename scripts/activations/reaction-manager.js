@@ -1408,7 +1408,7 @@ export class StartupScriptEditor extends FormApplication {
             width: 700,
             height: 580,
             resizable: true,
-            classes: ["lancer-reaction-editor"]
+            classes: ["lancer-reaction-editor", "lancer-dialog-base", "lancer-no-title"]
         });
     }
 
@@ -1509,7 +1509,7 @@ export class ReactionEditor extends FormApplication {
             template: `modules/lancer-automations/templates/reaction-editor.html`,
             width: 800,
             height: "auto",
-            classes: ["lancer-reaction-editor"]
+            classes: ["lancer-reaction-editor", "lancer-dialog-base", "lancer-no-title"]
         });
     }
 

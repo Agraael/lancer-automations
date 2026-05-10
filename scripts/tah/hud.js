@@ -757,25 +757,35 @@ export class LancerHUD {
      * @returns {object}
      */
     _simpleItem(label, icon, action, detail) {
-        const locked = isActionLocked(this._actor, action.name);
-        return {
+        return this._lockable({
             label,
             icon,
-            softDisabled: locked,
-            onClick: () => {
-                if (isActionLocked(this._actor, action.name)) {
-                    ui.notifications.warn(`${action.name} is locked on ${this._actor.name}.`);
-                    return;
-                }
-                return executeSimpleActivation(this._actor, { title: action.name, action, detail });
-            },
-            broadcastFn: (_t, a) => {
-                if (isActionLocked(a, action.name))
-                    return;
-                return executeSimpleActivation(a, { title: action.name, action, detail });
-            },
+            onClick:      () => executeSimpleActivation(this._actor, { title: action.name, action, detail }),
+            broadcastFn:  (_t, a) => executeSimpleActivation(a, { title: action.name, action, detail }),
             onRightClick: this._actionPopup({ ...action, detail }),
+        }, action.name);
+    }
+
+    // Wraps any TAH item with lock-action awareness: greyed when locked, click blocked.
+    _lockable(item, actionName) {
+        const origClick = item.onClick;
+        const origBroadcast = item.broadcastFn;
+        item.softDisabled = isActionLocked(this._actor, actionName);
+        item.onClick = () => {
+            if (isActionLocked(this._actor, actionName)) {
+                ui.notifications.warn(`${actionName} is locked on ${this._actor.name}.`);
+                return;
+            }
+            return origClick?.();
         };
+        if (origBroadcast) {
+            item.broadcastFn = (t, a) => {
+                if (isActionLocked(a, actionName))
+                    return;
+                return origBroadcast(t, a);
+            };
+        }
+        return item;
     }
 
     // anchorRow — the parent row this column aligns with vertically
@@ -1332,14 +1342,14 @@ export class LancerHUD {
             colLabel: 'Attacks',
             getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    { label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) },
-                    { label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) },
+                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) }, 'Skirmish'),
+                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) }, 'Barrage'),
                     this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
                     this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.'),
-                    { label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6',  onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) },
+                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) }, 'Improvised Attack'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
-                    { label: 'Fight', icon: 'systems/lancer/assets/icons/white/melee.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) },
+                    this._lockable({ label: 'Fight', icon: 'systems/lancer/assets/icons/white/melee.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight'),
                 ] : []),
                 { isSectionLabel: true, label: 'Tools' },
                 { label: 'Basic Attack',  icon: 'systems/lancer/assets/icons/mech_weapon.svg', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a) },
@@ -1423,11 +1433,11 @@ export class LancerHUD {
                     label: 'Basic',
                     childColLabel: 'Quick Tech',
                     getChildren: () => this._enrichHoverData([
-                        { label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: ap({ name: 'Basic Tech', activation: 'Quick Tech', tech_attack: true, detail: 'Roll your TECH ATTACK against one target\'s E-DEFENSE. On a success, deal 1d3 heat to the target.' }) },
-                        { label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) },
-                        { label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) },
-                        { label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) },
-                        { label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, choose one of the available Invade options.' }) },
+                        this._lockable({ label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: ap({ name: 'Basic Tech', activation: 'Quick Tech', tech_attack: true, detail: 'Roll your TECH ATTACK against one target\'s E-DEFENSE. On a success, deal 1d3 heat to the target.' }) }, 'Basic Tech'),
+                        this._lockable({ label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) }, 'Scan'),
+                        this._lockable({ label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) }, 'Lock On'),
+                        this._lockable({ label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) }, 'Bolster'),
+                        this._lockable({ label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, choose one of the available Invade options.' }) }, 'Invade'),
                     ], { actor, category: 'Tech' }),
                 },
                 { label: 'Invades',    childColLabel: 'Invades',    getChildren: () => this._catInvades().getItems() },
@@ -1467,8 +1477,8 @@ export class LancerHUD {
                 this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.')] : []),
-                { label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) },
-                { label: 'Teleport', icon: 'modules/lancer-automations/icons/teleport.svg', onClick: () => executeTeleport(this._token), broadcastFn: (_t, a) => executeTeleport(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Teleport', activation: 'Movement', detail: 'Teleport to a destination within your speed range. Costs speed in movement.' }) },
+                this._lockable({ label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up'),
+                this._lockable({ label: 'Teleport', icon: 'modules/lancer-automations/icons/teleport.svg', onClick: () => executeTeleport(this._token), broadcastFn: (_t, a) => executeTeleport(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Teleport', activation: 'Movement', detail: 'Teleport to a destination within your speed range. Costs speed in movement.' }) }, 'Teleport'),
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
