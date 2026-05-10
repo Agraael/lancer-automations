@@ -23,7 +23,8 @@ const NEW_STEP_KEYS = [
 ];
 const ALL_STEP_KEYS = [...OVERRIDE_STEP_KEYS, ...NEW_STEP_KEYS];
 const NEW_FLOW_KEYS = [
-    "secondaryStructureCrushingHit", "TearOffDirectHitFlow", "TearOffCrushingHitFlow",
+    "secondaryStructureCrushingHit", "secondaryStructureDirectHit",
+    "TearOffDirectHitFlow", "TearOffCrushingHitFlow",
     "DirectHitHullCheckFlow", "CrushingHitHullCheckFlow", "SimulatedStructureFlow",
     "StressEngineeringCheckFlow", "MeltdownFlow", "CriticalMeltdownFlow"
 ];
@@ -81,6 +82,7 @@ function setupHooks(flowSteps, flows) {
     }
 
     flows.set("secondaryStructureCrushingHit", { name: "Secondary Structure Crushing Hit", steps: ["initSecondaryStructureCrushingHit", "secondaryStructureRoll", "printSecondaryStructureCard", "selectDestructionTargetCrushingHitFallback", "printGenericCard"] });
+    flows.set("secondaryStructureDirectHit",   { name: "Secondary Structure Direct Hit",   steps: ["initSecondaryStructureCrushingHit", "secondaryStructureRoll", "printSecondaryStructureCard", "selectDestructionTargetDirectHitFallback",   "printGenericCard"] });
     flows.set("TearOffDirectHitFlow", { name: "Tear Off Direct Hit", steps: ["tearOffDirectHitFlow"] });
     flows.set("TearOffCrushingHitFlow", { name: "Tear Off Crushing Hit", steps: ["tearOffCrushingHitFlow"] });
     flows.set("DirectHitHullCheckFlow", { name: "Direct Hit HULL Check", steps: ["initStatRollData", "showStatRollHUD", "rollCheck", "handleDirectHitHullCheckResult", "printStatRollCard"] });

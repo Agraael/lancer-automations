@@ -266,7 +266,7 @@ export async function insertHullCheckButton(state) {
         } else {
             state.data.embedButtons.push(`<a
             class="alt-struct-flow-button lancer-button"
-            data-flow-type="check"
+            data-flow-type="StatRollFlow"
             data-check-type="hull"
             data-actor-id="${actor.uuid}"
           >
@@ -319,7 +319,7 @@ export async function insertSecondaryRollButton(state) {
         if (hasWeaponsOrSystems) {
             state.data.embedButtons.push(`<a
           class="alt-struct-flow-button lancer-button"
-          data-flow-type="secondaryStructure"
+          data-flow-type="secondaryStructureDirectHit"
           data-actor-id="${actor.uuid}"
         >
           <i class="fas fa-dice-d6 i--sm"></i> TEAR OFF
