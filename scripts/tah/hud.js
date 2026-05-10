@@ -1,6 +1,6 @@
-/* global $, window, game, CONFIG */
+/* global $, window, game, CONFIG, Hooks, fromUuid, Dialog */
 
-import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags } from '../interactive/detail-renderers.js';
+import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, hasItem } from '../interactive/deployables.js';
@@ -1125,6 +1125,7 @@ export class LancerHUD {
             this._catSkills(),
             this._catUtility(),
             this._catStatuses(),
+            this._catMacros(),
         ];
     }
 
@@ -2800,6 +2801,237 @@ export class LancerHUD {
 
     _catStatuses() {
         return { label: 'Statuses', isStatusPanel: true };
+    }
+
+    // ── MACROS panel (per-client list of Foundry macro shortcuts) ─────────────
+
+    _catMacros() {
+        return {
+            label: 'Macros',
+            colLabel: 'Macros',
+            getItems: () => this._buildMacroItems(),
+        };
+    }
+
+    _getMacroList() {
+        const raw = game.settings.get('lancer-automations', 'tah.macroList');
+        return Array.isArray(raw) ? raw : [];
+    }
+
+    async _saveMacroList(list) {
+        await game.settings.set('lancer-automations', 'tah.macroList', list);
+        Hooks.callAll('forceUpdateTokenActionHud');
+    }
+
+    // White-source SVGs render invisibly on light HUD rows; invert them to black.
+    _isWhiteSvgIcon(img) {
+        return !!img && img.endsWith('.svg') && (
+            img.includes('/white/')
+            || img.includes('modules/lancer-automations/')
+            || img.startsWith('icons/svg/')
+        );
+    }
+
+    _macroIconHtml(img, size = 20, invertOverride) {
+        if (!img)
+            return '';
+        const doInvert = typeof invertOverride === 'boolean'
+            ? invertOverride
+            : this._isWhiteSvgIcon(img);
+        const filter = doInvert ? 'invert(1)' : 'none';
+        return `<img src="${img}" onerror="this.onerror=null;this.src='icons/svg/dice-target.svg';" style="width:${size}px;height:${size}px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+    }
+
+    _buildMacroItems() {
+        const list = this._getMacroList();
+        /** @type {any[]} */
+        const items = list.map(entry => {
+            const macro = game.macros.get(entry.macroId);
+            const img = entry.iconOverride ?? macro?.img ?? entry.icon;
+            const name = entry.name ?? macro?.name ?? '(missing macro)';
+            const iconHtml = this._macroIconHtml(img, 20, entry.iconInvert);
+            if (!macro) {
+                return {
+                    label: `${iconHtml}<s style="opacity:0.7">${name}</s>`,
+                    onRightClick: (row) => this._openMacroRowPopup(entry, null, row),
+                };
+            }
+            return {
+                label: iconHtml + name,
+                onClick:      () => macro.execute(),
+                onRightClick: (row) => this._openMacroRowPopup(entry, macro, row),
+            };
+        });
+        items.push({
+            label: '<i class="fas fa-plus" style="margin-right:6px;opacity:0.6;"></i>Add macro...',
+            keepOpen: true,
+            onClick: () => this._openAddMacroDialog(),
+        });
+        return items;
+    }
+
+    _openAddMacroDialog() {
+        const list = this._getMacroList();
+        const known = new Set(list.map(e => e.macroId));
+        const macros = (game.macros?.contents ?? [])
+            .filter(m => !known.has(m.id))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const rowsHtml = macros.length
+            ? macros.map(m => `
+                <div class="la-tah-pick" data-id="${m.id}" style="cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:8px;border-left:3px solid transparent;background:#fafafa;">
+                    ${this._macroIconHtml(m.img, 22)}
+                    <span style="flex:1;font-size:0.9em;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.name}</span>
+                </div>`).join('')
+            : '<div style="padding:12px;text-align:center;color:#888;font-size:0.85em;font-style:italic;">No macros available.</div>';
+        const content = `
+            <div class="lancer-dialog-header">
+                <div class="lancer-dialog-title">ADD MACRO</div>
+                <div class="lancer-dialog-subtitle">Pick from the list. Customize the icon and name before adding.</div>
+            </div>
+            <input type="text" class="la-tah-search" placeholder="Search..." style="margin-top:8px;width:100%;height:26px;padding:2px 6px;font-size:0.9em;">
+            <div class="la-tah-pick-list lancer-scroll" style="margin-top:4px;max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid #ccc;background:#fff;">
+                ${rowsHtml}
+            </div>
+            <div class="la-tah-edit" style="margin-top:8px;display:flex;align-items:center;gap:8px;padding:6px;background:#eef4ff;border:1px solid #cbd6e8;opacity:0.5;pointer-events:none;">
+                <span class="la-tah-edit-icon" title="Click to change icon" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #ccc;background:#fff;flex-shrink:0;"></span>
+                <input type="text" class="la-tah-edit-name" placeholder="(select a macro)" style="flex:1;height:26px;padding:2px 6px;font-size:0.9em;">
+                <label class="la-tah-edit-invert-label" title="Invert SVG (white → black)" style="display:flex;align-items:center;gap:4px;font-size:0.78em;color:#666;opacity:0.4;">
+                    <input type="checkbox" class="la-tah-edit-invert" disabled>Invert
+                </label>
+            </div>
+            <div class="la-tah-macro-drop" style="margin-top:6px;padding:10px;border:1px dashed #888;text-align:center;font-size:0.85em;color:#888;">
+                Drop a macro here to add it.
+            </div>
+        `;
+        /** @type {{ id: string|null, name: string, img: string, iconOverride: string|null, invert: boolean }} */
+        const state = { id: null, name: '', img: '', iconOverride: null, invert: false };
+        const addEntry = async () => {
+            if (!state.id)
+                return;
+            const cur = this._getMacroList();
+            if (cur.some(e => e.macroId === state.id))
+                return;
+            const entry = { macroId: state.id, name: state.name, icon: state.img };
+            if (state.iconOverride)
+                entry.iconOverride = state.iconOverride;
+            const finalImg = state.iconOverride ?? state.img;
+            if (state.invert !== this._isWhiteSvgIcon(finalImg))
+                entry.iconInvert = state.invert;
+            cur.push(entry);
+            await this._saveMacroList(cur);
+        };
+        const dlg = new Dialog({
+            title: 'Add Macro',
+            content,
+            buttons: {
+                add: { label: 'Add', callback: () => addEntry() },
+                cancel: { label: 'Cancel' },
+            },
+            default: 'add',
+            render: (html) => {
+                const editEl     = html.find('.la-tah-edit');
+                const editIcon   = html.find('.la-tah-edit-icon');
+                const editName   = html.find('.la-tah-edit-name');
+                const editInvert = html.find('.la-tah-edit-invert');
+                const editInvertLabel = html.find('.la-tah-edit-invert-label');
+                const search    = html.find('.la-tah-search');
+                const refreshIconPreview = () => {
+                    const img = state.iconOverride ?? state.img;
+                    editIcon.html(this._macroIconHtml(img, 24, state.invert));
+                    const isSvg = !!img && img.endsWith('.svg');
+                    /** @type {HTMLInputElement} */ (editInvert[0]).disabled = !isSvg;
+                    /** @type {HTMLInputElement} */ (editInvert[0]).checked = state.invert;
+                    editInvertLabel.css('opacity', isSvg ? 1 : 0.4);
+                };
+                const select = (id, name, img) => {
+                    state.id = id;
+                    state.name = name;
+                    state.img = img;
+                    state.iconOverride = null;
+                    state.invert = this._isWhiteSvgIcon(img);
+                    refreshIconPreview();
+                    editName.val(name);
+                    editEl.css({ opacity: 1, pointerEvents: 'all' });
+                    html.find('.la-tah-pick').css({ background: '#fafafa', borderLeftColor: 'transparent' });
+                    html.find(`.la-tah-pick[data-id="${id}"]`).css({ background: '#e8f0fa', borderLeftColor: 'var(--primary-color)' });
+                };
+                html.find('.la-tah-pick').on('click', (ev) => {
+                    const id = $(ev.currentTarget).data('id');
+                    const m = game.macros.get(id);
+                    if (m)
+                        select(m.id, m.name, m.img);
+                });
+                editIcon.on('click', () => {
+                    if (!state.id)
+                        return;
+                    new FilePicker({
+                        type: 'image',
+                        current: state.iconOverride ?? state.img,
+                        callback: (path) => {
+                            state.iconOverride = path;
+                            state.invert = this._isWhiteSvgIcon(path);
+                            refreshIconPreview();
+                        },
+                    }).render(true);
+                });
+                editName.on('input', () => {
+                    state.name = String(editName.val() ?? '');
+                });
+                editInvert.on('change', () => {
+                    state.invert = /** @type {HTMLInputElement} */ (editInvert[0]).checked;
+                    refreshIconPreview();
+                });
+                search.on('input', () => {
+                    const q = String(search.val() ?? '').toLowerCase().trim();
+                    html.find('.la-tah-pick').each((_i, el) => {
+                        const name = $(el).find('span').text().toLowerCase();
+                        $(el).toggle(!q || name.includes(q));
+                    });
+                });
+                const drop = html.find('.la-tah-macro-drop');
+                drop.on('dragover', (ev) => { ev.preventDefault(); drop.css('border-color', 'var(--primary-color)'); });
+                drop.on('dragleave', () => drop.css('border-color', '#888'));
+                drop.on('drop', async (ev) => {
+                    ev.preventDefault();
+                    drop.css('border-color', '#888');
+                    try {
+                        const data = JSON.parse(ev.originalEvent.dataTransfer.getData('text/plain'));
+                        const doc = /** @type {any} */ (await fromUuid(data?.uuid));
+                        if (doc?.documentName === 'Macro')
+                            select(doc.id, doc.name, doc.img);
+                    } catch { /* ignore malformed drop */ }
+                });
+            },
+        }, { width: 380, classes: ['lancer-dialog-base', 'lancer-no-title'] });
+        dlg.render(true);
+    }
+
+    _openMacroRowPopup(entry, macro, anchorRow) {
+        $('.la-hud-popup').remove();
+        const title = macro?.name ?? entry.name ?? 'Macro';
+        const subtitle = macro ? '' : 'Macro missing';
+        const baseStyle = 'padding:3px 8px;cursor:pointer;font-size:0.78em;display:flex;align-items:center;gap:5px;font-family:inherit;';
+        const buttons = [];
+        if (macro) {
+            buttons.push(`<button class="la-tah-mr-sheet" style="${baseStyle}background:#2a2a2a;border:1px solid #444;color:#ddd;"><i class="fas fa-external-link-alt"></i>Open Sheet</button>`);
+        }
+        buttons.push(`<button class="la-tah-mr-remove" style="${baseStyle}background:#3a1818;border:1px solid #803333;color:#ffaaaa;"><i class="fas fa-trash"></i>Remove</button>`);
+        const bodyHtml = `<div style="display:flex;flex-direction:column;gap:4px;">${buttons.join('')}</div>`;
+        const popup = laDetailPopup('la-hud-popup la-tah-row-popup', title, subtitle, bodyHtml, 'default');
+        popup.css({ minWidth: 0, width: 'auto', maxWidth: 200 });
+        popup.children().eq(0).css({ padding: '4px 8px' });
+        popup.children().eq(0).find('div').first().css({ fontSize: '0.82em' });
+        popup.children().eq(1).css({ padding: '4px 8px' });
+        popup.find('.la-tah-mr-sheet').on('click', () => {
+            macro?.sheet?.render(true);
+            popup.remove();
+        });
+        popup.find('.la-tah-mr-remove').on('click', async () => {
+            const cur = this._getMacroList().filter(e => e.macroId !== entry.macroId);
+            popup.remove();
+            await this._saveMacroList(cur);
+        });
+        this._showPopupAt(popup, anchorRow);
     }
 
 

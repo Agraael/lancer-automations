@@ -235,7 +235,7 @@ export class StatusPanel {
         searchWrap.append(searchBar);
 
         // ── Status grid ────────────────────────────────────────────────────────
-        const gridEl = $(`<div style="${S_STATUS_GRID}"></div>`);
+        const gridEl = $(`<div class="lancer-scroll" style="${S_STATUS_GRID}"></div>`);
         for (const s of allStatuses) {
             const active = isActive(s);
             const badge  = getStatusBadge(s);
@@ -377,7 +377,7 @@ export class StatusPanel {
             };
 
             rightEl.append($(`<div style="${S_PANEL_HEADER}">Custom</div>`));
-            const customListEl = $(`<div style="${S_CUSTOM_LIST}"></div>`);
+            const customListEl = $(`<div class="lancer-scroll" style="${S_CUSTOM_LIST}"></div>`);
             for (const cs of /** @type {any[]} */ (customSaved)) {
                 const active = isCustomActive(cs.name);
                 const badge  = getCustomBadge(cs.name);
@@ -485,7 +485,7 @@ export class StatusPanel {
             ...constantBonuses.map((/** @type {any} */ b, i) => ({ b, kind: 'constant', idx: i })),
         ];
         rightEl.append($(`<div style="${S_PANEL_HEADER}">Bonuses</div>`));
-        const bonusListEl = $(`<div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;"></div>`);
+        const bonusListEl = $(`<div class="lancer-scroll" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;"></div>`);
         if (!allBonuses.length) {
             bonusListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No bonuses</div>`));
         } else {

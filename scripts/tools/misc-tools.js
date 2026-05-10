@@ -254,14 +254,15 @@ export async function executeTeleport(token, cost) {
         return;
     const speed = token.actor.system?.speed ?? 0;
     const moveCost = cost ?? speed;
-    await api.moveToken(token, {
+    const result = await api.moveToken(token, {
         teleport: true,
         range: speed,
         cost: moveCost,
         title: "TELEPORT",
         description: `Select destination within Range ${speed}. Costs ${moveCost} movement.`
     });
-    playTeleportFX(token);
+    if (result)
+        playTeleportFX(token);
 }
 
 /** @returns {Promise<void>} */

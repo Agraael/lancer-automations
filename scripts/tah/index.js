@@ -267,6 +267,14 @@ Hooks.on('init', () => {
         type: Object,
         default: null,
     });
+    // Per-client macro shortcuts shown in the TAH "Macros" category.
+    // Each entry: { macroId, name, icon }
+    game.settings.register(MODULE, 'tah.macroList', {
+        scope: 'client',
+        config: false,
+        type: Array,
+        default: [],
+    });
 });
 
 // ── Token selection ──────────────────────────────────────────────────────────
