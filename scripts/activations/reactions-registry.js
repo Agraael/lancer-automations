@@ -86,7 +86,7 @@ export function getDefaultItemReactionRegistry() {
             onInit: async function (token, item, api) {
                 await api.addExtraActions(item, {
                     name: "Overcharge (NPC)",
-                    activation: "Protocol",
+                    activation: "Free",
                     icon: "systems/lancer/assets/icons/overcharge.svg",
                     detail: item.system.effect
                 });
@@ -1632,6 +1632,8 @@ export function getDefaultGeneralReactionRegistry() {
                 if (!mechToken)
                     return;
 
+                await actionFX.playMountFX(reactorToken, mechToken);
+
                 // Apply Mount effect, store pilot ref
                 await api.setEffect(
                     mechToken.id,
@@ -1665,6 +1667,83 @@ export function getDefaultGeneralReactionRegistry() {
                     icon: "cci cci-pilot"
                 });
             }
+        }
+    };
+
+    builtInDefaults["Jockey"] = {
+        category: "General",
+        triggers: ["onActivation"],
+        actionType: "Full Action",
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        outOfCombat: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            const targets = await api.chooseToken(reactorToken, {
+                range: 1,
+                includeSelf: false,
+                filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
+                title: "JOCKEY",
+                description: `Choose the adjacent mech to JOCKEY.`,
+                icon: "modules/lancer-automations/icons/rope-dart.svg"
+            });
+            const mechToken = targets?.[0];
+            if (!mechToken)
+                return;
+            await actionFX.playJockeyFX(reactorToken, mechToken);
+
+            const result = await api.executeContestedCheck(
+                reactorToken, "GRIT",
+                mechToken,    "HULL",
+                { title: "JOCKEY - GRIT vs HULL", sendToOwner: true }
+            );
+            if (!result?.completed)
+                return;
+            if (result.winner !== reactorToken.actor) {
+                ui.notifications.info(`${reactorToken.name} failed to Jockey ${mechToken.name}.`);
+                return;
+            }
+
+            const choice = await api.startChoiceCard({
+                title: "JOCKEY",
+                description: `${reactorToken.name} climbs onto ${mechToken.name}. Choose one:`,
+                originToken: reactorToken,
+                relatedToken: mechToken,
+                choices: [
+                    {
+                        text: `Distract <span style="color:#aaa;font-size:0.85em;">-IMPAIR + SLOW</span>`,
+                        icon: "modules/lancer-automations/icons/rope-dart.svg",
+                        callback: async () => {
+                            await api.applyEffectsToTokens({
+                                tokens: [mechToken],
+                                effectNames: ['impaired', 'slow'],
+                                duration: { label: 'end', turns: 1, rounds: 0 }
+                            });
+                        }
+                    },
+                    {
+                        text: `Shred <span style="color:#aaa;font-size:0.85em;">-2 Heat</span>`,
+                        icon: "systems/lancer/assets/icons/white/condition_shredded.svg",
+                        callback: async () => {
+                            await api.executeDamageRoll(reactorToken, [mechToken], '2', 'Heat', `${reactorToken.name} - Jockey (Shred)`);
+                        }
+                    },
+                    {
+                        text: `Damage <span style="color:#aaa;font-size:0.85em;">-4 Kinetic</span>`,
+                        icon: "systems/lancer/assets/icons/melee.svg",
+                        callback: async () => {
+                            await api.executeDamageRoll(reactorToken, [mechToken], '4', 'Kinetic', `${reactorToken.name} - Jockey (Damage)`);
+                        }
+                    },
+                ]
+            });
+            if (choice?.choiceIdx == null)
+                return;
+
+            await api.moveToken(reactorToken, { destination: { x: mechToken.center.x, y: mechToken.center.y } });
         }
     };
 
@@ -1708,7 +1787,7 @@ export function getDefaultGeneralReactionRegistry() {
         autoActivate: true,
         outOfCombat: true,
         activationType: "code",
-        activationMode: "after",
+        activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             await gainAction(reactorToken, 'quick');
         }
@@ -1722,7 +1801,7 @@ export function getDefaultGeneralReactionRegistry() {
         triggerOther: false,
         autoActivate: true,
         outOfCombat: true,
-        actionType: "Protocol",
+        actionType: "Free",
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {

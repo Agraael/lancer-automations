@@ -218,12 +218,12 @@ const TAH_FIELDS = [
 // Per-action FX functions. Same list as the settings registered in tah/index.js.
 const ACTION_FX_KEYS = [
     'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
-    'dismount', 'disengage', 'deployable', 'freeAction', 'corePower',
+    'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
     'protocol', 'reaction', 'fullAction', 'quickAction', 'standingUp',
     'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
-    'grapple', 'ram', 'barrage', 'boost', 'overchargeNpc', 'hide',
+    'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
     'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-    'defaultThrow', 'targetFail',
+    'defaultThrow', 'targetFail', 'reload', 'fight',
 ];
 const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover'];
 const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
@@ -391,6 +391,28 @@ const TOOLS_FIELDS = [
     },
 ];
 
+const ER_FORK_TITLE = "Lancer Ruler (Lasossis's Fork)";
+const erKb = (key) => ({ type: 'keybinding', module: 'elevationruler', key, requireTitle: ER_FORK_TITLE });
+
+const CONTROL_FIELDS = [
+    { type: 'section', label: 'Lancer Automations' },
+    { type: 'keybinding', module: 'lancer-automations', key: 'resetMovement' },
+    { type: 'keybinding', module: 'lancer-automations', key: 'tah.toggleSearch' },
+
+    { type: 'section', label: 'Elevation Ruler (fork)', requireForkTitle: { module: 'elevationruler', title: ER_FORK_TITLE } },
+    erKb('incrementElevation'),
+    erKb('decrementElevation'),
+    erKb('addWaypoint'),
+    erKb('removeWaypoint'),
+    erKb('addWaypointTokenRuler'),
+    erKb('removeWaypointTokenRuler'),
+    erKb('togglePathfinding'),
+    erKb('forceToGround'),
+    erKb('teleport'),
+    erKb('freeMovement'),
+    erKb('debugMovement'),
+];
+
 const TAB_DEFS = [
     { id: 'activations', label: 'Activations', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
     { id: 'combat', label: 'Combat & Movement', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
@@ -402,7 +424,31 @@ const TAB_DEFS = [
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
+    { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
 ];
+
+const KEY_DISPLAY = {
+    ArrowLeft: '🡸', ArrowRight: '🡺', ArrowUp: '🡹', ArrowDown: '🡻',
+    Backquote: '`', Backslash: '\\',
+    BracketLeft: '[', BracketRight: ']',
+    Comma: ',', Equal: '=',
+    Meta: '⊞', MetaLeft: '⊞', MetaRight: '⊞', OsLeft: '⊞', OsRight: '⊞',
+    Minus: '-',
+    NumpadAdd: 'Numpad+', NumpadSubtract: 'Numpad-',
+    Period: '.', Quote: "'", Semicolon: ';', Slash: '/'
+};
+function _displayKey(code) {
+    if (code in KEY_DISPLAY) return KEY_DISPLAY[code];
+    if (typeof code !== 'string') return String(code);
+    if (code.startsWith('Digit')) return code.slice(5);
+    if (code.startsWith('Key')) return code.slice(3);
+    return code;
+}
+function _formatBinding(b) {
+    const parts = [...(b.modifiers ?? [])];
+    parts.push(_displayKey(b.key));
+    return parts.join(' + ');
+}
 
 function _isLockedForUser(key) {
     if (game.user.isGM) {
@@ -433,8 +479,13 @@ function _readStatusFx(sub) {
 
 /** @param {any} f */
 function _buildItem(f) {
-    if (f.type === 'section')
+    if (f.type === 'section') {
+        if (f.requireForkTitle) {
+            const m = game.modules.get(f.requireForkTitle.module);
+            if (!m?.active || m.title !== f.requireForkTitle.title) return null;
+        }
         return { type: 'section', label: f.label, isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed };
+    }
     if (f.type === 'button')
         return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '', isLocked: !game.user.isGM && !f.clientAllowed };
     if (f.type === 'table') {
@@ -444,6 +495,23 @@ function _buildItem(f) {
             cells: row.cells.map(cell => ({ ...cell, isLocked: _isLockedForUser(cell.name) }))
         }));
         return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows };
+    }
+    if (f.type === 'keybinding') {
+        const mod = game.modules.get(f.module);
+        if (!mod?.active) return null;
+        if (f.requireTitle && mod.title !== f.requireTitle) return null;
+        const fullKey = `${f.module}.${f.key}`;
+        const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
+        if (!action) return null;
+        const bindings = /** @type {any[]} */ (game.keybindings.bindings?.get(fullKey)) ?? [];
+        return {
+            type: 'keybinding',
+            isKeybinding: true,
+            fullKey,
+            name: game.i18n.localize(action.name ?? f.key),
+            hint: action.hint ? game.i18n.localize(action.hint) : '',
+            bindings: bindings.map(/** @type {any} */ b => ({ display: _formatBinding(b) }))
+        };
     }
     if (f.type === 'moduleBoolean') {
         const mod = game.modules.get(f.module);
@@ -781,6 +849,114 @@ export class LancerAutomationsConfig extends FormApplication {
     activateListeners(html) {
         super.activateListeners(html);
         const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
+        const captureKey = (onDone) => {
+            const km = /** @type {any} */ (globalThis).KeyboardManager;
+            const protectedKeys = new Set(km?.PROTECTED_KEYS ?? ['F5', 'F11', 'F12', 'PrintScreen', 'ScrollLock', 'NumLock', 'CapsLock', 'Pause', 'Break', 'Insert', 'Home', 'PageUp', 'PageDown', 'End', 'ContextMenu']);
+            const handler = (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (ev.key === 'Escape') {
+                    document.removeEventListener('keydown', handler, true);
+                    onDone(null);
+                    return;
+                }
+                if (['Alt', 'AltLeft', 'AltRight', 'Control', 'ControlLeft', 'ControlRight', 'Shift', 'ShiftLeft', 'ShiftRight', 'Meta', 'MetaLeft', 'MetaRight'].includes(ev.code))
+                    return;
+                if (protectedKeys.has(ev.code)) {
+                    ui.notifications.warn(`"${ev.code}" is reserved by Foundry and cannot be bound.`);
+                    document.removeEventListener('keydown', handler, true);
+                    onDone(null);
+                    return;
+                }
+                const modifiers = [];
+                if (ev.altKey)   modifiers.push('Alt');
+                if (ev.ctrlKey)  modifiers.push('Control');
+                if (ev.shiftKey) modifiers.push('Shift');
+                if (ev.metaKey)  modifiers.push('Meta');
+                document.removeEventListener('keydown', handler, true);
+                onDone({ key: ev.code, modifiers });
+            };
+            document.addEventListener('keydown', handler, true);
+        };
+        const splitFullKey = (fullKey) => {
+            const dot = fullKey.indexOf('.');
+            return [fullKey.slice(0, dot), fullKey.slice(dot + 1)];
+        };
+        const writeBindings = async (fullKey, next) => {
+            const [ns, action] = splitFullKey(fullKey);
+            await game.keybindings.set(ns, action, next);
+            this.render(true);
+        };
+
+        const placeholderStyle = 'flex:0 0 auto; padding:2px 10px; height:24px; line-height:20px; border:1px solid var(--primary-color, #991e2a); background:rgba(153,30,42,0.08); color:var(--primary-color, #991e2a); border-radius:3px; font-family:inherit; font-size:0.78em; font-style:italic; margin:0; cursor:default;';
+
+        $html.find('.la-kb-key').on('click', (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            const btn = ev.currentTarget;
+            const row = btn.closest('.la-keybinding-row');
+            const fullKey = row?.dataset.fullKey;
+            const idx = parseInt(btn.dataset.idx, 10);
+            if (!fullKey || Number.isNaN(idx)) return;
+            const original = btn.outerHTML;
+            const placeholder = document.createElement('span');
+            placeholder.style.cssText = placeholderStyle;
+            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            btn.replaceWith(placeholder);
+            captureKey(async (binding) => {
+                if (!binding) {
+                    placeholder.outerHTML = original;
+                    return;
+                }
+                const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
+                current[idx] = binding;
+                await writeBindings(fullKey, current);
+            });
+        });
+        $html.find('.la-kb-key').on('contextmenu', async (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            const btn = ev.currentTarget;
+            const row = btn.closest('.la-keybinding-row');
+            const fullKey = row?.dataset.fullKey;
+            const idx = parseInt(btn.dataset.idx, 10);
+            if (!fullKey || Number.isNaN(idx)) return;
+            const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
+            current.splice(idx, 1);
+            await writeBindings(fullKey, current);
+        });
+        $html.find('.la-kb-reset').on('click', async (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            const row = ev.currentTarget.closest('.la-keybinding-row');
+            const fullKey = row?.dataset.fullKey;
+            if (!fullKey) return;
+            const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
+            const defaults = (action?.editable ?? []).map(/** @type {any} */ b => ({ key: b.key, modifiers: [...(b.modifiers ?? [])] }));
+            await writeBindings(fullKey, defaults);
+        });
+        $html.find('.la-kb-add').on('click', (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            const btn = ev.currentTarget;
+            const row = btn.closest('.la-keybinding-row');
+            const binds = row?.querySelector('.la-kb-binds');
+            const fullKey = row?.dataset.fullKey;
+            if (!fullKey || !binds) return;
+            const placeholder = document.createElement('span');
+            placeholder.style.cssText = placeholderStyle;
+            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            const resetBtn = binds.querySelector('.la-kb-reset');
+            binds.insertBefore(placeholder, resetBtn);
+            btn.style.display = 'none';
+            captureKey(async (binding) => {
+                if (!binding) {
+                    placeholder.remove();
+                    btn.style.display = '';
+                    return;
+                }
+                const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
+                current.push(binding);
+                await writeBindings(fullKey, current);
+            });
+        });
+
         $html.find('button[data-action-key]').on('click', async (/** @type {any} */ ev) => {
             ev.preventDefault();
             const key = ev.currentTarget.dataset.actionKey;

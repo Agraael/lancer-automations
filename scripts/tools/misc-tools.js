@@ -3,7 +3,7 @@ import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { chooseToken, choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "../bonuses/genericBonuses.js";
 import { getItemActions } from "../interactive/deployables.js";
-import { playSkirmishFX, playBarrageFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX } from "../fx/actionFX.js";
+import { playSkirmishFX, playBarrageFX, playFightFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX } from "../fx/actionFX.js";
 import { awaitPendingAck } from "../socket.js";
 
 /** Maps activation type strings to the NPC feature tag LID that signals that activation. */
@@ -122,22 +122,32 @@ export function getActorActionItems(actor, activationType) {
             }
         }
 
-        // Pilot items: talents (by rank) and core bonuses only
-        const pilot = actor?.system?.pilot?.value;
-        if (pilot) {
-            for (const item of (pilot.items ?? [])) {
-                if (item.type === 'talent') {
-                    const currRank = item.system?.curr_rank ?? 0;
-                    for (let n = 0; n < currRank; n++) {
-                        for (const action of (item.system?.ranks?.[n]?.actions ?? [])) {
-                            if (action.activation === activationType)
-                                results.push({ action, sourceItem: item, rankIdx: n });
-                        }
-                    }
-                } else if (item.type === 'core_bonus') {
+        if (actor?.type === 'pilot') {
+            for (const item of (actor.items ?? [])) {
+                if (item.type === 'pilot_gear' || item.type === 'pilot_armor' || item.type === 'pilot_weapon') {
                     for (const action of getItemActions(item)) {
                         if (action.activation === activationType)
                             results.push({ action, sourceItem: item });
+                    }
+                }
+            }
+        } else {
+            const pilot = actor?.system?.pilot?.value;
+            if (pilot) {
+                for (const item of (pilot.items ?? [])) {
+                    if (item.type === 'talent') {
+                        const currRank = item.system?.curr_rank ?? 0;
+                        for (let n = 0; n < currRank; n++) {
+                            for (const action of (item.system?.ranks?.[n]?.actions ?? [])) {
+                                if (action.activation === activationType)
+                                    results.push({ action, sourceItem: item, rankIdx: n });
+                            }
+                        }
+                    } else if (item.type === 'core_bonus') {
+                        for (const action of getItemActions(item)) {
+                            if (action.activation === activationType)
+                                results.push({ action, sourceItem: item });
+                        }
                     }
                 }
             }
@@ -1748,6 +1758,14 @@ export async function executeFight(actorOrToken, bypassWeapon = null) {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return;
+    const sourceToken = /** @type {Token|null} */ (
+        (/** @type {any} */ (actorOrToken))?.actor
+            ? actorOrToken
+            : actor.token?.object || actor.getActiveTokens?.()?.[0] || null
+    );
+    if (sourceToken)
+        playFightFX(sourceToken);
+
     let weapon = bypassWeapon;
     if (!weapon) {
         const choices = await choseMount(actor, 1, null, null, 'FIGHT');

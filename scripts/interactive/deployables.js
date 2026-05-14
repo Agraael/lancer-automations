@@ -11,7 +11,7 @@ import {
 
 import { startChoiceCard } from "./network.js";
 import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
-import { playActionFxByActivation, playDeployableFX } from "../fx/actionFX.js";
+import { playActionFxByActivation, playDeployableFX, playReloadFX } from "../fx/actionFX.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
@@ -1901,6 +1901,11 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
     if (chosenWeapon) {
         await chosenWeapon.update(/** @type {any} */({ "system.loaded": true }));
         ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
+        const token = (/** @type {any} */ (actorOrToken))?.actor
+            ? /** @type {any} */ (actorOrToken)
+            : actor.getActiveTokens?.()?.[0];
+        if (token)
+            playReloadFX(token);
     }
     return chosenWeapon;
 }

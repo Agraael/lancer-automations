@@ -490,6 +490,7 @@ const THEMES = {
     tech:        { border: '#105a5a', gradFrom: '#052d2d', gradTo: '#021a1a', headerBorder: '#107a7a' },
     action:      { border: '#4a2800', gradFrom: '#251400', gradTo: '#160c00', headerBorder: '#5a3200' },
     mod:         { border: '#5a3010', gradFrom: '#2d1808', gradTo: '#1a0e04', headerBorder: '#7a4015' },
+    resource:    { border: '#6a6a10', gradFrom: '#363608', gradTo: '#1f1f04', headerBorder: '#8a8a18' },
 };
 
 /**

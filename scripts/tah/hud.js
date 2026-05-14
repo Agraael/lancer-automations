@@ -167,6 +167,13 @@ export class LancerHUD {
         this._render();
     }
 
+    toggleSearch() {
+        if (!this._el || !this._searchIcon)
+            return false;
+        this._searchIcon.trigger('click');
+        return true;
+    }
+
     unbind() {
         this._bindGen++;
         const el = this._el;
@@ -370,6 +377,8 @@ export class LancerHUD {
         menuLabel.append(searchIcon);
         const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid var(--primary-color);font-size:0.8em;font-family:inherit;outline:none;">`);
         menuLabel.after(searchBar);
+        this._searchIcon = searchIcon;
+        this._searchBar = searchBar;
         if (combatBar) {
             c1.prepend(combatBar);
         }
@@ -686,6 +695,7 @@ export class LancerHUD {
         // ── Search toggle + live-filter ──────────────────────────────────────────
         searchIcon.on('click', (ev) => {
             ev.stopPropagation();
+            playUiSound('details');
             if (searchBar.is(':visible')) {
                 searchBar.val('').slideUp(120);
                 searchIcon.css('opacity', '0.55');
@@ -696,19 +706,40 @@ export class LancerHUD {
                 searchIcon.css('opacity', '1');
             }
         });
-        searchBar.on('input', () => {
+        const runSearch = () => {
             const q = String(searchBar.val()).trim().toLowerCase();
             if (!q) {
                 this._searchActive = false;
-                closeCol(c2); return;
+                closeCol(c2);
+                return;
             }
             this._searchActive = true;
             _cancelCollapse();
             openSearchResults(c2, collectSearchResults(q, this._categories), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
+        };
+        searchBar.on('input', runSearch);
+        searchBar.on('mouseenter click', () => {
+            if (String(searchBar.val()).trim())
+                runSearch();
         });
         searchBar.on('keydown', (ev) => {
-            if (ev.key === 'Escape')
+            if (ev.key === 'Escape') {
                 searchIcon.trigger('click');
+                return;
+            }
+            const bindings = /** @type {any[]} */ (game.keybindings.get('lancer-automations', 'tah.toggleSearch') ?? []);
+            const match = bindings.some(b => {
+                if (b.key !== ev.code) return false;
+                const mods = b.modifiers ?? [];
+                return ev.altKey   === mods.includes('Alt')
+                    && ev.ctrlKey  === mods.includes('Control')
+                    && ev.shiftKey === mods.includes('Shift');
+            });
+            if (match) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                searchIcon.trigger('click');
+            }
         });
         searchBar.on('focus', () => _cancelCollapse());
     }
@@ -743,7 +774,8 @@ export class LancerHUD {
 
     /** Builds the standard effect + description + tags HTML for a system/item detail popup body. */
     _bodyHtml(/** @type {any} */ sys) {
-        const effect = sys?.effect ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(sys.effect)}</div>` : '';
+        const text = sys?.effect || sys?.description || '';
+        const effect = text ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-bottom:4px;">${laFormatDetailHtml(text)}</div>` : '';
         return laRenderTags(sys?.tags ?? []) + effect;
     }
 
@@ -1014,25 +1046,26 @@ export class LancerHUD {
                         closeCol(this._c4);
                         this._clearC1Active();
                     }
-                    if (item.keepOpen && item.refreshCol4)
-                        this._suppressRefreshDepth++;
-                    try {
-                        await item.onClick();
-                    } finally {
-                        if (item.keepOpen && item.refreshCol4) {
-                            this._suppressRefreshDepth--;
-                            if (col === this._c3)
-                                this._openCol(this._c3, item.refreshCol4(), anchorRow, { reposition: false });
-                            else if (this._c4AnchorRow)
-                                this._openCol(this._c4, item.refreshCol4(), this._c4AnchorRow, { reposition: false });
-                        }
-                    }
-                    if (this._tokens.length > 1 && item.broadcastFn) {
+                    const multi = this._tokens.length > 1 && item.broadcastFn;
+                    if (multi) {
+                        // Fire primary + every other token concurrently, none awaiting the others.
+                        Promise.resolve(item.onClick()).catch(e => console.error('[TAH primary]', e));
                         for (const t of this._tokens.slice(1)) {
-                            try {
-                                await item.broadcastFn(t, t.actor);
-                            } catch(e) {
-                                console.error('[TAH broadcast]', e);
+                            Promise.resolve(item.broadcastFn(t, t.actor))
+                                .catch(e => console.error('[TAH broadcast]', e));
+                        }
+                    } else {
+                        if (item.keepOpen && item.refreshCol4)
+                            this._suppressRefreshDepth++;
+                        try {
+                            await item.onClick();
+                        } finally {
+                            if (item.keepOpen && item.refreshCol4) {
+                                this._suppressRefreshDepth--;
+                                if (col === this._c3)
+                                    this._openCol(this._c3, item.refreshCol4(), anchorRow, { reposition: false });
+                                else if (this._c4AnchorRow)
+                                    this._openCol(this._c4, item.refreshCol4(), this._c4AnchorRow, { reposition: false });
                             }
                         }
                     }
@@ -1141,8 +1174,8 @@ export class LancerHUD {
             this._catTech(),
             this._catActions(),
             ...(isDeployable || isPilot ? [] : [this._catDeployables()]),
-            ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : []),
-            ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : []),
+            ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : isPilot ? [this._catPilotGear()] : []),
+            ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : isPilot ? [this._catPilot()] : []),
             ...(isMech ? [this._catTalents()] : []),
             this._catSkills(),
             this._catUtility(),
@@ -1256,18 +1289,37 @@ export class LancerHUD {
     _catActionsPilot(/** @type {any} */ actor) {
         const ap = a => this._actionPopup(a);
         const token = this._token;
+        const basicQuick = () => [
+            this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
+            this._simpleItem('Hide',     'systems/lancer/assets/icons/status_hidden.svg',    { name: 'Hide',     activation: 'Quick'          }, 'Obscure your position, becoming HIDDEN and unable to be identified, precisely located, or targeted directly by attacks or hostile actions.'),
+            this._simpleItem('Search',   'modules/lancer-automations/icons/search.svg',      { name: 'Search',   activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
+            this._simpleItem('Interact', 'modules/lancer-automations/icons/click.svg',       { name: 'Interact', activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
+            this._simpleItem('Prepare',  'modules/lancer-automations/icons/light-bulb.svg',  { name: 'Prepare',  activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
+            { label: 'Reload', icon: 'modules/lancer-automations/icons/reload.svg', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: ap({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
+        ];
+        const basicFull = () => [
+            this._simpleItem('Disengage', 'modules/lancer-automations/icons/disengage.svg', { name: 'Disengage', activation: 'Full' }, 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.'),
+            this._simpleItem('Mount',     'modules/lancer-automations/icons/thrust.svg',    { name: 'Mount',     activation: 'Full' }, 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.'),
+            this._simpleItem('Jockey',    'modules/lancer-automations/icons/rope-dart.svg',     { name: 'Jockey',    activation: 'Full' }, 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).'),
+        ];
         return {
             label: 'Actions',
             colLabel: 'Actions',
             getItems: () => [
-                { label: 'Reload', icon: 'modules/lancer-automations/icons/reload.svg', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: ap({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
-                this._simpleItem('Mount',  'systems/lancer/assets/icons/white/mech.svg', { name: 'Mount',  activation: 'Full' }, 'You can MOUNT as a full action. You must be adjacent your mech to MOUNT.\nAdditionally, you can also MOUNT willing allied mechs or vehicles. When you do so, move into the same space and then move with them.'),
-                this._simpleItem('Jockey', 'modules/lancer-automations/icons/ram.svg',   { name: 'Jockey', activation: 'Full' }, 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).'),
-                ...this._getActionsByActivation(actor, 'Quick', 'Actions'),
-                ...this._getActionsByActivation(actor, 'Full', 'Actions'),
-                ...this._catReactions().getItems(),
-                ...this._catProtocols().getItems(),
-                ...this._catFreeActions().getItems(),
+                {
+                    label: 'Basic',
+                    childColLabel: 'Quick',
+                    getChildren: () => [
+                        ...basicQuick(),
+                        { isSectionLabel: true, label: 'Full' },
+                        ...basicFull(),
+                    ],
+                },
+                { label: 'Quick Actions', childColLabel: 'Quick Actions', getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
+                { label: 'Full Actions',  childColLabel: 'Full Actions',  getChildren: () => this._getActionsByActivation(actor, 'Full',  'Actions') },
+                { label: 'Reaction',      childColLabel: 'Reaction',      getChildren: () => this._catReactions().getItems() },
+                { label: 'Protocol',      childColLabel: 'Protocol',      getChildren: () => this._catProtocols().getItems() },
+                { label: 'Free Actions',  childColLabel: 'Free Actions',  getChildren: () => this._catFreeActions().getItems() },
             ],
         };
     }
@@ -1349,7 +1401,7 @@ export class LancerHUD {
                     this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) }, 'Improvised Attack'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
-                    this._lockable({ label: 'Fight', icon: 'systems/lancer/assets/icons/white/melee.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight'),
+                    this._lockable({ label: 'Fight', icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight'),
                 ] : []),
                 { isSectionLabel: true, label: 'Tools' },
                 { label: 'Basic Attack',  icon: 'systems/lancer/assets/icons/mech_weapon.svg', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a) },
@@ -1520,10 +1572,13 @@ export class LancerHUD {
                 const reactionAvail = hasReactionAvailable(actor);
                 const unavailBg = '#ffe5b4';
                 const unavailBorder = '#cc7700';
-                const isDeployable = actor.type === 'deployable' || actor.type === 'pilot';
+                const noBrace     = actor.type === 'deployable' || actor.type === 'pilot';
+                const noOverwatch = actor.type === 'deployable';
                 const items = [
-                    ...(isDeployable ? [] : [
+                    ...(noBrace ? [] : [
                         { ...this._simpleItem('Brace',     'modules/lancer-automations/icons/brace.svg', { name: 'Brace',     activation: 'Reaction' }, 'You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
+                    ]),
+                    ...(noOverwatch ? [] : [
                         { ...this._simpleItem('Overwatch', 'systems/lancer/assets/icons/reaction.svg',   { name: 'Overwatch', activation: 'Reaction', trigger: 'A hostile character starts any movement (including BOOST and other actions) inside one of your weapons\' THREAT.' }, 'Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move.'), highlightBg: reactionAvail ? null : unavailBg, highlightBorderColor: reactionAvail ? null : unavailBorder },
                     ]),
                     ...this._getActionsByActivation(actor, 'Reaction', 'Actions'),
@@ -1583,7 +1638,8 @@ export class LancerHUD {
                 badge: (actor.system[s.key] >= 0 ? '+' : '') + actor.system[s.key],
                 badgeColor: '#777',
                 hoverData: { actor, item: null, action: { name: s.label }, category: 'Skills' },
-                onClick: () => /** @type {any} */ (actor).beginStatFlow(`system.${s.key}`),
+                onClick:     () => /** @type {any} */ (actor).beginStatFlow(`system.${s.key}`),
+                broadcastFn: (_t, a) => /** @type {any} */ (a)?.beginStatFlow?.(`system.${s.key}`),
             }));
 
         const skillItems = [];
@@ -1592,13 +1648,19 @@ export class LancerHUD {
             const skills = pilot.items?.filter(i => i.type === 'skill') ?? [];
             for (const skill of skills) {
                 const bonus = (skill.system.curr_rank ?? 0) * 2;
+                const skillName = skill.name;
                 skillItems.push({
                     label: skill.name,
                     badge: `+${bonus}`,
                     badgeColor: '#777',
                     icon: skill.img ?? null,
                     hoverData: { actor, item: skill, action: { name: skill.name }, category: 'Skills' },
-                    onClick: () => skill.beginSkillFlow?.(),
+                    onClick:     () => skill.beginSkillFlow?.(),
+                    broadcastFn: (_t, a) => {
+                        const p = /** @type {any} */ (a)?.system?.pilot?.value ?? a;
+                        const s2 = p?.items?.find(i => i.type === 'skill' && i.name === skillName);
+                        return s2?.beginSkillFlow?.();
+                    },
                 });
             }
         }
@@ -2118,6 +2180,7 @@ export class LancerHUD {
                     { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
                     { label: 'Core Bonus',  childColLabel: 'Core Bonus',  getChildren: () => this._coreBonusItems(actor) },
+                    { label: 'Reserves',    childColLabel: 'Reserves',    getChildren: () => this._catReserves({ source: actor.system?.pilot?.value, typeFilter: 'Mech' }).getItems() },
                 ];
                 const intLids = [
                     ...(frame.system?.traits ?? []).flatMap((/** @type {any} */ t) => t.integrated ?? []),
@@ -2129,6 +2192,200 @@ export class LancerHUD {
                 return rows;
             },
         };
+    }
+
+    _catReserves({ source, typeFilter = null, label = 'Reserves' } = {}) {
+        return {
+            label,
+            colLabel: label,
+            getItems: () => {
+                const reserves = (source?.items ?? []).filter(/** @type {any} */ i => i.type === 'reserve');
+                const filtered = typeFilter ? reserves.filter(/** @type {any} */ r => (r.system?.type ?? '') === typeFilter) : reserves;
+                if (!filtered.length)
+                    return [];
+                const TYPE_ORDER  = ['Mech', 'Tactical', 'Project', 'Organization', 'Resources', 'Resource', 'Bonus'];
+                const TYPE_ICON   = { Mech: 'cci cci-reserve-mech', Organization: 'mdi mdi-account-multiple', Project: 'cci cci-orbital', Resources: 'cci cci-reserve-resource', Resource: 'cci cci-reserve-resource', Tactical: 'cci cci-reserve-tac', Bonus: 'cci cci-accuracy' };
+                const buckets = {};
+                for (const r of filtered) {
+                    const t = r.system?.type ?? 'Other';
+                    (buckets[t] = buckets[t] || []).push(r);
+                }
+                const keys = TYPE_ORDER.filter(k => buckets[k]).concat(Object.keys(buckets).filter(k => !TYPE_ORDER.includes(k)));
+                const items = [];
+                const useSections = !typeFilter;
+                for (const key of keys) {
+                    if (useSections && keys.length > 1)
+                        items.push({ isSectionLabel: true, label: key.toUpperCase() });
+                    for (const r of buckets[key]) {
+                        const sys = r.system ?? {};
+                        const icon = TYPE_ICON[key] ?? 'cci cci-reserve-tac';
+                        const consumed = sys.consumable && sys.used;
+                        items.push({
+                            label: consumed ? this._destroyedLabel(sys.label || r.name) : (sys.label || r.name),
+                            icon,
+                            badge: sys.consumable ? (sys.used ? '✗' : '✓') : null,
+                            badgeColor: sys.consumable ? (sys.used ? '#c33' : '#3a9e6e') : null,
+                            hoverData: { actor: source, item: r, action: null, category: 'Reserves' },
+                            onClick: () => /** @type {any} */ (r).sheet.render(true),
+                            onRightClick: (/** @type {any} */ row) => {
+                                const bodyHtml = this._bodyHtml(sys) + laRenderActions(sys.actions ?? []);
+                                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-reserve-popup', dataKey: 'reserve-id', dataValue: r.id, title: sys.label || r.name, subtitle: `Reserve · ${key}`, bodyHtml, theme: 'resource', item: r, row });
+                            },
+                        });
+                    }
+                }
+                return items;
+            },
+        };
+    }
+
+    _catPilot() {
+        const actor = this._actor;
+        return {
+            label: 'Pilot',
+            colLabel: 'Pilot',
+            getItems: () => {
+                const as = actor.system ?? {};
+                const armor = (as.loadout?.armor ?? [])[0]?.value ?? null;
+
+                const grit = as.grit ?? Math.floor((as.level ?? 0) / 2);
+                const base = { hp: 6 + grit, armor: 0, edef: 10, evasion: 10, speed: 4 };
+                const cur  = { hp: as.hp?.max, armor: as.armor, edef: as.edef, evasion: as.evasion, speed: as.speed };
+
+                const stat = (/** @type {string} */ lbl, /** @type {any} */ val, /** @type {any} */ b = undefined) => {
+                    const delta = (val != null && b != null && val !== b)
+                        ? (val > b
+                            ? `<span style="position:absolute;bottom:2px;right:2px;color:#3a9e6e;font-size:0.55em;line-height:1;">▲</span>`
+                            : `<span style="position:absolute;bottom:2px;right:2px;color:#c33;font-size:0.55em;line-height:1;">▼</span>`)
+                        : '';
+                    return `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;">${delta}<span style="font-size:0.68em;color:#666;text-transform:uppercase;letter-spacing:0.05em;">${lbl}</span><span style="font-size:0.95em;color:#ccc;font-weight:bold;">${val ?? '—'}</span></div>`;
+                };
+                const grid = (/** @type {string[]} */ ...cells) => `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px 4px;padding:4px 2px;">${cells.join('')}</div>`;
+
+                const currentStats = grid(
+                    stat('HP',      cur.hp,      base.hp),
+                    stat('Armor',   cur.armor,   base.armor),
+                    stat('E-Def',   cur.edef,    base.edef),
+                    stat('Evasion', cur.evasion, base.evasion),
+                    stat('Speed',   cur.speed,   base.speed),
+                );
+                const haseRow = `<div style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;">${grid(
+                    stat('HULL', as.hull),
+                    stat('AGI',  as.agi),
+                    stat('SYS',  as.sys),
+                    stat('ENG',  as.eng),
+                    stat('Grit', grit),
+                )}</div>`;
+                const baseStats = `<details style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;"><summary style="font-size:0.72em;color:#555;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">▶ Base Stats (no armor)</summary>${grid(
+                    stat('HP',      base.hp),
+                    stat('Armor',   base.armor),
+                    stat('E-Def',   base.edef),
+                    stat('Evasion', base.evasion),
+                    stat('Speed',   base.speed),
+                )}</details>`;
+
+                const pilotSubtitle = this._joinSubtitle(as.callsign, as.player_name, as.level != null ? `LL${as.level}` : null);
+
+                const armorBody = armor
+                    ? (laRenderTags(armor.system?.tags ?? []) + (armor.system?.description ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${laFormatDetailHtml(armor.system.description)}</div>` : '') + (armor.system?.effect ? `<div style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;font-size:0.82em;line-height:1.5;color:#bbb;">${laFormatDetailHtml(armor.system.effect)}</div>` : '') + laRenderActions(armor.system?.actions ?? []))
+                    : '<div style="font-size:0.82em;color:#bbb;line-height:1.5;">The pilot wears no armor.</div>';
+
+                return [
+                    {
+                        label: actor.name,
+                        icon: actor.img ?? 'systems/lancer/assets/icons/generic_item.svg',
+                        onClick: () => /** @type {any} */ (actor).sheet.render(true),
+                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'pilot-id', dataValue: actor.id, title: actor.name, subtitle: pilotSubtitle, bodyHtml: currentStats + haseRow + baseStats, theme: 'frame', item: null, row }),
+                    },
+                    {
+                        label: armor ? armor.name : 'NO ARMOR',
+                        icon: armor?.img ?? 'systems/lancer/assets/icons/role_tank.svg',
+                        onClick: () => armor && /** @type {any} */ (armor).sheet.render(true),
+                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: armor ? 'armor-id' : 'no-armor', dataValue: armor ? armor.id : actor.id, title: armor ? armor.name : 'No Armor', subtitle: 'Pilot Armor', bodyHtml: armorBody, theme: 'system', item: armor, row }),
+                    },
+                    ...(() => {
+                        const reserveRows = this._catReserves({ source: actor }).getItems().filter(/** @type {any} */ r => !r.isSectionLabel);
+                        if (!reserveRows.length)
+                            return [];
+                        return [{ isSectionLabel: true, label: 'RESERVES' }, ...reserveRows];
+                    })(),
+                ];
+            },
+        };
+    }
+
+    _catPilotGear() {
+        const actor = this._actor;
+        return {
+            label: 'Gear',
+            colLabel: 'Gear',
+            getItems: () => {
+                const gear = (actor.system?.loadout?.gear ?? [])
+                    .map(/** @type {any} */ g => g?.value)
+                    .filter(/** @type {any} */ item => !!item);
+                if (!gear.length)
+                    return [];
+                return gear.map(item => {
+                    const sys = item.system;
+                    const status = getItemStatus(item);
+                    const labelHtml = status.destroyed ? this._destroyedLabel(item.name) : item.name;
+                    return {
+                        label: labelHtml,
+                        badge: status.badge ?? null,
+                        badgeColor: status.badgeColor ?? null,
+                        icon: item.img ?? null,
+                        hoverData: { actor, item, action: null, category: 'Gear' },
+                        childColLabel: item.name,
+                        getChildren: () => this._pilotGearChildren(item, actor),
+                        ...this._statusColors(status),
+                        onRightClick: (/** @type {any} */ row) => {
+                            const bodyHtml = this._bodyHtml(sys) + laRenderActions(sys.actions ?? []);
+                            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'gear-id', dataValue: item.id, title: item.name, subtitle: 'Pilot Gear', bodyHtml, theme: 'system', item, row, postRender: /** @type {any} */ p => appendItemPips(item, p) });
+                        },
+                    };
+                });
+            },
+        };
+    }
+
+    _pilotGearChildren(/** @type {any} */ item, /** @type {any} */ actor) {
+        const sys = item.system;
+        const ap = a => this._actionPopup(a);
+        const sysActions = sys.actions ?? [];
+        const status = getItemStatus(item);
+        const childBadge = status.badge ?? null;
+        const childBadgeColor = status.badgeColor ?? null;
+        const childStatusKind = status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null;
+
+        if (sysActions.length <= 1) {
+            const single = sysActions[0] ?? null;
+            const actStr = single?.activation ?? 'Quick';
+            return [{
+                label: single?.name ?? item.name,
+                icon: single ? getActivationIcon(single) : 'systems/lancer/assets/icons/activate.svg',
+                onClick: single
+                    ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0')
+                    : () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation: actStr }, detail: sys.effect ?? '' }, { item }),
+                onRightClick: single
+                    ? ap(single)
+                    : ap({ name: item.name, activation: actStr, detail: sys.effect ?? '' }),
+                hoverData: { actor, item, action: single ?? { name: item.name, activation: actStr }, category: 'Gear' },
+                badge: childBadge,
+                badgeColor: childBadgeColor,
+                statusKind: childStatusKind,
+            }];
+        }
+
+        return sysActions.map((/** @type {any} */ action, /** @type {number} */ idx) => ({
+            label: action.name,
+            icon: getActivationIcon(action),
+            onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
+            onRightClick: ap(action),
+            hoverData: { actor, item, action, category: 'Gear' },
+            badge: childBadge,
+            badgeColor: childBadgeColor,
+            statusKind: childStatusKind,
+        }));
     }
 
     // ── NPC Class / Systems ───────────────────────────────────────────────────
@@ -3370,7 +3627,7 @@ export class LancerHUD {
                     const si = /** @type {any} */ (sourceItem);
                     if (_coreActive)
                         si.beginCoreActiveFlow('system.core_system');
-                    else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
+                    else if (si?.type === 'mech_system' || si?.type === 'npc_feature' || si?.type === 'pilot_gear' || si?.type === 'pilot_armor' || si?.type === 'pilot_weapon') {
                         if (si?.type === 'npc_feature' && si.system?.tech_attack && si.beginTechAttackFlow) {
                             si.beginTechAttackFlow();
                         } else {
@@ -3379,8 +3636,10 @@ export class LancerHUD {
                                 si.beginActivationFlow(`system.actions.${actionIdx}`);
                             else if (action._sourceItemId || action.recharge !== undefined)
                                 executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' }, { item: si });
-                            else
+                            else if (si.beginSystemFlow)
                                 si.beginSystemFlow();
+                            else
+                                executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' }, { item: si });
                         }
                     } else if (si?.type === 'talent') {
                         if (action.activation === 'Invade') {
@@ -3401,7 +3660,7 @@ export class LancerHUD {
                         const equiv = /** @type {any} */ (a).system?.loadout?.frame?.value;
                         if (equiv)
                             equiv.beginCoreActiveFlow('system.core_system');
-                    } else if (si?.type === 'mech_system' || si?.type === 'npc_feature') {
+                    } else if (si?.type === 'mech_system' || si?.type === 'npc_feature' || si?.type === 'pilot_gear' || si?.type === 'pilot_armor' || si?.type === 'pilot_weapon') {
                         const equiv = /** @type {any} */ (a).items.find(/** @type {any} */ i => i.system?.lid === si.system?.lid);
                         if (equiv) {
                             const actionIdx = (si.system?.actions ?? []).findIndex(/** @type {any} */ ac => ac === action || ac.name === action.name);
@@ -3409,8 +3668,10 @@ export class LancerHUD {
                                 equiv.beginActivationFlow(`system.actions.${actionIdx}`);
                             else if (action._sourceItemId || action.recharge !== undefined)
                                 executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' }, { item: equiv });
-                            else
+                            else if (equiv.beginSystemFlow)
                                 equiv.beginSystemFlow();
+                            else
+                                executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' }, { item: equiv });
                         }
                     } else if (si?.type === 'talent') {
                         if (action.activation === 'Invade') {

@@ -1,4 +1,4 @@
-/* global Hooks, game, canvas, libWrapper, Token, document */
+/* global Hooks, game, canvas, libWrapper, Token, document, CONST */
 
 import { LancerHUD } from './hud.js';
 import { playUiSound } from './sound.js';
@@ -33,6 +33,19 @@ Hooks.on('init', () => {
             if (!en)
                 hud.unbind();
         },
+    });
+    game.keybindings.register(MODULE, 'tah.toggleSearch', {
+        name: 'TAH: Toggle Search',
+        hint: 'Open or close the Token Action HUD search bar.',
+        editable: [{ key: 'KeyF', modifiers: ['Alt'] }],
+        onDown: () => {
+            if (!enabled())
+                return false;
+            if (!hud.toggleSearch())
+                return false;
+            return true;
+        },
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
     game.settings.register(MODULE, 'tah.clickToOpen', {
         name: 'Click to Open',

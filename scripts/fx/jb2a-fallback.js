@@ -39,8 +39,9 @@ const JB2A_FALLBACKS = {
 
     'jb2a.markers.chain.standard.complete.02.grey': { src: 'jb2a.markers.chain.standard.complete.02.red', tint: 0x888888 },
     'jb2a.ui.success.green' : {src: ''},
-    'jb2a.ui.failure.red' : {src: '', tint: 0xff3030},
+    'jb2a.ui.failure.red' : {src: ''},
     'jb2a.ui.hit.blue': {src: ''},
+    'jb2a.template_circle.radar.loop.800px.001.pulse.purplered': {src: 'jb2a.template_circle.radar.loop.800px.001.pulse.greenpurple', tint: 0xff3030}
 };
 
 const PLACEHOLDER = 'modules/lancer-automations/FX/Debugempty.png';
@@ -76,7 +77,9 @@ function _existsInDatabase(id) {
 export function resolveJb2a(id) {
     if (typeof id !== 'string' || !id.startsWith('jb2a.'))
         return { src: id };
-    if (_hasPatreon())
+
+    // Paid + present → original. Old paid installs may lack newer assets; fall through.
+    if (_hasPatreon() && _existsInDatabase(id))
         return { src: id };
 
     const entry = JB2A_FALLBACKS[id] ?? _runtimeRegistry.get(id);

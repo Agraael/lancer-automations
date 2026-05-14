@@ -463,7 +463,12 @@ export function _updateInfoCard(cardEl, type, data) {
             const disabledClass = (data.disabled || choice.disabled) ? "la-choice-disabled" : "";
             const iconHtml = choice.icon
                 ? (/[./]/.test(choice.icon)
-                    ? `<img src="${choice.icon}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;">`
+                    ? (() => {
+                        const ic = choice.icon;
+                        const isWhite = ic.endsWith('.svg') && (ic.includes('/white/') || ic.includes('modules/lancer-automations/') || ic.startsWith('icons/svg/'));
+                        const filt = isWhite ? 'filter:invert(1);' : '';
+                        return `<img src="${ic}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;${filt}">`;
+                    })()
                     : `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`)
                 : '';
             const statusHtml = isDone

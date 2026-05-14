@@ -56,6 +56,20 @@
                 </button>
                 {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
             </div>
+            {{else if this.isKeybinding}}
+            <div class="la-keybinding-row" data-full-key="{{this.fullKey}}" style="display:flex; align-items:center; gap:10px; margin:2px 0; padding:4px 8px; border-bottom:1px dotted rgba(120,46,34,0.25);">
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:bold; font-size:0.9em; color:#2b2b2b; line-height:1.2;">{{this.name}}</div>
+                    {{#if this.hint}}<div style="font-size:0.74em; color:#666; line-height:1.25; margin-top:1px;">{{this.hint}}</div>{{/if}}
+                </div>
+                <div class="la-kb-binds" style="display:flex; flex-direction:row; flex-wrap:nowrap; gap:4px; align-items:center; flex-shrink:0; line-height:1;">
+                    <button type="button" class="la-kb-add" title="Add binding" style="width:16px; height:16px; flex:0 0 auto; padding:0; line-height:1; border:1px solid var(--primary-color, #991e2a); background:var(--primary-color, #991e2a); color:#fff; cursor:pointer; border-radius:50%; font-size:0.6em; margin:0;"><i class="fas fa-plus"></i></button>
+                    {{#each this.bindings}}
+                    <button type="button" class="la-kb-key" data-idx="{{@index}}" title="Click to rebind. Right-click to remove." style="width:auto; flex:0 0 auto; padding:2px 8px; height:24px; line-height:20px; border:1px solid #999; background:#fff; color:#2b2b2b; border-radius:3px; font-family:monospace; font-size:0.82em; cursor:pointer; box-shadow:0 1px 0 #888; margin:0;">{{this.display}}</button>
+                    {{/each}}
+                    <button type="button" class="la-kb-reset" title="Reset to default" style="width:24px; height:24px; flex:0 0 auto; padding:0; line-height:1; border:1px solid #888; background:rgba(0,0,0,0.04); color:#555; cursor:pointer; border-radius:3px; font-size:0.75em; margin:0;"><i class="fas fa-undo"></i></button>
+                </div>
+            </div>
             {{else if this.isTable}}
             <table style="width:100%; border-collapse:collapse; margin: 6px 0;">
                 <thead>

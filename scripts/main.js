@@ -4042,7 +4042,7 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('CoreActiveFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
     flows.get('SystemFlow')?.insertStepAfter('initSystemUseData', 'lancer-automations:onInitActivation');
     flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onInitActivation');
-    flows.get('SimpleActivationFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onInitActivation');
+    flows.get('SimpleActivationFlow')?.insertStepBefore('printActionUseCard', 'lancer-automations:onInitActivation');
     // OverchargeFlow / StabilizeFlow have no init step; insert at the start so they're cancellable.
     flows.get('OverchargeFlow')?.insertStepBefore('initOverchargeData', 'lancer-automations:onInitActivation');
     flows.get('StabilizeFlow')?.insertStepBefore('initializeStabilize', 'lancer-automations:onInitActivation');
