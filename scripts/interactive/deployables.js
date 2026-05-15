@@ -296,14 +296,27 @@ export async function pickupWeaponToken(ownerToken) {
  * @returns {Promise<{deployable: Actor|null, source: string|null}>} The deployable and its source ('actor', 'compendium', or null)
  */
 export async function resolveDeployable(deployableOrLid, ownerActor) {
-    // If it's already an Actor, return directly
-    if (deployableOrLid && typeof deployableOrLid !== 'string') {
-        return { deployable: deployableOrLid, source: 'actor' };
+    if (typeof deployableOrLid !== 'string') {
+        if (deployableOrLid)
+            return { deployable: deployableOrLid, source: 'actor' };
+        return { deployable: null, source: null };
     }
-
     const lid = deployableOrLid;
     if (!lid)
         return { deployable: null, source: null };
+
+    // UUID-shaped string: try fromUuid first (e.g. "Actor.abc", "Compendium.pack.Actor.id").
+    if (lid.startsWith('Compendium.') || /^Actor\.[A-Za-z0-9]+$/.test(lid)) {
+        try {
+            const doc = /** @type {any} */ (await fromUuid(lid));
+            if (doc?.documentName === 'Actor' && doc.type === 'deployable') {
+                return {
+                    deployable: doc,
+                    source: lid.startsWith('Compendium.') ? 'compendium' : 'actor'
+                };
+            }
+        } catch { /* fall through to LID search */ }
+    }
 
     // First, look in actor folder owned by this actor
     let deployable = /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ a) => {
@@ -581,8 +594,17 @@ export async function placeDeployable(options = /** @type {any} */({})) {
     // --- Normalize deployable input to array ---
     const deployableInputs = Array.isArray(deployableOrLid) ? deployableOrLid : [deployableOrLid];
 
+    const isDrone = (actor, item) => {
+        if (actor?.system?.type === 'Drone')
+            return true;
+        const tagHas = (tags) => Array.isArray(tags)
+            && tags.some(t => /drone/i.test(t?.lid ?? '') || /drone/i.test(t?.id ?? ''));
+        return tagHas(actor?.system?.tags) || tagHas(item?.system?.tags);
+    };
+
     // Resolve all deployables and build actor entries
     const actorEntries = [];
+    let anyDrone = false;
     for (const input of deployableInputs) {
         const resolved = await resolveDeployable(input, ownerActor);
         let actualDeployable = resolved.deployable;
@@ -619,6 +641,9 @@ export async function placeDeployable(options = /** @type {any} */({})) {
             }
             ui.notifications.info(`Created ${actorData.name}`);
         }
+
+        if (isDrone(actualDeployable, systemItem))
+            anyDrone = true;
 
         const tokenWidth = width ?? actualDeployable.prototypeToken?.width ?? 1;
         const tokenHeight = height ?? actualDeployable.prototypeToken?.height ?? 1;
@@ -658,9 +683,13 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         : {};
 
     const baseElevation = originToken?.document?.elevation ?? 0;
+    const noExplicitRange = rangeOpt == null && itemFlags.deployRange == null;
+    const finalRange = (noExplicitRange && anyDrone)
+        ? (ownerActor.type === 'pilot' ? 5 : (ownerActor.system?.sensor_range ?? 10))
+        : range;
     const result = await placeToken({
         actor: actorParam,
-        range,
+        range: finalRange,
         count,
         origin: originToken,
         title,
@@ -1091,6 +1120,32 @@ export async function addExtraActions(target, actions) {
     // can resolve the source item later (needed for onlyOnSourceMatch).
     const isItem = doc.documentName === 'Item';
     if (isItem) {
+        // Dedup tag conflicts: any consumable tag on the action that already exists on the
+        // parent item is stripped, with its state field, so item-level state stays the single
+        // source of truth for that tag.
+        const CONSUMABLE_LIDS = new Set(['tg_loading', 'tg_recharge', 'tg_limited']);
+        const FIELD_FOR = { tg_loading: 'loaded', tg_recharge: 'charged', tg_limited: 'uses' };
+        const itemTagLids = new Set(((doc.system?.tags ?? [])).map((/** @type {any} */ t) => t.lid));
+        for (const action of newActions) {
+            const a = /** @type {any} */ (action);
+            if (Array.isArray(a.tags) && a.tags.length) {
+                const dropped = [];
+                a.tags = a.tags.filter((/** @type {any} */ t) => {
+                    if (CONSUMABLE_LIDS.has(t.lid) && itemTagLids.has(t.lid)) {
+                        dropped.push(t.lid);
+                        const f = FIELD_FOR[t.lid];
+                        if (f && f in a)
+                            delete a[f];
+                        if (t.lid === 'tg_recharge' && 'recharge' in a)
+                            delete a.recharge;
+                        return false;
+                    }
+                    return true;
+                });
+                if (dropped.length)
+                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}; removed from extra action "${a.name}".`);
+            }
+        }
         for (const action of newActions) {
             const a = /** @type {any} */ (action);
             if (!a._sourceItemId) a._sourceItemId = doc.id;
@@ -1148,16 +1203,169 @@ export async function removeExtraActions(target, filter = null) {
     await doc.setFlag('lancer-automations', 'extraActions', kept);
 }
 
+// Decrement / mark-spent the consumable state on an actor-level extra action. Returns true if
+// the caller can proceed to execute, false if the action is depleted (caller should bail out).
+export async function consumeExtraAction(actor, actionName) {
+    if (!actor)
+        return true;
+    const all = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const idx = all.findIndex(a => a.name === actionName);
+    if (idx < 0)
+        return true;
+    const entry = { ...all[idx] };
+    const tags = entry.tags ?? [];
+    const hasLoading = tags.some(t => t.lid === 'tg_loading');
+    const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
+    const hasLimited = tags.some(t => t.lid === 'tg_limited');
+    let needsWrite = false;
+
+    if (hasLoading) {
+        if (entry.loaded === false) {
+            ui.notifications.warn(`${entry.name} is not loaded.`);
+            return false;
+        }
+        entry.loaded = false;
+        needsWrite = true;
+    }
+    if (hasRecharge) {
+        if (entry.charged === false) {
+            ui.notifications.warn(`${entry.name} is uncharged.`);
+            return false;
+        }
+        entry.charged = false;
+        needsWrite = true;
+    }
+    if (hasLimited) {
+        const cur = entry.uses?.value ?? 0;
+        if (cur <= 0) {
+            ui.notifications.warn(`${entry.name} has no uses left.`);
+            return false;
+        }
+        entry.uses = { ...entry.uses, value: cur - 1 };
+        needsWrite = true;
+    }
+
+    if (needsWrite) {
+        const next = all.slice();
+        next[idx] = entry;
+        await actor.setFlag('lancer-automations', 'extraActions', next);
+    }
+    return true;
+}
+
+// Reset the consumable state on a single actor-level extra action.
+export async function reloadExtraAction(actor, actionName) {
+    if (!actor)
+        return;
+    const all = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const idx = all.findIndex(a => a.name === actionName);
+    if (idx < 0)
+        return;
+    const entry = { ...all[idx] };
+    const tags = entry.tags ?? [];
+    let changed = false;
+    if (tags.some(t => t.lid === 'tg_loading') && entry.loaded !== true) {
+        entry.loaded = true;
+        changed = true;
+    }
+    if (tags.some(t => t.lid === 'tg_recharge') && entry.charged !== true) {
+        entry.charged = true;
+        changed = true;
+    }
+    if (tags.some(t => t.lid === 'tg_limited') && entry.uses?.max != null && entry.uses?.value !== entry.uses.max) {
+        entry.uses = { ...entry.uses, value: entry.uses.max };
+        changed = true;
+    }
+    if (changed) {
+        const next = all.slice();
+        next[idx] = entry;
+        await actor.setFlag('lancer-automations', 'extraActions', next);
+    }
+}
+
+// Per-extra-deployable range/count overrides. Keyed by LID or UUID, stored on whatever document
+// holds the extras (Item or Actor). When set, these override the item-level deployRange / deployCount
+// flags for that specific deployable.
+export function getExtraDeployableOpts(target, key) {
+    if (!target || !key)
+        return null;
+    const t = /** @type {any} */ (target);
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+    const map = doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {};
+    return map[key] ?? null;
+}
+
+export async function setExtraDeployableOpts(target, key, opts) {
+    if (!target || !key)
+        return null;
+    const t = /** @type {any} */ (target);
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+    const map = { ...doc.getFlag?.('lancer-automations', 'extraDeployableOpts') };
+    const cur = { ...map[key] };
+    for (const [k, v] of Object.entries(opts || {})) {
+        if (v == null || v === '')
+            delete cur[k];
+        else
+            cur[k] = v;
+    }
+    if (Object.keys(cur).length === 0)
+        delete map[key];
+    else
+        map[key] = cur;
+    await doc.setFlag('lancer-automations', 'extraDeployableOpts', map);
+    return doc;
+}
+
+// Roll recharge dice for any uncharged extras action with tg_recharge — both on the actor and on
+// any of its items. Mirrors NPCRechargeFlow semantics: 1d6, charged if roll >= entry.recharge.
+export async function rechargeExtraActionsForActor(actor) {
+    if (!actor)
+        return;
+    const rollFor = (list) => {
+        let mutated = false;
+        const next = list.map(entry => {
+            const tags = entry?.tags ?? [];
+            if (!tags.some(t => t.lid === 'tg_recharge'))
+                return entry;
+            if (entry.charged !== false)
+                return entry;
+            const threshold = Number(entry.recharge ?? 6);
+            const roll = 1 + Math.floor(Math.random() * 6);
+            if (roll >= threshold) {
+                mutated = true;
+                return { ...entry, charged: true };
+            }
+            return entry;
+        });
+        return { next, mutated };
+    };
+    const actorList = actor.getFlag('lancer-automations', 'extraActions') || [];
+    if (actorList.length) {
+        const { next, mutated } = rollFor(actorList);
+        if (mutated)
+            await actor.setFlag('lancer-automations', 'extraActions', next);
+    }
+    for (const item of (actor.items ?? [])) {
+        const itemList = item.getFlag?.('lancer-automations', 'extraActions') || [];
+        if (!itemList.length)
+            continue;
+        const { next, mutated } = rollFor(itemList);
+        if (mutated)
+            await item.setFlag('lancer-automations', 'extraActions', next);
+    }
+}
+
 /**
- * Add extra deployable LIDs to an item via flags (system.deployables is read-only due to Lancer's TypeDataModel).
- * Stores extra LIDs in the 'lancer-automations.extraDeployables' flag, deduplicating against existing entries.
- * @param {Item} item                   The Foundry Item document to update
+ * Add extra deployable LIDs to an item, actor, or token via flags.
+ * - Item: stores on item (system.deployables is read-only).
+ * - Token/Actor: stores on the actor.
+ * @param {Item|Actor|Token} target     The document to attach LIDs to
  * @param {string|Array<string>} lids   A single LID string or array of LID strings to add
- * @returns {Promise<Item|null>} The updated item, or null on failure
+ * @returns {Promise<Item|Actor|null>} The updated document, or null on failure
  */
-export async function addExtraDeploymentLids(item, lids) {
-    if (!item) {
-        ui.notifications.error("addExtraDeploymentLids: item is required.");
+export async function addExtraDeploymentLids(target, lids) {
+    if (!target) {
+        ui.notifications.error("addExtraDeploymentLids: target is required.");
         return null;
     }
     const newLids = Array.isArray(lids) ? lids : [lids];
@@ -1166,17 +1374,174 @@ export async function addExtraDeploymentLids(item, lids) {
         return null;
     }
 
-    const existingFlags = item.getFlag('lancer-automations', 'extraDeployables') || [];
+    const t = /** @type {any} */ (target);
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+
+    const existingFlags = doc.getFlag('lancer-automations', 'extraDeployables') || [];
     const merged = [...new Set([...existingFlags, ...newLids])];
 
     // Skip if nothing new to add
     if (merged.length === existingFlags.length) {
-        return item;
+        return doc;
     }
 
-    await item.setFlag('lancer-automations', 'extraDeployables', merged);
-    console.log(`lancer-automations | addExtraDeploymentLids: Added LID(s) to ${item.name}:`, newLids);
-    return item;
+    await doc.setFlag('lancer-automations', 'extraDeployables', merged);
+    console.log(`lancer-automations | addExtraDeploymentLids: Added LID(s) to ${doc.name}:`, newLids);
+    return doc;
+}
+
+/**
+ * Add extra deployable actors (by reference or UUID) to an item, actor, or token via flags.
+ * Mirrors addExtraDeploymentLids but stores actor UUIDs under 'lancer-automations.extraDeployableActors'.
+ * @param {Item|Actor|Token} target                       The document to attach the deployables to
+ * @param {any|string|Array<any|string>} actors           Actor doc, UUID string, or array of either
+ * @returns {Promise<Item|Actor|null>} The updated document, or null on failure
+ */
+export async function addExtraDeploymentActor(target, actors) {
+    if (!target) {
+        ui.notifications.error("addExtraDeploymentActor: target is required.");
+        return null;
+    }
+    const inputs = Array.isArray(actors) ? actors : [actors];
+    if (inputs.length === 0) {
+        ui.notifications.error("addExtraDeploymentActor: actors must be an Actor, UUID, or array of them.");
+        return null;
+    }
+
+    // Normalize to UUIDs, validating each input resolves to a deployable actor.
+    const validUuids = [];
+    for (const input of inputs) {
+        if (!input)
+            continue;
+        let uuid = null;
+        let resolved = null;
+        if (typeof input === 'string') {
+            uuid = input;
+            try {
+                resolved = /** @type {any} */ (await fromUuid(uuid));
+            } catch { /* invalid uuid string */ }
+        } else if (typeof input === 'object' && input?.uuid) {
+            uuid = input.uuid;
+            resolved = input;
+        }
+        if (!uuid || resolved?.documentName !== 'Actor') {
+            ui.notifications.warn(`addExtraDeploymentActor: skipping non-actor input: ${typeof input === 'string' ? input : input?.name}`);
+            continue;
+        }
+        validUuids.push(uuid);
+    }
+    if (validUuids.length === 0)
+        return null;
+
+    const t = /** @type {any} */ (target);
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+
+    const existing = doc.getFlag('lancer-automations', 'extraDeployableActors') || [];
+    const merged = [...new Set([...existing, ...validUuids])];
+
+    if (merged.length === existing.length)
+        return doc;
+
+    await doc.setFlag('lancer-automations', 'extraDeployableActors', merged);
+    console.log(`lancer-automations | addExtraDeploymentActor: Added actor UUID(s) to ${doc.name}:`, validUuids);
+    return doc;
+}
+
+/**
+ * Remove extra deployable actor UUIDs from an item, actor, or token via flags.
+ * Also strips matching entries from the sibling `extraDeployableActorsViaUI` marker flag if present.
+ * @param {Item|Actor|Token} target
+ * @param {any|string|Array<any|string>} actors  Actor doc, UUID string, or array of either
+ * @returns {Promise<Item|Actor|null>}
+ */
+export async function removeExtraDeploymentActor(target, actors) {
+    if (!target)
+        return null;
+    const inputs = Array.isArray(actors) ? actors : [actors];
+    const removeUuids = inputs
+        .map(i => typeof i === 'string' ? i : i?.uuid)
+        .filter(Boolean);
+    if (removeUuids.length === 0)
+        return null;
+    const removeSet = new Set(removeUuids);
+
+    const t = /** @type {any} */ (target);
+    const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
+
+    const existing = doc.getFlag('lancer-automations', 'extraDeployableActors') || [];
+    const kept = existing.filter(u => !removeSet.has(u));
+    let mutated = kept.length !== existing.length;
+    if (mutated)
+        await doc.setFlag('lancer-automations', 'extraDeployableActors', kept);
+
+    const uiMarkers = doc.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+    const keptMarkers = uiMarkers.filter(u => !removeSet.has(u));
+    if (keptMarkers.length !== uiMarkers.length) {
+        await doc.setFlag('lancer-automations', 'extraDeployableActorsViaUI', keptMarkers);
+        mutated = true;
+    }
+
+    if (mutated)
+        console.log(`lancer-automations | removeExtraDeploymentActor: Removed actor UUID(s) from ${doc.name}:`, [...removeSet]);
+    return doc;
+}
+
+/**
+ * Pick a token on the canvas to toggle its owner-link to `ownerToken.actor`.
+ * Sets/removes the `lancer-automations.ownerActorUuid` (+ ownerName) flag on the picked token's
+ * document — the same flag `placeDeployable` writes and `recallDeployable` reads.
+ * Already-linked tokens are marked invalid in the picker (with a "click to UNLINK" warning).
+ * @param {Token} ownerToken
+ * @returns {Promise<void>}
+ */
+export async function promptLinkOrUnlinkActor(ownerToken) {
+    const owner = ownerToken?.actor;
+    if (!owner) {
+        ui.notifications.warn("promptLinkOrUnlinkActor: token has no actor.");
+        return;
+    }
+    const ownerUuid = owner.uuid;
+    const isLinkedToOwner = (/** @type {any} */ t) =>
+        t?.document?.getFlag?.('lancer-automations', 'ownerActorUuid') === ownerUuid;
+
+    const picked = await chooseToken(ownerToken, {
+        count: 1,
+        includeSelf: false,
+        title: 'LINK / UNLINK ACTOR',
+        description: 'Pick a token to link. Already-linked tokens will be unlinked.',
+        icon: 'cci cci-deployable',
+        filter: (/** @type {any} */ t) => !isLinkedToOwner(t),
+        filterWarning: 'Already linked — click to UNLINK',
+    });
+    const target = picked?.[0];
+    if (!target?.document)
+        return;
+    if (isLinkedToOwner(target)) {
+        await target.document.unsetFlag('lancer-automations', 'ownerActorUuid');
+        await target.document.unsetFlag('lancer-automations', 'ownerName');
+        ui.notifications.info(`Unlinked ${target.actor?.name ?? target.name} from ${owner.name}.`);
+    } else {
+        await target.document.setFlag('lancer-automations', 'ownerActorUuid', ownerUuid);
+        await target.document.setFlag('lancer-automations', 'ownerName', owner.name ?? '');
+        ui.notifications.info(`Linked ${target.actor?.name ?? target.name} to ${owner.name}.`);
+    }
+}
+
+/**
+ * Read extra deployable LIDs + actor UUIDs stored on an actor (or the actor under a token).
+ * Used to surface "loose" deployables not tied to any item.
+ * @param {Actor|Token} tokenOrActor
+ * @returns {string[]} LIDs and UUIDs intermixed.
+ */
+export function getActorDeployables(tokenOrActor) {
+    if (!tokenOrActor)
+        return [];
+    const t = /** @type {any} */ (tokenOrActor);
+    const doc = t.actor ?? t.document ?? t;
+    return [
+        ...(doc.getFlag?.('lancer-automations', 'extraDeployables') || []),
+        ...(doc.getFlag?.('lancer-automations', 'extraDeployableActors') || []),
+    ];
 }
 
 /**
@@ -1196,7 +1561,8 @@ export function getItemDeployables(item, actor = null) {
         ? item.system?.core_system?.deployables || []
         : item.system?.deployables || [];
     const extraDeployables = item.getFlag?.('lancer-automations', 'extraDeployables') || [];
-    let deployablesArray = [...systemDeployables, ...extraDeployables];
+    const extraDeployableActors = item.getFlag?.('lancer-automations', 'extraDeployableActors') || [];
+    let deployablesArray = [...systemDeployables, ...extraDeployables, ...extraDeployableActors];
 
     if (deployablesArray.length === 0)
         return [];
@@ -1313,17 +1679,18 @@ export async function beginDeploymentCard(options = /** @type {any} */({})) {
     const allLids = [];
     let totalCount = 0;
 
-    // Read per-index options for range and count; use the first range found, sum all counts
+    // Read per-index options for range and count; use the first range found, sum all counts.
+    // Per-deployable extra opts (set via setExtraDeployableOpts) act as the next fallback.
     let rangeOpt = null;
     for (let i = 0; i < deployablesArray.length; i++) {
         const lid = deployablesArray[i];
         const idxOpts = deployableOptions[i] || {};
-        const depCount = idxOpts.count || 1;
+        const extraOpts = getExtraDeployableOpts(item, lid) || {};
+        const depCount = idxOpts.count ?? extraOpts.count ?? 1;
         totalCount += depCount;
-        if (idxOpts.range !== undefined && rangeOpt === null) {
-            rangeOpt = idxOpts.range;
-        }
-        // Push the LID once per deployable entry
+        const effectiveRange = idxOpts.range !== undefined ? idxOpts.range : extraOpts.range;
+        if (effectiveRange !== undefined && rangeOpt === null)
+            rangeOpt = effectiveRange;
         allLids.push(lid);
     }
 
@@ -1356,9 +1723,10 @@ export async function openDeployableMenu(actor) {
     const allSystemsWithDeployables = actor.items.filter(item =>
         getItemDeployables(item, actor).length > 0
     );
+    const actorLevelDeployables = getActorDeployables(actor);
 
-    if (allSystemsWithDeployables.length === 0) {
-        ui.notifications.warn(`No systems with deployables found for ${actor.name}.`);
+    if (allSystemsWithDeployables.length === 0 && actorLevelDeployables.length === 0) {
+        ui.notifications.warn(`No deployables found for ${actor.name}.`);
         return;
     }
 
@@ -1431,6 +1799,50 @@ export async function openDeployableMenu(actor) {
                     tokenHeight: 1
                 });
             }
+        }
+    }
+
+    for (const lid of actorLevelDeployables) {
+        const { deployable, source } = await resolveDeployable(lid, actor);
+        if (deployable) {
+            const isFromCompendium = source === 'compendium';
+            items.push({
+                id: `__actor_${lid}`,
+                systemId: null,
+                deployableId: deployable.id,
+                deployableLid: lid,
+                systemName: 'Extra Deployables',
+                deployableName: deployable.name,
+                deployableImg: deployable.img,
+                deployableData: deployable,
+                usesText: '',
+                chargesText: '',
+                disabled: false,
+                needsRecharge: false,
+                hasUses: false,
+                fromCompendium: isFromCompendium,
+                tokenWidth: deployable.prototypeToken?.width || 1,
+                tokenHeight: deployable.prototypeToken?.height || 1
+            });
+        } else {
+            items.push({
+                id: `__actor_${lid}`,
+                systemId: null,
+                deployableId: null,
+                deployableLid: lid,
+                systemName: 'Extra Deployables',
+                deployableName: `Not found: ${lid}`,
+                deployableImg: 'icons/svg/hazard.svg',
+                usesText: '',
+                chargesText: '',
+                disabled: true,
+                needsRecharge: false,
+                hasUses: false,
+                notFound: true,
+                fromCompendium: false,
+                tokenWidth: 1,
+                tokenHeight: 1
+            });
         }
     }
 
@@ -1597,7 +2009,9 @@ export async function openDeployableMenu(actor) {
                     if (!item || item.disabled || !item.deployableId) {
                         return;
                     }
-                    const system = actor.items.get(item.systemId);
+                    const system = item.systemId ? actor.items.get(item.systemId) : null;
+                    const holder = system ?? actor;
+                    const extraOpts = getExtraDeployableOpts(holder, item.deployableLid) || {};
 
                     await placeDeployable({
                         deployable: item.fromCompendium ? item.deployableData : game.actors.get(item.deployableId),
@@ -1607,7 +2021,8 @@ export async function openDeployableMenu(actor) {
                         fromCompendium: item.fromCompendium,
                         width: item.tokenWidth,
                         height: item.tokenHeight,
-                        range: null,
+                        range: extraOpts.range ?? null,
+                        count: extraOpts.count ?? null,
                         at: null,
                         title: `DEPLOY ${item.deployableName}`,
                         description: ""

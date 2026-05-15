@@ -71,7 +71,7 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
         scrollWrap.append($(`<div style="${S_MUTED}">No results</div>`));
     } else {
         for (const item of results) {
-            const row = makeRow(item.label, false, item.icon ?? null, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
+            const row = makeRow(item.label, false, item.icon ?? 'fas fa-circle-dot', item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
             if (item.highlightBg) {
                 const bc = item.highlightBorderColor ?? item.highlightBg;
                 row.data('restingBg', item.highlightBg).data('restingBorder', bc).data('hoverBg', brighten(item.highlightBg));

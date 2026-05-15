@@ -734,7 +734,15 @@ interface LancerAutomationsAPI {
     // ── Deployment & Thrown Weapons ───────────────────────────────────────────
     addItemFlags(item: any, flags: Record<string, any>): Promise<any>;
     getItemFlags(item: any, flagName?: string): any;
-    addExtraDeploymentLids(item: any, lids: string | string[]): Promise<any>;
+    addExtraDeploymentLids(target: any, lids: string | string[]): Promise<any>;
+    addExtraDeploymentActor(target: any, actors: any | string | Array<any | string>): Promise<any>;
+    removeExtraDeploymentActor(target: any, actors: any | string | Array<any | string>): Promise<any>;
+    getActorDeployables(tokenOrActor: any): string[];
+    getExtraDeployableOpts(target: any, key: string): { range?: number; count?: number } | null;
+    setExtraDeployableOpts(target: any, key: string, opts: { range?: number | null; count?: number | null }): Promise<any>;
+    consumeExtraAction(actor: any, actionName: string): Promise<boolean>;
+    reloadExtraAction(actor: any, actionName: string): Promise<void>;
+    rechargeExtraActionsForActor(actor: any): Promise<void>;
     addExtraActions(target: any, actions: object | object[]): Promise<any>;
     getItemActions(item: any): object[];
     getActorActions(tokenOrActor: Token | any): object[];

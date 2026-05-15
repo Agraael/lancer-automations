@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "2.14.9",
+    "version": "2.14.10",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -18,7 +18,8 @@
         "scripts/combat/grapple.js",
         "scripts/combat/speed-provider.js",
         "scripts/tah/index.js",
-        "scripts/setup/telemetry.js"
+        "scripts/setup/telemetry.js",
+        "scripts/setup/news.js"
     ],
     "scripts": [
         "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"

@@ -13,7 +13,8 @@ import { cancelRulerDrag ,
     drawMovementTrace,
     getActiveGMId, getTokenOwnerUserId,
     handleManualDeployLink, startWaitCard,
-    resolveDeployableSourceItem
+    resolveDeployableSourceItem,
+    rechargeExtraActionsForActor
 } from './interactive/index.js';
 import {
     EffectsAPI,
@@ -94,6 +95,31 @@ let cachedFlatGeneralReactions = null;
 const cachedNonActionReactionsByTrigger = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd']);
 let deployableConnectionsGraphic = null;
+let _hoverConnectionToken = null;
+let _hoverConnectionTicker = null;
+let _dashOffset = 0;
+
+function _drawDashedLine(g, x1, y1, x2, y2, dashLength = 8, spaceLength = 14, offset = 0) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= 0)
+        return;
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const period = dashLength + spaceLength;
+    const norm = ((offset % period) + period) % period;
+    let traveled = -norm;
+    while (traveled < dist) {
+        const a = Math.max(0, traveled);
+        const b = Math.min(dist, traveled + dashLength);
+        if (b > a) {
+            g.moveTo(x1 + ux * a, y1 + uy * a);
+            g.lineTo(x1 + ux * b, y1 + uy * b);
+        }
+        traveled += period;
+    }
+}
 
 // Cache reaction items per actor; invalidated on actor/item changes
 Hooks.on('lancer-automations.clearCaches', () => {
@@ -193,6 +219,25 @@ export function getReactionItems(token) {
             getFlag: () => null,
             _deployableSurrogate: true,
             _deployableActor: actor
+        }]);
+    }
+
+    // Actor-UUID surrogate: reactions registered against an actor's UUID
+    // (e.g. "Actor.qe5wEevLrMN6ki44") resolve via this. Applies to every actor type.
+    if (actor.uuid) {
+        items = items.concat([{
+            name: actor.name,
+            type: "actor_surrogate",
+            system: {
+                lid: actor.uuid,
+                tags: [],
+                destroyed: actor.system?.destroyed === true,
+                disabled: actor.system?.disabled === true,
+                actions: actor.system?.actions || []
+            },
+            getFlag: () => null,
+            _actorSurrogate: true,
+            _surrogateActor: actor
         }]);
     }
 
@@ -675,7 +720,8 @@ async function checkReactions(triggerType, data) {
                     const triggeringItem = data.weapon || data.techItem || data.item;
                     const triggeringItemLid = triggeringItem?.system?.lid ?? null;
                     const triggeringDepLid = data.deployable?.lid ?? null;
-                    if (triggeringItemLid !== lid && triggeringDepLid !== lid)
+                    const triggeringActorUuid = data.triggeringToken?.actor?.uuid ?? null;
+                    if (triggeringItemLid !== lid && triggeringDepLid !== lid && triggeringActorUuid !== lid)
                         continue;
                 }
 
@@ -4268,7 +4314,6 @@ Hooks.once('ready', async () => {
         }
     }
 
-    checkModuleUpdate('lancer-automations');
     initCollapseHook();
 
     // Scale down token vision radius during drag if the multiplier is configured
@@ -4405,79 +4450,64 @@ Hooks.on('canvasReady', () => {
     }
 });
 
-Hooks.on('hoverToken', (token, hovered) => {
-    if (!deployableConnectionsGraphic || deployableConnectionsGraphic.destroyed) {
+function _redrawHoverConnections() {
+    if (!deployableConnectionsGraphic || deployableConnectionsGraphic.destroyed)
         return;
-    }
     deployableConnectionsGraphic.clear();
-
-    if (!hovered) {
+    const token = _hoverConnectionToken;
+    if (!token)
         return;
-    }
-
-    // Only show lines if the user has ownership over the hovered token
-    if (!token.actor?.isOwner) {
+    if (!token.actor?.isOwner)
         return;
-    }
-
-    if (!game.settings.get('lancer-automations', 'showDeployableLines')) {
+    if (!game.settings.get('lancer-automations', 'showDeployableLines'))
         return;
-    }
-
     const sourceUuid = token.actor?.uuid;
-    if (!sourceUuid) {
+    if (!sourceUuid)
         return;
-    }
 
-    // Check if hovered token is a deployable itself
     const ownerUuidFlag = token.document.getFlag('lancer-automations', 'ownerActorUuid');
-
-    const drawDashedLine = (g, x1, y1, x2, y2, dashLength = 8, spaceLength = 8) => {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const distance = Math.hypot(dx, dy);
-        const steps = Math.floor(distance / (dashLength + spaceLength));
-        const dashX = (dx / distance) * dashLength;
-        const dashY = (dy / distance) * dashLength;
-        const spaceX = (dx / distance) * spaceLength;
-        const spaceY = (dy / distance) * spaceLength;
-
-        let cx = x1;
-        let cy = y1;
-        for (let i = 0; i < steps; i++) {
-            g.moveTo(cx, cy);
-            g.lineTo(cx + dashX, cy + dashY);
-            cx += dashX + spaceX;
-            cy += dashY + spaceY;
-        }
-        const rem = distance - (steps * (dashLength + spaceLength));
-        if (rem > 0) {
-            g.moveTo(cx, cy);
-            if (rem > dashLength) {
-                g.lineTo(cx + dashX, cy + dashY);
-            } else {
-                g.lineTo(x2, y2);
-            }
-        }
-    };
-
-    // 2px width, yellowish color (0xffd700 = Gold), 0.6 alpha
     deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
-
     if (ownerUuidFlag) {
-        // Hovered token is a deployable, draw line to its owner
         const ownerToken = canvas.tokens.placeables.find(t => t.actor?.uuid === ownerUuidFlag);
-        if (ownerToken) {
-            drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, ownerToken.center.x, ownerToken.center.y);
-        }
+        if (ownerToken)
+            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, ownerToken.center.x, ownerToken.center.y, 8, 14, _dashOffset);
     } else {
-        // Hovered token is a potential owner, draw lines to all its deployables
         const deployables = canvas.tokens.placeables.filter(t =>
             t.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
         );
-        for (const dep of deployables) {
-            drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, dep.center.x, dep.center.y);
-        }
+        for (const dep of deployables)
+            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, dep.center.x, dep.center.y, 8, 14, _dashOffset);
+    }
+
+    const partnerUuids = [];
+    const actor = token.actor;
+    const pilotUuid = actor?.system?.pilot?.value?.uuid;
+    const activeMechUuid = actor?.system?.active_mech?.value?.uuid;
+    if (actor?.type === 'mech' && pilotUuid)
+        partnerUuids.push(pilotUuid);
+    if (actor?.type === 'pilot' && activeMechUuid)
+        partnerUuids.push(activeMechUuid);
+    if (partnerUuids.length)
+        deployableConnectionsGraphic.lineStyle(2, 0x4caf50, 0.6);
+    for (const uuid of partnerUuids) {
+        const partner = canvas.tokens.placeables.find(t => t.actor?.uuid === uuid);
+        if (partner)
+            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, partner.center.x, partner.center.y, 8, 14, _dashOffset);
+    }
+}
+
+Hooks.on('hoverToken', (token, hovered) => {
+    _hoverConnectionToken = hovered ? token : null;
+    _redrawHoverConnections();
+    if (_hoverConnectionToken && !_hoverConnectionTicker) {
+        _hoverConnectionTicker = () => {
+            _dashOffset = (_dashOffset - 0.25) % 1000;
+            _redrawHoverConnections();
+        };
+        canvas.app?.ticker?.add(_hoverConnectionTicker);
+    } else if (!_hoverConnectionToken && _hoverConnectionTicker) {
+        canvas.app?.ticker?.remove(_hoverConnectionTicker);
+        _hoverConnectionTicker = null;
     }
 });
 
@@ -5052,6 +5082,8 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
             initMovementCap(startingToken);
             await handleTrigger('onTurnStart', { triggeringToken: startingToken });
             processDurationEffects('start', startingToken.id);
+            if (startingToken.actor)
+                await rechargeExtraActionsForActor(startingToken.actor);
         }
     }
 

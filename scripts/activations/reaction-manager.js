@@ -433,6 +433,22 @@ export class ReactionConfig extends FormApplication {
             }
         }
 
+        // 3. Resolve any remaining keys that look like Actor UUIDs (e.g. "Actor.abc123" or "Compendium.…Actor.…").
+        if (midsToLookup.size > 0) {
+            for (const key of [...midsToLookup]) {
+                let actor = null;
+                if (/^Actor\.[A-Za-z0-9]+$/.test(key)) {
+                    actor = game.actors.get(key.slice('Actor.'.length));
+                } else if (key.startsWith('Compendium.') && key.includes('.Actor.')) {
+                    try { actor = /** @type {any} */ (await fromUuid(key)); } catch { /* ignore */ }
+                }
+                if (actor?.documentName === 'Actor') {
+                    itemMap.set(key, { name: `${actor.name} (Actor)`, system: actor.system });
+                    midsToLookup.delete(key);
+                }
+            }
+        }
+
         const resolveActionName = (itemData, path) => {
             if (!itemData || !path || path === "system.trigger" || path === "system")
                 return null;

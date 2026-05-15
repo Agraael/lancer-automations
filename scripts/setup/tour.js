@@ -690,7 +690,7 @@ function _welcomeDialog() {
                     <p style="margin: 0 0 8px;">This module does a lot of stuff. Its use is mainly for me, so the design is catered to what I like.</p>
                     <p style="margin: 0 0 8px;">I hope you read the <a href="https://github.com/Agraael/lancer-automations#readme" target="_blank" rel="noopener"><b>README</b> on GitHub</a> a bit. If not, you should.</p>
                     <p style="margin: 0 0 8px;">Since it's a big module, here's a little tour to show the most important stuff.</p>
-                    <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>.</p>
+                    <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
                     <p style="margin: 0; opacity: 0.85;">Shout to the 2 people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a>, it's not needed but it's nice.</p>
                 </div>
                 <p style="padding: 6px 10px 0; font-size: 0.85em; opacity: 0.7; border-top: 1px solid rgba(120,46,34,0.2); margin-top: 6px;">You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b> &gt; <b>Tour</b>, or from Foundry's <b>Configure Tours</b> menu.</p>

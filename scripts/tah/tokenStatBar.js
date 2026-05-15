@@ -8,6 +8,7 @@ const SETTING_DEFAULT_COMBAT_ONLY = 'statBarDefaultCombatOnly';
 const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
 const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
+const SETTING_EFFECT_ICON_SCALE = 'statBarEffectIconScale';
 
 const VIS_ALL = 'all';
 const VIS_OWNER = 'owner';
@@ -1385,6 +1386,16 @@ export function registerTokenStatBarSettings() {
     });
     game.settings.register(MODULE_ID, SETTING_VIS_IN_COMBAT, {
         scope: 'world', config: false, type: String, default: VIS_ALL,
+    });
+    game.settings.register(MODULE_ID, SETTING_EFFECT_ICON_SCALE, {
+        name: 'Effect Icon Scale (with Stat Bar)',
+        hint: 'Multiplier on token effect icon size when the custom stat bar is active. 1 = no shrink (Foundry default), lower values progressively shrink. Only used when stat bar is enabled.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 0.7,
+        range: { min: 0.3, max: 1, step: 0.05 },
+        requiresReload: true,
     });
 
 }

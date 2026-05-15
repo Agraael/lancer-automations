@@ -3,6 +3,7 @@
 import { ReactionReset } from '../activations/reaction-reset.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
 import { repairLCPData } from './lancer-modif.js';
+import { openNewsHistory } from './news.js';
 
 const MODULE_ID = 'lancer-automations';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
@@ -124,6 +125,7 @@ const TOKENS_DISPLAY_FIELDS = [
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
+    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale (Stat Bar)', min: 0.3, max: 1, step: 0.05 },
     { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
     { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
     { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
@@ -388,6 +390,15 @@ const TOOLS_FIELDS = [
         icon: 'fas fa-file-import',
         hint: 'Import activations from a JSON file.',
         onClick: () => new ReactionImport().render(true),
+    },
+
+    { type: 'section', label: 'News' },
+    { type: 'button',
+        key: 'openNewsHistory',
+        label: 'News & Releases',
+        icon: 'fas fa-newspaper',
+        hint: 'Browse past news entries and module release notes.',
+        onClick: () => openNewsHistory(),
     },
 ];
 
@@ -1166,6 +1177,11 @@ export class LancerAutomationsConfig extends FormApplication {
                 const f = /** @type {any} */ (fRaw);
                 if (f.type === 'statusFx' && f.sub)
                     sfxSubs.add(f.sub);
+                else if (f.type === 'compactStatusFx') {
+                    for (const it of (f.items ?? [])) {
+                        if (it?.sub) sfxSubs.add(it.sub);
+                    }
+                }
             }
         }
         if (sfxSubs.size > 0) {

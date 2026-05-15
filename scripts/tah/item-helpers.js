@@ -35,55 +35,60 @@ export function activationTheme(/** @type {string|null|undefined} */ activation)
 }
 
 /**
- * Inspects any Lancer item and returns its availability status for display in the HUD.
- * Checks: loading, recharge, limited uses, disabled, destroyed.
+ * Inspects any Lancer item OR standalone action object and returns its availability status
+ * for display in the HUD. Checks: loading, recharge, limited uses, disabled, destroyed.
  * Works for weapons (uses active_profile tags), systems, traits, and any other item type.
+ * For action objects (actor-level extras), reads tags / loaded / charged / uses directly.
  *
- * @param {Item} item
+ * @param {Item|object} itemOrAction
  * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, destroyed: boolean }}
  */
-export function getItemStatus(item) {
-    const sys = item.system;
-    const activeTags = sys.active_profile?.tags ?? [];
+export function getItemStatus(itemOrAction, extraAction = null) {
+    const isItem = !!itemOrAction?.system;
+    const sys = isItem ? itemOrAction.system : itemOrAction;
+    const activeTags = isItem ? (sys.active_profile?.tags ?? []) : [];
     const baseTags   = sys.all_base_tags ?? sys.tags ?? [];
-    const tags = [...activeTags, ...baseTags];
+    const itemTags = [...activeTags, ...baseTags];
 
     let unavailable = !!(sys.disabled);
     const destroyed = !!(sys.destroyed);
     const parts = [];
     let badgeColor = '#3a9e6e'; // green = ready
 
-    const hasLoading  = tags.some(t => t.lid === 'tg_loading');
-    const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
-    const hasLimited  = tags.some(t => t.lid === 'tg_limited');
-
-    if (hasLoading) {
-        if (sys.loaded === false) {
-            parts.push('⬡'); unavailable = true; badgeColor = '#c33';
-        } else {
-            parts.push('⬢');
-        }
-    }
-    if (hasRecharge) {
-        if (sys.charged === false) {
-            parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33';
-        } else {
-            parts.push(rechargeIcon(true));
-        }
-    }
-    if (hasLimited) {
+    const pushLoaded = (loaded) => {
+        if (loaded === false) { parts.push('⬡'); unavailable = true; badgeColor = '#c33'; }
+        else parts.push('⬢');
+    };
+    const pushCharged = (charged) => {
+        if (charged === false) { parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33'; }
+        else parts.push(rechargeIcon(true));
+    };
+    const pushUses = (usesField) => {
         let val = 0, max = 0;
-        if (sys.uses != null) {
-            if (typeof sys.uses === 'number') {
-                val = sys.uses;
-            } else {
-                val = sys.uses.value ?? 0; max = sys.uses.max ?? 0;
-            }
+        if (usesField != null) {
+            if (typeof usesField === 'number') val = usesField;
+            else { val = usesField.value ?? 0; max = usesField.max ?? 0; }
         }
         if (val <= 0) { unavailable = true; badgeColor = '#c33'; }
-        else if (val < max && badgeColor !== '#c33') { badgeColor = '#cc7700'; }
+        else if (val < max && badgeColor !== '#c33') badgeColor = '#cc7700';
         parts.push(`${val}/${max}`);
-    }
+    };
+
+    if (itemTags.some(t => t.lid === 'tg_loading'))
+        pushLoaded(sys.loaded);
+    if (itemTags.some(t => t.lid === 'tg_recharge'))
+        pushCharged(sys.charged);
+    if (itemTags.some(t => t.lid === 'tg_limited'))
+        pushUses(sys.uses);
+
+    // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
+    const actionTags = isItem && extraAction?._addedViaExtrasUI ? (extraAction.tags ?? []) : [];
+    if (actionTags.some(t => t.lid === 'tg_loading'))
+        pushLoaded(extraAction.loaded);
+    if (actionTags.some(t => t.lid === 'tg_recharge'))
+        pushCharged(extraAction.charged);
+    if (actionTags.some(t => t.lid === 'tg_limited'))
+        pushUses(extraAction.uses);
 
     const badge = parts.length ? parts.join(' ') : null;
     return { labelPrefix: '', badge, badgeColor, unavailable, destroyed };
@@ -100,7 +105,9 @@ export function laHudRenderIcon(icon) {
     if (!icon)
         return '';
     if (icon.endsWith('.svg')) {
-        const isWhite = icon.includes('/white/') || icon.includes('modules/lancer-automations/');
+        const isWhite = icon.includes('/white/')
+            || icon.includes('modules/lancer-automations/')
+            || icon.startsWith('icons/svg/');
         const filter = isWhite ? 'invert(1)' : 'none';
         return `<img src="${icon}" style="width:20px;height:20px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
@@ -192,12 +199,16 @@ export function laHudItemChildren(item, opts = {}) {
  * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge
  */
 export function appendItemPips(item, popup, depthCallbacks) {
+    const action = depthCallbacks?.action;
+    const isActorExtra = item?.documentName === 'Actor' && action?._addedViaExtrasUI === true;
     const sys = item?.system;
-    const allTags = sys ? [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])] : [];
+    const allTags = isActorExtra
+        ? (action?.tags ?? [])
+        : (sys ? [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])] : []);
     const hasLoading  = allTags.some(t => t.lid === 'tg_loading');
     const hasRecharge = allTags.some(t => t.lid === 'tg_recharge');
     const hasLimited  = allTags.some(t => t.lid === 'tg_limited');
-    const hasExtraRecharge = !!depthCallbacks?.action?.recharge;
+    const hasExtraRecharge = !!action?.recharge && !isActorExtra;
     if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge)
         return;
 
@@ -206,15 +217,39 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const pipsWrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
     popup.children().last().prepend(pipsWrap);
 
+    const readState = () => {
+        if (isActorExtra) {
+            const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+            return list.find(a => a.name === action.name) ?? action;
+        }
+        return item.system;
+    };
+    const patchState = async (patch) => {
+        if (isActorExtra) {
+            const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+            const idx = list.findIndex(a => a.name === action.name);
+            if (idx < 0)
+                return;
+            const next = list.slice();
+            next[idx] = { ...next[idx], ...patch };
+            await item.setFlag('lancer-automations', 'extraActions', next);
+        } else {
+            const flat = {};
+            for (const [k, v] of Object.entries(patch))
+                flat[`system.${k}`] = v;
+            await /** @type {any} */ (item).update(flat);
+        }
+    };
+
     const rebuild = () => {
         pipsWrap.empty();
-        const s = item.system;
+        const s = readState();
         if (hasLoading) {
             const loaded = s.loaded !== false;
             const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
-                await /** @type {any} */ (item).update({ 'system.loaded': !item.system.loaded });
+                await patchState({ loaded: !loaded });
                 rebuild();
             });
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading</span>`), pip));
@@ -224,7 +259,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
-                await /** @type {any} */ (item).update({ 'system.charged': !item.system.charged });
+                await patchState({ charged: !charged });
                 rebuild();
             });
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged</span>`), pip));
@@ -241,7 +276,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
                     pip.on('click', async () => {
                         playUiSound('toggle');
                         const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
-                        await /** @type {any} */ (item).update(isObj ? { 'system.uses.value': newVal } : { 'system.uses': newVal });
+                        await patchState(isObj ? { uses: { ...s.uses, value: newVal } } : { uses: newVal });
                         rebuild();
                     });
                     usesRow.append(pip);
@@ -252,10 +287,71 @@ export function appendItemPips(item, popup, depthCallbacks) {
     };
     rebuild();
 
+    // Item-attached extras-UI action: render a second pip row whose tags are disjoint from the
+    // item's (dedup guaranteed at add-time). State reads/writes go to the flag entry by name.
+    const isItemDoc = item?.documentName === 'Item';
+    if (isItemDoc && action?._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length) {
+        const actHasLoading  = action.tags.some(t => t.lid === 'tg_loading');
+        const actHasRecharge = action.tags.some(t => t.lid === 'tg_recharge');
+        const actHasLimited  = action.tags.some(t => t.lid === 'tg_limited');
+        if (actHasLoading || actHasRecharge || actHasLimited) {
+            const readAct = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
+                .find(a => a.name === action.name) ?? action;
+            const patchAct = async (patch) => {
+                const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                const idx = list.findIndex(a => a.name === action.name);
+                if (idx < 0)
+                    return;
+                const next = list.slice();
+                next[idx] = { ...next[idx], ...patch };
+                await item.setFlag('lancer-automations', 'extraActions', next);
+            };
+            const actWrap = $(`<div class="la-ea-pips" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+            popup.children().last().prepend(actWrap);
+            const rebuildAct = () => {
+                actWrap.empty();
+                const s = readAct();
+                if (actHasLoading) {
+                    const loaded = s.loaded !== false;
+                    const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
+                    pip.on('click', async () => { playUiSound('toggle'); await patchAct({ loaded: !loaded }); rebuildAct(); });
+                    actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
+                }
+                if (actHasRecharge) {
+                    const charged = s.charged !== false;
+                    const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
+                    pip.on('click', async () => { playUiSound('toggle'); await patchAct({ charged: !charged }); rebuildAct(); });
+                    actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
+                }
+                if (actHasLimited && s.uses != null) {
+                    const isObj = typeof s.uses !== 'number';
+                    const val = isObj ? (s.uses.value ?? 0) : s.uses;
+                    const max = isObj ? (s.uses.max ?? 0) : s.uses;
+                    if (max > 0) {
+                        const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses*</span>`));
+                        for (let i = 1; i <= max; i++) {
+                            const n = i;
+                            const pip = $(`<span style="${S_PIP}color:${n <= val ? '#3a9e6e' : '#444'};">${n <= val ? '⬢' : '⬡'}</span>`);
+                            pip.on('click', async () => {
+                                playUiSound('toggle');
+                                const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
+                                await patchAct(isObj ? { uses: { ...s.uses, value: newVal } } : { uses: newVal });
+                                rebuildAct();
+                            });
+                            usesRow.append(pip);
+                        }
+                        actWrap.append(usesRow);
+                    }
+                }
+            };
+            rebuildAct();
+        }
+    }
+
     // Extra-action recharge pip (action-level, not item-level).
     // Uses the same "Charged" label + ▣/□ pip style as native tg_recharge items.
     const extraAction = depthCallbacks?.action;
-    if (extraAction?.recharge && item) {
+    if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI) {
         const eaWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
         if (!pipsWrap.length) popup.children().last().prepend(eaWrap);
         const rebuildEa = () => {

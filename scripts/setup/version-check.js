@@ -1,19 +1,13 @@
 /*global game, console, fetch, Dialog, foundry, window */
 
-export async function checkModuleUpdate(moduleId) {
-    if (!game.user.isGM) {
-        return;
-    }
+export async function getPendingUpdate(moduleId) {
+    if (!game.user.isGM) return null;
 
     const module = game.modules.get(moduleId);
-    if (!module) {
-        return;
-    }
+    if (!module) return null;
 
-    let manifestUrl = module.manifest;
-    if (!manifestUrl) {
-        return;
-    }
+    const manifestUrl = module.manifest;
+    if (!manifestUrl) return null;
 
     try {
         let remoteVersion;
@@ -54,15 +48,22 @@ export async function checkModuleUpdate(moduleId) {
             }
         }
 
-        if (remoteVersion && foundry.utils.isNewerVersion(remoteVersion, module.version)) {
-            const lastNotified = game.settings.get(moduleId, 'lastNotifiedVersion');
-            if (lastNotified !== remoteVersion) {
-                showUpdateDialog(module, remoteVersion, releaseNotes);
-            }
-        }
+        if (!remoteVersion || !foundry.utils.isNewerVersion(remoteVersion, module.version)) return null;
+
+        const lastNotified = game.settings.get(moduleId, 'lastNotifiedVersion');
+        if (lastNotified === remoteVersion) return null;
+
+        return { module, newVersion: remoteVersion, releaseNotes };
     } catch (error) {
         console.error(`${moduleId} | Version check failed:`, error);
+        return null;
     }
+}
+
+export async function checkModuleUpdate(moduleId) {
+    const pending = await getPendingUpdate(moduleId);
+    if (!pending) return;
+    showUpdateDialog(pending.module, pending.newVersion, pending.releaseNotes);
 }
 
 function showUpdateDialog(module, newVersion, releaseNotes = "") {

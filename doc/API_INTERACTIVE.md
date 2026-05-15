@@ -386,20 +386,107 @@ await api.addActorFlags(mineActor, {
 ---
 
 <details>
-<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Item</code></summary>
+<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> · <b><code>addExtraDeploymentActor</code></b> <sup>async</sup> · <b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> · <b><code>getActorDeployables</code></b></summary>
 
 <br>
 
 ```js
-await api.addExtraDeploymentLids(item, lids)
+await api.addExtraDeploymentLids(target, lids)
+await api.addExtraDeploymentActor(target, actors)
+await api.removeExtraDeploymentActor(target, actors)
+api.getActorDeployables(tokenOrActor)
 ```
 
-Adds extra deployable LIDs to an item via flags. Since Lancer's TypeDataModel prevents writing to `system.deployables` on NPC features, this stores extra LIDs as flags merged in by `getItemDeployables`.
+Item / Actor / Token target. Item stores on itself; Token/Actor stores on the actor. Both feed `getItemDeployables`.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>item</kbd> | `Item` | The item to update |
-| <kbd>lids</kbd> | `string\|Array<string>` | LID string(s) to add |
+| <kbd>target</kbd> | `Item\|Actor\|Token` | Holder |
+| <kbd>lids</kbd> | `string\|Array<string>` | LID(s) |
+| <kbd>actors</kbd> | `Actor\|string\|Array<Actor\|string>` | Actor doc(s) or UUID(s) |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>getExtraDeployableOpts</code></b> · <b><code>setExtraDeployableOpts</code></b> <sup>async</sup></summary>
+
+<br>
+
+```js
+api.getExtraDeployableOpts(target, key)
+await api.setExtraDeployableOpts(target, key, opts)
+```
+
+Per-extra range / count override keyed by LID or UUID. Overrides item-level `deployRange` / `deployCount`. Pass `null` / `''` to clear.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>target</kbd> | `Item\|Actor\|Token` | Holder |
+| <kbd>key</kbd> | `string` | LID or actor UUID |
+| <kbd>opts</kbd> | `{ range?: number\|null, count?: number\|null }` | Patch |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>promptLinkOrUnlinkActor</code></b> <sup>async</sup></summary>
+
+<br>
+
+```js
+await api.promptLinkOrUnlinkActor(ownerToken)
+```
+
+Picker that toggles the deployable-owner link flag (`ownerActorUuid` + `ownerName`) on the picked token. Already-linked tokens show as invalid with a click-to-unlink warning.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>ownerToken</kbd> | `Token` | Owner |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> · <b><code>reloadExtraAction</code></b> <sup>async</sup> · <b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup></summary>
+
+<br>
+
+```js
+await api.consumeExtraAction(target, actionName)
+await api.reloadExtraAction(target, actionName)
+await api.rechargeExtraActionsForActor(actor)
+```
+
+Charge plumbing for extras with `tg_loading` / `tg_recharge` / `tg_limited` tags. `consume` decrements / spends, returns `false` if depleted. `reload` resets. `recharge` rolls 1d6 vs `entry.recharge` per uncharged entry (fires on turn start).
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>target</kbd> | `Item\|Actor` | Holder of `extraActions` flag |
+| <kbd>actionName</kbd> | `string` | Matches `action.name` |
+| <kbd>actor</kbd> | `Actor` | Recharge sweep target |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>openExtrasDialog</code></b></summary>
+
+<br>
+
+```js
+api.openExtrasDialog(actor)
+```
+
+Dialog for managing actor-level extras (extra actions + extra deployment actors). Only lists entries created here. Also reachable via TAH > Utility > Misc > Add Extra.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>actor</kbd> | `Actor` | Owner |
 
 </details>
 
@@ -414,14 +501,34 @@ Adds extra deployable LIDs to an item via flags. Since Lancer's TypeDataModel pr
 await api.addExtraActions(target, actions)       // add to Item, Token, or Actor
 api.getItemActions(item)                          // → Object[] (system.actions + extras)
 api.getActorActions(tokenOrActor)                 // → Object[] (extras on actor)
-await api.removeExtraActions(target, filter?)      // string name, predicate, or null (clear all)
+await api.removeExtraActions(target, filter?)     // string name, predicate, or null (clear all)
 ```
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>target</kbd> | `Item\|Token\|Actor` | The document to update |
-| <kbd>actions</kbd> | `Object\|Array<Object>` | Action object(s) with `{ name, activation, detail }` |
-| <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null |
+| <kbd>target</kbd> | `Item\|Token\|Actor` | Item stores on itself; Token/Actor stores on the actor |
+| <kbd>actions</kbd> | `ExtraAction\|ExtraAction[]` | One action or an array |
+| <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null (clear all) |
+
+**`ExtraAction` shape** (`LancerAction` + extras):
+
+| Field | Type | Notes |
+|:------|:-----|:------|
+| `name` | `string` | Required |
+| `activation` | `string` | Required. `"Quick"` / `"Full"` / `"Protocol"` / `"Reaction"` / `"Free"` / `"Quick Tech"` / `"Full Tech"` / `"Invade"` |
+| `detail` | `string` | HTML effect text |
+| `lid`, `cost`, `heat_cost`, `frequency`, `init`, `trigger`, `terse` | various | Standard `LancerAction` fields |
+| `tech_attack` | `boolean` | Routes click through `beginTechAttackFlow` |
+| `damage`, `range` | `Array<{val,type}>` | Same shape as system actions |
+| `mech`, `pilot` | `boolean` | Visibility gates |
+| `tags` | `Array<{lid,val}>` | Standard Lancer tags |
+| `icon` | `string` | TAH icon override (path or FontAwesome class) |
+| `recharge`, `charged` | `number`, `boolean` | Charge state for `tg_recharge` actions |
+| `uses` | `{value,max}` | Charge state for `tg_limited` actions |
+
+**Auto-behaviors when target is an Item:**
+- `_sourceItemId` is stamped onto every added action so `onlyOnSourceMatch` reactions can resolve the parent item.
+- If the action carries a consumable tag (`tg_loading` / `tg_recharge` / `tg_limited`) that's already on the parent item, that tag is stripped from the action along with its state field (`loaded` / `charged`+`recharge` / `uses`). A warning is shown. Keeps the item-level state as the single source of truth.
 
 **Example:**
 ```js

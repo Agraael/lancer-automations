@@ -1,9 +1,10 @@
-/* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog */
+/* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog, FilePicker */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction } from '../interactive/deployables.js';
+import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
@@ -1380,6 +1381,11 @@ export class LancerHUD {
             getItems: () => [
                 { label: 'Deploy Item', icon: 'systems/lancer/assets/icons/deployable.svg', onClick: () => openDeployableMenu(actor) },
                 { label: 'Recall Item', icon: 'modules/lancer-automations/icons/up-card.svg',     onClick: () => recallDeployable(token) },
+                {
+                    label: 'Link/Unlink Actor',
+                    icon: 'modules/lancer-automations/icons/linked-rings.svg',
+                    onClick: () => promptLinkOrUnlinkActor(token),
+                },
                 ...(deployableRows.length ? [{ isSectionLabel: true, label: 'Deployables' }, ...deployableRows] : []),
             ],
         };
@@ -1947,6 +1953,9 @@ export class LancerHUD {
                             onClick: () => {
                                 const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; api?.executeRest?.(token);
                             } },
+                        { label: 'Add Extra',
+                            icon: 'modules/lancer-automations/icons/files.svg',
+                            onClick: () => openExtrasDialog(actor) },
                     ] },
             ],
         };
@@ -3132,7 +3141,8 @@ export class LancerHUD {
             };
         });
         items.push({
-            label: '<i class="fas fa-plus" style="margin-right:6px;opacity:0.6;"></i>Add macro...',
+            label: 'Add macro...',
+            icon: 'fas fa-plus',
             keepOpen: true,
             onClick: () => this._openAddMacroDialog(),
         });
@@ -3595,7 +3605,8 @@ export class LancerHUD {
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
             const theme = themeOverride ?? activationTheme(action.activation);
             const sourceItem = typeof source === 'string' ? null : source;
-            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: this._joinSubtitle(...subtitleParts), bodyHtml, theme, item: sourceItem ?? action.name, row, postRender: sourceItem ? p => appendItemPips(sourceItem, p, { action }) : (action.recharge ? p => appendItemPips(null, p, { action }) : null) });
+            const actorForExtra = this._actor;
+            this._showItemPopup({ cssClass: 'la-hud-popup la-hud-action-popup', dataKey: 'action-key', dataValue: action.name, title: action.name, subtitle: this._joinSubtitle(...subtitleParts), bodyHtml, theme, item: sourceItem ?? action.name, row, postRender: sourceItem ? p => appendItemPips(sourceItem, p, { action }) : (action._addedViaExtrasUI ? p => appendItemPips(actorForExtra, p, { action }) : (action.recharge ? p => appendItemPips(null, p, { action }) : null)) });
         };
     }
 
@@ -3604,7 +3615,7 @@ export class LancerHUD {
             return [];
         const coreUsed = actor.system?.core_energy === 0;
         return getActorActionItems(actor, activationType).map((/** @type {any} */ { action, sourceItem, rankIdx, _coreActive }) => {
-            const status = sourceItem ? getItemStatus(sourceItem) : { badge: null, badgeColor: null, unavailable: false, destroyed: false };
+            const status = sourceItem ? getItemStatus(sourceItem, action) : getItemStatus(action);
             // Core power spent: mark the core active entry as unavailable (orange).
             if (_coreActive && coreUsed && !status.destroyed)
                 status.unavailable = true;
@@ -3618,13 +3629,18 @@ export class LancerHUD {
             }
             return {
                 label: status.destroyed ? this._destroyedLabel(action.name)
-                    : (action._sourceItemId ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
+                    : ((action._sourceItemId || action._addedViaExtrasUI) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
                 ...this._statusColors(status),
-                onClick: () => {
+                onClick: async () => {
                     const si = /** @type {any} */ (sourceItem);
+                    if (action._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length) {
+                        const ok = await consumeExtraAction(si ?? actor, action.name);
+                        if (!ok)
+                            return;
+                    }
                     if (_coreActive)
                         si.beginCoreActiveFlow('system.core_system');
                     else if (si?.type === 'mech_system' || si?.type === 'npc_feature' || si?.type === 'pilot_gear' || si?.type === 'pilot_armor' || si?.type === 'pilot_weapon') {
@@ -3651,8 +3667,9 @@ export class LancerHUD {
                             const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ a => a.name === action.name);
                             si.beginActivationFlow(`system.ranks.${ri}.actions.${Math.max(ai, 0)}`);
                         }
-                    } else
+                    } else {
                         executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
+                    }
                 },
                 broadcastFn: (t, a) => {
                     const si = /** @type {any} */ (sourceItem);

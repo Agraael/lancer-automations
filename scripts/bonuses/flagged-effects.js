@@ -1061,14 +1061,22 @@ function _shrinkEffectIcons(token) {
     if (!bg || !token.effects?.children)
         return;
 
+    let scale = 1;
+    try {
+        scale = Number(game.settings.get('lancer-automations', 'statBarEffectIconScale')) || 1;
+    } catch { /* not registered */ }
+    if (scale >= 1)
+        return;
+
     const sprites = token.effects.children.filter(c => c !== bg && c instanceof PIXI.Sprite);
     if (sprites.length === 0)
         return;
 
     const gridPx = canvas.dimensions?.size ?? 100;
-    const size = Math.max(8, Math.round(gridPx * 0.1));
+    const shrunk = gridPx * 0.1;
+    const natural = gridPx * 0.2;
+    const size = Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
 
-    // Skip if already at the target size (avoids re-layout churn).
     if (sprites[0].width === size && sprites[0].height === size)
         return;
 
