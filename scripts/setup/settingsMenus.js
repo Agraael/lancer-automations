@@ -381,14 +381,14 @@ const TOOLS_FIELDS = [
         key: 'openExport',
         label: 'Export to JSON',
         icon: 'fas fa-file-export',
-        hint: 'Export all custom activations to a JSON file.',
+        hint: 'Export custom activations, user startup scripts, all Lancer Automations settings, and the foreign-module shortcuts shown here, to a JSON file.',
         onClick: () => new ReactionExport().render(true),
     },
     { type: 'button',
         key: 'openImport',
         label: 'Import from JSON',
         icon: 'fas fa-file-import',
-        hint: 'Import activations from a JSON file.',
+        hint: 'Import from a JSON file. A review dialog lets you pick exactly which activations and settings to apply.',
         onClick: () => new ReactionImport().render(true),
     },
 
@@ -437,6 +437,32 @@ const TAB_DEFS = [
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
     { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
 ];
+
+export function getExportableModuleBooleanFields() {
+    /** @type {{ module: string, key: string }[]} */
+    const out = [];
+    for (const tab of TAB_DEFS) {
+        for (const f of tab.fields) {
+            const fa = /** @type {any} */ (f);
+            if (fa.type === 'moduleBoolean' && fa.module && fa.key)
+                out.push({ module: fa.module, key: fa.key });
+        }
+    }
+    return out;
+}
+
+export function getExportableKeybindingFields() {
+    /** @type {{ module: string, key: string }[]} */
+    const out = [];
+    for (const tab of TAB_DEFS) {
+        for (const f of tab.fields) {
+            const fa = /** @type {any} */ (f);
+            if (fa.type === 'keybinding' && fa.module && fa.key)
+                out.push({ module: fa.module, key: fa.key });
+        }
+    }
+    return out;
+}
 
 const KEY_DISPLAY = {
     ArrowLeft: '🡸', ArrowRight: '🡺', ArrowUp: '🡹', ArrowDown: '🡻',

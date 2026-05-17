@@ -53,7 +53,7 @@
         <div class="form-fields flexrow" style="gap: 10px;">
             <div style="flex: 2;">
                 <label style="font-weight: bold;">Item LID / Deployable LID / Actor UUID</label>
-                <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id or Actor.qe5wEevLrMN6ki44">
+                <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
                 <p class="notes">Matches an item's `system.lid`, a deployable actor's LID, or an actor by UUID.</p>
             </div>
             <div style="flex: 3;">
@@ -109,7 +109,8 @@
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
-        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches triggering item LID, deployable LID, or actor UUID.</p>
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches triggering item LID,
+            deployable LID, or actor UUID.</p>
     </div>
 
     <!-- Custom Trigger Description -->

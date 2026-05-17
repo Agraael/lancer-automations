@@ -154,12 +154,12 @@ Hooks.on('init', () => {
         });
     }
     for (const a of ['skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
-        'dismount', 'disengage', 'deployable', 'freeAction', 'corePower',
+        'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
         'protocol', 'reaction', 'fullAction', 'quickAction', 'standingUp',
         'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
-        'grapple', 'ram', 'barrage', 'boost', 'overchargeNpc', 'hide',
+        'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
         'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-        'defaultThrow', 'targetFail']) {
+        'defaultThrow', 'targetFail', 'reload', 'fight']) {
         game.settings.register(MODULE, `tah.actionFxSound.${a}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });

@@ -194,9 +194,9 @@ function getConflictRules() {
         // ── ER fork required for movement features ──
         {
             id: 'upstream-er-detected',
-            label: 'You are not using the Elevation Ruler version required by Lancer Automations. '
-                + 'Auto-fix will disable Movement Cap Detection and Boost Detection. '
-                + 'Install the required version to re-enable them: <a href="https://github.com/Agraael/fvtt-elevation-ruler" target="_blank" rel="noopener">Agraael/fvtt-elevation-ruler</a>.',
+            label: 'Movement Cap Detection and Boost Detection can\'t run on your current Elevation Ruler install (Lasossis\'s fork is required). '
+                + 'Auto-fix will disable those two features. '
+                + 'Switch to the fork to re-enable them: <a href="https://github.com/Agraael/fvtt-elevation-ruler" target="_blank" rel="noopener">Agraael/fvtt-elevation-ruler</a>.',
             check() {
                 if (!game.modules.get('elevationruler')?.active)
                     return false;

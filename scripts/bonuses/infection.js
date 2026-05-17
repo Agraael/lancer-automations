@@ -18,6 +18,11 @@ const MODULE_ID = 'lancer-automations';
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
 let _pendingInfection = null;
 
+function _infectionEnabled() {
+    try { return !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration'); }
+    catch { return false; }
+}
+
 // ---------------------------------------------------------------------------
 // 1. Schema injection — add system.infection field to actor data models
 // ---------------------------------------------------------------------------
@@ -160,6 +165,8 @@ export function injectInfectionCSS() {
 
 /** Init infection check data — mirrors initBurnCheckData but uses Heat + system.infection. */
 async function initInfectionCheckData(state) {
+    if (!_infectionEnabled())
+        return false;
     if (!state.data)
         throw new TypeError('Infection flow state missing!');
 
@@ -336,6 +343,8 @@ function _getFlowBase() {
 // ---------------------------------------------------------------------------
 
 async function clearInfectionOnStabilize(state) {
+    if (!_infectionEnabled())
+        return true;
     if (!state.actor)
         return true;
     const infection = state.actor.system?.infection ?? 0;
@@ -347,6 +356,8 @@ async function clearInfectionOnStabilize(state) {
 }
 
 async function clearInfectionOnRepair(state) {
+    if (!_infectionEnabled())
+        return true;
     if (!state.actor)
         return true;
     const infection = state.actor.system?.infection ?? 0;

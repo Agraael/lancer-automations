@@ -1,5 +1,5 @@
 import * as actionFX from '../fx/actionFX.js';
-import { consumeAction, gainAction } from '../tools/misc-tools.js';
+import { gainAction } from '../tools/misc-tools.js';
 
 const externalItemReactions = {};
 const externalGeneralReactions = {};
@@ -1771,8 +1771,6 @@ export function getDefaultGeneralReactionRegistry() {
             const speed = reactorToken.actor?.system?.speed ?? 0;
             api.increaseMovementCap(reactorToken, speed);
             await gainAction(reactorToken, 'move');
-            await consumeAction(reactorToken, 'quick');
-
             await actionFX.playBoostFX(reactorToken);
         }
     };

@@ -4852,7 +4852,8 @@ Hooks.on('ready', async () => {
 
     initStatusFX();
     initTokenStatBar();
-    initInfectionHooks();
+    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+        initInfectionHooks();
     initWreckTokenConfig();
 
     if (game.settings.get('lancer-automations', 'allowHalfSizeTokens')) {

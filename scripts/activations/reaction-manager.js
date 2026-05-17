@@ -300,21 +300,64 @@ export class ReactionManager {
         }
     }
 
-    static exportReactions() {
+    static async exportReactions() {
         const itemReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
         const generalReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const startupScripts = (game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
+            .filter(s => !s.builtin);
+
+        const skip = new Set([
+            ReactionManager.SETTING_REACTIONS,
+            ReactionManager.SETTING_GENERAL_REACTIONS,
+            ReactionManager.SETTING_STARTUP_SCRIPTS,
+            ReactionManager.SETTING_FOLDERS,
+        ]);
+        const settings = {};
+        for (const setting of game.settings.settings.values()) {
+            if (setting.namespace !== ReactionManager.ID)
+                continue;
+            if (skip.has(setting.key))
+                continue;
+            try {
+                settings[setting.key] = game.settings.get(ReactionManager.ID, setting.key);
+            } catch { /* skip unreadable */ }
+        }
+
+        const externalSettings = {};
+        const keybindings = {};
+        try {
+            const mod = await import('../setup/settingsMenus.js');
+            for (const { module, key } of (mod.getExportableModuleBooleanFields?.() ?? [])) {
+                if (!game.modules.get(module)?.active)
+                    continue;
+                try {
+                    externalSettings[`${module}.${key}`] = game.settings.get(module, key);
+                } catch { /* skip */ }
+            }
+            for (const { module, key } of (mod.getExportableKeybindingFields?.() ?? [])) {
+                if (module !== ReactionManager.ID && !game.modules.get(module)?.active)
+                    continue;
+                const bindings = game.keybindings.bindings.get(`${module}.${key}`);
+                if (Array.isArray(bindings))
+                    keybindings[`${module}.${key}`] = bindings.map(b => ({ key: b.key, modifiers: [...(b.modifiers ?? [])] }));
+            }
+        } catch { /* settingsMenus unavailable */ }
 
         const exportData = {
-            version: 1,
+            version: 2,
             exportDate: new Date().toISOString(),
-            itemReactions: itemReactions,
-            generalReactions: generalReactions
+            itemReactions,
+            generalReactions,
+            startupScripts,
+            settings,
+            externalSettings,
+            keybindings,
         };
 
         const jsonStr = JSON.stringify(exportData, null, 2);
-        saveDataToFile(jsonStr, "application/json", `lancer-activations-${new Date().toISOString().slice(0, 10)}.json`);
+        saveDataToFile(jsonStr, "application/json", `lancer-automations-${new Date().toISOString().slice(0, 10)}.json`);
 
-        ui.notifications.info("Activations exported successfully.");
+        ui.notifications.info("Configuration exported successfully.");
     }
 
     static async importReactions(file, mode = "merge") {
@@ -322,29 +365,184 @@ export class ReactionManager {
             const text = await file.text();
             const data = JSON.parse(text);
 
-            if (!data.itemReactions && !data.generalReactions) {
-                throw new Error("Invalid activation file format.");
+            if (!data.itemReactions && !data.generalReactions && !data.startupScripts && !data.settings && !data.externalSettings) {
+                throw new Error("Invalid configuration file format.");
             }
 
             if (mode === "replace") {
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, data.itemReactions || {});
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, data.generalReactions || {});
+                if (Array.isArray(data.startupScripts))
+                    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, data.startupScripts);
             } else {
                 const existingItem = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
                 const existingGeneral = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
-
-                const mergedItem = { ...existingItem, ...data.itemReactions };
-                const mergedGeneral = { ...existingGeneral, ...data.generalReactions };
-
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, mergedItem);
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, mergedGeneral);
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, { ...existingItem, ...data.itemReactions });
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, { ...existingGeneral, ...data.generalReactions });
+                if (Array.isArray(data.startupScripts) && data.startupScripts.length) {
+                    const existingScripts = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+                    const seen = new Set(existingScripts.map(s => s.id ?? s.name));
+                    const merged = [...existingScripts];
+                    for (const s of data.startupScripts) {
+                        const key = s.id ?? s.name;
+                        if (key && seen.has(key))
+                            continue;
+                        merged.push(s);
+                        if (key)
+                            seen.add(key);
+                    }
+                    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, merged);
+                }
             }
-            clearScriptCache();
 
-            ui.notifications.info(`Activations imported successfully (${mode} mode).`);
+            if (data.settings && typeof data.settings === 'object') {
+                for (const [k, v] of Object.entries(data.settings)) {
+                    const setting = game.settings.settings.get(`${ReactionManager.ID}.${k}`);
+                    if (!setting)
+                        continue;
+                    try {
+                        await game.settings.set(ReactionManager.ID, k, v);
+                    } catch (e) {
+                        console.warn(`[lancer-automations] failed to restore setting ${k}:`, e);
+                    }
+                }
+            }
+
+            if (data.externalSettings && typeof data.externalSettings === 'object') {
+                for (const [composite, v] of Object.entries(data.externalSettings)) {
+                    const dot = composite.indexOf('.');
+                    if (dot < 0)
+                        continue;
+                    const mod = composite.slice(0, dot);
+                    const k = composite.slice(dot + 1);
+                    if (!game.modules.get(mod)?.active)
+                        continue;
+                    if (!game.settings.settings.get(`${mod}.${k}`))
+                        continue;
+                    try {
+                        await game.settings.set(mod, k, v);
+                    } catch (e) {
+                        console.warn(`[lancer-automations] failed to restore ${mod}.${k}:`, e);
+                    }
+                }
+            }
+
+            clearScriptCache();
+            ui.notifications.info(`Configuration imported successfully (${mode} mode).`);
             return true;
         } catch (e) {
-            ui.notifications.error(`Failed to import activations: ${e.message}`);
+            ui.notifications.error(`Failed to import configuration: ${e.message}`);
+            return false;
+        }
+    }
+
+    static async applyImportSelection(data, selection) {
+        try {
+            const pickedItem = selection?.itemReactions ?? new Set();
+            const pickedGeneral = selection?.generalReactions ?? new Set();
+            const pickedStartup = selection?.startupScripts ?? new Set();
+            const pickedSettings = selection?.settings ?? new Set();
+            const pickedExternal = selection?.externalSettings ?? new Set();
+
+            if (pickedItem.size && data.itemReactions) {
+                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+                const merged = { ...existing };
+                for (const lid of pickedItem) {
+                    if (data.itemReactions[lid] !== undefined)
+                        merged[lid] = data.itemReactions[lid];
+                }
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, merged);
+            }
+
+            if (pickedGeneral.size && data.generalReactions) {
+                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+                const merged = { ...existing };
+                for (const name of pickedGeneral) {
+                    if (data.generalReactions[name] !== undefined)
+                        merged[name] = data.generalReactions[name];
+                }
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, merged);
+            }
+
+            if (pickedStartup.size && Array.isArray(data.startupScripts)) {
+                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+                const existingKeys = new Set(existing.map(s => s.id ?? s.name));
+                const merged = [...existing];
+                for (let i = 0; i < data.startupScripts.length; i++) {
+                    const s = data.startupScripts[i];
+                    const key = s?.id ?? s?.name ?? String(i);
+                    if (!pickedStartup.has(String(key)))
+                        continue;
+                    if (existingKeys.has(key))
+                        continue;
+                    merged.push(s);
+                    existingKeys.add(key);
+                }
+                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, merged);
+            }
+
+            if (pickedSettings.size && data.settings) {
+                for (const k of pickedSettings) {
+                    if (!(k in data.settings))
+                        continue;
+                    if (!game.settings.settings.get(`${ReactionManager.ID}.${k}`))
+                        continue;
+                    try {
+                        await game.settings.set(ReactionManager.ID, k, data.settings[k]);
+                    } catch (e) {
+                        console.warn(`[lancer-automations] failed to restore setting ${k}:`, e);
+                    }
+                }
+            }
+
+            if (pickedExternal.size && data.externalSettings) {
+                for (const composite of pickedExternal) {
+                    if (!(composite in data.externalSettings))
+                        continue;
+                    const dot = composite.indexOf('.');
+                    if (dot < 0)
+                        continue;
+                    const mod = composite.slice(0, dot);
+                    const k = composite.slice(dot + 1);
+                    if (!game.modules.get(mod)?.active)
+                        continue;
+                    if (!game.settings.settings.get(`${mod}.${k}`))
+                        continue;
+                    try {
+                        await game.settings.set(mod, k, data.externalSettings[composite]);
+                    } catch (e) {
+                        console.warn(`[lancer-automations] failed to restore ${mod}.${k}:`, e);
+                    }
+                }
+            }
+
+            const pickedKeybindings = selection?.keybindings ?? new Set();
+            if (pickedKeybindings.size && data.keybindings) {
+                for (const composite of pickedKeybindings) {
+                    if (!(composite in data.keybindings))
+                        continue;
+                    const dot = composite.indexOf('.');
+                    if (dot < 0)
+                        continue;
+                    const mod = composite.slice(0, dot);
+                    const k = composite.slice(dot + 1);
+                    if (mod !== ReactionManager.ID && !game.modules.get(mod)?.active)
+                        continue;
+                    if (!game.keybindings.actions.get(`${mod}.${k}`))
+                        continue;
+                    try {
+                        await game.keybindings.set(mod, k, data.keybindings[composite]);
+                    } catch (e) {
+                        console.warn(`[lancer-automations] failed to restore keybinding ${mod}.${k}:`, e);
+                    }
+                }
+            }
+
+            clearScriptCache();
+            ui.notifications.info("Import applied.");
+            return true;
+        } catch (e) {
+            ui.notifications.error(`Failed to apply import: ${e.message}`);
             return false;
         }
     }

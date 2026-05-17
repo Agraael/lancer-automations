@@ -1285,10 +1285,13 @@ function injectLancerHud(hud, html, actor) {
     // 100px wide, 2 inputs per row.
     const containerStyle = 'display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; width: 100px; height: fit-content;';
 
-    // Top: Overshield, Infection, Burn.
+    // Top: Overshield, [Infection], Burn. Infection cell hidden when integration is disabled.
+    let infectionOn = false;
+    try { infectionOn = !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration'); }
+    catch { /* setting not registered */ }
     const topInner =
         cell('system.overshield.value', sys?.overshield?.value ?? 0, COLORS.overshield, 'Overshield') +
-        cell('system.infection',         sys?.infection ?? 0,         COLORS.infection,  'Infection') +
+        (infectionOn ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
         cell('system.burn',              sys?.burn ?? 0,              COLORS.burn,       'Burn');
     const topAttribute = `<div class="attribute la-hud-top" style="${containerStyle} position: absolute; top: 44px; transform: translateY(-100%); left: 50%; margin-left: -50px;">${topInner}</div>`;
 
