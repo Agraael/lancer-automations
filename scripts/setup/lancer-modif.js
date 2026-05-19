@@ -1150,7 +1150,9 @@ export function wrapInitTechAttackData(flowSteps) {
         const result = await orig(state, options);
         if (savedTitle && state.data?.title === "TECH ATTACK") {
             state.data.title = savedTitle;
-            try { state.data.acc_diff.title = savedTitle; } catch { /* */ }
+            try {
+                state.data.acc_diff.title = savedTitle;
+            } catch { /* */ }
         }
         return result;
     });
@@ -1174,7 +1176,9 @@ export function wrapInitAttackData(flowSteps) {
             return result;
         if (savedTitle && state.data.title === "BASIC ATTACK") {
             state.data.title = savedTitle;
-            try { state.data.acc_diff.title = savedTitle; } catch { /* */ }
+            try {
+                state.data.acc_diff.title = savedTitle;
+            } catch { /* */ }
         }
         if (savedAction && !state.data.action)
             state.data.action = savedAction;
@@ -1184,22 +1188,63 @@ export function wrapInitAttackData(flowSteps) {
     });
 }
 
-// Lancer 2.12.0 added DamageType.Aoe/All to the enum but not to AppliedDamage,
-// so damage typed "aoe"/"all" silently applies 0. Hide them from dropdowns.
-// The damage HUD is a Svelte component, not an Application, so we watch the DOM.
+// Hide Aoe/All from damage dropdowns (system applies 0 for those in 2.12.0).
 export function stripBrokenDamageTypeOptions() {
     const SEL = 'select option[value="aoe"], select option[value="all"]';
-    const strip = (root) => root.querySelectorAll?.(SEL).forEach(o => o.remove());
+    const strip = (root) => {
+        root.querySelectorAll?.(SEL).forEach(o => o.remove());
+        root.querySelectorAll?.('select option').forEach(o => {
+            const txt = (o.textContent || '').trim();
+            if (txt && o.value === txt && /^[a-z]+$/.test(txt))
+                o.remove();
+        });
+    };
     const run = () => {
         strip(document);
         new MutationObserver(records => {
-            for (const r of records) for (const n of r.addedNodes) {
-                if (n.nodeType === 1) strip(n);
-            }
+            for (const r of records)
+                for (const n of r.addedNodes) {
+                    if (n.nodeType === 1)
+                        strip(n);
+                }
         }).observe(document.body, { childList: true, subtree: true });
     };
-    if (document.body) run();
-    else Hooks.once("ready", run);
+    if (document.body)
+        run();
+    else
+        Hooks.once("ready", run);
+}
+
+// Add lowercase aliases on DamageType so apps/damage/data.ts:27
+export async function patchDamageTypeCaseInsensitive() {
+    try {
+        const entryRes = await fetch('systems/lancer/lancer.mjs');
+        const entryText = await entryRes.text();
+        const match = entryText.match(/lancer-[a-z0-9]+\.mjs/);
+        if (!match)
+            return;
+        const mod = await import(`/systems/lancer/${match[0]}`);
+        // Export name is minified, find by shape.
+        let DamageType = null;
+        for (const v of Object.values(mod)) {
+            if (v && typeof v === 'object' && v.Kinetic === 'kinetic' && v.Energy === 'energy' && v.Explosive === 'explosive' && v.Heat === 'heat' && v.Burn === 'burn') {
+                DamageType = v;
+                break;
+            }
+        }
+        if (!DamageType) {
+            console.warn('lancer-automations | DamageType enum not found in lancer bundle');
+            return;
+        }
+        for (const [key, val] of Object.entries(DamageType)) {
+            if (typeof val === 'string' && val !== key && !(val in DamageType)) {
+                DamageType[val] = val;
+            }
+        }
+        console.log('lancer-automations | DamageType case-fold patch applied');
+    } catch (e) {
+        console.warn('lancer-automations | patchDamageTypeCaseInsensitive failed:', e);
+    }
 }
 
 export const ItemDisabledAPI = {

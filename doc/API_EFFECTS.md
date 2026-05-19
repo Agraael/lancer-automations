@@ -1,4 +1,4 @@
-# API — Effects & Bonuses
+# API - Effects & Bonuses
 
 [Back to API Reference](API_REFERENCE.md)
 
@@ -22,7 +22,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 | <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
 | <kbd>effectNames</kbd> | `string\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }` |
 | <kbd>note</kbd> | `string` | `undefined` | Flavor note |
-| <kbd>duration</kbd> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` — when `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
+| <kbd>duration</kbd> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` - when `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | <kbd>checkEffectCallback</kbd> | `fn` | `null` | Duplicate check predicate |
 | <kbd>notify</kbd> | `bool\|obj` | `true` | Unified notification config |
 
@@ -44,7 +44,7 @@ Any additional key-value pairs in `extraOptions` (e.g. `suppressSourceId`, `supp
 await api.removeEffectsByNameFromTokens(options)
 ```
 
-Finds all effects matching the given name(s) and removes them. This is a **find-by-name-and-delete-all-matches** operation — it removes every effect whose name matches, not a targeted removal by ID. To delete a specific known effect by ID, use `deleteEffect` instead.
+Finds all effects matching the given name(s) and removes them. This is a **find-by-name-and-delete-all-matches** operation - it removes every effect whose name matches, not a targeted removal by ID. To delete a specific known effect by ID, use `deleteEffect` instead.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -54,7 +54,7 @@ Finds all effects matching the given name(s) and removes them. This is a **find-
 | <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
 | <kbd>notify</kbd> | `bool\|Object` | `true` | Notification config |
 
-> **Note:** `originId` and `extraFlags` are independent filters — both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
+> **Note:** `originId` and `extraFlags` are independent filters - both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
 
 **Example:**
 ```js
@@ -100,7 +100,7 @@ Removes effects from a single token by name. Lower-level than `removeEffectsByNa
 api.deleteEffect(token, effect)
 ```
 
-Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFromTokens`, this targets one exact effect — no name matching, no side effects. Routes through the GM socket automatically for non-GM users.
+Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFromTokens`, this targets one exact effect - no name matching, no side effects. Routes through the GM socket automatically for non-GM users.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -133,7 +133,7 @@ Searches for an effect on a token by name or predicate function.
 | <kbd>token</kbd> | `Token\|TokenDocument` | The token to search |
 | <kbd>identifier</kbd> | `string\|Function` | Effect name (string) or predicate `(effect) => boolean` |
 
-**Example — predicate search:**
+**Example - predicate search:**
 ```js
 const effect = api.findEffectOnToken(target, e =>
     e.name === "Suppress" && e.flags?.['lancer-automations']?.suppressSourceId === reactorToken.id
@@ -270,9 +270,9 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Stack count |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
-| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate — if false, the whole bonus is skipped. |
+| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
-| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static — set at bonus creation. For dynamic per-target filters on `target_modifier`, see `applyToCondition` below. |
+| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For dynamic per-target filters on `target_modifier`, see `applyToCondition` below. |
 
 </details>
 
@@ -295,11 +295,11 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | Property | Type | Description |
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
-| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` — survives reloads. Useful for dynamic filters (e.g. range, target status) that can't be pinned to a static `applyTo` array. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` - survives reloads. Useful for dynamic filters (e.g. range, target status) that can't be pinned to a static `applyTo` array. |
 
 `"no_invisible"` forces `plugins.invisibility.data = 0` on the target, bypassing `"invisible"`.
 
-**Example — ignore invisibility only within range 3:**
+**Example - ignore invisibility only within range 3:**
 ```js
 await api.addConstantBonus(actor, {
     id: 'lesser-sight',
@@ -354,7 +354,7 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 | `"lowest"`  | Auto-keep `min(originalTotal, altTotal)`. Stacking gives worst-of-N+1. |
 | `"choose"`  | Second card prompts `Original (X)` / `Alt (Y)` and the user picks. |
 
-**Stacking:** when an actor has multiple `reroll` bonuses matching a roll, they fire sequentially — each operates on the *current* total. Candidates are sorted by subtype priority (`retry` → `highest`/`lowest` → `choose`) so the choose prompt always sees the running best total. Damage rolls deep-snapshot `damage_results`/`reliable_results`/`targets` so a "keep original" decision restores the full damage breakdown, not just the total.
+**Stacking:** when an actor has multiple `reroll` bonuses matching a roll, they fire sequentially - each operates on the *current* total. Candidates are sorted by subtype priority (`retry` → `highest`/`lowest` → `choose`) so the choose prompt always sees the running best total. Damage rolls deep-snapshot `damage_results`/`reliable_results`/`targets` so a "keep original" decision restores the full damage breakdown, not just the total.
 
 </details>
 
@@ -465,9 +465,9 @@ triggerData.flowState.injectFlowExtraData(extraData) // merge into state.la_extr
 triggerData.flowState.getFlowExtraData()             // read la_extraData
 ```
 
-- **`injectBonus`** — Adds an ephemeral bonus (e.g., an accuracy bonus). Applies to rolls during this flow and is discarded when the flow completes.
-- **`injectFlowExtraData`** — Merges properties into `state.la_extraData`. Useful for passing variables between trigger phases (e.g., from `onHit` to `onDamage`).
-- **`getFlowExtraData`** — Returns the `la_extraData` object attached to the current flow state.
+- **`injectBonus`** - Adds an ephemeral bonus (e.g., an accuracy bonus). Applies to rolls during this flow and is discarded when the flow completes.
+- **`injectFlowExtraData`** - Merges properties into `state.la_extraData`. Useful for passing variables between trigger phases (e.g., from `onHit` to `onDamage`).
+- **`getFlowExtraData`** - Returns the `la_extraData` object attached to the current flow state.
 
 </details>
 

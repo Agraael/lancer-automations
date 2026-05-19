@@ -136,6 +136,7 @@ export class LancerHUD {
         this._statusPanelInstance  = null;
         this._suppressRefreshDepth = 0;
         this._searchActive         = false;
+        this._favoritesActive      = false;
         this._categories           = null;
         this._clickToOpen          = false;
         // Track what's currently open in each column for in-place refresh
@@ -376,8 +377,23 @@ export class LancerHUD {
         menuLabel.css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
         const searchIcon = $(`<span class="la-hud-search-toggle" title="Search" style="cursor:pointer;opacity:0.55;font-size:1.15em;padding-left:4px;line-height:1;flex-shrink:0;">⌕</span>`);
         menuLabel.append(searchIcon);
+        const favIcon = $(`<div class="la-hud-fav-tab" title="Favorites" style="position:absolute;cursor:pointer;user-select:none;background:transparent;z-index:2;width:28px;"><div class="la-hud-fav-icon" style="display:flex;align-items:center;justify-content:center;background:var(--primary-color);color:#fff;font-size:1em;line-height:1;box-sizing:border-box;">★</div></div>`);
+        this._favIconPositioner = () => {
+            const c1Pos = c1.position();
+            const labelPos = menuLabel.position();
+            if (!c1Pos || !labelPos) return;
+            const c1Bottom = c1Pos.top + c1.outerHeight();
+            const labelTop = c1Pos.top + labelPos.top;
+            favIcon.css({
+                top: `${labelTop}px`,
+                left: `${c1Pos.left + c1.outerWidth() + 6}px`,
+                height: `${c1Bottom - labelTop}px`,
+            });
+            favIcon.find('.la-hud-fav-icon').css({ height: `${menuLabel.outerHeight()}px` });
+        };
         const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid var(--primary-color);font-size:0.8em;font-family:inherit;outline:none;">`);
         menuLabel.after(searchBar);
+        this._favIcon = favIcon;
         this._searchIcon = searchIcon;
         this._searchBar = searchBar;
         if (combatBar) {
@@ -526,6 +542,9 @@ export class LancerHUD {
         c3.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 2 });
         c4.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 1 });
         hud.append(c2, c3, c4);
+        // WIP - favorites tab disabled until ready
+        // hud.append(favIcon);
+        // requestAnimationFrame(() => this._favIconPositioner?.());
         this._c2 = c2;
         this._c3 = c3;
         this._c4 = c4;
@@ -743,6 +762,78 @@ export class LancerHUD {
             }
         });
         searchBar.on('focus', () => _cancelCollapse());
+
+        // ── Favorites tab ──── WIP, disabled until ready ─────────────────────────
+        if (false) {
+        const openFavorites = () => {
+            if (searchBar.is(':visible'))
+                searchIcon.trigger('click');
+            _cancelCollapse();
+            playUiSound();
+            this._c2Category = null; this._c2AnchorRow = null;
+            this._c3SourceItem = null; this._c4SourceItem = null;
+            closeCol(c3, 80); closeCol(c4, 80);
+            openSearchResults(c2, [], { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
+            c2.find('.la-hud-col-label').text('Favorites');
+        };
+        const favIconInner = favIcon.find('.la-hud-fav-icon');
+        const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites';
+        let favHovering = false;
+        const applyFavStyle = () => {
+            const open = isFavoritesOpen();
+            const hover = favHovering;
+            let bg, color;
+            if (open) { bg = '#fff'; color = 'var(--primary-color)'; }
+            else if (hover) { bg = BG_HOVER; color = TEXT_DEFAULT; }
+            else { bg = 'var(--primary-color)'; color = '#fff'; }
+            favIconInner.css({ background: bg, color });
+        };
+        const isOverFavIcon = (ev) => {
+            const r = favIcon[0]?.getBoundingClientRect();
+            if (!r) return false;
+            return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+        };
+        const enterFav = () => {
+            if (favHovering) return;
+            favHovering = true;
+            _cancelCollapse();
+            applyFavStyle();
+            if (!clickToOpen) openFavorites();
+        };
+        const leaveFav = () => {
+            if (!favHovering) return;
+            favHovering = false;
+            applyFavStyle();
+        };
+        const favObserver = new MutationObserver(() => applyFavStyle());
+        favObserver.observe(c2[0], { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+        favIcon.on('mouseenter', enterFav);
+        favIcon.on('mouseleave', leaveFav);
+        if (this._favDocHandlers) {
+            document.removeEventListener('mousemove', this._favDocHandlers.move);
+            if (this._favDocHandlers.click)
+                document.removeEventListener('click', this._favDocHandlers.click, true);
+        }
+        const docMoveHandler = (ev) => {
+            if (!this._el) return;
+            const over = isOverFavIcon(ev);
+            if (over) enterFav();
+            else leaveFav();
+        };
+        document.addEventListener('mousemove', docMoveHandler);
+        let docClickHandler = null;
+        if (clickToOpen) {
+            docClickHandler = (ev) => {
+                if (!this._el) return;
+                if (isOverFavIcon(ev)) {
+                    ev.stopPropagation();
+                    openFavorites();
+                }
+            };
+            document.addEventListener('click', docClickHandler, true);
+        }
+        this._favDocHandlers = { move: docMoveHandler, click: docClickHandler };
+        }
     }
 
     // ── Generic column populator ──────────────────────────────────────────────

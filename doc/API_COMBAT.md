@@ -1,4 +1,4 @@
-# API — Combat, Spatial & Item Tools
+# API - Combat, Spatial & Item Tools
 
 [Back to API Reference](API_REFERENCE.md)
 
@@ -199,7 +199,7 @@ api.getMinGridDistance(token1, token2, overridePos1, includeElevation)
 
 Minimum cell-to-cell grid distance across all occupied cell pairs.
 
-When `includeElevation` is `true`, the elevation difference (converted to grid spaces) is **added** to the planar distance — e.g. 1 horizontal + 2 vertical = 3. When `false` (default), elevation is ignored (purely 2D).
+When `includeElevation` is `true`, the elevation difference (converted to grid spaces) is **added** to the planar distance - e.g. 1 horizontal + 2 vertical = 3. When `false` (default), elevation is ignored (purely 2D).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

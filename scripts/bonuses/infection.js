@@ -107,7 +107,7 @@ export async function injectInfectionDamageType() {
             }
             if (field instanceof foundry.data.fields.StringField &&
                 Array.isArray(field.choices) &&
-                field.choices.includes('Kinetic') &&
+                field.choices.includes('kinetic') &&
                 !field.choices.includes('Infection')) {
                 field.choices.push('Infection');
                 patched++;

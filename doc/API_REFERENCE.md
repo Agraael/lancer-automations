@@ -1,4 +1,4 @@
-# Lancer Automations — API Reference
+# Lancer Automations - API Reference
 
 ## Documentation Files
 
@@ -116,8 +116,8 @@ Fires *before* movement is finalized. Allows interception.
     ```
 - **`onInvoluntaryMove`**: Fires **before** each involuntary per-token move (e.g. knockback, forced reposition) and is **cancellable**. Data: `{ triggeringToken, token, distance, actionName, item, destination: { x, y }, cancel(reason?) }`.
   - `cancel(reason?)` synchronously skips this specific token's move; other tokens in the batch still proceed.
-  - Does **not** fire when `knockBackToken()` is called with `{ asVoluntary: true }` — in that mode the move goes through `onPreMove`/`onMove` like a regular drag.
-  - `actionName` and `item` are passed from the caller (e.g. `"Grapple"`) — enables `onlyOnSourceMatch` matching.
+  - Does **not** fire when `knockBackToken()` is called with `{ asVoluntary: true }` - in that mode the move goes through `onPreMove`/`onMove` like a regular drag.
+  - `actionName` and `item` are passed from the caller (e.g. `"Grapple"`) - enables `onlyOnSourceMatch` matching.
 
 </details>
 

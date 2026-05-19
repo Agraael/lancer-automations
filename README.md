@@ -79,7 +79,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Socketlib](https://foundryvtt.com/packages/socketlib) | Required for API hooks |
 | [Tokenmagic](https://foundryvtt.com/packages/tokenmagic) | Required for API hooks |
 | [Sequencer](https://foundryvtt.com/packages/sequencer) | Required for API hooks |
-| [JB2A — Patreon](https://www.patreon.com/JB2A) **or** [JB2A — Free](https://foundryvtt.com/packages/JB2A_DnD5e) | Source of most action FX visuals. Patreon is preferred since it has the full library. The free pack works too: missing assets are auto-swapped to free equivalents, sometimes recolored, so a few effects look a bit rougher. |
+| [JB2A - Patreon](https://www.patreon.com/JB2A) **or** [JB2A - Free](https://foundryvtt.com/packages/JB2A_DnD5e) | Source of most action FX visuals. Patreon is preferred since it has the full library. The free pack works too: missing assets are auto-swapped to free equivalents, sometimes recolored, so a few effects look a bit rougher. |
 
 ### Optional
 
@@ -447,7 +447,7 @@ flowchart LR
 
 
 > **Client execution note:** `activationCode` does **not** always run on the GM's client.
-> - **Auto activations** run on the client of the triggering token's owner — the player whose action fired the trigger (or the GM if that token has no online owner).
+> - **Auto activations** run on the client of the triggering token's owner - the player whose action fired the trigger (or the GM if that token has no online owner).
 > - **Manual activations (popup)** run on whichever client clicks the Activate button. The popup is routed via socket to the reactor's token owner and/or GM depending on the `reactionNotificationMode` setting (`'owner'`, `'gm'`, or `'both'`).
 >
 > Because of this, `activationCode` may execute on a non-GM client. If your code needs GM-only permissions (creating tokens, modifying actors you don't own, etc.), you must delegate those operations via socket or use API helpers that already handle delegation internally.
@@ -658,9 +658,9 @@ For example, reduce incoming damage by half, or cap heat gain at a certain thres
 The `userIdControl` parameter routes the card to a specific user or a list of users. When an array is given, the **first to respond wins** and the card is dismissed for everyone else.
 
 Three modes are available:
-- **OR** — pick exactly one option, card closes immediately.
-- **AND** — every option must be clicked before the card closes; each callback fires as soon as its button is clicked.
-- **Vote / Hidden Vote** — the card is broadcast to all recipients simultaneously. The creator monitors a live tally and clicks **Confirm** to finalize. Ties are broken by the creator. In hidden mode, voters cannot see each other's choices until the vote is confirmed.
+- **OR** - pick exactly one option, card closes immediately.
+- **AND** - every option must be clicked before the card closes; each callback fires as soon as its button is clicked.
+- **Vote / Hidden Vote** - the card is broadcast to all recipients simultaneously. The creator monitors a live tally and clicks **Confirm** to finalize. Ties are broken by the creator. In hidden mode, voters cannot see each other's choices until the vote is confirmed.
 
 ![Vote card](doc/img/vote-card.png)
 
@@ -726,6 +726,10 @@ The module tracks cumulative drag movement for each token during their turn. Whe
 
 Cumulative movement resets automatically at the start of each token's turn. You can also reset it manually: `api.clearMoveData(tokenDocumentId)`. Full movement-tracking API in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
 
+### Movement & Distance
+
+A few toggles that change how movement and distance are computed: a **built-in speed provider** (replaces `lancer-speed-provider`), **3D distance counting**, **path hex calculation**, and a **one-struct NPC** houserule. Each is documented in-tab.
+
 ### Stat Roll Targeting
 
 Enable in **Module Settings > Lancer Automations > Enable Stat Roll Target Selection**.
@@ -763,6 +767,8 @@ The HUD gives you quick access to all your mech's actions, weapons, systems, fra
 
 It is available as an optional setting in Module Settings > Lancer Automations.
 
+The TAH tab in module settings controls behavior (click vs hover, range preview, aura Alt-key toggle, team/disposition stripe) and exposes utility buttons to reset position and rebuild auras.
+
 <br clear="right"/>
 
 ---
@@ -775,9 +781,28 @@ Enable it in Module Settings > Lancer Automations.
 
 ---
 
-### Drag Vision Mitigation
+### Vision
 
-When configured in module settings, a token's vision radius is reduced during drag. This is useful to prevent accidentally revealing too much of the map while moving a token. The reduction is a multiplier you set. `1.0` means no change, lower values shrink the vision radius during the drag.
+The Vision tab gathers everything that affects how tokens see and block sight.
+
+![Vision from edge](doc/img/vision-from-edge.png)
+
+- **Vision From Edge (experimental)**: spawns perimeter vision sources to imitate Lancer's edge-of-token LOS instead of Foundry's center-only source.
+
+![Token blocks line of sight](doc/img/token-blocks-vision.png)
+
+- **Token Blocks Line of Sight + Bulwark**: per-token "blocks LoS" flag, Bulwark auto-blocks. With [Wall Height](https://foundryvtt.com/packages/wall-height) installed, blocking is elevation-aware.
+
+![Lancer vision modes](doc/img/lancer-vision-modes.png)
+
+- **Lancer Vision Modes**: auto-applies Sensor / Awareness vision modes to mech and NPC tokens.
+- **Drag Vision**: shrinks the vision radius while a token is being dragged, so you don't reveal new map area mid-drag.
+
+---
+
+### Keybindings
+
+All keybindings (movement history reset, TAH search, and the Elevation Ruler fork's bindings if installed) are listed under **Configure Controls > Lancer Automations**.
 
 ---
 
@@ -981,7 +1006,11 @@ A custom [Token Tooltip Alt](https://foundryvtt.com/packages/token-tooltip-alt) 
 
 ![custom_bar_brawl](doc/img/custom_bar_brawl.png)
 
-I made my own custom Bar Brawl, tailored to Lancer. You can toggle it from the module settings — you'll need to deactivate Bar Brawl for it to run.
+A bespoke token stat bar tailored to Lancer. Replaces Bar Brawl on Lancer tokens, you'll need to deactivate Bar Brawl for it to render. Per-token visibility (combat / out-of-combat / hidden / GM / owner), icon scale, row height, and a scene-wide "apply defaults" button are configurable.
+
+### Sounds
+
+The module ships its own audio layer for UI feedback, damage stings, action FX, and wreck explosions, with master sliders and per-category mute toggles. Configure under **Module Settings > Sounds**.
 
 ### Wreck System
 
@@ -989,7 +1018,7 @@ Unlike Lancer QoL's wreck system which swaps the token image, this one spawns a 
 
 Per-category wreck mode (Token or Tile) and terrain spawning can be configured independently for Mech, Human, Monstrosity, and Biological types. Wrecks can optionally spawn difficult terrain at the death location (requires Terrain Height Tools), with the terrain height matching the token's wall-height. The wreck image/effect scale is adjustable per token via the L.A tab.
 
-On each prototype token's L.A tab, you can override the wreck mode, terrain spawning, wreck image, effect, sound, and scale — if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
+On each prototype token's L.A tab, you can override the wreck mode, terrain spawning, wreck image, effect, sound, and scale - if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
 
 You can point to your own custom wreck assets folder in the Wreck Automation settings. The expected directory structure is:
 

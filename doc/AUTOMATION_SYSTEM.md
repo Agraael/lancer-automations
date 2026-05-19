@@ -77,7 +77,7 @@ Step by step, what the engine actually does for one trigger:
 
 1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires `startRelatedFlow`, `startRelatedFlowToReactor` (launch the item's default flow, optionally on a specific user's client) and `sendMessageToReactor` (remote RPC to an `onMessage` handler) onto `data`.
 2. **Reactor sweep.** Every token currently on the scene is treated as a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
-3. **Distance enrichment.** For each reactor, `distanceToTrigger` (reactor to triggering token) and `canTriggerReaction` (true if the trigger is allowed to trigger a reaction — false when the mover has `hidden`, `disengage`, the `provoke` immunity, or is `intangible` while the reactor is not also intangible) are computed once and merged into a per-reactor copy of the trigger data.
+3. **Distance enrichment.** For each reactor, `distanceToTrigger` (reactor to triggering token) and `canTriggerReaction` (true if the trigger is allowed to trigger a reaction - false when the mover has `hidden`, `disengage`, the `provoke` immunity, or is `intangible` while the reactor is not also intangible) are computed once and merged into a per-reactor copy of the trigger data.
 4. **Item reactions first.** For every item the reactor's actor owns whose LID matches a registered item activation, run the filter chain.
 5. **General reactions second.** Walk the flat list of general activations that listen to this trigger; run the filter chain.
 6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
@@ -110,12 +110,12 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 
 ### Deployable activation
 
-- Registered under a **deployable LID**, the value of `actor.system.lid` on the deployable actor (e.g. `"dep_moonlight_drone"`). The engine matches any LID against the deployable's actor LID — there is no required prefix.
+- Registered under a **deployable LID**, the value of `actor.system.lid` on the deployable actor (e.g. `"dep_moonlight_drone"`). The engine matches any LID against the deployable's actor LID - there is no required prefix.
 - The reactor is the deployable actor itself: any deployable on the scene whose `actor.system.lid === <registered LID>` is a candidate.
-- The engine auto-resolves the **source item** (the item whose `system.deployables[]` contains the deployable's LID — for frames, also `core_system.deployables` and `traits[].deployables`) and surfaces it as `triggerData.item` so authors can read effect/tag context.
+- The engine auto-resolves the **source item** (the item whose `system.deployables[]` contains the deployable's LID - for frames, also `core_system.deployables` and `traits[].deployables`) and surfaces it as `triggerData.item` so authors can read effect/tag context.
 - `triggerData.deployable = { actor, lid }` is also set, providing the explicit deployable identity.
 - `triggerData.actionData.action.name` is the action's name (e.g. `"Move"`, `"Combine"`); for the top-level deploy click it's the deployable actor's name. `triggerData.actionData.action.activation` is the activation type (`"Protocol"`, `"Quick"`).
-- `onlyOnSourceMatch: true` means: *only fire when the activation source is the matching deployable* — i.e. one of this exact deployable's actions was the trigger.
+- `onlyOnSourceMatch: true` means: *only fire when the activation source is the matching deployable* - i.e. one of this exact deployable's actions was the trigger.
 - `reactionPath`: empty string matches the top-level deploy itself (`actor.system.activation`); `"actions.<name>"` matches a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern).
 
 ### Picking one

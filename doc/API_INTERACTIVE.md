@@ -1,4 +1,4 @@
-# API — Interactive Tools, Deployment & Movement
+# API - Interactive Tools, Deployment & Movement
 
 [Back to API Reference](API_REFERENCE.md)
 
@@ -19,7 +19,7 @@ const targets = await api.chooseToken(casterToken, options)
 |:------|:-----|:--------|:------------|
 | <kbd>range</kbd> | `number` | `null` | Max range for advisory highlight |
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
-| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` — excludes tokens when returning false |
+| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` - excludes tokens when returning false |
 | <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
 | <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections (old behavior). |
 | <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
@@ -54,9 +54,9 @@ await api.placeZone(casterToken, options)
 | <kbd>texture</kbd> | `string` | `null` | Optional texture path |
 | <kbd>count</kbd> | `number` | `1` | Number of zones (-1 for unlimited) |
 | <kbd>hooks</kbd> | `Object` | `{}` | templatemacro hooks (see below) |
-| <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }` — ENG check on entry/turn start |
+| <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }` - ENG check on entry/turn start |
 | <kbd>statusEffects</kbd> | `Array` | `[]` | Status effect IDs applied to tokens inside |
-| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` — ElevationRuler cost |
+| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - ElevationRuler cost |
 | <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
 | <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
 
@@ -70,7 +70,7 @@ Each hook entry supports two formats that can be combined:
 | `{ command: string, asGM: boolean }` | JS code stored in template flags (persists across reloads) |
 | `{ function: Function, asGM: boolean }` | JS function in runtime registry (lost on reload) |
 
-Both formats **stack** — if you provide both for the same trigger, both run.
+Both formats **stack** - if you provide both for the same trigger, both run.
 
 **Trigger List:** `created`, `deleted`, `moved`, `hidden`, `revealed`, `entered`, `left`, `through`, `staying`, `turnStart`, `turnEnd`.
 
@@ -212,11 +212,11 @@ Prompts the user to pick an item from a list using a Choice Card.
 <br>
 
 ```js
-api.getWeapons(entity)                           // → Array<Item> — all weapons on an actor
-await api.reloadOneWeapon(actorOrToken, name?)    // → Item|null — pick & reload a Loading weapon
-await api.rechargeSystem(actorOrToken, name?)     // → Item|null — pick & recharge a depleted system
-api.findAura(actorOrToken, auraName)              // → object|null — find Grid-Aware Aura by name
-api.findItemByLid(actorOrToken, lid)              // → Item|null — find item by Lancer ID
+api.getWeapons(entity)                           // → Array<Item> - all weapons on an actor
+await api.reloadOneWeapon(actorOrToken, name?)    // → Item|null - pick & reload a Loading weapon
+await api.rechargeSystem(actorOrToken, name?)     // → Item|null - pick & recharge a depleted system
+api.findAura(actorOrToken, auraName)              // → object|null - find Grid-Aware Aura by name
+api.findItemByLid(actorOrToken, lid)              // → Item|null - find item by Lancer ID
 ```
 
 </details>

@@ -1,4 +1,4 @@
-# API — Registration, How-Tos & Auras
+# API - Registration, How-Tos & Auras
 
 [Back to API Reference](API_REFERENCE.md)
 
@@ -41,8 +41,8 @@ api.registerDefaultItemReactions(reactions)     // object mapping LIDs to activa
 api.registerDefaultGeneralReactions(reactions)   // object mapping names to activation objects
 ```
 
-- **Item reactions** are tied to specific item LIDs — the reaction only fires for tokens that have that item.
-- **General reactions** are global — they fire for all tokens regardless of items.
+- **Item reactions** are tied to specific item LIDs - the reaction only fires for tokens that have that item.
+- **General reactions** are global - they fire for all tokens regardless of items.
 
 </details>
 

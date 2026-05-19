@@ -364,6 +364,7 @@ const TOOLS_FIELDS = [
 
     { type: 'section', label: 'System compatibility' },
     { key: 'hideBrokenDamageTypes', type: 'boolean' },
+    { key: 'patchDamageTypeCase', type: 'boolean' },
 
     { type: 'section', label: 'Maintenance' },
     { type: 'button',

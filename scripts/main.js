@@ -65,7 +65,7 @@ import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/rein
 import { CardStackTests } from "../tests/card-stack.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, stripBrokenDamageTypeOptions } from "./setup/lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, stripBrokenDamageTypeOptions, patchDamageTypeCaseInsensitive } from "./setup/lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
@@ -1374,6 +1374,16 @@ function registerSettings() {
         requiresReload: true
     });
 
+    game.settings.register('lancer-automations', 'patchDamageTypeCase', {
+        name: 'Patch damage type case bug (2.12.0)',
+        hint: 'Lancer 2.12.0 silently rewrites heat/burn/etc to kinetic (e.g. Invade shows 2 Kinetic instead of 2 Heat). Reload required.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+        requiresReload: true
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
@@ -2008,6 +2018,7 @@ function _handleMovementCapExceeded(token, ctx) {
     const canBoost = speed > 0 && need <= (cap + speed);
     const canOvercharge = (isMech || !!npcOvercharge) && speed > 0 && need > (cap + speed) && need <= (cap + speed * 2);
     const overchargeActionName = isMech ? 'Overcharge' : 'Overcharge (NPC)';
+
     options.ignoreMovementCap = true;
     triggerData.cancelTriggeredMove._engineCancel = true;
 
@@ -2135,9 +2146,9 @@ function _handleMovementCapExceeded(token, ctx) {
                 await fireBoost();
             }
         })();
-    } else if (capDetect) {
+    } else {
         triggerData.cancelTriggeredMove(
-            `Not enough movement points (${need} > ${cap}). ` +
+            `Movement exceeds cap (${need} > ${cap}) and cannot be covered by Boost or Overcharge. ` +
             `Hold <b>${freeKey}</b> for free movement.`
         );
     }
@@ -4172,6 +4183,9 @@ Hooks.on('init', () => {
     patchStatRollCardTemplate();
     if (game.settings.get('lancer-automations', 'hideBrokenDamageTypes')) {
         stripBrokenDamageTypeOptions();
+    }
+    if (game.settings.get('lancer-automations', 'patchDamageTypeCase')) {
+        patchDamageTypeCaseInsensitive();
     }
 
     if (game.modules.get("elevationruler")?.active) {
