@@ -2,6 +2,14 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-05-19-templatemacro-revamp",
+            "date": "2026-05-19",
+            "title": "Template Macro: full revamp",
+            "body": [
+                "<p>I just shipped a complete rewrite of my <a href=\"https://github.com/Agraael/templatemacro\" target=\"_blank\" rel=\"noopener\">Template Macro</a> module, bringing its architecture and UX in line with Grid Aware Auras and Terrain Height Tools. Details on the latest <a href=\"https://www.patreon.com/c/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
             "id": "2026-05-15-where-to-reach-me",
             "date": "2026-05-15",
             "title": "Where to reach me",
