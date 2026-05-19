@@ -65,7 +65,7 @@ import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/rein
 import { CardStackTests } from "../tests/card-stack.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, stripBrokenDamageTypeOptions } from "./setup/lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
@@ -1364,6 +1364,16 @@ function registerSettings() {
         requiresReload: true
     });
 
+    game.settings.register('lancer-automations', 'hideBrokenDamageTypes', {
+        name: 'Hide Aoe/All damage types',
+        hint: 'These types apply 0 damage in Lancer 2.12.0. Reload required.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+        requiresReload: true
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
@@ -2045,12 +2055,12 @@ function _handleMovementCapExceeded(token, ctx) {
         (async () => {
             const result = await startChoiceCard({
                 title: 'BOOST & MOVE',
-                icon: 'modules/lancer-automations/icons/black/speedometer.svg',
+                icon: 'modules/lancer-automations/icons/speedometer.svg',
                 description: `Movement exceeds cap (${need}/${cap}). Boost adds +${speed}.`,
                 originToken: token,
                 userIdControl: getTokenOwnerUserId(token),
                 choices: [
-                    { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/black/speedometer.svg' },
+                    { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/speedometer.svg' },
                     { text: 'Ignore', icon: 'fas fa-forward' },
                 ]
             });
@@ -2329,7 +2339,7 @@ async function onAttackStep(state) {
             name: state.data?.title || weapon?.name || "Attack"
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
+        attack_type: state.data?.attack_type || "ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
         flowState: state
     };
@@ -2363,7 +2373,7 @@ async function onHitMissStep(state) {
             name: state.data?.title || weapon?.name || "Attack"
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
+        attack_type: state.data?.attack_type || "ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
         flowState: state
     };
@@ -2474,7 +2484,7 @@ async function onDamageStep(state) {
             name: state.data?.title || weapon?.name || "Attack"
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
+        attack_type: state.data?.attack_type || "ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
         flowState: state
     };
@@ -3004,7 +3014,7 @@ async function onInitAttackStep(state) {
             name: state.data?.title || weapon?.name || "Attack"
         },
         detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
+        attack_type: state.data?.attack_type || "ranged",
         tags: state.data?.tags || weapon?.system?.tags || [],
         flowState: state
     };
@@ -4160,6 +4170,9 @@ Hooks.on('init', () => {
         injectInfectionCSS(); // Infection damage icon + color
     }
     patchStatRollCardTemplate();
+    if (game.settings.get('lancer-automations', 'hideBrokenDamageTypes')) {
+        stripBrokenDamageTypeOptions();
+    }
 
     if (game.modules.get("elevationruler")?.active) {
         Hooks.once("ready", () => {

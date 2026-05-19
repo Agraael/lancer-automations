@@ -465,7 +465,7 @@ export function _updateInfoCard(cardEl, type, data) {
                 ? (/[./]/.test(choice.icon)
                     ? (() => {
                         const ic = choice.icon;
-                        const isWhite = ic.endsWith('.svg') && (ic.includes('/white/') || ic.includes('modules/lancer-automations/') || ic.startsWith('icons/svg/'));
+                        const isWhite = ic.endsWith('.svg') && !ic.includes('/black/') && (ic.includes('/white/') || ic.includes('modules/lancer-automations/') || ic.startsWith('icons/svg/'));
                         const filt = isWhite ? 'filter:invert(1);' : '';
                         return `<img src="${ic}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;${filt}">`;
                     })()

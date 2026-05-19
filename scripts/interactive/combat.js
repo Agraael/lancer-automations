@@ -1334,7 +1334,7 @@ export async function executeInvade(actorOrToken, bypassChoice = null) {
             title: "Fragment Signal",
             invade: true,
             effect: selected.detail,
-            attack_type: "Tech"
+            attack_type: "tech"
         });
         await flow.begin();
     } else {
@@ -1344,7 +1344,7 @@ export async function executeInvade(actorOrToken, bypassChoice = null) {
         const flow = new TechAttackFlow(uuid, {
             title: selected.name,
             invade: true,
-            attack_type: "Tech",
+            attack_type: "tech",
             action: selected.action,
             effect: selected.detail,
             tags: selected.tags

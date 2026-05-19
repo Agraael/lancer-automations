@@ -1997,7 +1997,7 @@ export async function executeEffectManager(options = {}) {
                     });
                     bonusData.damage = damageEntries.length > 0 ? damageEntries : [{
                         val: "1d6",
-                        type: "Kinetic"
+                        type: "kinetic"
                     }];
                 } else if (type === 'tag') {
                     const selectEl = /** @type {HTMLSelectElement} */ (html.find('#bonus-tagSelect')[0]);

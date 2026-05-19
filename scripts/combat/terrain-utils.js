@@ -117,7 +117,7 @@ async function _runDangerousZone(token, damageType, damageValue) {
         await actor.unsetFlag("lancer-automations", "dangerousZoneRound");
     }
 
-    const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
+    const typeMap = { kinetic: "kinetic", energy: "energy", explosive: "explosive", burn: "burn", heat: "heat", variable: "variable" };
 
     const StatRollFlow = game.lancer?.flows?.get?.("StatRollFlow");
     if (!StatRollFlow) return;
@@ -135,7 +135,7 @@ async function _runDangerousZone(token, damageType, damageValue) {
         if (!DamageRollFlow) return;
         const dmgFlow = new DamageRollFlow(actor.uuid, {
             title: "Dangerous Terrain",
-            damage: [{ val: String(damageValue), type: typeMap[String(damageType).toLowerCase()] || "Kinetic" }],
+            damage: [{ val: String(damageValue), type: typeMap[String(damageType).toLowerCase()] || "kinetic" }],
             tags: [],
             hit_results: [],
             has_normal_hit: true

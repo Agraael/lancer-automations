@@ -338,7 +338,7 @@ export async function executeFall(paramToken) {
 
         if (damageGroups > 0) {
             const totalDamage = damageGroups * 3;
-            await executeDamageRoll(targetToken, [targetToken], totalDamage, "Kinetic", "Fall", { ap: true, action: { name: "Fall" } });
+            await executeDamageRoll(targetToken, [targetToken], totalDamage, "kinetic", "Fall", { ap: true, action: { name: "Fall" } });
         }
 
         // Adjust final elevation to be exactly at ground level
@@ -836,8 +836,8 @@ export async function executeDamageRoll(attacker, targets, damageValue = null, d
         });
     }
 
-    const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", infection: "Infection", variable: "Variable" };
-    const resolvedType = damageType ? (typeMap[damageType.toLowerCase()] || "Kinetic") : "Kinetic";
+    const typeMap = { kinetic: "kinetic", energy: "energy", explosive: "explosive", burn: "burn", heat: "heat", infection: "Infection", variable: "variable" };
+    const resolvedType = damageType ? (typeMap[damageType.toLowerCase()] || "kinetic") : "kinetic";
 
     const flowData = {
         title: title,
@@ -1071,7 +1071,7 @@ export async function executeReactorExplosion(token) {
     const targets = await game.lancer.targetsFromTemplate(template.id);
     token.control({ releaseOthers: true });
 
-    await executeDamageRoll(token, targets, "4d6", "Explosive", "REACTOR EXPLOSION");
+    await executeDamageRoll(token, targets, "4d6", "explosive", "REACTOR EXPLOSION");
 
     await template.delete();
 
@@ -2261,13 +2261,13 @@ export async function executeInvade(actorOrToken) {
             invade: true,
             effect: selected.detail,
             grit: actor.system.tech_attack,
-            attack_type: "Tech"
+            attack_type: "tech"
         });
     } else {
         await executeTechAttack(selected.item, {
             title: selected.name,
             invade: true,
-            attack_type: "Tech",
+            attack_type: "tech",
             action: selected.action,
             effect: selected.detail,
             tags: selected.tags

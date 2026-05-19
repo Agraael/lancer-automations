@@ -175,7 +175,7 @@ async function initInfectionCheckData(state) {
         return false;
 
     state.data.amount = infection;
-    state.data.damage = [{ type: "Heat", val: infection.toString() }];
+    state.data.damage = [{ type: "heat", val: infection.toString() }];
 
     const tokens = state.actor.getActiveTokens();
     if (!tokens?.length) {
@@ -313,7 +313,7 @@ function _triggerInfectionFlow(actor) {
         type: "damage",
         title: "Infection Heat",
         icon: "cci cci-infection",
-        damage: [{ type: "Heat", val: "1" }],  // Will be overwritten by initInfectionCheckData
+        damage: [{ type: "heat", val: "1" }],  // overwritten by initInfectionCheckData
         configurable: false,
         add_burn: false,
         tags: [],

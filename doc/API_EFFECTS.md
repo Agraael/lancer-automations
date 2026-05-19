@@ -283,7 +283,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | `"effect"`, `"damage"`, `"resistance"`, `"crit"`, `"hit"`, `"miss"`, `"elevation"`, `"terrain"`, `"provoke"` |
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
-| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
+| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["energy", "kinetic"]`) |
 
 `"provoke"` acts like permanent DISENGAGE: the actor cannot be engaged and its movement does not provoke reactions from others. No extra fields required.
 

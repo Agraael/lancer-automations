@@ -362,6 +362,9 @@ const TOOLS_FIELDS = [
     { key: 'enableLaSossisItems', type: 'boolean' },
     { key: 'enablePersonalStuff', type: 'boolean' },
 
+    { type: 'section', label: 'System compatibility' },
+    { key: 'hideBrokenDamageTypes', type: 'boolean' },
+
     { type: 'section', label: 'Maintenance' },
     { type: 'button',
         key: 'openLcpRepair',

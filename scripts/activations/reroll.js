@@ -50,7 +50,7 @@ const ROLL_TYPES = {
                         : (hr.target?.actor?.system?.evasion ?? 5);
                     hr.total = String(newTotal).padStart(2, '0');
                     hr.hit = newTotal >= targetStat;
-                    hr.crit = state.data?.attack_type !== 'Tech' && newTotal >= 20;
+                    hr.crit = state.data?.attack_type !== 'tech' && newTotal >= 20;
                 }
             }
         }

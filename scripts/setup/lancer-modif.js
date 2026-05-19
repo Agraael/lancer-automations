@@ -804,7 +804,7 @@ async function stripCoverForMelee(state) {
     if (!state.data?.acc_diff?.targets)
         return true;
 
-    const isMelee = state.data.attack_type === 'Melee';
+    const isMelee = state.data.attack_type === 'melee';
     const isThrow = state.la_extraData?.is_throw === true;
 
     // Propagate is_throw for other modules/macros
@@ -1184,9 +1184,23 @@ export function wrapInitAttackData(flowSteps) {
     });
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+// Lancer 2.12.0 added DamageType.Aoe/All to the enum but not to AppliedDamage,
+// so damage typed "aoe"/"all" silently applies 0. Hide them from dropdowns.
+// The damage HUD is a Svelte component, not an Application, so we watch the DOM.
+export function stripBrokenDamageTypeOptions() {
+    const SEL = 'select option[value="aoe"], select option[value="all"]';
+    const strip = (root) => root.querySelectorAll?.(SEL).forEach(o => o.remove());
+    const run = () => {
+        strip(document);
+        new MutationObserver(records => {
+            for (const r of records) for (const n of r.addedNodes) {
+                if (n.nodeType === 1) strip(n);
+            }
+        }).observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.body) run();
+    else Hooks.once("ready", run);
+}
 
 export const ItemDisabledAPI = {
     isItemDisabled,

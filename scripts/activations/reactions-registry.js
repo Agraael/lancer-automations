@@ -780,7 +780,7 @@ export function getDefaultGeneralReactionRegistry() {
                     await actionFX.playRamFX(reactorToken, chosen[0]);
                     await api.executeBasicAttack(reactorToken.actor, {
                         title: "Ram",
-                        attack_type: "Melee",
+                        attack_type: "melee",
                         action: { name: "Ram", activation: "Quick" },
                         effect: "Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.",
                         tags: [{ lid: 'tg_knockback', val: 1 }]
