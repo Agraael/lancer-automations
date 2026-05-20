@@ -542,9 +542,8 @@ export class LancerHUD {
         c3.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 2 });
         c4.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 1 });
         hud.append(c2, c3, c4);
-        // WIP - favorites tab disabled until ready
-        // hud.append(favIcon);
-        // requestAnimationFrame(() => this._favIconPositioner?.());
+        hud.append(favIcon);
+        requestAnimationFrame(() => this._favIconPositioner?.());
         this._c2 = c2;
         this._c3 = c3;
         this._c4 = c4;
@@ -763,8 +762,7 @@ export class LancerHUD {
         });
         searchBar.on('focus', () => _cancelCollapse());
 
-        // ── Favorites tab ──── WIP, disabled until ready ─────────────────────────
-        if (false) {
+        // ── Favorites tab ────────────────────────────────────────────────────────
         const openFavorites = () => {
             if (searchBar.is(':visible'))
                 searchIcon.trigger('click');
@@ -773,7 +771,7 @@ export class LancerHUD {
             this._c2Category = null; this._c2AnchorRow = null;
             this._c3SourceItem = null; this._c4SourceItem = null;
             closeCol(c3, 80); closeCol(c4, 80);
-            openSearchResults(c2, [], { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
+            openSearchResults(c2, this._collectFavorites(), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
             c2.find('.la-hud-col-label').text('Favorites');
         };
         const favIconInner = favIcon.find('.la-hud-fav-icon');
@@ -789,7 +787,7 @@ export class LancerHUD {
             favIconInner.css({ background: bg, color });
         };
         const isOverFavIcon = (ev) => {
-            const r = favIcon[0]?.getBoundingClientRect();
+            const r = favIconInner[0]?.getBoundingClientRect();
             if (!r) return false;
             return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
         };
@@ -807,8 +805,8 @@ export class LancerHUD {
         };
         const favObserver = new MutationObserver(() => applyFavStyle());
         favObserver.observe(c2[0], { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
-        favIcon.on('mouseenter', enterFav);
-        favIcon.on('mouseleave', leaveFav);
+        favIconInner.on('mouseenter', enterFav);
+        favIconInner.on('mouseleave', leaveFav);
         if (this._favDocHandlers) {
             document.removeEventListener('mousemove', this._favDocHandlers.move);
             if (this._favDocHandlers.click)
@@ -833,7 +831,6 @@ export class LancerHUD {
             document.addEventListener('click', docClickHandler, true);
         }
         this._favDocHandlers = { move: docMoveHandler, click: docClickHandler };
-        }
     }
 
     // ── Generic column populator ──────────────────────────────────────────────
@@ -1020,6 +1017,21 @@ export class LancerHUD {
             const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
+            const isFavoritable = !item.isSectionLabel && !!item.onClick && !!this._favKey(item);
+            if (isFavoritable && this._isFavorite(item)) this._applyFavStyle(row);
+            row.on('contextmenu', async (ev) => {
+                if (!ev.ctrlKey) return;
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                if (!isFavoritable) {
+                    this._showQuickTip(ev.clientX, ev.clientY, "Can't favorite this");
+                    return;
+                }
+                const nowFav = await this._toggleFavorite(item);
+                playUiSound('toggle');
+                if (nowFav) this._applyFavStyle(row);
+                else this._clearFavStyle(row);
+            });
 
             // if (hasChildren && rawChildren !== null && !rawChildren.length)
             //     row.css({ opacity: 0.9 });
@@ -3984,6 +3996,73 @@ export class LancerHUD {
             row.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
         });
         return row;
+    }
+
+    _collectFavorites() {
+        const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
+        if (!favs.length) return [];
+        const favSet = new Set(favs);
+        const results = [];
+        const seen = new Set();
+        const walk = (items, catLabel) => {
+            for (const item of (items ?? [])) {
+                if (item.isSectionLabel) continue;
+                if (item.onClick) {
+                    const key = this._favKey(item);
+                    if (key && favSet.has(key) && !seen.has(key)) {
+                        seen.add(key);
+                        results.push({ ...item, _catLabel: catLabel });
+                    }
+                }
+                if (item.getChildren)
+                    walk(item.getChildren(), catLabel);
+            }
+        };
+        for (const cat of (this._categories ?? [])) {
+            if (cat.isStatusPanel) continue;
+            walk(cat.getItems?.(), cat.label);
+        }
+        return results;
+    }
+
+    _showQuickTip(x, y, text) {
+        const tip = $(`<div style="position:fixed;left:${x + 12}px;top:${y + 12}px;background:#111;color:#fff;padding:4px 8px;border-radius:3px;font-size:0.8em;pointer-events:none;z-index:200;opacity:0;transition:opacity 0.1s;">${text}</div>`);
+        $('body').append(tip);
+        requestAnimationFrame(() => tip.css('opacity', 1));
+        setTimeout(() => tip.css('opacity', 0), 800);
+        setTimeout(() => tip.remove(), 1000);
+    }
+
+    _applyFavStyle(row) {
+        row.css({ position: 'relative' });
+        row.find('.la-hud-fav-mark').remove();
+        row.append(`<span class="la-hud-fav-mark" style="position:absolute;top:1px;right:3px;font-size:9px;color:#111;line-height:1;pointer-events:none;">★</span>`);
+    }
+
+    _clearFavStyle(row) {
+        row.find('.la-hud-fav-mark').remove();
+    }
+
+    _favKey(item) {
+        return item?.hoverData?.item?.uuid ?? item?.label ?? null;
+    }
+
+    _isFavorite(item) {
+        const key = this._favKey(item);
+        if (!key) return false;
+        const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
+        return favs.includes(key);
+    }
+
+    async _toggleFavorite(item) {
+        const key = this._favKey(item);
+        if (!key) return false;
+        const favs = [...(/** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [])];
+        const idx = favs.indexOf(key);
+        if (idx >= 0) favs.splice(idx, 1);
+        else favs.push(key);
+        await /** @type {any} */ (game.user).setFlag('lancer-automations', 'tahFavorites', favs);
+        return idx < 0;
     }
 
     _setActive(col, activeRow, isCategory = false) {

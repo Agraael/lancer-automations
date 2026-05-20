@@ -301,8 +301,52 @@ const ACTIVATION_MANAGER_STEPS = [
     },
 ];
 
-function _tahCategoryStep(label, content) {
+function _tahDrillStep(id, title, content, drillPath, finalPrefix) {
+    const cls = `la-hud-tour-${id}`;
+    return {
+        id,
+        title,
+        content,
+        selector: `${TAH_ROOT} .${cls}`,
+        action: async () => {
+            document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
+            const findRow = (prefix) => Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`))
+                .find((r) => r.textContent?.trim().toLowerCase().startsWith(prefix));
+            const openRow = async (prefix) => {
+                for (let i = 0; i < 40; i++) {
+                    const row = findRow(prefix);
+                    if (row) {
+                        $(row).trigger('mouseenter');
+                        $(row).trigger('click');
+                        return row;
+                    }
+                    await new Promise((r) => setTimeout(r, 50));
+                }
+                return null;
+            };
+            for (const p of drillPath)
+                await openRow(p);
+            for (let i = 0; i < 40; i++) {
+                const target = findRow(finalPrefix);
+                if (target) { target.classList.add(cls); break; }
+                await new Promise((r) => setTimeout(r, 50));
+            }
+        },
+        cleanup: () => {
+            document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
+            const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+            for (let i = 1; i < colLabels.length; i++) {
+                const col = colLabels[i].parentElement;
+                if (col instanceof HTMLElement)
+                    col.style.display = 'none';
+            }
+        },
+    };
+}
+
+function _tahCategoryStep(label, content, alternatives = []) {
     const cls = `la-hud-tour-cat-${label.toLowerCase().replace(/\s+/g, '')}`;
+    const candidates = [label, ...alternatives].map((l) => l.toLowerCase());
     return {
         id: `cat-${label.toLowerCase().replace(/\s+/g, '-')}`,
         title: label,
@@ -311,7 +355,10 @@ function _tahCategoryStep(label, content) {
         action: () => {
             document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
             const rows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
-            const target = rows.find((r) => r.textContent?.trim().toLowerCase().startsWith(label.toLowerCase()));
+            const target = rows.find((r) => {
+                const text = r.textContent?.trim().toLowerCase() ?? '';
+                return candidates.some((c) => text.startsWith(c));
+            });
             target?.classList.add(cls);
         },
         cleanup: () => {
@@ -399,13 +446,25 @@ const TAH_STEPS = [
             }
         },
     },
+    {
+        id: 'search',
+        title: 'Search',
+        content: 'Click the magnifier or press <b>Alt+F</b> to live-filter every action.',
+        selector: `${TAH_ROOT} .la-hud-search-toggle`,
+    },
+    {
+        id: 'favorites',
+        title: 'Favorites',
+        content: 'Ctrl+Right-click any action to mark as favorite. Hover the star tab to open the list.',
+        selector: `${TAH_ROOT} .la-hud-fav-icon`,
+    },
     _tahCategoryStep('Attacks', "Skirmish, Barrage and basic attacks."),
     _tahCategoryStep('Weapons', "Your equipped weapons by mount."),
     _tahCategoryStep('Tech', "Tech actions and tech-tagged systems."),
     _tahCategoryStep('Actions', "Every other action your token can take, sorted by Quick / Full / Reaction / Protocol / Free. Most common actions are under Basic"),
     _tahCategoryStep('Deployables', "Whatever your loadout deploys."),
     _tahCategoryStep('Systems', "Mech systems"),
-    _tahCategoryStep('Class', "Frame info, traits, core power, talents."),
+    _tahCategoryStep('Frame', "Frame info, traits, core power, talents.", ['Class', 'Pilot']),
     {
         id: 'utility',
         title: 'Utility',
@@ -422,6 +481,15 @@ const TAH_STEPS = [
         },
     },
     _tahCategoryStep('Statuses', "Status effects on the token."),
+    _tahDrillStep('add-extra', 'Add Extra', 'Under Utility, opens a dialog to attach custom actions or extra deployables to the actor.', ['utility', 'misc'], 'add extra'),
+    _tahDrillStep('scan', 'Scan', 'Lancer Automations has its own spin on Scan: a successful scan feeds the target\'s data into the Glossary so players can read it later.', ['tech', 'basic'], 'scan'),
+    _tahDrillStep('glossary', 'Glossary', 'Under Utility, a reference panel that shows scanned actors. Visibility is gated by who has read permission on each scanned actor.', ['utility'], 'glossary'),
+    {
+        id: 'outro',
+        title: 'And more',
+        content: 'There is a lot more under the hood, but the tour would get long. Drop by Discord if you have questions.',
+        selector: TAH_ROOT,
+    },
 ];
 
 let _tahPrevControlled = [];

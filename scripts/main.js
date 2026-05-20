@@ -65,7 +65,7 @@ import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/rein
 import { CardStackTests } from "../tests/card-stack.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, stripBrokenDamageTypeOptions, patchDamageTypeCaseInsensitive } from "./setup/lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, stripBrokenDamageTypeOptions, patchDamageTypeCaseInsensitive, patchDamageCalcArmor } from "./setup/lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
@@ -4186,6 +4186,7 @@ Hooks.on('init', () => {
     }
     if (game.settings.get('lancer-automations', 'patchDamageTypeCase')) {
         patchDamageTypeCaseInsensitive();
+        patchDamageCalcArmor();
     }
 
     if (game.modules.get("elevationruler")?.active) {

@@ -1216,6 +1216,39 @@ export function stripBrokenDamageTypeOptions() {
 }
 
 // Add lowercase aliases on DamageType so apps/damage/data.ts:27
+// Mirror AppliedDamage PascalCase props to lowercase so damageCalc's `damage[t]` writes hit the right slot.
+export function patchDamageCalcArmor() {
+    const proto = CONFIG?.Actor?.documentClass?.prototype;
+    if (!proto?.damageCalc || proto._laArmorMirror) return;
+    const orig = proto.damageCalc;
+    const map = { Kinetic: 'kinetic', Energy: 'energy', Explosive: 'explosive', Burn: 'burn', Heat: 'heat', Variable: 'variable' };
+    proto.damageCalc = function (damage, opts, ...rest) {
+        if (damage && typeof damage === 'object') {
+            for (const [pc, lc] of Object.entries(map)) {
+                if (!(lc in damage)) {
+                    Object.defineProperty(damage, lc, {
+                        get() {
+                            return this[pc];
+                        },
+                        set(v) {
+                            this[pc] = v;
+                        },
+                        configurable: true,
+                        enumerable: false,
+                    });
+                }
+            }
+            if (opts?.multiple === 2) {
+                for (const pc of Object.keys(map))
+                    damage[pc] *= 2;
+                opts = { ...opts, multiple: 1 };
+            }
+        }
+        return orig.call(this, damage, opts, ...rest);
+    };
+    proto._laArmorMirror = true;
+}
+
 export async function patchDamageTypeCaseInsensitive() {
     try {
         const entryRes = await fetch('systems/lancer/lancer.mjs');
