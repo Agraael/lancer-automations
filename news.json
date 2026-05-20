@@ -2,6 +2,14 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-05-21-gaa-download-url-fix",
+            "date": "2026-05-21",
+            "title": "Grid Aware Auras 0.5.8.3 is out",
+            "body": [
+                "<p>Quick fix release on my <a href=\"https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras\" target=\"_blank\" rel=\"noopener\">Grid Aware Auras</a> fork: auto-updates now stay on the fork. Hit update.</p>"
+            ]
+        },
+        {
             "id": "2026-05-19-templatemacro-revamp",
             "date": "2026-05-19",
             "title": "Template Macro: full revamp",
