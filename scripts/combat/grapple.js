@@ -260,7 +260,7 @@ Hooks.on('lancer-automations.ready', (api) => {
                                     await actionFX.playGrappleFX(reactorToken);
                                     await api.executeBasicAttack(reactorToken.actor, {
                                         title: "Grapple",
-                                        attack_type: "melee"
+                                        attack_type: "Melee"
                                     });
                                 }
                             },

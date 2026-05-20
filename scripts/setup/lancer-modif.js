@@ -804,7 +804,7 @@ async function stripCoverForMelee(state) {
     if (!state.data?.acc_diff?.targets)
         return true;
 
-    const isMelee = state.data.attack_type === 'melee';
+    const isMelee = state.data.attack_type === 'Melee';
     const isThrow = state.la_extraData?.is_throw === true;
 
     // Propagate is_throw for other modules/macros
@@ -1186,98 +1186,6 @@ export function wrapInitAttackData(flowSteps) {
             state.data.effect = savedEffect;
         return result;
     });
-}
-
-// Hide Aoe/All from damage dropdowns (system applies 0 for those in 2.12.0).
-export function stripBrokenDamageTypeOptions() {
-    const SEL = 'select option[value="aoe"], select option[value="all"]';
-    const strip = (root) => {
-        root.querySelectorAll?.(SEL).forEach(o => o.remove());
-        root.querySelectorAll?.('select option').forEach(o => {
-            const txt = (o.textContent || '').trim();
-            if (txt && o.value === txt && /^[a-z]+$/.test(txt))
-                o.remove();
-        });
-    };
-    const run = () => {
-        strip(document);
-        new MutationObserver(records => {
-            for (const r of records)
-                for (const n of r.addedNodes) {
-                    if (n.nodeType === 1)
-                        strip(n);
-                }
-        }).observe(document.body, { childList: true, subtree: true });
-    };
-    if (document.body)
-        run();
-    else
-        Hooks.once("ready", run);
-}
-
-// Add lowercase aliases on DamageType so apps/damage/data.ts:27
-// Mirror AppliedDamage PascalCase props to lowercase so damageCalc's `damage[t]` writes hit the right slot.
-export function patchDamageCalcArmor() {
-    const proto = CONFIG?.Actor?.documentClass?.prototype;
-    if (!proto?.damageCalc || proto._laArmorMirror) return;
-    const orig = proto.damageCalc;
-    const map = { Kinetic: 'kinetic', Energy: 'energy', Explosive: 'explosive', Burn: 'burn', Heat: 'heat', Variable: 'variable' };
-    proto.damageCalc = function (damage, opts, ...rest) {
-        if (damage && typeof damage === 'object') {
-            for (const [pc, lc] of Object.entries(map)) {
-                if (!(lc in damage)) {
-                    Object.defineProperty(damage, lc, {
-                        get() {
-                            return this[pc];
-                        },
-                        set(v) {
-                            this[pc] = v;
-                        },
-                        configurable: true,
-                        enumerable: false,
-                    });
-                }
-            }
-            if (opts?.multiple === 2) {
-                for (const pc of Object.keys(map))
-                    damage[pc] *= 2;
-                opts = { ...opts, multiple: 1 };
-            }
-        }
-        return orig.call(this, damage, opts, ...rest);
-    };
-    proto._laArmorMirror = true;
-}
-
-export async function patchDamageTypeCaseInsensitive() {
-    try {
-        const entryRes = await fetch('systems/lancer/lancer.mjs');
-        const entryText = await entryRes.text();
-        const match = entryText.match(/lancer-[a-z0-9]+\.mjs/);
-        if (!match)
-            return;
-        const mod = await import(`/systems/lancer/${match[0]}`);
-        // Export name is minified, find by shape.
-        let DamageType = null;
-        for (const v of Object.values(mod)) {
-            if (v && typeof v === 'object' && v.Kinetic === 'kinetic' && v.Energy === 'energy' && v.Explosive === 'explosive' && v.Heat === 'heat' && v.Burn === 'burn') {
-                DamageType = v;
-                break;
-            }
-        }
-        if (!DamageType) {
-            console.warn('lancer-automations | DamageType enum not found in lancer bundle');
-            return;
-        }
-        for (const [key, val] of Object.entries(DamageType)) {
-            if (typeof val === 'string' && val !== key && !(val in DamageType)) {
-                DamageType[val] = val;
-            }
-        }
-        console.log('lancer-automations | DamageType case-fold patch applied');
-    } catch (e) {
-        console.warn('lancer-automations | patchDamageTypeCaseInsensitive failed:', e);
-    }
 }
 
 export const ItemDisabledAPI = {

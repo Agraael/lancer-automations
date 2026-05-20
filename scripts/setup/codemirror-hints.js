@@ -206,7 +206,7 @@ const HAND_OPTION_SCHEMAS = {
     ],
     'executeBasicAttack.options': [
         ['title', 'string'],
-        ['attack_type', '"melee" | "ranged"'],
+        ['attack_type', '"Melee" | "Ranged"'],
         ['lookupItem', 'Item'],
     ],
     'executeSimpleActivation.options': [

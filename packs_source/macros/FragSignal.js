@@ -22,6 +22,6 @@ const flow = new TechAttackFlow(myActor, {
     invade: true,
     effect: effectDescription,
     grit: myActor.system.tech_attack,
-    attack_type: "tech",
+    attack_type: "Tech",
 });
 await flow.begin();

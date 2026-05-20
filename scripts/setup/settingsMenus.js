@@ -180,6 +180,30 @@ const TAH_FIELDS = [
             for (const tok of tokens) await applyDefaultAuras(tok);
             ui.notifications.info(`Cleared TAH auras from ${cleared} token(s) and rebuilt defaults.`);
         } },
+    { key: 'tah.clearMacros', type: 'button', label: 'Clear TAH Macros', icon: 'fas fa-trash', hint: 'Remove every macro from the TAH Macros category for this client.',
+        clientAllowed: true,
+        onClick: async () => {
+            const confirmed = await Dialog.confirm({
+                title: 'Clear TAH Macros',
+                content: '<p>Remove every macro from the TAH Macros category? This cannot be undone.</p>',
+            });
+            if (!confirmed) return;
+            await game.settings.set(MODULE_ID, 'tah.macroList', []);
+            Hooks.callAll('forceUpdateTokenActionHud');
+            ui.notifications.info('TAH Macros cleared.');
+        } },
+    { key: 'tah.clearFavorites', type: 'button', label: 'Clear TAH Favorites', icon: 'fas fa-star', hint: 'Remove every favorite (★) marked through the TAH. Saved per user.',
+        clientAllowed: true,
+        onClick: async () => {
+            const confirmed = await Dialog.confirm({
+                title: 'Clear TAH Favorites',
+                content: '<p>Remove every favorite marker? This cannot be undone.</p>',
+            });
+            if (!confirmed) return;
+            await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites', []);
+            Hooks.callAll('forceUpdateTokenActionHud');
+            ui.notifications.info('TAH Favorites cleared.');
+        } },
     { type: 'table',
         label: 'Range Auras',
         tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
@@ -361,10 +385,6 @@ const TOOLS_FIELDS = [
     { type: 'section', label: 'Optional content packs' },
     { key: 'enableLaSossisItems', type: 'boolean' },
     { key: 'enablePersonalStuff', type: 'boolean' },
-
-    { type: 'section', label: 'System compatibility' },
-    { key: 'hideBrokenDamageTypes', type: 'boolean' },
-    { key: 'patchDamageTypeCase', type: 'boolean' },
 
     { type: 'section', label: 'Maintenance' },
     { type: 'button',

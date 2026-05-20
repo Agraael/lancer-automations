@@ -625,7 +625,7 @@ const npcInsulatedBonus = {
                         {
                             type: "immunity",
                             subtype: "damage",
-                            damageTypes: ["burn"]
+                            damageTypes: ["Burn"]
                         }
                     ]
                 });
@@ -1524,7 +1524,7 @@ api.registerDefaultItemReactions({
                         return;
                     const flow = new DamageRollFlow(mover.actor.uuid, {
                         title: "Remote Machine Gun",
-                        damage: [{ val: String(damage), type: "kinetic" }],
+                        damage: [{ val: String(damage), type: "Kinetic" }],
                         tags: [],
                         hit_results: [],
                         has_normal_hit: true
@@ -3177,7 +3177,7 @@ api.registerDefaultItemReactions({
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                     const tier = reactorToken.actor.system.tier || 1;
                     const damage = [3, 5, 7][tier - 1] || 3;
-                    await api.executeDamageRoll(reactorToken, [triggerData.triggeringToken], damage, "kinetic", "Sharpen \u2014 Prone Damage");
+                    await api.executeDamageRoll(reactorToken, [triggerData.triggeringToken], damage, "Kinetic", "Sharpen \u2014 Prone Damage");
                 }
             },
             // ── R4: onActivation "Tremor" — Blast 1, Hull saves, Prone + AP ─────
@@ -3227,7 +3227,7 @@ api.registerDefaultItemReactions({
                     // 10 AP Kinetic to all deployables in one roll
                     if (deployables.length > 0) {
                         await api.executeDamageRoll(
-                            reactorToken, deployables, 10, "kinetic",
+                            reactorToken, deployables, 10, "Kinetic",
                             "Tremor \u2014 Objects & Terrain", { ap: true }
                         );
                     }
@@ -3845,7 +3845,7 @@ api.registerDefaultItemReactions({
                 await api.addGlobalBonus(target.actor, {
                     name: "Pour It On",
                     type: "damage",
-                    damage: [{ val: "1d6", type: "variable" }],
+                    damage: [{ val: "1d6", type: "Variable" }],
                     rollTypes: ["melee", "ranged"],
                     uses: 1
                 }, {
@@ -4059,7 +4059,7 @@ api.registerDefaultItemReactions({
 
                 game.user.updateTokenTargets(targets.map(t => t.id));
                 await api.executeDamageRoll(
-                    reactorToken, targets, damageVal, "explosive",
+                    reactorToken, targets, damageVal, "Explosive",
                     `${item.name} — Rainmaker Volley`,
                     {},
                     flowBonuses.length ? { flow_bonus: flowBonuses } : {}

@@ -552,15 +552,8 @@ export async function executeEffectManager(options = {}) {
     const bonusDurationOptionsHtml = '<option value="">None (Permanent, no Icon)</option>' +
         durations.filter(d => d.label !== 'permanent').map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
 
-    const dmgTypeOptionsHtml = [
-        { value: 'kinetic', label: 'Kinetic' },
-        { value: 'explosive', label: 'Explosive' },
-        { value: 'energy', label: 'Energy' },
-        { value: 'heat', label: 'Heat' },
-        { value: 'burn', label: 'Burn' },
-        { value: 'Infection', label: 'Infection' },
-        { value: 'variable', label: 'Variable' }
-    ].map(t => `<option value="${t.value}">${t.label}</option>`).join('');
+    const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
+        .map(t => `<option value="${t}">${t}</option>`).join('');
 
     const statusEffectIconsHtml = [...CONFIG.statusEffects]
         .sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name))
@@ -574,14 +567,14 @@ export async function executeEffectManager(options = {}) {
         }).join('');
 
     const damageTypes = [
-        { name: 'kinetic', label: 'Kinetic', icon: 'systems/lancer/assets/icons/white/damage_kinetic.svg' },
-        { name: 'energy', label: 'Energy', icon: 'systems/lancer/assets/icons/white/damage_energy.svg' },
-        { name: 'explosive', label: 'Explosive', icon: 'systems/lancer/assets/icons/white/damage_explosive.svg' },
-        { name: 'heat', label: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
-        { name: 'burn', label: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
+        { name: 'Kinetic', icon: 'systems/lancer/assets/icons/white/damage_kinetic.svg' },
+        { name: 'Energy', icon: 'systems/lancer/assets/icons/white/damage_energy.svg' },
+        { name: 'Explosive', icon: 'systems/lancer/assets/icons/white/damage_explosive.svg' },
+        { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
+        { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
     ];
     const damageTypeIconsHtml = damageTypes.map(t => `
-        <div class="bonus-immunity-damage-option te-icon-option" data-type="${t.name}" title="${t.label}">
+        <div class="bonus-immunity-damage-option te-icon-option" data-type="${t.name}" title="${t.name}">
             <img src="${t.icon}" width="24" height="24">
         </div>
     `).join('');
@@ -2004,7 +1997,7 @@ export async function executeEffectManager(options = {}) {
                     });
                     bonusData.damage = damageEntries.length > 0 ? damageEntries : [{
                         val: "1d6",
-                        type: "kinetic"
+                        type: "Kinetic"
                     }];
                 } else if (type === 'tag') {
                     const selectEl = /** @type {HTMLSelectElement} */ (html.find('#bonus-tagSelect')[0]);
