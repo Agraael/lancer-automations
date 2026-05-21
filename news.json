@@ -2,6 +2,15 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-05-21-v13-where-i-stand",
+            "date": "2026-05-21",
+            "title": "Lancer System v13 is out, and i'm not on v13",
+            "body": [
+                "<p>Lancer System v13 is out, and i'm not on v13. All my personal setup and work environment is in v12. A lot of features lancer-automations (or my other modules) provide now exist natively in v13.</p>",
+                "<p>Moving to v13 is a humongous task, and i haven't had time to enjoy my own projects tbh (only got one game in). i need to gauge how important it is to people. Poll on my <a href=\"https://www.patreon.com/posts/158837577\" target=\"_blank\" rel=\"noopener\">Patreon</a> if you want to weigh in, or on <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">Discord</a>. Thanks.</p>"
+            ]
+        },
+        {
             "id": "2026-05-21-gaa-download-url-fix",
             "date": "2026-05-21",
             "title": "Grid Aware Auras 0.5.8.3 is out",
