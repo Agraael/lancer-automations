@@ -53,9 +53,9 @@ export function collectSearchResults(query, categories) {
  *
  * @param {any} col     jQuery column element (c2).
  * @param {any[]} results  From `collectSearchResults`.
- * @param {{ el: any, makeRow: Function, token: any, brighten: Function, S_MUTED: string }} ctx
+ * @param {{ el: any, makeRow: Function, token: any, brighten: Function }} ctx
  */
-export function openSearchResults(col, results, { el, makeRow, token, brighten, S_MUTED }) {
+export function openSearchResults(col, results, { el, makeRow, token, brighten }) {
     col.children(':not(.la-hud-col-label)').remove();
     col.find('.la-hud-col-label').text('Results');
 
@@ -68,7 +68,7 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
     const maxHeight = maxItems > 0 ? `${48 * maxItems}px` : '420px';
     const scrollWrap = $(`<div class="la-hud-search-scroll lancer-scroll" style="max-height:${maxHeight};overflow-y:auto;overflow-x:hidden;"></div>`);
     if (!results.length) {
-        scrollWrap.append($(`<div style="${S_MUTED}">No results</div>`));
+        scrollWrap.append($(`<div class="la-hud-muted">No results</div>`));
     } else {
         for (const item of results) {
             const row = makeRow(item.label, false, item.icon ?? 'fas fa-circle-dot', item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);

@@ -27,58 +27,13 @@ const HUD_TOP  = 115;   // below Foundry's top nav bar
 
 const ROW_MAX_WIDTH = 250;
 
-const S_COL  = `display:flex;flex-direction:column;gap:2px;width:max-content;min-width:180px;max-width:${ROW_MAX_WIDTH}px;`;
-
-const S_ITEM = [
-    'box-sizing:border-box',
-    'height:30px',
-    'padding:6px 12px',
-    'background:#f5f5f5',
-    'border:2px solid #bbb',
-    'border-left:3px solid var(--primary-color)',
-    'font-size:1em',
-    'font-weight:600',
-    'color:#111',
-    'cursor:pointer',
-    'text-transform:uppercase',
-    'letter-spacing:0.5px',
-    'display:flex',
-    'align-items:center',
-    `max-width:${ROW_MAX_WIDTH}px`,
-    'overflow:hidden',
-    'user-select:none',
-    'font-family:inherit',
-].join(';') + ';';
-
-const S_MUTED = [
-    'padding:5px 12px',
-    'background:#f5f5f5',
-    'border:1px solid #ddd',
-    'font-size:0.8em',
-    'color:#888',
-    'font-style:italic',
-].join(';') + ';';
-
-const S_COL_LABEL = [
-    'padding:3px 12px 4px',
-    'background:var(--primary-color)',
-    'color:#fff',
-    'font-size:0.68em',
-    'letter-spacing:1px',
-    'text-transform:uppercase',
-    'font-weight:bold',
-    'position:sticky',
-    'top:0',
-    'z-index:1',
-].join(';') + ';';
-
 const BG_DEFAULT   = '#f5f5f5';
 const BG_HOVER     = 'color-mix(in srgb, var(--primary-color), white 85%)';
 const BG_ACTIVE    = 'var(--primary-color)';
 const TEXT_DEFAULT = '#111';
 const TEXT_ACTIVE  = '#fff';
 
-/** Animate a column closed — mirrors the open slide-in (opacity + marginLeft). */
+/** Animate a column closed (mirror of the open slide-in). */
 function closeCol(col, duration = 90) {
     col.stop(true).animate({ opacity: 0, marginLeft: -10 }, duration, function () {
         $(this).hide().css('marginLeft', '').children(':not(.la-hud-col-label)').remove();
@@ -201,11 +156,7 @@ export class LancerHUD {
             el.stop(true).animate({ opacity: 0, left: '-=18' }, 180, () => el.remove());
     }
 
-    /**
-     * Returns `{ incDepth, decDepth }` bound to this HUD's suppress counter.
-     * Pass to any out-of-column click handler (popups, pips, etc.) that calls
-     * item/actor.update() and must not trigger a full HUD re-render.
-     */
+    /** Suppress-counter handles for handlers that call actor.update() but must not re-render. */
     _depthCallbacks() {
         return {
             incDepth: () => this._suppressRefreshDepth++,
@@ -213,7 +164,7 @@ export class LancerHUD {
         };
     }
 
-    /** Debounced full refresh — coalesces rapid successive updates into one render. */
+    /** Debounced full refresh. Coalesces rapid updates into one render. */
     scheduleRefresh(delay = 100) {
         if (this._suppressRefreshDepth > 0)
             return;
@@ -221,10 +172,7 @@ export class LancerHUD {
         this._refreshTimer = setTimeout(() => this.refresh(), delay);
     }
 
-    /**
-     * Update only the stats bar in-place (HP, heat, structure…).
-     * Does NOT collapse sub-columns — safe to call on every updateActor.
-     */
+    /** In-place stats bar refresh. Does not collapse sub-columns. */
     updateStatsInPlace() {
         if (!this._actor || !this._el)
             return;
@@ -258,13 +206,13 @@ export class LancerHUD {
     refresh() {
         if (!this._token || this._suppressRefreshDepth > 0)
             return;
-        // Status panel open — sync rows in-place, never close+reopen it
+        // Status panel open: sync rows in-place, never close + reopen.
         if (this._statusPanelInstance?.isVisible) {
             this.updateStatsInPlace();
             this._statusPanelInstance.syncRows();
             return;
         }
-        // Detail popup open — refresh visible columns in-place, never full re-render
+        // Detail popup open: refresh visible columns in-place, no full rebuild.
         if ($('.la-hud-popup').length) {
             this.updateStatsInPlace();
             this._refreshColumnsInPlace();
@@ -334,34 +282,16 @@ export class LancerHUD {
             }
         }
 
-        const S_TOKEN_TITLE = [
-            'background:#1a1a1a',
-            'color:#fff',
-            'font-size:1em',
-            'letter-spacing:1px',
-            'text-transform:uppercase',
-            'font-weight:bold',
-            'white-space:nowrap',
-            'width:max-content',
-            'cursor:context-menu',
-            'display:flex',
-            'align-items:stretch',
-        ].join(';') + ';';
-
-        const titleEl = $(`<div style="${S_TOKEN_TITLE}"><span class="la-hud-token-name" style="padding:6px 6px 5px 12px;display:flex;align-items:center;">${tokenName}</span></div>`);
+        const titleEl = $(`<div class="la-hud-token-title"><span class="la-hud-token-name">${tokenName}</span></div>`);
 
         // Combat toggle icon (left of token name)
         const inCombat = this._token.inCombat;
-        const combatToggle = $(`<span class="la-combat-toggle" style="cursor:pointer;color:${inCombat ? 'var(--primary-color)' : '#555'};margin-right:4px;padding-left:8px;font-size:0.85em;flex-shrink:0;opacity:${inCombat ? 1 : 0.5};transition:color 0.15s, opacity 0.15s;display:flex;align-items:center;" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
-        combatToggle.on('mouseenter', () => { playUiSound('statusHover'); combatToggle.css({ color: 'color-mix(in srgb, var(--primary-color), white 40%)', opacity: 1 }); });
-        combatToggle.on('mouseleave', () => {
-            const ic = this._token.inCombat;
-            combatToggle.css({ color: ic ? 'var(--primary-color)' : '#555', opacity: ic ? 1 : 0.5 });
-        });
+        const combatToggle = $(`<span class="la-combat-toggle${inCombat ? ' la-combat-toggle--in' : ''}" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
+        combatToggle.on('mouseenter', () => playUiSound('statusHover'));
         combatToggle.on('click', async () => {
             await /** @type {any} */ (this._token.document).toggleCombatant?.(!this._token.inCombat);
             const nowInCombat = this._token.inCombat;
-            combatToggle.css({ color: nowInCombat ? 'var(--primary-color)' : '#555', opacity: nowInCombat ? 1 : 0.5 });
+            combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
             combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
             this._updateCombatBar();
         });
@@ -375,9 +305,9 @@ export class LancerHUD {
         // ── Search icon + input ──────────────────────────────────────────────────
         const menuLabel = c1.find('.la-hud-col-label');
         menuLabel.css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
-        const searchIcon = $(`<span class="la-hud-search-toggle" title="Search" style="cursor:pointer;opacity:0.55;font-size:1.15em;padding-left:4px;line-height:1;flex-shrink:0;">⌕</span>`);
+        const searchIcon = $(`<span class="la-hud-search-toggle" title="Search">⌕</span>`);
         menuLabel.append(searchIcon);
-        const favIcon = $(`<div class="la-hud-fav-tab" title="Favorites" style="position:absolute;cursor:pointer;user-select:none;background:transparent;z-index:2;width:28px;"><div class="la-hud-fav-icon" style="display:flex;align-items:center;justify-content:center;background:var(--primary-color);color:#fff;font-size:1em;line-height:1;box-sizing:border-box;">★</div></div>`);
+        const favIcon = $(`<div class="la-hud-fav-tab" title="Favorites"><div class="la-hud-fav-icon">★</div></div>`);
         this._favIconPositioner = () => {
             const c1Pos = c1.position();
             const labelPos = menuLabel.position();
@@ -391,7 +321,7 @@ export class LancerHUD {
             });
             favIcon.find('.la-hud-fav-icon').css({ height: `${menuLabel.outerHeight()}px` });
         };
-        const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…" style="display:none;width:100%;box-sizing:border-box;padding:4px 8px;background:#1a1a1a;color:#fff;border:0;border-bottom:2px solid var(--primary-color);font-size:0.8em;font-family:inherit;outline:none;">`);
+        const searchBar = $(`<input type="text" class="la-hud-search-bar" placeholder="Search…">`);
         menuLabel.after(searchBar);
         this._favIcon = favIcon;
         this._searchIcon = searchIcon;
@@ -406,7 +336,7 @@ export class LancerHUD {
         const savedPos = game.settings.get('lancer-automations', 'tah.position');
         const startLeft = savedPos?.left ?? HUD_LEFT;
         const startTop  = savedPos?.top  ?? HUD_TOP;
-        const hud = $(`<div id="la-hud" style="position:fixed;left:${startLeft}px;top:${startTop}px;z-index:70;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5));"></div>`);
+        const hud = $(`<div id="la-hud" style="left:${startLeft}px;top:${startTop}px;"></div>`);
         if (animate)
             hud.css({ opacity: 0, left: startLeft - 18 });
         hud.append(c1);
@@ -417,21 +347,18 @@ export class LancerHUD {
 
         // Lock / drag / reset controls
         let unlocked = false;
-        const lockBtn = $(`<span class="la-hud-lock" title="Unlock to drag" style="cursor:pointer;font-size:0.75em;opacity:0;margin-left:auto;padding:0 2px;filter:grayscale(1) brightness(10);transition:opacity 0.15s;">🔒</span>`);
-        const resetBtn = $(`<span class="la-hud-reset" title="Reset position" style="cursor:pointer;font-size:0.7em;opacity:0;margin-left:2px;padding:0 2px;color:#fff;transition:opacity 0.15s;">↺</span>`);
-        titleEl.css({ display: 'flex', alignItems: 'stretch' });
-        lockBtn.css({ display: 'flex', alignItems: 'center' });
-        resetBtn.css({ display: 'flex', alignItems: 'center' });
+        const lockBtn = $(`<span class="la-hud-lock" title="Unlock to drag">🔒</span>`);
+        const resetBtn = $(`<span class="la-hud-reset" title="Reset position">↺</span>`);
         titleEl.append(lockBtn).append(resetBtn);
 
-        // Disposition / team stripe + expanding detail — appended LAST so it's at the far right edge
+        // Disposition / team stripe. Appended last to sit at the far right edge.
         if (_dispColor && _dispLabel) {
             const _r = parseInt(_dispColor.slice(1, 3), 16) || 0;
             const _g = parseInt(_dispColor.slice(3, 5), 16) || 0;
             const _b = parseInt(_dispColor.slice(5, 7), 16) || 0;
             const _textColor = (_r * 0.299 + _g * 0.587 + _b * 0.114) > 150 ? '#111' : '#fff';
-            const dispDetail = $(`<div class="la-disp-detail" style="display:none;overflow:hidden;background:${_dispColor};padding:0;white-space:nowrap;align-items:center;justify-content:center;"><span style="font-size:0.85em;letter-spacing:0.5px;color:${_textColor};font-weight:bold;margin:0 20px 0 12px;">${_dispLabel.toUpperCase()}</span></div>`);
-            const dispToggle = $(`<div class="la-disp-toggle" style="cursor:pointer;user-select:none;width:10px;background:${_dispColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><span style="font-size:0.55em;color:${_textColor};font-weight:bold;line-height:1;">▶</span></div>`);
+            const dispDetail = $(`<div class="la-disp-detail" style="background:${_dispColor};"><span class="la-disp-detail__label" style="color:${_textColor};">${_dispLabel.toUpperCase()}</span></div>`);
+            const dispToggle = $(`<div class="la-disp-toggle" style="background:${_dispColor};"><span class="la-disp-toggle__chevron" style="color:${_textColor};">▶</span></div>`);
             titleEl.append(dispToggle);
             titleEl.append(dispDetail);
             let _dispExpanded = false;
@@ -470,7 +397,7 @@ export class LancerHUD {
             });
         }
 
-        // Title bar hover/click — must be after lockBtn/resetBtn creation
+        // Title bar hover/click. Must be after lockBtn/resetBtn creation.
         const nameSpan = titleEl.find('.la-hud-token-name');
         nameSpan.on('mouseenter', () => {
             playUiSound('statusHover');
@@ -533,7 +460,7 @@ export class LancerHUD {
             game.settings.set('lancer-automations', 'tah.position', pos);
         });
 
-        // c2 and c3 are absolutely positioned — never affect c1's layout
+        // c2/c3/c4 are absolutely positioned. They never affect c1's layout.
         const c2 = this._makeCol('');
         const c3 = this._makeCol('');
         const c4 = this._makeCol('');
@@ -694,7 +621,7 @@ export class LancerHUD {
                 }
             });
         }
-        // Title / stats / menu-label area is above the item list — hovering it closes open columns
+        // Title / stats / menu-label area. Hovering it closes open columns.
         titleEl.on('mouseenter', () => {
             _clearC1Active();
             if (!clickToOpen)
@@ -734,7 +661,7 @@ export class LancerHUD {
             }
             this._searchActive = true;
             _cancelCollapse();
-            openSearchResults(c2, collectSearchResults(q, this._categories), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
+            openSearchResults(c2, collectSearchResults(q, this._categories), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten });
         };
         searchBar.on('input', runSearch);
         searchBar.on('mouseenter click', () => {
@@ -771,7 +698,7 @@ export class LancerHUD {
             this._c2Category = null; this._c2AnchorRow = null;
             this._c3SourceItem = null; this._c4SourceItem = null;
             closeCol(c3, 80); closeCol(c4, 80);
-            openSearchResults(c2, this._collectFavorites(), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten, S_MUTED });
+            openSearchResults(c2, this._collectFavorites(), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten });
             c2.find('.la-hud-col-label').text('Favorites');
         };
         const favIconInner = favIcon.find('.la-hud-fav-icon');
@@ -779,12 +706,9 @@ export class LancerHUD {
         let favHovering = false;
         const applyFavStyle = () => {
             const open = isFavoritesOpen();
-            const hover = favHovering;
-            let bg, color;
-            if (open) { bg = '#fff'; color = 'var(--primary-color)'; }
-            else if (hover) { bg = BG_HOVER; color = TEXT_DEFAULT; }
-            else { bg = 'var(--primary-color)'; color = '#fff'; }
-            favIconInner.css({ background: bg, color });
+            favIconInner
+                .toggleClass('la-hud-fav-icon--open', open)
+                .toggleClass('la-hud-fav-icon--hover', favHovering && !open);
         };
         const isOverFavIcon = (ev) => {
             const r = favIconInner[0]?.getBoundingClientRect();
@@ -833,9 +757,6 @@ export class LancerHUD {
         this._favDocHandlers = { move: docMoveHandler, click: docClickHandler };
     }
 
-    // ── Generic column populator ──────────────────────────────────────────────
-    // col       — jQuery element to populate
-    // items     — Item[] (see shape above)
     // ── Multi-token intersection filter ──────────────────────────────────────
 
     _filterIntersect(items) {
@@ -868,15 +789,7 @@ export class LancerHUD {
         return laRenderTags(sys?.tags ?? []) + effect;
     }
 
-    /**
-     * Factory for simple executeSimpleActivation rows.
-     * Auto-generates onClick, broadcastFn, and onRightClick from one action definition.
-     * @param {string} label
-     * @param {string|null} icon
-     * @param {{ name: string, activation: string, [key: string]: any }} action
-     * @param {string} detail
-     * @returns {object}
-     */
+    /** Factory for executeSimpleActivation rows. Wires onClick / broadcast / right-click popup. */
     _simpleItem(label, icon, action, detail) {
         return this._lockable({
             label,
@@ -909,7 +822,7 @@ export class LancerHUD {
         return item;
     }
 
-    // anchorRow — the parent row this column aligns with vertically
+    // anchorRow: parent row this column aligns with vertically.
 
     _openCol(col, items, anchorRow, { reposition = true } = {}) {
         const filteredItems = this._filterIntersect(items);
@@ -924,20 +837,17 @@ export class LancerHUD {
         }
 
         if (!filteredItems.length) {
-            col.append(`<div style="${S_MUTED}height:30px;box-sizing:border-box;display:flex;align-items:center;">Empty</div>`);
+            col.append(`<div class="la-hud-muted la-hud-muted--empty">Empty</div>`);
             return;
         }
 
         for (const item of filteredItems) {
             if (item.isSectionLabel) {
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
-                col.append(`<div style="${S_COL_LABEL};display:flex;align-items:center;">${iconHtml}${item.label}</div>`);
+                col.append(`<div class="la-hud-section-label">${iconHtml}${item.label}</div>`);
                 continue;
             }
             if (item.inputCell) {
-                const S_BTN  = 'color:#111;cursor:pointer;font-size:0.7em;line-height:1;padding:0 3px;flex-shrink:0;user-select:none;';
-                const S_LBL  = 'flex:1;overflow:hidden;min-width:0;';
-                const S_PAN  = 'display:inline-block;white-space:nowrap;padding-right:8px;';
                 const hasMax  = item.max != null;
                 const noColor = !!item.noColor;
                 const min     = item.min ?? (hasMax ? 0 : -Infinity);
@@ -946,13 +856,11 @@ export class LancerHUD {
                 const valColor = (v) => noColor ? '#111' : hasMax ? (v <= 0 ? '#c33' : v < max ? '#cc7700' : '#3a9e6e') : '#111';
                 const restingBg = (v) => noColor ? BG_DEFAULT : hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
                 const borderColor = (v) => noColor ? 'var(--primary-color)' : hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
-                const S_CELL = `${S_ITEM}justify-content:space-between;gap:6px;cursor:default;min-width:220px;`;
                 let cell;
                 if (item.subtype === 'increment') {
                     let cur = item.getValue();
                     const valText = item.formatValue ? () => item.formatValue(cur) : () => hasMax ? `${cur}/${max}` : `${cur}`;
-                    const S_VAL  = `min-width:22px;text-align:center;font-weight:600;font-size:1em;color:${valColor(cur)};`;
-                    cell = $(`<div style="${S_CELL}background:${restingBg(cur)};border-left-color:${borderColor(cur)};">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><div style="display:flex;align-items:center;gap:4px;"><span class="la-dec-btn" style="${S_BTN}">◄</span><span class="la-inc-val" style="${S_VAL}">${valText()}</span><span class="la-inc-btn" style="${S_BTN}">►</span></div></div>`);
+                    cell = $(`<div class="la-hud-cell" style="background:${restingBg(cur)};border-left-color:${borderColor(cur)};">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${item.name}</span></span><div class="la-hud-cell__buttons"><span class="la-dec-btn la-hud-cell__btn">◄</span><span class="la-inc-val la-hud-cell__val" style="color:${valColor(cur)};">${valText()}</span><span class="la-inc-btn la-hud-cell__btn">►</span></div></div>`);
                     const step = item.step ?? 1;
                     const suppress = () => {
                         this._suppressRefreshDepth++; setTimeout(() => this._suppressRefreshDepth--, 300);
@@ -973,8 +881,8 @@ export class LancerHUD {
                     let on = !!item.getValue();
                     const onColor = 'var(--primary-color)';
                     const offColor = '#666';
-                    const switchHtml = `<span class="la-toggle-switch" style="display:inline-block;width:28px;height:14px;border-radius:2px;background:${on ? onColor : offColor};position:relative;cursor:pointer;transition:background 0.15s;flex-shrink:0;"><span class="la-toggle-knob" style="position:absolute;top:1px;left:${on ? '14px' : '1px'};width:13px;height:12px;border-radius:1px;background:#fff;transition:left 0.15s;"></span></span>`;
-                    cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span>${switchHtml}</div>`);
+                    const switchHtml = `<span class="la-toggle-switch" style="background:${on ? onColor : offColor};"><span class="la-toggle-knob" style="left:${on ? '14px' : '1px'};"></span></span>`;
+                    cell = $(`<div class="la-hud-cell">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${item.name}</span></span>${switchHtml}</div>`);
                     cell.find('.la-toggle-switch').on('click', async (ev) => {
                         ev.stopPropagation();
                         playUiSound('toggle');
@@ -991,7 +899,7 @@ export class LancerHUD {
                     });
                     cell.data('restingBg', BG_DEFAULT);
                 } else {
-                    cell = $(`<div style="${S_CELL}">${iconHtml}<span class="la-hud-clip" style="${S_LBL}"><span class="la-hud-pan" style="${S_PAN}">${item.name}</span></span><input type="number" class="la-type-val" value="${item.getValue()}" style="width:44px;text-align:center;background:#fff;border:1px solid #bbb;color:#111;font-size:0.9em;padding:2px 4px;"></div>`);
+                    cell = $(`<div class="la-hud-cell">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${item.name}</span></span><input type="number" class="la-type-val la-hud-cell__input" value="${item.getValue()}"></div>`);
                     cell.find('.la-type-val').on('change', (ev) => {
                         ev.stopPropagation(); playUiSound('toggle'); const v = Number.parseInt(/** @type {HTMLInputElement} */(ev.target).value, 10); if (!Number.isNaN(v))
                             item.onValueChanged(v);
@@ -1072,9 +980,7 @@ export class LancerHUD {
                 row.css({ background: _stripeStyle.bg, borderLeftColor: _stripeStyle.border, color: _stripeStyle.color });
                 if (item.softDisabled)
                     row.css({ cursor: 'not-allowed' });
-                // Keep the leading icon visible on the dark stripes:
-                // white-source SVGs (invert(1) applied by laHudRenderIcon) → strip the invert so they stay white-ish;
-                // dark-source SVGs (no invert) → apply invert(1) so they become white-ish. Both end up dimmed at 0.55 opacity.
+                // Keep leading icon visible on dark stripes: flip whatever invert state laHudRenderIcon left.
                 const _leadingIcon = row.children('img').first();
                 if (_leadingIcon.length) {
                     const _styleAttr = _leadingIcon.attr('style') || '';
@@ -1265,7 +1171,7 @@ export class LancerHUD {
 
     // ── Category / item builders ──────────────────────────────────────────────
 
-    // ── Category list — reorder these lines to reorder the HUD ──────────────
+    // ── Category list (order = HUD order) ──────────────────────────────────
     _buildCategories() {
         const types        = this._tokens.map(t => t.actor?.type);
         const isMech       = types.every(t => t === 'mech');
@@ -1363,7 +1269,7 @@ export class LancerHUD {
             });
         }
 
-        // Recall action (direct — no dialog, just delete this token)
+        // Recall action (no dialog, just deletes this token).
         if (sys.recall != null) {
             items.push({
                 label: 'Recall',
@@ -1432,10 +1338,8 @@ export class LancerHUD {
         const actor = this._actor;
         const token = this._token;
 
-        // Mechs: only show deployables from equipped items (avoids unequipped systems).
-        // Loadout entries can be raw ID strings or resolved {id,status,value} objects — handle both.
-        // Include systems + frame + weapons so frame-integrated deployables are also shown.
-        // NPCs and others: use all actor.items (no loadout concept).
+        // Mechs: equipped items only (systems + frame + weapons). NPCs: all actor.items.
+        // Loadout entries can be raw ID strings or {id,status,value} objects; handle both.
         let equippedItems;
         if (actor.type === 'mech') {
             const loadout = actor.system?.loadout ?? {};
@@ -1945,7 +1849,7 @@ export class LancerHUD {
             });
         };
 
-        // Ranges section — persistent aura toggles.
+        // Ranges section: persistent aura toggles.
         const hasGAA = !!game.modules.get('grid-aware-auras')?.active;
         const threatVal = getActorMaxThreat(actor);
         const sensorVal = actor?.system?.sensor_range ?? (actor?.type === 'pilot' ? 5 : 10);
@@ -3467,7 +3371,7 @@ export class LancerHUD {
         const addRightClicks = (children, attackLabel, bypassMountArg) => children.map(child => {
             if (child.isSectionLabel || child.onRightClick)
                 return child;
-            // Mod row may have no onClick — handle it first
+            // Mod row may have no onClick; handle it first.
             if (modItem && child.label === modItem.name) {
                 const ms = modItem.system;
                 const subtitle = this._joinSubtitle(ms?.type, ms?.license ? `${ms.manufacturer} ${ms.license_level}` : null) || 'Weapon Mod';
@@ -3879,12 +3783,7 @@ export class LancerHUD {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Re-render the content of all currently-visible columns without touching the DOM
-     * structure, popups, or collapse timers. Used when a detail popup is open and an
-     * item update fires — we need badge/status indicators to update but must not destroy
-     * the existing column layout or close the popup.
-     */
+    /** Refresh visible column contents without touching structure, popups, or timers. */
     _refreshColumnsInPlace() {
         if (!this._c2Category?.getItems || !this._c2?.is(':visible'))
             return;
@@ -3892,7 +3791,7 @@ export class LancerHUD {
 
         if (!this._c3SourceItem?.getChildren || !this._c3?.is(':visible'))
             return;
-        // _c3AnchorRow is a c2 row that was just rebuilt above — now detached, skip reposition
+        // _c3AnchorRow points to a c2 row that was just rebuilt; it's detached now, skip reposition.
         this._openCol(this._c3, this._c3SourceItem.getChildren(), null, { reposition: false });
 
         if (!this._c4SourceItem?.getChildren || !this._c4?.is(':visible'))
@@ -3960,20 +3859,16 @@ export class LancerHUD {
     }
 
     _makeCol(label) {
-        return $(`<div class="la-hud-col lancer-scroll" style="${S_COL}"><div class="la-hud-col-label" style="${S_COL_LABEL}">${label}</div></div>`);
+        return $(`<div class="la-hud-col lancer-scroll"><div class="la-hud-col-label">${label}</div></div>`);
     }
 
     _makeRow(label, hasArrow, icon = null, activation = null, badge = null, badgeColor = null, count = 0) {
         const iconHtml = icon ? laHudRenderIcon(icon) : '';
-        const countHtml = hasArrow && count > 0 ? `<span style="opacity:0.35;font-size:0.72em;margin-left:4px;flex-shrink:0;">${count}</span>` : '';
-        const arrow = hasArrow ? `<span style="opacity:0.5;font-size:0.75em;margin-left:2px;flex-shrink:0;">▶</span>` : '';
-        const actHtml = activation
-            ? `<span style="font-size:0.68em;color:#777;font-weight:normal;margin-left:5px;letter-spacing:0;white-space:nowrap;">[${activation}]</span>`
-            : '';
-        const badgeHtml = badge
-            ? `<span style="font-size:0.92em;font-weight:bold;color:${badgeColor ?? '#3a9e6e'};margin-left:6px;flex-shrink:0;white-space:nowrap;letter-spacing:0;">${badge}</span>`
-            : '';
-        const row = $(`<div class="la-hud-row" style="${S_ITEM}">${iconHtml}<span class="la-hud-clip" style="flex:1;overflow:hidden;min-width:0;"><span class="la-hud-pan" style="display:inline-block;white-space:nowrap;padding-right:8px;">${label}${actHtml}</span></span>${badgeHtml}${countHtml}${arrow}</div>`);
+        const countHtml = hasArrow && count > 0 ? `<span class="la-hud-count">${count}</span>` : '';
+        const arrow = hasArrow ? `<span class="la-hud-arrow">▶</span>` : '';
+        const actHtml = activation ? `<span class="la-hud-activation">[${activation}]</span>` : '';
+        const badgeHtml = badge ? `<span class="la-hud-badge" style="color:${badgeColor ?? '#3a9e6e'};">${badge}</span>` : '';
+        const row = $(`<div class="la-hud-row">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${label}${actHtml}</span></span>${badgeHtml}${countHtml}${arrow}</div>`);
         row.on('mouseenter', () => {
             if (!row.hasClass('la-hud-active'))
                 row.css({ background: row.data('hoverBg') ?? BG_HOVER, color: row.data('hoverColor') ?? TEXT_DEFAULT });
@@ -4036,7 +3931,7 @@ export class LancerHUD {
     _applyFavStyle(row) {
         row.css({ position: 'relative' });
         row.find('.la-hud-fav-mark').remove();
-        row.append(`<span class="la-hud-fav-mark" style="position:absolute;top:1px;right:3px;font-size:9px;color:#111;line-height:1;pointer-events:none;">★</span>`);
+        row.append('<span class="la-hud-fav-mark">★</span>');
     }
 
     _clearFavStyle(row) {

@@ -1,15 +1,5 @@
 /* global $, game */
 
-const S_COL_LABEL = [
-    'padding:3px 12px 4px',
-    'background:var(--primary-color)',
-    'color:#fff',
-    'font-size:0.68em',
-    'letter-spacing:1px',
-    'text-transform:uppercase',
-    'font-weight:bold',
-].join(';') + ';';
-
 function relTime(/** @type {number} */ ts) {
     const diff = (Date.now() - ts) / 1000;
     if (diff < 60)    return `${Math.floor(diff)}s ago`;
@@ -73,17 +63,17 @@ export class LogPanel {
             .reverse();
 
         // Panel structure
-        const panel = $(`<div class="la-hud-log-panel" style="display:flex;flex-direction:column;background:#f5f5f5;border:2px solid var(--primary-color);border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.82em;min-width:320px;max-width:400px;"></div>`);
+        const panel = $(`<div class="la-hud-panel la-hud-log-panel"></div>`);
 
         // Header
-        const header = $(`<div style="${S_COL_LABEL}">Log · ${token?.name ?? actor.name}</div>`);
+        const header = $(`<div class="la-hud-col-label">Log · ${token?.name ?? actor.name}</div>`);
         panel.append(header);
 
         // Scrollable list
-        const list = $(`<div style="overflow-y:auto;max-height:420px;padding:4px 0;"></div>`);
+        const list = $(`<div class="la-hud-log-list"></div>`);
 
         if (!messages.length) {
-            list.append(`<div style="font-size:0.9em;color:#666;text-align:center;padding:16px 0;">No log entries.</div>`);
+            list.append(`<div class="la-log-empty">No log entries.</div>`);
         } else {
             for (const msg of messages) {
                 const div = document.createElement('div');
@@ -92,12 +82,12 @@ export class LogPanel {
                 const name = headerEl?.textContent?.trim() ?? 'Action';
                 const time = relTime(msg.timestamp);
 
-                const row = $(`<div style="padding:4px 8px;border-bottom:1px solid #ddd;cursor:pointer;">` +
-                    `<div style="display:flex;justify-content:space-between;align-items:center;">` +
-                    `<span style="font-size:0.9em;font-weight:bold;color:#333;text-transform:uppercase;letter-spacing:0.03em;">${name}</span>` +
-                    `<span style="font-size:0.78em;color:#999;">${time}</span>` +
+                const row = $(`<div class="la-log-row">` +
+                    `<div class="la-log-row__head">` +
+                    `<span class="la-log-row__name">${name}</span>` +
+                    `<span class="la-log-row__time">${time}</span>` +
                     `</div>` +
-                    `<div class="la-log-content" style="max-height:0;overflow:hidden;transition:max-height 0.25s ease;color:#555;font-size:0.85em;margin-top:0;">${msg.content}</div>` +
+                    `<div class="la-log-content">${msg.content}</div>` +
                     `</div>`);
 
                 row.on('mouseenter', () => {

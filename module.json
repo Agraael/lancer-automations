@@ -26,7 +26,8 @@
     ],
     "styles": [
         "styles/codemirror-dark.css",
-        "styles/interactive-tools.css"
+        "styles/interactive-tools.css",
+        "styles/tah.css"
     ],
     "compatibility": {
         "minimum": "12",

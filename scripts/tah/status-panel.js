@@ -32,15 +32,6 @@ function getBonusDetailStr(/** @type {any} */ b) {
 
 const BG_DEFAULT = '#f5f5f5';
 const BG_HOVER   = 'color-mix(in srgb, var(--primary-color) 18%, #f5f5f5)';
-const S_COL_LABEL = [
-    'padding:3px 12px 4px',
-    'background:var(--primary-color)',
-    'color:#fff',
-    'font-size:0.68em',
-    'letter-spacing:1px',
-    'text-transform:uppercase',
-    'font-weight:bold',
-].join(';') + ';';
 
 export class StatusPanel {
     constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth }) {
@@ -170,7 +161,7 @@ export class StatusPanel {
             const effects = getEffectsForStatus(s.id);
             const lines = [];
             if (s.description)
-                lines.push(`<div style="color:#bbb;margin-bottom:4px;line-height:1.4;">${s.description}</div>`);
+                lines.push(`<div class="la-tooltip-line">${s.description}</div>`);
             for (const eff of effects) {
                 const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const sc = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
@@ -184,23 +175,13 @@ export class StatusPanel {
                     label = 'Bonus Effect';
                 const stackStr = sc && sc > 1 ? ` ×${sc}` : '';
                 if (effects.length > 1 || stackStr)
-                    lines.push(`<div style="font-weight:bold;color:#fff;margin-top:4px;">${label}${stackStr}</div>`);
+                    lines.push(`<div class="la-tooltip-label">${label}${stackStr}</div>`);
                 const dur = la?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
                 if (dur?.label)
-                    lines.push(`<div style="color:#aaa;font-size:0.85em;margin-top:2px;">Duration: ${dur.label}</div>`);
+                    lines.push(`<div class="la-tooltip-duration">Duration: ${dur.label}</div>`);
             }
             return lines.length ? lines.join('') : null;
         };
-
-        // ── Styles ─────────────────────────────────────────────────────────────
-        const S_PANEL      = 'display:flex;flex-direction:row;gap:4px;background:#f5f5f5;border:2px solid var(--primary-color);border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.8em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;';
-        const S_STATUS_GRID = `overflow-y:auto;overflow-x:hidden;max-height:420px;padding:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;min-width:500px;`;
-        const S_STATUS_ROW  = `display:flex;align-items:center;gap:5px;padding:1px 5px;margin-bottom:0;cursor:pointer;border-radius:2px;border-left:3px solid transparent;`;
-        const S_RIGHT_COL   = `display:flex;flex-direction:column;gap:4px;width:160px;flex-shrink:0;padding:4px;`;
-        const S_UTIL_BTN    = `padding:4px 6px;background:var(--primary-color);color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;width:100%;text-align:left;`;
-        const S_CUSTOM_LIST = `overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;`;
-        const S_PANEL_HEADER = `background:var(--primary-color);color:#fff;padding:3px 8px;font-size:0.75em;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;border-radius:1px;margin-bottom:4px;flex-shrink:0;`;
-        const S_TOOLTIP     = 'position:fixed;z-index:9999;background:#1a1a1a;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:260px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);';
 
         // ── In-place helpers ───────────────────────────────────────────────────
         const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive) => {
@@ -217,9 +198,9 @@ export class StatusPanel {
             if (!body)
                 return null;
             const label = game.i18n.localize(s.name ?? s.id);
-            const tt = $(`<div class="la-status-tooltip" style="${S_TOOLTIP}">
-                <div style="font-weight:bold;color:#fff;margin-bottom:4px;">${label}</div>
-                <div style="color:#bbb;line-height:1.4;">${body}</div>
+            const tt = $(`<div class="la-status-tooltip">
+                <div class="la-status-tooltip__title">${label}</div>
+                <div class="la-status-tooltip__body">${body}</div>
             </div>`);
             $('body').append(tt);
             const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
@@ -230,21 +211,21 @@ export class StatusPanel {
         };
 
         // ── Search bar ─────────────────────────────────────────────────────────
-        const searchBar = $(`<input type="text" class="la-status-search" placeholder="Search statuses…" style="width:100%;box-sizing:border-box;padding:4px 8px 4px 28px;background:#1a1a1a;color:#fff;border:none;border-bottom:2px solid var(--primary-color);font-size:0.85em;font-family:inherit;outline:none;">`);
-        const searchWrap = $(`<div style="position:relative;flex-shrink:0;"><i class="fas fa-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#666;font-size:0.8em;pointer-events:none;"></i></div>`);
+        const searchBar = $(`<input type="text" class="la-status-search" placeholder="Search statuses…">`);
+        const searchWrap = $(`<div class="la-status-search-wrap"><i class="fas fa-search la-status-search-icon"></i></div>`);
         searchWrap.append(searchBar);
 
         // ── Status grid ────────────────────────────────────────────────────────
-        const gridEl = $(`<div class="lancer-scroll" style="${S_STATUS_GRID}"></div>`);
+        const gridEl = $(`<div class="lancer-scroll la-hud-status-grid"></div>`);
         for (const s of allStatuses) {
             const active = isActive(s);
             const badge  = getStatusBadge(s);
             const bg     = active ? '#b8d4f0' : BG_DEFAULT;
             const border = active ? '#1a4a7a' : 'transparent';
-            const rowEl = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};" data-status-id="${s.id}">
-                <img src="${s.icon ?? s.img ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
-                <span class="la-status-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${game.i18n.localize(s.name ?? s.id)}</span>
-                <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
+            const rowEl = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};" data-status-id="${s.id}">
+                <img class="la-status-row__img" src="${s.icon ?? s.img ?? ''}" onerror="this.style.display='none'">
+                <span class="la-status-name">${game.i18n.localize(s.name ?? s.id)}</span>
+                <span class="la-status-badge">${badge}</span>
             </div>`);
             rowEl.data('active', active);
 
@@ -332,16 +313,16 @@ export class StatusPanel {
         }
 
         // ── Right column ───────────────────────────────────────────────────────
-        const rightEl = $(`<div style="${S_RIGHT_COL}"></div>`);
+        const rightEl = $(`<div class="la-hud-right-col"></div>`);
 
         const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
         if (laApi?.executeEffectManager) {
-            const emBtn = $(`<button style="${S_UTIL_BTN}">Effect Manager</button>`);
+            const emBtn = $(`<button class="la-hud-util-btn">Effect Manager</button>`);
             emBtn.on('mouseenter', () => playUiSound('statusHover'));
             emBtn.on('click', () => { playUiSound('toggle'); laApi.executeEffectManager(); });
             rightEl.append(emBtn);
         }
-        const clearBtn = $(`<button style="${S_UTIL_BTN}background:#444;">Clear All Effects</button>`);
+        const clearBtn = $(`<button class="la-hud-util-btn la-hud-util-btn--secondary">Clear All Effects</button>`);
         clearBtn.on('mouseenter', () => playUiSound('statusHover'));
         clearBtn.on('click', async () => {
             playUiSound('toggle');
@@ -376,17 +357,17 @@ export class StatusPanel {
                 return parts.join(' ');
             };
 
-            rightEl.append($(`<div style="${S_PANEL_HEADER}">Custom</div>`));
-            const customListEl = $(`<div class="lancer-scroll" style="${S_CUSTOM_LIST}"></div>`);
+            rightEl.append($(`<div class="la-hud-panel-section-header">Custom</div>`));
+            const customListEl = $(`<div class="lancer-scroll la-hud-custom-list"></div>`);
             for (const cs of /** @type {any[]} */ (customSaved)) {
                 const active = isCustomActive(cs.name);
                 const badge  = getCustomBadge(cs.name);
                 const bg     = active ? '#b8d4f0' : BG_DEFAULT;
                 const border = active ? '#1a4a7a' : 'transparent';
-                const cRow = $(`<div style="${S_STATUS_ROW}background:${bg};border-left-color:${border};">
-                    <img src="${cs.icon ?? ''}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0;image-rendering:pixelated;background:#2a2a2a;border-radius:2px;padding:2px;" onerror="this.style.display='none'">
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cs.name}</span>
-                    <span class="la-status-badge" style="font-size:0.78em;color:#555;flex-shrink:0;margin-left:3px;">${badge}</span>
+                const cRow = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};">
+                    <img class="la-status-row__img" src="${cs.icon ?? ''}" onerror="this.style.display='none'">
+                    <span class="la-status-name">${cs.name}</span>
+                    <span class="la-status-badge">${badge}</span>
                 </div>`);
                 cRow.on('mouseenter', function() {
                     playUiSound('statusHover');
@@ -473,7 +454,7 @@ export class StatusPanel {
                 customListEl.append(cRow);
             }
             if (!customSaved.length)
-                customListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No custom statuses</div>`));
+                customListEl.append($(`<div class="la-status-empty">No custom statuses</div>`));
             rightEl.append(customListEl);
         }
 
@@ -484,20 +465,20 @@ export class StatusPanel {
             ...globalBonuses.map((/** @type {any} */ b, i) => ({ b, kind: 'global', idx: i })),
             ...constantBonuses.map((/** @type {any} */ b, i) => ({ b, kind: 'constant', idx: i })),
         ];
-        rightEl.append($(`<div style="${S_PANEL_HEADER}">Bonuses</div>`));
-        const bonusListEl = $(`<div class="lancer-scroll" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:1px;"></div>`);
+        rightEl.append($(`<div class="la-hud-panel-section-header">Bonuses</div>`));
+        const bonusListEl = $(`<div class="lancer-scroll la-bonus-list"></div>`);
         if (!allBonuses.length) {
-            bonusListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No bonuses</div>`));
+            bonusListEl.append($(`<div class="la-status-empty">No bonuses</div>`));
         } else {
             for (const { b, kind } of allBonuses) {
                 const detail = getBonusDetailStr(b);
-                const kindBadge = kind === 'constant' ? ' <span style="opacity:0.6;font-size:0.85em;">(const)</span>' : '';
-                const row = $(`<div style="font-size:0.75em;padding:2px 4px;line-height:1.4;display:flex;align-items:flex-start;gap:3px;" title="${b.name}: ${detail}">
-                    <div style="flex:1;">
+                const kindBadge = kind === 'constant' ? ' <span class="la-bonus-row__kind">(const)</span>' : '';
+                const row = $(`<div class="la-bonus-row" title="${b.name}: ${detail}">
+                    <div class="la-bonus-row__body">
                         <b>${b.name}</b>${kindBadge}<br>
-                        <span style="color:#666;">${detail}</span>
+                        <span class="la-bonus-row__detail">${detail}</span>
                     </div>
-                    <i class="la-bonus-del fas fa-trash" style="cursor:pointer;color:var(--primary-color);opacity:0.45;flex-shrink:0;padding:2px;font-size:0.9em;" title="Delete bonus"></i>
+                    <i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>
                 </div>`);
                 row.find('.la-bonus-del').on('mouseenter', function() { $(this).css('opacity', '1'); })
                     .on('mouseleave', function() { $(this).css('opacity', '0.45'); })
@@ -509,7 +490,7 @@ export class StatusPanel {
                             await removeConstantBonus(actor, b.id);
                         row.remove();
                         if (!bonusListEl.children().length)
-                            bonusListEl.append($(`<div style="font-size:0.78em;color:#888;padding:4px;">No bonuses</div>`));
+                            bonusListEl.append($(`<div class="la-status-empty">No bonuses</div>`));
                     });
                 bonusListEl.append(row);
             }
@@ -517,9 +498,9 @@ export class StatusPanel {
         rightEl.append(bonusListEl);
 
         // ── Assemble panel ──────────────────────────────────────────────────────
-        const panel = $(`<div style="${S_PANEL}"></div>`);
-        const leftWrap = $(`<div style="display:flex;flex-direction:column;flex:1;min-width:0;"></div>`);
-        const header = $(`<div style="${S_COL_LABEL}">Statuses</div>`);
+        const panel = $(`<div class="la-hud-status-panel"></div>`);
+        const leftWrap = $(`<div class="la-status-leftwrap"></div>`);
+        const header = $(`<div class="la-hud-col-label">Statuses</div>`);
         searchBar.on('input', function () {
             const q = String($(this).val()).toLowerCase().trim();
             gridEl.find('[data-status-id]').each(function () {
@@ -558,13 +539,9 @@ export class StatusPanel {
         const hasSC = !!game.modules.get('statuscounter')?.active;
         const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
-        const S_PANEL = 'background:#2a2a2a;border:1px solid var(--primary-color);border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.6);font-family:inherit;font-size:0.78em;font-weight:bold;letter-spacing:0.04em;text-transform:uppercase;min-width:180px;';
-        const S_HDR   = 'background:var(--primary-color);color:#fff;padding:2px 6px;display:flex;justify-content:space-between;align-items:center;border-radius:2px 2px 0 0;';
-        const S_ROW   = 'display:flex;align-items:center;gap:4px;padding:2px 6px;border-bottom:1px solid #3a3a3a;';
-        const S_BTN   = 'display:inline-block;border-radius:2px;cursor:pointer;width:18px;height:16px;line-height:16px;font-weight:bold;flex-shrink:0;text-align:center;user-select:none;';
 
-        const panel = $(`<div style="${S_PANEL}position:absolute;z-index:20;"></div>`);
-        const hdr   = $(`<div style="${S_HDR}">${statusName} <span class="la-sub-close" style="cursor:pointer;margin-left:8px;opacity:0.8;">✕</span></div>`);
+        const panel = $(`<div class="la-hud-sub-panel"></div>`);
+        const hdr   = $(`<div class="la-hud-sub-header">${statusName} <span class="la-sub-close">✕</span></div>`);
         const body  = $(`<div></div>`);
         panel.append(hdr, body);
         hdr.find('.la-sub-close').on('click', () => {
@@ -585,12 +562,12 @@ export class StatusPanel {
                 else if (la?.linkedBonusId)
                     label = 'Bonus';
                 const stack = getStack(eff);
-                const row = $(`<div style="${S_ROW}" data-eid="${eff.id}">
-                    <span style="flex:1;color:#ccc;text-transform:none;letter-spacing:0;">${label}</span>
-                    <span style="color:#fff;min-width:18px;text-align:center;">×${stack}</span>
-                    ${hasSC ? `<span class="la-sub-minus" style="${S_BTN}background:#555;color:#fff;">−</span>` : ''}
-                    ${hasSC ? `<span class="la-sub-plus"  style="${S_BTN}background:#3a6a3a;color:#fff;">+</span>` : ''}
-                    <span class="la-sub-del" style="${S_BTN}background:#6a2a2a;color:#fff;">✕</span>
+                const row = $(`<div class="la-hud-sub-row" data-eid="${eff.id}">
+                    <span class="la-sub-label">${label}</span>
+                    <span class="la-sub-stack">×${stack}</span>
+                    ${hasSC ? `<span class="la-sub-minus la-sub-btn la-sub-btn--minus">−</span>` : ''}
+                    ${hasSC ? `<span class="la-sub-plus la-sub-btn la-sub-btn--plus">+</span>` : ''}
+                    <span class="la-sub-del la-sub-btn la-sub-btn--del">✕</span>
                 </div>`);
                 row.find('.la-sub-minus').on('click', async () => {
                     const e = /** @type {any} */ (actor.effects).get(eff.id);

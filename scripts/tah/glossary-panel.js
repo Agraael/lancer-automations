@@ -2,16 +2,6 @@
 
 import { playUiSound } from './sound.js';
 
-const S_COL_LABEL = [
-    'padding:3px 12px 4px',
-    'background:var(--primary-color)',
-    'color:#fff',
-    'font-size:0.68em',
-    'letter-spacing:1px',
-    'text-transform:uppercase',
-    'font-weight:bold',
-].join(';') + ';';
-
 /** Pull every visible scan journal entry. */
 function _collectVisibleScans() {
     /** @type {any[]} */
@@ -75,15 +65,15 @@ export class GlossaryPanel {
 
         const scans = _collectVisibleScans();
 
-        const panel = $(`<div class="la-hud-glossary-panel" style="display:flex;flex-direction:column;background:#f5f5f5;border:2px solid var(--primary-color);border-radius:3px;box-shadow:0 4px 16px rgba(0,0,0,0.45);font-family:inherit;font-size:0.82em;width:480px;"></div>`);
-        panel.append(`<div style="${S_COL_LABEL}">Glossary &middot; Scanned Units</div>`);
+        const panel = $(`<div class="la-hud-panel la-hud-glossary-panel"></div>`);
+        panel.append(`<div class="la-hud-col-label">Glossary &middot; Scanned Units</div>`);
 
-        const searchWrap = $(`<div style="padding:6px 8px;box-sizing:border-box;"><input type="text" placeholder="Search by name…" style="width:100%;padding:5px 8px;border:1px solid #999;border-radius:3px;background:#fff;color:#222;font-size:0.95em;box-sizing:border-box;"></div>`);
+        const searchWrap = $(`<div class="la-hud-panel-search"><input type="text" placeholder="Search by name…"></div>`);
         const search = searchWrap.find('input');
         panel.append(searchWrap);
 
-        const list = $(`<div class="la-hud-glossary-list" style="overflow-y:auto;padding:4px 6px 8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1;min-height:80px;"></div>`);
-        const empty = $(`<div style="grid-column:1 / -1;font-size:0.9em;color:#666;text-align:center;padding:16px 8px;">No scans visible to you yet.</div>`);
+        const list = $(`<div class="la-hud-glossary-list"></div>`);
+        const empty = $(`<div class="la-hud-glossary-empty">No scans visible to you yet.</div>`);
 
         const renderRows = (filter) => {
             list.empty();
@@ -96,13 +86,13 @@ export class GlossaryPanel {
                 return;
             }
             for (const s of filtered) {
-                const row = $(`<div class="la-glossary-row" style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:#fff;border:1px solid #ddd;border-left:3px solid var(--primary-color);border-radius:2px;cursor:pointer;color:#222;min-width:0;">
-                    <img src="${s.img}" style="width:32px;height:32px;border-radius:3px;border:1px solid #888;object-fit:cover;background:#1a1a1a;flex-shrink:0;" alt="">
-                    <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
-                        <span class="la-hud-clip" style="overflow:hidden;min-width:0;"><span class="la-hud-pan" style="display:inline-block;white-space:nowrap;padding-right:8px;font-weight:600;font-size:0.92em;">${s.name}</span></span>
-                        <span style="font-size:0.72em;color:#777;letter-spacing:0.5px;">${s.scanIndex ? `SCAN ${s.scanIndex}` : s.displayName}</span>
+                const row = $(`<div class="la-glossary-row">
+                    <img class="la-glossary-row__img" src="${s.img}" alt="">
+                    <div class="la-glossary-row__body">
+                        <span class="la-hud-clip"><span class="la-hud-pan la-glossary-row__name">${s.name}</span></span>
+                        <span class="la-glossary-row__sub">${s.scanIndex ? `SCAN ${s.scanIndex}` : s.displayName}</span>
                     </div>
-                    <i class="fas fa-book-open" style="color:#999;font-size:0.85em;flex-shrink:0;"></i>
+                    <i class="fas fa-book-open la-glossary-row__icon"></i>
                 </div>`);
                 row.on('mouseenter', () => {
                     this._cancelCollapse();
