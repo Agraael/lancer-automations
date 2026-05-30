@@ -12,11 +12,10 @@ export function getTokenCells(token) {
     return offsets.map(o => [o.row, o.col]);
 }
 
-// Cache for terrain types to avoid redundant API calls and array searches
 const _terrainCache = {
     solidMap: new Map(),
     timestamp: 0,
-    ttl: 2000 // 2 second TTL is safe for terrain config changes
+    ttl: 2000
 };
 
 function _refreshSolidCache(terrainAPI) {
@@ -40,14 +39,16 @@ function _refreshSolidCache(terrainAPI) {
  * @returns {number}
  */
 export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainHeightTools) {
-    if (!terrainAPI) return 0;
+    if (!terrainAPI)
+        return 0;
     _refreshSolidCache(terrainAPI);
     let maxHeight = 0;
     const cell = terrainAPI.getCell(col, row) || [];
     for (const terrain of cell) {
         if (_terrainCache.solidMap.has(terrain.terrainTypeId)) {
             const h = (terrain.elevation || 0) + (terrain.height || 0);
-            if (h > maxHeight) maxHeight = h;
+            if (h > maxHeight)
+                maxHeight = h;
         }
     }
     return maxHeight;
@@ -64,7 +65,8 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     let maxGroundHeight = 0;
     for (const [x, y] of cells) {
         const h = getHexGroundElevation(y, x, terrainAPI);
-        if (h > maxGroundHeight) maxGroundHeight = h;
+        if (h > maxGroundHeight)
+            maxGroundHeight = h;
     }
     return maxGroundHeight;
 }
@@ -76,17 +78,20 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
  * @returns {boolean}
  */
 export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHeightTools) {
-    if (!terrainAPI) return false;
+    if (!terrainAPI)
+        return false;
     const elevation = token?.document?.elevation || 0;
     const ownCells = getTokenCells(token);
     const ownSet = new Set(ownCells.map(([r, c]) => r + "," + c));
     for (const [r, c] of ownCells) {
         for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
-                if (dr === 0 && dc === 0) continue;
+                if (dr === 0 && dc === 0)
+                    continue;
                 const nr = r + dr;
                 const nc = c + dc;
-                if (ownSet.has(nr + "," + nc)) continue;
+                if (ownSet.has(nr + "," + nc))
+                    continue;
                 if (getHexGroundElevation(nc, nr, terrainAPI) > elevation)
                     return true;
             }
@@ -105,11 +110,13 @@ export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHei
  */
 async function _runDangerousZone(token, damageType, damageValue) {
     const actor = token?.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
     const curRound = game.combat?.round || 0;
     const lastRound = actor.getFlag("lancer-automations", "dangerousZoneRound");
 
-    if (lastRound === curRound && game.combat?.started) return;
+    if (lastRound === curRound && game.combat?.started)
+        return;
 
     if (game.combat?.started) {
         await actor.setFlag("lancer-automations", "dangerousZoneRound", curRound);
@@ -120,7 +127,8 @@ async function _runDangerousZone(token, damageType, damageValue) {
     const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
 
     const StatRollFlow = game.lancer?.flows?.get?.("StatRollFlow");
-    if (!StatRollFlow) return;
+    if (!StatRollFlow)
+        return;
 
     const flow = new StatRollFlow(actor, { path: "system.eng", title: "Dangerous Terrain :: ENG" });
     const completed = await flow.begin();
@@ -132,7 +140,8 @@ async function _runDangerousZone(token, damageType, damageValue) {
         }
 
         const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
-        if (!DamageRollFlow) return;
+        if (!DamageRollFlow)
+            return;
         const dmgFlow = new DamageRollFlow(actor.uuid, {
             title: "Dangerous Terrain",
             damage: [{ val: String(damageValue), type: typeMap[String(damageType).toLowerCase()] || "Kinetic" }],
@@ -156,7 +165,8 @@ async function _runDangerousZone(token, damageType, damageValue) {
  */
 export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
     const actor = token?.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
 
     const immunityBonuses = getImmunityBonuses(actor, "terrain");
     const hasStatusImmunity = !!actor.statuses?.has?.("terrain_immunity");

@@ -84,8 +84,9 @@ export function bindChatMessageStateInterceptor(message, html) {
         return;
     }
 
-    // Use vanilla JS to add a capture-phase listener so it runs before Lancer's jQuery listener
-    const damageBtn = html[0].querySelector(".lancer-damage-flow");
+    // v13's renderChatMessageHTML passes a raw HTMLElement; legacy/wrapped paths pass jQuery.
+    const root = html instanceof HTMLElement ? html : html[0];
+    const damageBtn = root?.querySelector(".lancer-damage-flow");
     if (damageBtn) {
         damageBtn.addEventListener("click", () => {
             ActiveFlowState.current = flowState;

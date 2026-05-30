@@ -1,5 +1,15 @@
 /*global PIXI, libWrapper */
 
+import "./movement/token-ruler.js";
+import "./movement/tactical-distance.js";
+import "./movement/iso-elevation-anim.js";
+import "./movement/elevation.js";
+import "./movement/cost-rules.js";
+import "./movement/movement-actions.js";
+import "./movement/history.js";
+import "./movement/keybindings.js";
+import { moveTokenTo } from "./movement/move-api.js";
+import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybindings.js";
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
@@ -22,9 +32,10 @@ import {
     processDurationEffects,
     initCollapseHook,
     findEffectOnToken,
+    runInOnInitTriggerContext,
 } from "./bonuses/flagged-effects.js";
 import {
-    getMovementPathHexes, drawDebugPath
+    getMovementPathHexes, drawDebugPath, accDiffTargetToken
 } from "./combat/grid-helpers.js";
 import {
     genericBonusStepDamage,
@@ -59,7 +70,7 @@ import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtili
 } from "./activations/flows.js";
 import { DowntimeAPI } from "./tools/downtime.js";
 import { RestAPI } from "./tools/rest.js";
-import { ScanAPI } from "./tools/scan.js";
+import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/reinforcement.js";
 import { CardStackTests } from "../tests/card-stack.js";
@@ -68,6 +79,8 @@ import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/ind
 import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
+import { registerAccDiffTargetButton } from "./activations/accdiff-target-button.js";
+registerAccDiffTargetButton();
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
 import * as actionFX from "./fx/actionFX.js";
@@ -77,6 +90,7 @@ import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settings
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
+import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import './filters/customFilters.js';
 import { checkCompatibility } from "./setup/checkCompatibility.js";
@@ -268,6 +282,10 @@ function getAllSceneTokens() {
 }
 
 async function checkOnInitReactions(token, filterItem = null) {
+    return runInOnInitTriggerContext(() => _checkOnInitReactionsBody(token, filterItem));
+}
+
+async function _checkOnInitReactionsBody(token, filterItem = null) {
     const api = game.modules.get('lancer-automations').api;
     // 1. Check Item-based onInit
     const items = filterItem ? [filterItem] : getReactionItems(token);
@@ -1241,6 +1259,13 @@ async function processEffectConsumption(triggerType, data) {
 }
 
 async function handleTrigger(triggerType, data) {
+    // onInit* triggers fire from system events (token creation, etc.) and shouldn't leak hidden state in chat.
+    if (triggerType?.startsWith('onInit'))
+        return runInOnInitTriggerContext(() => _handleTriggerBody(triggerType, data));
+    return _handleTriggerBody(triggerType, data);
+}
+
+async function _handleTriggerBody(triggerType, data) {
     // runInFlowBody: child flow.begin() from reactions routes to innerChain, avoids parent-await deadlock.
     return runInFlowBody(async () => {
         data.startRelatedFlow = async () => {
@@ -1334,6 +1359,24 @@ function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-automations', 'showCombatStateHudButton', {
+        name: 'Token HUD Combat State Button',
+        hint: 'Foundry\'s default "Toggle Combat State" button on the Token HUD.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'showTargetStateHudButton', {
+        name: 'Token HUD Target State Button',
+        hint: 'Foundry\'s default "Toggle Target State" button on the Token HUD.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'showRevertMovementHudButton', {
         name: 'Revert Movement Button',
         hint: 'The Revert Last Movement / Reset Movement History button on the Token HUD.',
@@ -1411,7 +1454,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'experimentalBoostDetection', {
         name: 'Experimental Boost Detection (WIP)',
-        hint: 'Detects Boost when cumulative drag exceeds base speed. Requires Elevation Ruler.',
+        hint: 'Detects Boost when cumulative drag exceeds base speed.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1420,7 +1463,7 @@ function registerSettings() {
 
     game.settings.register('lancer-automations', 'enableMovementCapDetection', {
         name: 'Movement Cap Detection [beta]',
-        hint: 'Cancel drag movement exceeding the token\'s movement cap. Works best with Elevation Ruler.',
+        hint: 'Cancel drag movement exceeding the token\'s movement cap.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1500,12 +1543,17 @@ function registerSettings() {
             choices: wreckModeChoices,
         });
         game.settings.register('lancer-automations', `wreckTerrain_${cat}`, {
-            name: `${label}: Spawn Terrain`,
-            hint: `Spawn difficult terrain when a ${label} is wrecked.`,
+            name: `${label}: Wreck Difficult Terrain`,
+            hint: `What to leave behind for movement cost when a ${label} is wrecked.`,
             scope: 'world',
             config: false,
-            type: Boolean,
-            default: cat === 'mech' || cat === 'monstrosity',
+            type: String,
+            default: (cat === 'mech' || cat === 'monstrosity') ? 'aura' : 'none',
+            choices: {
+                none: 'Nothing',
+                terrain: 'THT Difficult Terrain',
+                aura: 'Aura on wreck (movement +1)',
+            },
         });
     }
     game.settings.register('lancer-automations', 'wreckAssetsPath', {
@@ -1610,6 +1658,15 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'debugPathHexCalculation', {
         name: 'Debug: Path Hex Calculation',
         hint: 'Draw temporary circles on the map highlighting the calculated path hex steps.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'debugMovement', {
+        name: 'Debug: Movement',
+        hint: 'Console logs from the Lancer cost-rules pipeline, revert flow, and movement recording. Also enables the on-canvas debug overlay (per-cell terrain markers).',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1727,15 +1784,10 @@ export function deserializeTriggerData(data) {
 }
 
 
-// Move history flags on token document:
-//   lancer-automations.moveHistory  = { moves: Array<{ distanceMoved, isDrag, isFreeMovement, boostSet, startPos }> }
-//   lancer-automations.movementCap  = number
-
-// In-memory cache for move history (survives between preUpdateToken calls in multi-segment moves)
+// Bridges multi-segment moves where preUpdateToken fires per-segment.
 const _moveHistoryCache = new Map();
 
-// Per-mover action stack for chained move/activation sequences (e.g. Boost & Move).
-// Only one stack exists at a time. A new push wipes the previous one.
+// Per-mover action stack for chained move/activation sequences. New push wipes the previous one.
 /**
  * @typedef {Object} MoveStackFrame
  * @property {'awaitMove'|'awaitActivation'} kind
@@ -1875,6 +1927,12 @@ function getMovementCap(tokenOrId) {
     return doc?.getFlag('lancer-automations', 'movementCap') ?? 0;
 }
 
+// Used by the token-ruler overlay to look up which past waypoints belong to free/debug moves.
+function getMoveDataList(tokenOrId) {
+    const data = _getMoveHistoryData(tokenOrId);
+    return data.moves || [];
+}
+
 function getMovementHistory(tokenOrId) {
     const data = _getMoveHistoryData(tokenOrId);
     const moves = data.moves || [];
@@ -1988,7 +2046,8 @@ function _handleMovementCapExceeded(token, ctx) {
         return;
     }
 
-    const freeKey = game.keybindings.get('elevationruler', 'freeMovement')?.[0]?.key ?? '[free movement key]';
+    let freeKey = '[free movement key]';
+    try { freeKey = game.keybindings.get('lancer-automations', 'freeMovement')?.[0]?.key ?? freeKey; } catch { /* not registered yet */ }
     const speed = token.actor?.system?.speed ?? 0;
     const isMech = token.actor?.type === 'mech';
     const npcOvercharge = !isMech && token.actor?.type === 'npc'
@@ -2058,12 +2117,12 @@ function _handleMovementCapExceeded(token, ctx) {
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
             if (choiceIdx === 1) {
                 // Ignore: do the move anyway, bypassing the cap (and any further offer).
-                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
                 return;
             }
             if (choiceIdx !== 0)
                 return; // Card cancelled: do nothing.
-            const fireFinalLeg = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+            const fireFinalLeg = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
             if (snapMid) {
                 // Cap not yet exhausted: leg1 -> Boost -> leg2.
                 _pushMoveStack(token.id, [
@@ -2071,7 +2130,7 @@ function _handleMovementCapExceeded(token, ctx) {
                     { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: fireFinalLeg },
                     { kind: 'awaitMove' }
                 ]);
-                await _rulerMove(token, snapMid, { _skipBoostOffer: true, useElevationRuler: true });
+                await _rulerMove(token, snapMid, { _skipBoostOffer: true, isDrag: true, useRuler: true });
             } else {
                 // Cap already exhausted: skip leg1, fire Boost immediately.
                 _pushMoveStack(token.id, [
@@ -2101,13 +2160,13 @@ function _handleMovementCapExceeded(token, ctx) {
             });
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
             if (choiceIdx === 1) {
-                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+                await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
                 return;
             }
             if (choiceIdx !== 0)
                 return; // Card cancelled: do nothing.
-            const mid2Move = () => _rulerMove(token, mid2, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
-            const finalMove = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, useElevationRuler: true });
+            const mid2Move = () => _rulerMove(token, mid2, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
+            const finalMove = () => _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
             const tailFrames = [
                 { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: mid2Move },
                 { kind: 'awaitMove', onSatisfy: fireOvercharge },
@@ -2120,7 +2179,7 @@ function _handleMovementCapExceeded(token, ctx) {
                     { kind: 'awaitMove', onSatisfy: fireBoost },
                     ...tailFrames
                 ]);
-                await _rulerMove(token, mid1, { _skipBoostOffer: true, useElevationRuler: true });
+                await _rulerMove(token, mid1, { _skipBoostOffer: true, isDrag: true, useRuler: true });
             } else {
                 _pushMoveStack(token.id, tailFrames);
                 await fireBoost();
@@ -2134,74 +2193,64 @@ function _handleMovementCapExceeded(token, ctx) {
     }
 }
 
-// Move a token from code. Plain `tokenDoc.update` by default so the destination
-// lands exactly where asked (ER's moveTokenTo simulates a drag and mis-snaps
-// non-size-1 tokens). Pass `useElevationRuler: true` to go through ER's pipeline
-// (only safe for size-1 tokens that need cost tracking).
 /**
+ * Move a token from code. `useRuler` routes through Token.move() (Lancer cost rules apply);
+ * otherwise plain TokenDocument.update for an exact land.
  * @param {any} token
  * @param {{x: number, y: number, elevation?: number}} destination
  * @param {Record<string, any>} [extraOpts]
  */
 export async function _rulerMove(token, destination, extraOpts = {}) {
-    const { useElevationRuler, ...passthroughOpts } = extraOpts;
-    const erApi = useElevationRuler && game.modules.get('elevationruler')?.active
-        ? game.modules.get('elevationruler')?.api
-        : null;
-    if (erApi?.moveTokenTo) {
-        const Settings = erApi.Settings;
-        const prevForceFree = Settings?.FORCE_FREE_MOVEMENT;
-        const wantFree = !!passthroughOpts.lancerFreeMovement;
-        const previouslyControlled = canvas.tokens.controlled.map(t => t.id);
-        const needsTempControl = !token.controlled;
-        try {
-            if (wantFree && Settings)
-                Settings.FORCE_FREE_MOVEMENT = true;
-            if (needsTempControl)
-                token.control({ releaseOthers: true });
-            await erApi.moveTokenTo(token, destination, passthroughOpts);
-        } finally {
-            if (wantFree && Settings)
-                Settings.FORCE_FREE_MOVEMENT = prevForceFree;
-            if (needsTempControl) {
-                canvas.tokens.releaseAll();
-                for (const id of previouslyControlled) {
-                    canvas.tokens.get(id)?.control({ releaseOthers: false });
-                }
-            }
-        }
+    const { useRuler, ...passthroughOpts } = extraOpts;
+    if (useRuler) {
+        await moveTokenTo(token, destination, passthroughOpts);
     } else {
         const update = { x: destination.x, y: destination.y };
         if (destination.elevation !== undefined) {
             update.elevation = destination.elevation;
         }
-        await token.document.update(update, { isDrag: true, ...passthroughOpts });
+        // No implicit isDrag; caller opts in via passthroughOpts for cap consumption.
+        await token.document.update(update, passthroughOpts);
     }
 }
 
-/**
- * Compute move distances from preUpdateToken options.
- * Uses ElevationRuler segment data when available, falls back to 2D grid measurement.
- * @param {Record<string, any>} options
- * @param {{x: number, y: number}} startPos
- * @param {{x: number, y: number}} endPos
- * @param {number} [elevationFallback]
- * @returns {{ distanceMoved: number, movementCost: number, isFreeMovement: boolean }}
- *   distanceMoved: physical squares traveled (no terrain penalty overhead)
- *   movementCost:  squares consumed from movement cap (includes terrain penalty)
- */
-function _computeMoveData(options, startPos, endPos, elevationFallback = 0) {
-    const isFreeMovement = options.lancerFreeMovement
-        ?? (game.modules.get('elevationruler')?.api?.Settings?.FORCE_FREE_MOVEMENT || false);
+function _computeMoveData(options, startPos, endPos, elevationFallback = 0, tokenDoc = null) {
+    const isFreeMovement = !!options.lancerFreeMovement || isForceFreeMovement();
+    const sceneDist = canvas.scene?.grid?.distance ?? 1;
 
+    // Knockback/teleport set a forced cost via these options.
     if (options.lancerSegmentDistance !== undefined) {
         const distanceMoved = Math.max(0, Math.round(options.lancerSegmentCost - (options.lancerTerrainPenalty ?? 0)));
         const movementCost = Math.round(options.lancerSegmentCost);
         return { distanceMoved, movementCost, isFreeMovement };
     }
 
-    // Fallback: no ElevationRuler data available
-    const dist2D = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / canvas.scene.grid.distance);
+    if (tokenDoc?.measureMovementPath) {
+        try {
+            const wpStart = {
+                x: startPos.x,
+                y: startPos.y,
+                elevation: startPos.elevation ?? tokenDoc.elevation ?? 0,
+                width: tokenDoc.width,
+                height: tokenDoc.height
+            };
+            const wpEnd = {
+                x: endPos.x,
+                y: endPos.y,
+                elevation: endPos.elevation ?? wpStart.elevation,
+                width: tokenDoc.width,
+                height: tokenDoc.height
+            };
+            const result = tokenDoc.measureMovementPath([wpStart, wpEnd]);
+            const cost = Number(result?.cost) || 0;
+            const terrainPenalty = Number(result?.lancerTerrainPenalty) || 0;
+            const movementCost = Math.round(cost / sceneDist);
+            const distanceMoved = Math.max(0, Math.round((cost - terrainPenalty) / sceneDist));
+            return { distanceMoved, movementCost, isFreeMovement };
+        } catch { /* fall through */ }
+    }
+
+    const dist2D = Math.round(canvas.grid.measurePath([startPos, endPos], {}).distance / sceneDist);
     const distanceMoved = dist2D + Math.floor(elevationFallback);
     return { distanceMoved, movementCost: distanceMoved, isFreeMovement };
 }
@@ -2221,14 +2270,17 @@ async function handleTokenMove(document, change, options, userId) {
     if (!token)
         return;
 
-    const startPos = { x: document.x, y: document.y };
-    const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
+    const startPos = { x: document.x, y: document.y, elevation: document.elevation };
+    const endPos = { x: change.x ?? document.x, y: change.y ?? document.y, elevation: change.elevation ?? document.elevation };
     const elevationMoved = change.elevation ?? document.elevation;
 
-    const isDrag = !options.forceUnintentional && ('rulerSegment' in options || options.isDrag);
+    const v13Method = options.movement?.[document.id]?.method;
+    const isDrag = !options.forceUnintentional && (
+        'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
+    );
     const isTeleport = !!options.teleport;
 
-    const { distanceMoved, movementCost, isFreeMovement } = _computeMoveData(options, startPos, endPos, elevationMoved);
+    const { distanceMoved, movementCost, isFreeMovement } = _computeMoveData(options, startPos, endPos, elevationMoved, document);
 
     const moveInfo = {
         isInvoluntary: !isDrag,
@@ -2251,20 +2303,18 @@ async function handleTokenMove(document, change, options, userId) {
     const existingData = (inCombat ? (_moveHistoryCache.get(tokenId) ?? tokenDoc.getFlag('lancer-automations', 'moveHistory')) : null) ?? { moves: [] };
     const existingMoves = existingData.moves || [];
 
-    // Compute prior intentional cost for boost detection (uses movementCost to count terrain correctly)
+    // Use movementCost (not raw distance) so terrain penalty counts toward the boost threshold.
     const prevIntentional = existingMoves
         .filter(m => m.isDrag && !m.isFreeMovement)
         .reduce((acc, m) => acc + (m.movementCost ?? m.distanceMoved), 0);
 
-    // Boost detection only when enabled
     if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
         const speed = token.actor?.system?.speed || 0;
         const currentIntentional = prevIntentional + movementCost;
 
         const boostSet = [];
         if (speed > 0) {
-            // Standard move is 1-speed, boost 1 is speed+1 to 2*speed, boost 2 is 2*speed+1 to 3*speed, etc.
-            // Boost N is used when intentional > N * speed
+            // Boost N is consumed when intentional cost crosses N*speed.
             const prevBoostCount = prevIntentional > 0 ? Math.floor((prevIntentional - 1) / speed) : 0;
             const newBoostCount = currentIntentional > 0 ? Math.floor((currentIntentional - 1) / speed) : 0;
             for (let n = prevBoostCount + 1; n <= newBoostCount; n++) {
@@ -2274,16 +2324,17 @@ async function handleTokenMove(document, change, options, userId) {
         moveInfo.boostSet = boostSet;
         moveInfo.isBoost = boostSet.length > 0;
 
-        // Debug notification for boost detection testing
         if (game.settings.get('lancer-automations', 'debugBoostDetection')) {
             ui.notifications.info(`${token.name}: moved ${distanceMoved} (cost ${movementCost}), intentional ${prevIntentional + movementCost}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
         }
     }
 
-    // Build updated move history and persist (only in combat; outside combat, keep in-memory only for the trigger call)
+    // movementId is generated in #preUpdateMovement, after our preUpdateToken hook;
+    // leave null here and let updateToken stamp it once finalized.
     const newData = {
         ...existingData,
         moves: [...existingMoves, {
+            movementId: null,
             distanceMoved,
             movementCost,
             isDrag,
@@ -2299,7 +2350,6 @@ async function handleTokenMove(document, change, options, userId) {
         if (tokenDoc.isOwner && isLastSegment) {
             tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
         }
-        // First regular intentional move of the turn consumes the move action.
         if (isDrag && !isFreeMovement && !isTeleport && prevIntentional === 0)
             consumeAction(token, 'move');
     }
@@ -2309,8 +2359,6 @@ async function handleTokenMove(document, change, options, userId) {
 
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
 
-    // Move leg complete: advance the action stack if this token is the awaited mover.
-    // Fire-and-forget so this hook returns promptly.
     _advanceMoveStack('awaitMove', token.id, false);
 }
 
@@ -2321,7 +2369,7 @@ async function onAttackStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
     const targetInfos = state.data?.acc_diff?.targets || [];
-    const targets = targetInfos.map(t => t.target).filter(Boolean);
+    const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
 
     const actionData = {
         type: state.data?.type || "attack",
@@ -2374,7 +2422,7 @@ async function onHitMissStep(state) {
 
     for (let i = 0; i < hitResults.length; i++) {
         const hitResult = hitResults[i];
-        const targetToken = targetInfos[i]?.target;
+        const targetToken = hitResult?.target ?? accDiffTargetToken(targetInfos[i]);
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
 
         if (!targetToken)
@@ -2688,7 +2736,7 @@ async function onTechAttackStep(state) {
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const techItem = item;
     const targetInfos = state.data?.acc_diff?.targets || [];
-    const targets = targetInfos.map(t => t.target).filter(Boolean);
+    const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
 
     const actionData = {
         type: state.data?.type || "tech",
@@ -2741,7 +2789,7 @@ async function onTechHitMissStep(state) {
 
     for (let i = 0; i < hitResults.length; i++) {
         const hitResult = hitResults[i];
-        const targetToken = targetInfos[i]?.target;
+        const targetToken = hitResult?.target ?? accDiffTargetToken(targetInfos[i]);
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
 
         if (!targetToken)
@@ -2992,7 +3040,7 @@ async function onInitAttackStep(state) {
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
-    const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+    const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
     if (!state.data)
         state.data = {};
     if (!state.data._cancelledBy)
@@ -3049,7 +3097,7 @@ async function onInitTechAttackStep(state) {
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const techItem = item;
-    const targets = state.data?.acc_diff?.targets?.map(t => t.target).filter(Boolean) || [];
+    const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
     if (!state.data)
         state.data = {};
     if (!state.data._cancelledBy)
@@ -3440,6 +3488,25 @@ async function throwChoiceStep(state) {
     return true;
 }
 
+// After v3's initAttackData builds acc_diff, mirror LA's throw choice into the native
+// thrown flag so v3's attack HUD opens with the checkbox ticked (and range/rules update).
+async function syncThrowToAccDiffStep(state) {
+    const isThrow = !!state.la_extraData?.is_throw;
+    const weapon = state.data?.acc_diff?.weapon;
+    if (weapon) weapon.thrown = isThrow;
+    return true;
+}
+
+// After v3's HUD closes, mirror the native thrown flag BACK into LA's is_throw so the user
+// can opt into throw mechanics by ticking the HUD checkbox without going through LA's dialog.
+async function syncAccDiffToThrowStep(state) {
+    if (state.data?.acc_diff?.weapon?.thrown) {
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.is_throw = true;
+    }
+    return true;
+}
+
 async function throwDeployStep(state) {
     if (!state.la_extraData?.is_throw)
         return true;
@@ -3456,15 +3523,15 @@ async function throwDeployStep(state) {
     let deployTarget = null;
     for (let i = 0; i < hitResults.length; i++) {
         if (hitResults[i]?.hit) {
-            const tDoc = targetInfos[i]?.target;
-            deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
+            const tDoc = hitResults[i]?.target ?? accDiffTargetToken(targetInfos[i]);
+            deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
             if (deployTarget)
                 break;
         }
     }
     if (!deployTarget && targetInfos.length > 0) {
-        const tDoc = targetInfos[0]?.target;
-        deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null);
+        const tDoc = accDiffTargetToken(targetInfos[0]);
+        deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
     }
 
     const multipleTargets = targetInfos.length > 1;
@@ -3724,6 +3791,17 @@ function wrapStatRollFlatModifier(flowSteps) {
 
 // Builds DOM matching the Lancer system's Svelte accdiff-flat-bonus structure.
 function _injectStatFlatModRow(dialog, bonus, onChange) {
+    // Detect v3's current svelte scope class from a sibling .accdiff-grid (svelte scope hashes
+    // rebuild on every Lancer release; hardcoding breaks on update).
+    const _scope = (() => {
+        const ref = dialog.querySelector('.accdiff-grid, .accdiff-other-grid');
+        if (!ref) return '';
+        for (const cls of ref.classList) {
+            if (cls.startsWith('svelte-')) return cls;
+        }
+        return '';
+    })();
+
     // Label: identical to the attack dialog's "Flat Modifier" header.
     const label = document.createElement('label');
     label.className = 'flexrow accdiff-weight lancer-border-primary';
@@ -3732,13 +3810,13 @@ function _injectStatFlatModRow(dialog, bonus, onChange) {
 
     // Container grid: matches accdiff-grid accdiff-flat-bonus.
     const grid = document.createElement('div');
-    grid.className = 'la-stat-flat-mod accdiff-grid accdiff-flat-bonus svelte-k5ear2';
+    grid.className = `la-stat-flat-mod accdiff-grid accdiff-flat-bonus ${_scope}`.trim();
 
     // Left column: "Base: +N"
     const leftCol = document.createElement('div');
-    leftCol.className = 'accdiff-other-grid svelte-k5ear2';
+    leftCol.className = `accdiff-other-grid ${_scope}`.trim();
     const leftSpan = document.createElement('span');
-    leftSpan.className = 'svelte-k5ear2';
+    leftSpan.className = _scope;
     const leftB = document.createElement('b');
     leftB.textContent = 'Base:';
     leftSpan.appendChild(leftB);
@@ -3747,27 +3825,27 @@ function _injectStatFlatModRow(dialog, bonus, onChange) {
 
     // Middle column: input + plus/minus buttons
     const midCol = document.createElement('div');
-    midCol.className = 'accdiff-other-grid accdiff-flat-mod svelte-k5ear2';
+    midCol.className = `accdiff-other-grid accdiff-flat-mod ${_scope}`.trim();
     midCol.style.position = 'relative';
     const input = document.createElement('input');
-    input.className = 'accdiff-flat-mod__input svelte-k5ear2';
+    input.className = `accdiff-flat-mod__input ${_scope}`.trim();
     input.type = 'number';
     input.value = '0';
     const plusBtn = document.createElement('button');
-    plusBtn.className = 'accdiff-flat-mod__plus svelte-k5ear2';
+    plusBtn.className = `accdiff-flat-mod__plus ${_scope}`.trim();
     plusBtn.type = 'button';
-    plusBtn.innerHTML = '<i class="fas fa-plus svelte-k5ear2"></i>';
+    plusBtn.innerHTML = `<i class="fas fa-plus ${_scope}"></i>`;
     const minusBtn = document.createElement('button');
-    minusBtn.className = 'accdiff-flat-mod__minus svelte-k5ear2';
+    minusBtn.className = `accdiff-flat-mod__minus ${_scope}`.trim();
     minusBtn.type = 'button';
-    minusBtn.innerHTML = '<i class="fas fa-minus svelte-k5ear2"></i>';
+    minusBtn.innerHTML = `<i class="fas fa-minus ${_scope}"></i>`;
     midCol.append(input, plusBtn, minusBtn);
 
     // Right column: "Total: +N"
     const rightCol = document.createElement('div');
-    rightCol.className = 'accdiff-other-grid svelte-k5ear2';
+    rightCol.className = `accdiff-other-grid ${_scope}`.trim();
     const rightSpan = document.createElement('span');
-    rightSpan.className = 'svelte-k5ear2';
+    rightSpan.className = _scope;
     const rightB = document.createElement('b');
     rightB.textContent = 'Total:';
     rightSpan.appendChild(rightB);
@@ -3989,6 +4067,8 @@ function insertModuleFlowSteps(flowSteps, flows) {
     // Register Throw steps
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
+    flowSteps.set('lancer-automations:syncThrowToAccDiff', syncThrowToAccDiffStep);
+    flowSteps.set('lancer-automations:syncAccDiffToThrow', syncAccDiffToThrowStep);
 
     // Register generic accuracy steps
     flowSteps.set('lancer-automations:genericAccuracyStepAttack', genericAccuracyStepAttack);
@@ -4019,6 +4099,12 @@ function insertModuleFlowSteps(flowSteps, flows) {
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:genericBonusStepDamage');
 
     flows.get('WeaponAttackFlow')?.insertStepBefore('initAttackData', 'lancer-automations:throwChoice');
+    // After acc_diff exists (built by initAttackData / onInitAttack), copy LA's throw choice
+    // into the native thrown flag so v3's attack HUD reflects it.
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onInitAttack', 'lancer-automations:syncThrowToAccDiff');
+    // After the HUD closes, mirror back: if the user manually ticked Thrown, set LA's is_throw
+    // so the throwDeploy step runs.
+    flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:syncAccDiffToThrow');
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
     flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
     flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:throwDeploy');
@@ -4121,15 +4207,11 @@ function openResetMovementDialog(token) {
                 label: "Reset History",
                 callback: () => clearMovementHistory(token, false)
             },
-            ...(game.modules.get('elevationruler')?.active
-                && game.settings.get('elevationruler', 'token-ruler-combat-history')
-                ? {
-                    revert: {
-                        icon: '<i class="fas fa-undo-alt"></i>',
-                        label: "Reset & Revert All",
-                        callback: () => clearMovementHistory(token, true)
-                    },
-                } : {}),
+            revert: {
+                icon: '<i class="fas fa-undo-alt"></i>',
+                label: "Reset & Revert All",
+                callback: () => clearMovementHistory(token, true)
+            },
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
                 label: "Cancel"
@@ -4150,7 +4232,22 @@ Hooks.on('init', () => {
     registerSettingsMenus(); // Grouped Activations / Combat / Deployables menus
     registerTourBootstrap();
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
+    registerIsoSettings(); // Isometric-perspective compat toggles
     registerFlowStatePersistence();
+
+    // THT v0.7.6 references tokenElevationChange setting but forgot to register it. Shim it.
+    if (game.modules.get('terrain-height-tools')?.active) {
+        try {
+            game.settings.register('terrain-height-tools', 'tokenElevationChange', {
+                name: 'SETTINGS.TokenElevationChange.Name',
+                hint: 'SETTINGS.TokenElevationChange.Hint',
+                scope: 'world',
+                type: Boolean,
+                config: false,
+                default: false,
+            });
+        } catch (e) { /* already registered */ }
+    }
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
@@ -4162,73 +4259,10 @@ Hooks.on('init', () => {
     }
     patchStatRollCardTemplate();
 
-    if (game.modules.get("elevationruler")?.active) {
-        Hooks.once("ready", () => {
-            const MovePenalty = game.modules.get("elevationruler")?.api?.MovePenalty;
-            if (!MovePenalty)
-                return;
-            CONFIG.elevationruler.MovePenalty = MovePenalty;
-
-            /**
-             * @param {string} name
-             * @param {(base: (token: any) => boolean) => (token: any) => boolean} build
-             */
-            const wrap = (name, build) => {
-                if (typeof MovePenalty[name] !== "function")
-                    return;
-                const base = MovePenalty[name].bind(MovePenalty);
-                MovePenalty[name] = build(base);
-            };
-
-            wrap("isFlying", base => function(token) {
-                if (base(token))
-                    return true;
-                if (token?.actor?.statuses?.has("flying"))
-                    return true;
-                if (token?.actor?.statuses?.has("hover"))
-                    return true;
-                return false;
-            });
-
-            if (typeof MovePenalty.getFlyingStep === "function") {
-                MovePenalty.getFlyingStep = function(token) {
-                    const speed = token?.actor?.system?.speed ?? 0;
-                    if (speed <= 0)
-                        return 0;
-                    const perCell = canvas?.grid?.distance ?? 1;
-                    return speed * perCell;
-                };
-            }
-
-            wrap("isClimbingImmune", base => function(token) {
-                if (base(token))
-                    return true;
-                if (token?.actor?.statuses?.has("climber"))
-                    return true;
-                if (getImmunityBonuses(token?.actor, "elevation").length > 0)
-                    return true;
-                return false;
-            });
-
-            wrap("isTerrainImmune", base => function(token) {
-                if (base(token))
-                    return true;
-                if (token?.actor?.statuses?.has("terrain_immunity"))
-                    return true;
-                if (token?.actor?.statuses?.has("surefoot"))
-                    return true;
-                if (getImmunityBonuses(token?.actor, "terrain").length > 0)
-                    return true;
-                return false;
-            });
-        });
-    }
-
-
     game.keybindings.register('lancer-automations', 'resetMovement', {
         name: 'Reset Movement',
         hint: 'Open the movement history reset dialog for the selected token.',
-        editable: [{ key: 'KeyR' }],
+        editable: [{ key: 'KeyH' }],
         onDown: () => {
             const token = canvas.tokens?.controlled[0];
             if (!token) {
@@ -4251,6 +4285,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     registerUseAmmoFlow(flowSteps, flows); // Ammo flow
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
     registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
+    registerScanFlowSteps(flowSteps, flows); // Override v3's printScanCard + post-process journal
 });
 
 async function _consumeFlowAction(flow, success) {
@@ -4261,6 +4296,10 @@ async function _consumeFlowAction(flow, success) {
     const token = _flowSourceToken(flow);
     if (!token)
         return;
+    if (flow?.constructor?.name === 'StabilizeFlow') {
+        await consumeAction(token, 'full');
+        return;
+    }
     const label = _flowResolveActivationLabel(flow);
     if (label === 'Quick' || label === 'Quick Tech' || label === 'Invade')
         await consumeAction(token, 'quick');
@@ -4273,6 +4312,7 @@ Hooks.on('lancer.postFlow.TechAttackFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.SimpleActivationFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.CoreActiveFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.TalentFlow', _consumeFlowAction);
+Hooks.on('lancer.postFlow.StabilizeFlow', _consumeFlowAction);
 
 // Workaround for `lancer-alternative-sheets` reading prototypeToken on null compendium actors.
 function patchFromUuidSyncForCompendiumActors() {
@@ -4301,6 +4341,23 @@ Hooks.once('ready', async () => {
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();
 
+    // Lancer system v3 registers a renderCombatDock handler that calls html.find() expecting
+    // jQuery; v13 passes HTMLElement. libWrap Hooks.callAll to wrap the html arg for that hook.
+    if (typeof libWrapper !== 'undefined') {
+        try {
+            libWrapper.register('lancer-automations', 'Hooks.callAll', function (wrapped, hook, ...args) {
+                if (hook === 'renderCombatDock' && args[1] instanceof HTMLElement) {
+                    args[1] = $(args[1]);
+                }
+                return wrapped(hook, ...args);
+            }, 'WRAPPER');
+        } catch (e) {
+            console.warn('lancer-automations | Could not wrap Hooks.callAll for renderCombatDock fix:', e);
+        }
+    }
+
+    // Late flow injection: gated on a setting, so we wait until 'ready' (settings are guaranteed
+    // registered by then). `lancer.registerFlows` can fire before LA's init in some load orders.
     if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation')) {
         const flows = game.lancer?.flows;
         flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
@@ -4818,6 +4875,7 @@ Hooks.on('ready', async () => {
         getCumulativeMoveData,
         getIntentionalMoveData,
         getMovementHistory,
+        getMoveDataList,
         getMovementCap,
         increaseMovementCap,
         initMovementCap,
@@ -4829,6 +4887,8 @@ Hooks.on('ready', async () => {
         getActiveGMId,
         getTokenOwnerUserId,
         delayedTokenAppearance,
+        getIsoProvider,
+        isoLabelTransform,
         // Tests
         tests: {
             cardStack: CardStackTests,
@@ -4836,6 +4896,12 @@ Hooks.on('ready', async () => {
         }
     });
     initSocket();
+    // Token rulers were drawn at canvasReady, before this api existed. Force a refresh so
+    // _getSegmentStyle reruns with LA's move-data lookups available (otherwise free-move trails
+    // render as tier 1 blue until the next drag).
+    for (const tok of canvas.tokens?.placeables ?? []) {
+        tok.renderFlags?.set?.({ refreshRuler: true });
+    }
     // Defer to next tick so other 'ready' listeners (e.g. TAH's showAttackHUD wrap) finish first;
     // initFlowQueue must be the outermost wrap on game.lancer.flowSteps.
     setTimeout(initFlowQueue, 0);
@@ -4886,7 +4952,9 @@ function _isLikelyWhiteIcon(src) {
     return false;
 }
 
-Hooks.on('renderChatMessage', (app, html, data) => {
+Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) => {
+    // v13 passes a raw HTMLElement; wrap once so the existing jQuery handler keeps working.
+    const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
     html.find('img').each((_, el) => {
         if (_isLikelyWhiteIcon(el.getAttribute('src')))
             el.classList.add('la-invert-icon');
@@ -4993,9 +5061,18 @@ Hooks.on('renderChatMessage', (app, html, data) => {
     });
 });
 
-Hooks.on('renderTokenHUD', (hud, html, data) => {
+Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) => {
+    // v13 TokenHUD is ApplicationV2 and passes a raw HTMLElement; wrap once so the rest works.
+    const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
     if (!game.settings.get('lancer-automations', 'showStatusEffectsHudButton')) {
-        html.find('.col.right .control-icon[data-action="effects"]').remove();
+        // v13: the button is data-action="togglePalette" data-palette="effects", with a separate palette div.
+        html.find('[data-palette="effects"]').remove();
+    }
+    if (!game.settings.get('lancer-automations', 'showCombatStateHudButton')) {
+        html.find('.control-icon[data-action="combat"]').remove();
+    }
+    if (!game.settings.get('lancer-automations', 'showTargetStateHudButton')) {
+        html.find('.control-icon[data-action="target"]').remove();
     }
 
     // Existing Bonus Menu Button
@@ -5028,11 +5105,8 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         return;
     }
 
-    const hasERHistory = game.modules.get('elevationruler')?.active
-        && game.settings.get('elevationruler', 'token-ruler-combat-history');
-
     const resetButtonHtml = `
-    <div class="control-icon lancer-ruler-reset-button" title="${hasERHistory ? 'Revert Last Movement' : 'Reset Movement History'}">
+    <div class="control-icon lancer-ruler-reset-button" title="Movement History">
         <i class="fas fa-shoe-prints fa-fw"></i>
     </div>
   `;
@@ -5047,11 +5121,7 @@ Hooks.on('renderTokenHUD', (hud, html, data) => {
         if (!token)
             return;
 
-        if (hasERHistory) {
-            await revertMovement(token);
-        } else {
-            clearMovementHistory(token, false);
-        }
+        await revertMovement(token);
     });
 
     btn.on('contextmenu', async (event) => {
@@ -5692,33 +5762,32 @@ Hooks.on('renderTileHUD', (app, html) => {
 });
 
 Hooks.on('renderSettings', (app, html) => {
-    const lancerHeader = html.find('#settings-lancer');
-    if (lancerHeader.length === 0) {
-        return;
-    }
+    // v13: html is HTMLElement; sidebar uses <section class="settings|documentation|access">.
+    const root = html instanceof HTMLElement ? html : html[0];
+    const settingsSection = root.querySelector('section.settings');
+    if (!settingsSection) return;
+    if (settingsSection.querySelector('#lancer-automations-overview')) return; // already added
 
-    const overviewButton = $(`<button id="lancer-automations-overview" data-action="lancer-automations-overview">
-        <i class="fas fa-cog"></i> Lancer Automations
-    </button>`);
-    const managerButton = $(`<button id="lancer-automations-manager" data-action="lancer-automations-manager">
-        <i class="fas fa-tasks"></i> Activation Manager
-    </button>`);
+    const makeBtn = (id, icon, label) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.id = id;
+        b.dataset.action = id;
+        b.innerHTML = `<i class="fa-solid ${icon}" inert></i> ${label}`;
+        return b;
+    };
+    const divider = document.createElement('h4');
+    divider.className = 'divider';
+    divider.textContent = 'Lancer Automations';
+    const overviewButton = makeBtn('lancer-automations-overview', 'fa-cog', 'Lancer Automations');
+    const managerButton = makeBtn('lancer-automations-manager', 'fa-tasks', 'Activation Manager');
+    settingsSection.append(divider, overviewButton, managerButton);
 
-    const helpButton = lancerHeader.find('button#triggler-form');
-    if (helpButton.length > 0) {
-        helpButton.after(managerButton);
-        helpButton.after(overviewButton);
-    } else {
-        lancerHeader.append(overviewButton);
-        lancerHeader.append(managerButton);
-    }
-
-    overviewButton.on('click', (ev) => {
+    overviewButton.addEventListener('click', (ev) => {
         ev.preventDefault();
         new LancerAutomationsConfig().render(true);
     });
-
-    managerButton.on('click', async (ev) => {
+    managerButton.addEventListener('click', (ev) => {
         ev.preventDefault();
         new ReactionConfig().render(true);
     });
@@ -5738,10 +5807,18 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
     //     });
     // }
 
-    if (options.lancerDebugMovement)
+    // [V] debug-movement keybind held OR option set -> skip ALL LA automation (history, triggers).
+    if (options.lancerDebugMovement || isForceDebugMovement()) {
+        options.lancerDebugMovement = true;
         return true;
+    }
 
-    const isDrag = !options.forceUnintentional && ('rulerSegment' in options || options.isDrag);
+    // v13: drag-drops go through Token.move({method:'dragging'}); the operation's `movement`
+    // bag holds the per-token method. v12 set `rulerSegment`/`isDrag` directly on options.
+    const v13Method = options.movement?.[document.id]?.method;
+    const isDrag = !options.forceUnintentional && (
+        'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
+    );
 
     if (options.IgnorePreMove) {
         if (isDrag) {
@@ -5765,11 +5842,11 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
         let cancelUpdate = false;
         const token = canvas.tokens.get(document.id);
 
-        const startPos = { x: document.x, y: document.y };
-        const endPos = { x: change.x ?? document.x, y: change.y ?? document.y };
+        const startPos = { x: document.x, y: document.y, elevation: document.elevation };
+        const endPos = { x: change.x ?? document.x, y: change.y ?? document.y, elevation: change.elevation ?? document.elevation };
         const elevationToMove = change.elevation ?? document.elevation;
 
-        const { distanceMoved: distanceToMove, movementCost: moveToMovementCost, isFreeMovement: moveIsFreeMovement } = _computeMoveData(options, startPos, endPos);
+        const { distanceMoved: distanceToMove, movementCost: moveToMovementCost, isFreeMovement: moveIsFreeMovement } = _computeMoveData(options, startPos, endPos, 0, document);
 
         const isTeleport = !!options.teleport;
         const shouldCalculatePath = game.settings.get('lancer-automations', 'enablePathHexCalculation');
@@ -5802,7 +5879,11 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             if (change.elevation !== undefined) {
                 dest.elevation = change.elevation;
             }
-            await _rulerMove(token, dest, { ...options, _cancelledBy: triggerData._cancelledBy });
+            // continueCallback re-fires the user's original drag; preserve cap-consuming semantics.
+            // STRIP v13-internal options that get frozen with non-configurable defineProperty
+            // when the first call was cancelled. Spreading them would crash v13's #preUpdateMovement.
+            const { _movement, _movementArguments, movement, ...cleanOptions } = options;
+            await _rulerMove(token, dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true });
         };
         triggerData._cancelledBy = options._cancelledBy || [];
         const _cancelMoveCard = _buildCancelFn({
@@ -5849,14 +5930,17 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     if (extraData.elevation !== undefined) {
                         dest.elevation = extraData.elevation;
                     }
-                    await _rulerMove(token, dest, { isUndo: false, isModified: true, ...extraData });
+                    // Rerouted user drag - still consumes cap.
+                    await _rulerMove(token, dest, { isUndo: false, isModified: true, isDrag: true, useRuler: true, ...extraData });
                 }, 50);
             };
             const executeOriginal = async () => {
                 const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
                 if (change.elevation !== undefined)
                     originalUpdate.elevation = change.elevation;
-                await token.document.update(originalUpdate, { ...options, _cancelledBy: triggerData._cancelledBy, isDrag: true });
+                // Strip v13-internal frozen options - see continueCallback for explanation.
+                const { _movement, _movementArguments, movement, ...cleanOptions } = options;
+                await token.document.update(originalUpdate, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true });
             };
 
             if (preConfirm) {
@@ -5937,6 +6021,12 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                 console.error("lancer-automations | Error drawing visual path debug:", err);
             }
         }
+    } else {
+        // Unintentional move (knockback, displacement, etc.): still log to LA history so the
+        // ruler trail can render it white. handleTokenMove stores it with isDrag=false; cap
+        // calculation already filters those out, so this is purely for trail visuals.
+        const token = canvas.tokens.get(document.id);
+        if (token) handleTokenMove(token, change, options, userId);
     }
     return true;
 });
@@ -5944,6 +6034,21 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 Hooks.on('updateToken', async function(document, change, options, userId) {
     if (game.user.id !== userId)
         return;
+
+    // Stamp v13 movementId onto the LA history entry that handleTokenMove just appended.
+    // Done here (not in preUpdateToken) because v13 generates the id in #preUpdateMovement,
+    // which runs after the preUpdateToken hook. Token-ruler uses this to color past free/debug trails.
+    const moveId = document.movement?.id;
+    if (moveId && !options.lancerDebugMovement) {
+        const data = _moveHistoryCache.get(document.id) ?? document.getFlag('lancer-automations', 'moveHistory');
+        const lastEntry = data?.moves?.at(-1);
+        if (lastEntry && !lastEntry.movementId) {
+            lastEntry.movementId = moveId;
+            _moveHistoryCache.set(document.id, data);
+            foundry.utils.setProperty(document.flags, 'lancer-automations.moveHistory', data);
+            if (document.isOwner) document.update({ 'flags.lancer-automations.moveHistory': data });
+        }
+    }
 
     if (change.hidden !== undefined) {
         const tok = canvas.tokens.get(document.id);
@@ -5964,11 +6069,9 @@ Hooks.on('updateToken', async function(document, change, options, userId) {
     if (!token)
         return;
 
-    if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // a bit sketchy but it works
-        const anim = CanvasAnimation.getAnimation(document.object?.animationName);
-        if (anim)
-            await anim.promise;
-    }
+    // v13: wait for the actual movement animation to finish via the token's native promise.
+    // Avoids the v12-era setTimeout hack that guessed at animation duration.
+    const animPromise = token.movementAnimationPromise;
+    if (animPromise) await animPromise;
     await handleTrigger("onUpdate", { triggeringToken: token, document, change, options });
 });

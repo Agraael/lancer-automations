@@ -57,7 +57,8 @@ function _getSampleCount(tokenDoc) {
 function _getSamplePoints(token) {
     const tokenDoc = token.document;
     const count = _getSampleCount(tokenDoc);
-    const size = token.getSize?.() ?? { width: token.w, height: token.h };
+    // v13 deprecated Token#getSize in favor of TokenDocument#getSize.
+    const size = tokenDoc.getSize?.() ?? token.getSize?.() ?? { width: token.w, height: token.h };
     const x0 = tokenDoc.x;
     const y0 = tokenDoc.y;
     const x1 = x0 + size.width;

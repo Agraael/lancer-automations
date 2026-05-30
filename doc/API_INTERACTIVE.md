@@ -56,7 +56,7 @@ await api.placeZone(casterToken, options)
 | <kbd>hooks</kbd> | `Object` | `{}` | templatemacro hooks (see below) |
 | <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }` - ENG check on entry/turn start |
 | <kbd>statusEffects</kbd> | `Array` | `[]` | Status effect IDs applied to tokens inside |
-| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - ElevationRuler cost |
+| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - Lancer Automations Ruler movement cost |
 | <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
 | <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
 

@@ -4,6 +4,7 @@ import { startChoiceCard, startVoteCard } from "./network.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
 import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
 import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
+import { clearTokenMovementHistory, revertLastMovement, getRecordedWaypoints } from "../movement/history.js";
 
 /**
  * Opens a dialog to select and throw a weapon.
@@ -68,7 +69,8 @@ export async function openThrowMenu(actor) {
             const throwRange = thrown?.val || thrown?.num_val || '?';
             const dmg = (profile?.damage ?? []).map(d => `${d.val} ${d.type}`).join(' + ');
             const parts = [];
-            if (dmg) parts.push(dmg);
+            if (dmg)
+                parts.push(dmg);
             parts.push(`Throw ${throwRange}`);
             return `${w.name} (${parts.join(' — ')})`;
         }
@@ -91,76 +93,58 @@ export async function openThrowMenu(actor) {
 /**
  * Revert a token's movement to the previous position in history or a specific destination.
  * @param {Token} token - The token to revert
- * @param {Object} [destination=null] - Optional destination to move to if elevationruler is not active.
+ * @param {Object} [destination=null] - Optional explicit destination override.
  * @returns {Promise<boolean>} - True if history is clean (0 or 1 point remain), false otherwise.
  */
 export async function revertMovement(token, destination = null) {
     if (!token)
         return true;
 
-    // Helper to calculate distance
     const getDist = (p1, p2) => {
-        let d = 0;
-        d = canvas.grid.measurePath([p1, p2], {}).distance;
+        const d = canvas.grid.measurePath([p1, p2], {}).distance;
         return Math.round(d / canvas.scene.grid.distance);
     };
 
-    if (game.modules.get("elevationruler")?.active) {
-        const history = token["elevationruler"]?.measurementHistory;
-        if (history && history.length >= 2) {
-            if (!token.document.isOwner) {
-                ui.notifications.warn(`You do not own ${token.name} and cannot revert their movement.`);
-                return false;
-            }
-            const currentPos = { x: token.document.x, y: token.document.y };
-            // Find the target: skip back past any teleport snaps, then past one real move
-            let idx = history.length - 1;
-            // Skip trailing teleport snaps
-            while (idx > 0 && history[idx].teleport && (history[idx].cost ?? 0) === 0) {
-                idx--;
-            }
-            // Skip the real movement entry
-            if (idx > 0) {
-                idx--;
-            }
-            // Skip any more teleport snaps before the real move
-            while (idx > 0 && history[idx].teleport && (history[idx].cost ?? 0) === 0) {
-                idx--;
-            }
-            const newLastPoint = history[idx];
-            const updates = {};
+    if (!token.document.isOwner) {
+        ui.notifications.warn(`You do not own ${token.name} and cannot revert their movement.`);
+        return false;
+    }
 
-            const topLeft = {
-                x: newLastPoint.x - (token.w * 0.5),
-                y: newLastPoint.y - (token.h * 0.5)
-            };
-            const snappedPos = token.getSnappedPosition(topLeft);
-            updates.x = snappedPos.x;
-            updates.y = snappedPos.y;
-            updates.elevation = CONFIG.GeometryLib.utils.pixelsToGridUnits(newLastPoint.z);
-
-            // Trim history to target (skip ER's isUndo pop since we handle it ourselves)
-            history.length = idx + 1;
-
-            const dist = getDist(currentPos, {x: updates.x, y: updates.y});
-            await token.document.update(updates, /** @type {any} */ ({ isUndo: true, _historyTrimmed: true }));
-            game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
-
-            const remaining = token["elevationruler"]?.measurementHistory;
-            return !remaining || remaining.length < 2;
-        } else {
-            await game.modules.get("elevationruler")?.api?.clearTokenMovementHistory(token);
-            ui.notifications.info("Movement history cleared.");
-            return true;
+    const sourceHistory = token.document._source?._movementHistory ?? [];
+    const recorded = getRecordedWaypoints(token);
+    const _laDebug = (() => {
+        try {
+            return !!game.settings.get('lancer-automations', 'debugMovement');
+        } catch {
+            return false;
         }
-    } else if (destination) {
+    })();
+    if (_laDebug)
+        console.log('lancer-automations | revertMovement', {
+            tokenId: token.id,
+            recordedLen: recorded.length,
+            sourceLen: sourceHistory.length,
+            hasDestination: !!destination
+        });
+
+    if (sourceHistory.length > 0) {
+        const currentPos = { x: token.document.x, y: token.document.y };
+        const isClean = await revertLastMovement(token);
+        const newPos = { x: token.document.x, y: token.document.y };
+        const dist = getDist(currentPos, newPos);
+        game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
+        return isClean;
+    }
+
+    if (destination) {
         const currentPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, destination);
-
         await token.document.update(destination, /** @type {any} */ ({ isUndo: true }));
         game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
         return true;
     }
+
+    ui.notifications.info(`${token.name} has no movement history to revert.`);
     return true;
 }
 
@@ -175,16 +159,7 @@ export async function clearMovementHistory(tokens, revert = false) {
     if (tokenList.length === 0)
         return;
 
-    const elevationRulerActive = game.modules.get("elevationruler")?.active;
     const lancerAutomations = game.modules.get('lancer-automations');
-
-    // Always clear our own movement cap/history even without Elevation Ruler.
-    if (!elevationRulerActive) {
-        for (const token of tokenList) {
-            lancerAutomations?.api?.clearMoveData?.(token.id ?? token.document?.id);
-        }
-        return;
-    }
 
     for (const token of tokenList) {
         if (revert) {
@@ -196,11 +171,8 @@ export async function clearMovementHistory(tokens, revert = false) {
             }
         }
 
-        await game.modules.get("elevationruler")?.api?.clearTokenMovementHistory(token);
-
-        if (lancerAutomations?.api?.clearMoveData) {
-            lancerAutomations.api.clearMoveData(token.document.id);
-        }
+        await clearTokenMovementHistory(token);
+        lancerAutomations?.api?.clearMoveData?.(token.document.id);
     }
     const tokenNames = tokenList.map(t => t.name).join(", ");
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
@@ -264,7 +236,6 @@ export async function openChoiceMenu() {
         `;
         html.find('.la-choice-mode-container').html(modeHtml);
 
-        // Render choices list - No icons, just text with automatic numbers
         const choicesHtml = choicesInfo.map((c, idx) => `
             <div class="form-group la-choice-row" data-idx="${idx}" style="display: flex; gap: 5px; margin-bottom: 2px; align-items: center;">
                 <span style="font-size: 0.9em; font-weight: bold; width: 15px; text-align: right;">${idx + 1}.</span>
@@ -566,8 +537,6 @@ function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberT
     });
     dialog.render(true);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** @returns {Promise<object[]|null>} array of selected mounts, or null if cancelled */
 export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null) {

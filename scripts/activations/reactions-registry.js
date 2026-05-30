@@ -1840,7 +1840,7 @@ export function getDefaultGeneralReactionRegistry() {
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Guardian",
                             unified: false,
-                            radiusOffset: -5,
+                            radiusOffset: -3,
                             innerRadius: "",
                             radius: "0",
                             lineWidth: 6,
@@ -1904,7 +1904,7 @@ export function getDefaultGeneralReactionRegistry() {
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Bulwark",
                             unified: false,
-                            radiusOffset: -5,
+                            radiusOffset: -3,
                             innerRadius: "",
                             radius: "0",
                             lineWidth: 6,

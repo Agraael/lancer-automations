@@ -581,6 +581,27 @@ h2.la-collapsible:hover {
     scrollbar-gutter: stable;
 }
 
+/* Regular options flow in two columns; sections, tables, keybindings, etc. span the full width. */
+.la-config-content .tab.active {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 18px;
+    align-items: start;
+    align-content: start;
+}
+
+.la-config-content .tab:not(.active) {
+    display: none !important;
+}
+
+.la-config-content .tab.active > * {
+    grid-column: 1 / -1;
+}
+
+.la-config-content .tab.active > .la-opt-row {
+    grid-column: auto;
+}
+
 .la-config-footer {
     flex: 0 0 auto;
     display: flex;
@@ -625,6 +646,28 @@ h2.la-collapsible:hover {
     margin-right: 6px;
 }
 
+/* Action buttons (Apply Fixes, Export, etc.) — just a soft shadow contour so they read at rest. */
+.la-config-content .la-config-btn {
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    transition: box-shadow 0.15s ease;
+}
+
+.la-config-content .la-config-btn:hover:not(:disabled) {
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Same soft shadow contour for the Activation Manager buttons. */
+.lancer-action-btn {
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    transition: box-shadow 0.15s ease;
+}
+
+.lancer-action-btn:hover:not(:disabled) {
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45) !important;
+}
+
 
 /* --- Queue pending badge (floats above the card when more cards are waiting) --- */
 .la-queue-badge {
@@ -654,19 +697,50 @@ h2.la-collapsible:hover {
     }
 }
 
-/* --- Card Wrapper (animation & pointer-events) --- */
+/* --- Card Wrapper ---
+   v13: cards are appended into #hudzone (Lancer system v3's HUD container, anchored
+   bottom-right next to the sidebar). Stack naturally as siblings of the Lancer HUDs
+   (DAMAGE ROLL, ATTACK HUD, etc.) so they never overlap. */
 .la-info-card {
     position: relative;
     opacity: 0;
     pointer-events: auto;
     transition: transform 0.2s ease;
-    min-width: 300px;
-    max-width: 380px;
+    width: 360px;
+    max-width: 360px;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+}
+/* First-render fallback: Lancer's own .lancer-hud rule lives in a CSS @layer that may not
+   apply on the very first render. These rules sit outside any @layer so the card always has
+   a proper background even before Lancer's styling fully cascades. */
+.la-info-card .lancer-hud,
+.la-info-card .lancer-hud.window-content {
+    background-color: var(--background-color, #ededed);
+    color: var(--dark-text, #000);
+    border: 1px solid var(--primary-color, #991e2a);
+    border-radius: 4px;
+}
+/* Black header bar (matches Lancer system window-header look). */
+.la-info-card .lancer-header {
+    background: #0a0a0a !important;
+    background-image: none !important;
+    color: #fff !important;
+    border-bottom: 1px solid #2a2a2a !important;
+    border-radius: 4px 4px 0 0;
+    padding: 6px 10px !important;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.la-info-card .lancer-header > span,
+.la-info-card .lancer-header > div,
+.la-info-card .lancer-header i {
+    color: #fff !important;
 }
 
 /* --- Body padding --- */
 .la-info-card-body {
-    padding: 0.3em;
+    padding: 8px 10px;
 }
 
 /* --- Info Row (Range / Count / Type / Size) --- */
@@ -785,6 +859,11 @@ h2.la-collapsible:hover {
     flex: 1;
     font-size: 13px;
     font-weight: 600;
+    color: #000;
+}
+
+/* Leading font icon on the light button; without this it inherits Lancer's light theme color and vanishes. */
+.la-choice-item > i {
     color: #000;
 }
 
@@ -934,6 +1013,11 @@ h2.la-collapsible:hover {
 }
 
 /* ── Rest dialog ───────────────────────────────────────────────────────────── */
+
+.la-rest-dialog {
+    min-width: 700px;
+    box-sizing: border-box;
+}
 
 .la-rest-top-row {
     display: flex;
@@ -1185,15 +1269,117 @@ h2.la-collapsible:hover {
     font-weight: 600;
 }
 
-.la-rest-contribute-row {
+.la-rest-allies-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.la-rest-ally-card {
+    flex: 0 0 auto;
+    width: 120px;
+    background: #fff;
+    border: 1px solid #999;
+    border-top: 3px solid var(--primary-color, #782e22);
+    border-radius: 3px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.la-rest-ally-card.la-rest-ally-active {
+    border-color: var(--primary-color, #782e22);
+    background: #fff8f4;
+}
+
+.la-rest-ally-portrait {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border: 1px solid #888;
+    border-radius: 3px;
+}
+
+.la-rest-ally-name {
+    font-size: 0.78em;
+    font-weight: 700;
+    text-align: center;
+    color: #222;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.la-rest-ally-repairs {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.8em;
+    color: #444;
+    font-weight: 600;
+}
+
+.la-rest-ally-repairs img {
+    width: 14px;
+    height: 14px;
+    filter: invert(0.4);
+}
+
+.la-rest-ally-sep {
+    opacity: 0.5;
+}
+
+.la-rest-ally-stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.la-rest-ally-stepper button {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    line-height: 1;
+    border: 1px solid #888;
+    background: #f0f0f0;
+    border-radius: 3px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.la-rest-ally-stepper button:hover:not(:disabled) {
+    background: var(--primary-color, #782e22);
+    color: #fff;
+    border-color: var(--primary-color, #782e22);
+}
+
+.la-rest-ally-stepper button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.la-rest-ally-pulled {
+    min-width: 18px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.95em;
+}
+
+.la-rest-grant-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 6px;
     font-size: 0.9em;
 }
 
-.la-rest-contribute-row input {
+.la-rest-grant-input {
     width: 60px;
     padding: 4px 6px;
     border: 1px solid #999;
@@ -1201,6 +1387,12 @@ h2.la-collapsible:hover {
     background: #fff;
     text-align: center;
     font-weight: 700;
+}
+
+.la-rest-grant-suffix {
+    color: #666;
+    font-size: 0.85em;
+    font-style: italic;
 }
 
 .la-rest-cost-tally {
@@ -1275,8 +1467,8 @@ h2.la-collapsible:hover {
 
 .la-rest-recovery-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
 }
 
 .la-rest-recovery-cell {

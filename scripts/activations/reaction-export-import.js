@@ -78,8 +78,10 @@ function esc(s) {
 }
 
 function fmtVal(v) {
-    if (v === null || v === undefined) return '<em>—</em>';
-    if (typeof v === 'object') return `<code>${esc(JSON.stringify(v))}</code>`;
+    if (v === null || v === undefined)
+        return '<em>—</em>';
+    if (typeof v === 'object')
+        return `<code>${esc(JSON.stringify(v))}</code>`;
     return `<code>${esc(String(v))}</code>`;
 }
 
@@ -134,22 +136,36 @@ function openImportSummary(data) {
     };
 
     const settingRows = Object.keys(settings).sort().map(k => {
-        const current = (() => { try { return game.settings.get('lancer-automations', k); } catch { return undefined; } })();
+        const current = (() => {
+            try {
+                return game.settings.get('lancer-automations', k);
+            } catch {
+                return undefined;
+            }
+        })();
         return settingRow('settings', k, current, settings[k]);
     });
 
     const externalRows = Object.keys(externalSettings).sort().map(composite => {
         const dot = composite.indexOf('.');
-        if (dot < 0) return '';
+        if (dot < 0)
+            return '';
         const mod = composite.slice(0, dot);
         const key = composite.slice(dot + 1);
-        const current = (() => { try { return game.settings.get(mod, key); } catch { return undefined; } })();
+        const current = (() => {
+            try {
+                return game.settings.get(mod, key);
+            } catch {
+                return undefined;
+            }
+        })();
         return settingRow('externalSettings', composite, current, externalSettings[composite]);
     });
 
     const keybindings = data.keybindings ?? {};
     const fmtBindings = (arr) => {
-        if (!Array.isArray(arr) || !arr.length) return '<em>none</em>';
+        if (!Array.isArray(arr) || !arr.length)
+            return '<em>none</em>';
         return arr.map(b => esc([...(b.modifiers ?? []), b.key].join('+'))).join(', ');
     };
     const keybindingRows = Object.keys(keybindings).sort().map(composite => {
@@ -206,13 +222,19 @@ function openImportSummary(data) {
             html.find('.la-imp-section-all').on('change', (ev) => {
                 const sec = $(ev.currentTarget).data('section');
                 const on = /** @type {HTMLInputElement} */ (ev.currentTarget).checked;
-                html.find(`.la-imp-pick[data-section="${sec}"]`).each((_i, el) => { /** @type {HTMLInputElement} */ (el).checked = on; });
+                html.find(`.la-imp-pick[data-section="${sec}"]`).each((_i, el) => {
+                    /** @type {HTMLInputElement} */ (el).checked = on;
+                });
             });
             html.find('.la-imp-all-on').on('click', () => {
-                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => { /** @type {HTMLInputElement} */ (el).checked = true; });
+                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => {
+                    /** @type {HTMLInputElement} */ (el).checked = true;
+                });
             });
             html.find('.la-imp-all-off').on('click', () => {
-                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => { /** @type {HTMLInputElement} */ (el).checked = false; });
+                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => {
+                    /** @type {HTMLInputElement} */ (el).checked = false;
+                });
             });
         }
     }, { width: 640, classes: ['lancer-dialog-base'] });

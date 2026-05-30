@@ -2,9 +2,12 @@
 
 function relTime(/** @type {number} */ ts) {
     const diff = (Date.now() - ts) / 1000;
-    if (diff < 60)    return `${Math.floor(diff)}s ago`;
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 60)
+        return `${Math.floor(diff)}s ago`;
+    if (diff < 3600)
+        return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400)
+        return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
@@ -28,7 +31,9 @@ export class LogPanel {
         if (this._panel) {
             const panel = this._panel;
             this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function () { $(this).remove(); });
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function () {
+                $(this).remove();
+            });
         }
     }
 
@@ -54,8 +59,10 @@ export class LogPanel {
         const messages = /** @type {any[]} */ ([...game.messages.values()])
             .filter(m => {
                 const sp = m.speaker;
-                if (tokenId && sp.token === tokenId) return true;
-                if (sp.actor === actorId) return true;
+                if (tokenId && sp.token === tokenId)
+                    return true;
+                if (sp.actor === actorId)
+                    return true;
                 return false;
             })
             .filter(m => m.content?.startsWith('<div c'))

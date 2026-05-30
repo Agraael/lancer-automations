@@ -1,12 +1,13 @@
 /* global console, ChatMessage, Dialog, fromUuid, game, ui, renderTemplate, $ */
 
+import { socketRequestWithAck } from '../socket.js';
+
 const TPL = {
     menu:      'modules/lancer-automations/templates/rest-menu.html',
     emergency: 'modules/lancer-automations/templates/rest-emergency.html',
 };
 
 const REPAIR_ICON = 'systems/lancer/assets/icons/white/repair.svg';
-const ALLIED_REGEX = /Contributed (\d+) Repairs/;
 
 async function _resolveMechAndPilot(token) {
     const actor = token?.actor;
@@ -33,21 +34,58 @@ async function _resolveMechAndPilot(token) {
     return { mech: null, pilot: null };
 }
 
-function _getAlliedRepairs() {
-    const messages = game.messages.contents.slice(-5);
-    let total = 0;
-    for (const m of messages) {
-        const c = m.content ?? '';
-        if (c.includes('Rest Report') && c.includes('Contributed')) {
-            const match = c.match(ALLIED_REGEX);
-            if (match)
-                total += parseInt(match[1], 10) || 0;
+/** Mechs owned by currently-connected non-GM players, excluding `selfMech`. */
+async function _getAlliedMechs(selfMech) {
+    const allies = [];
+    const seen = new Set();
+    const users = game.users?.contents ?? [];
+    for (const u of users) {
+        if (!u.active || u.isGM)
+            continue;
+        const char = u.character;
+        if (!char)
+            continue;
+        let mech = null;
+        if (char.type === 'mech')
+            mech = char;
+        else if (char.type === 'pilot' && char.system?.active_mech?.id) {
+            try {
+                mech = /** @type {any} */ (await fromUuid(char.system.active_mech.id));
+            } catch { /* ignore */ }
         }
+        if (!mech || mech.id === selfMech.id || seen.has(mech.id))
+            continue;
+        seen.add(mech.id);
+        const r = mech.system?.repairs ?? {};
+        allies.push({
+            actorId: mech.id,
+            uuid: mech.uuid,
+            name: mech.name,
+            img: mech.img,
+            ownerName: u.name,
+            value: r.value ?? 0,
+            max: r.max ?? 0,
+        });
     }
-    return total;
+    return allies;
 }
 
-function _snapshotMech(mech, pilot) {
+async function _setAllyRepairs(allyActorId, newValue) {
+    const actor = game.actors.get(allyActorId);
+    if (!actor)
+        return false;
+    if (game.user.isGM || actor.isOwner) {
+        await actor.update({ 'system.repairs.value': newValue });
+        return true;
+    }
+    await socketRequestWithAck('updateActorSystem', {
+        actorId: allyActorId,
+        data: { 'system.repairs.value': newValue },
+    });
+    return true;
+}
+
+function _snapshotMech(mech, pilot, allies) {
     const sys = mech.system;
     /** @type {any[]} */
     const effects = mech.effects?.contents?.map((e) => ({
@@ -92,6 +130,9 @@ function _snapshotMech(mech, pilot) {
         structureRate: sys.structure_repair_cost ?? 2,
         stressRate: sys.stress_repair_cost ?? 2,
         repairIcon: REPAIR_ICON,
+        allies,
+        hasAllies: allies.length > 0,
+        isGM: !!game.user.isGM,
     };
 }
 
@@ -125,16 +166,94 @@ async function _postReinitReport(mech, pilot) {
     });
 }
 
-async function _showEmergencyRest(mech, pilot) {
-    let alliedRepairs = _getAlliedRepairs();
-    const data = _snapshotMech(mech, pilot);
-    data.alliedRepairs = alliedRepairs;
+/**
+ * Wires the ally pull cards and GM grant row to mutate `pulledByAlly` / `gmGrantRef`
+ * and re-runs `onChange`. Returns a function that re-renders the steppers from state.
+ */
+function _bindAllyControls(html, data, pulledByAlly, gmGrantRef, onChange) {
+    const $cards = html.find('.la-rest-ally-card');
+    const renderAlly = (allyId) => {
+        const ally = data.allies.find(a => a.actorId === allyId);
+        if (!ally)
+            return;
+        const cur = pulledByAlly.get(allyId) ?? 0;
+        const $card = $cards.filter(`[data-ally-id="${allyId}"]`);
+        $card.find('.la-rest-ally-pulled').text(cur);
+        $card.find('.la-rest-ally-step-down').prop('disabled', cur <= 0);
+        $card.find('.la-rest-ally-step-up').prop('disabled', cur >= ally.value);
+        $card.toggleClass('la-rest-ally-active', cur > 0);
+    };
+    $cards.each(function () {
+        renderAlly(this.dataset.allyId);
+    });
 
-    const recompute = () => {
-        const pilotRepairs = mech.system.repairs?.value ?? 0;
-        const total = pilotRepairs + alliedRepairs;
-        const required = Math.max(0, 4 - alliedRepairs);
-        return { total, required, canConfirm: total >= 4 };
+    html.find('.la-rest-ally-step-up').on('click', function () {
+        const id = this.closest('.la-rest-ally-card')?.dataset.allyId;
+        const ally = data.allies.find(a => a.actorId === id);
+        if (!ally)
+            return;
+        const cur = pulledByAlly.get(id) ?? 0;
+        if (cur >= ally.value)
+            return;
+        pulledByAlly.set(id, cur + 1);
+        renderAlly(id);
+        onChange();
+    });
+    html.find('.la-rest-ally-step-down').on('click', function () {
+        const id = this.closest('.la-rest-ally-card')?.dataset.allyId;
+        const cur = pulledByAlly.get(id) ?? 0;
+        if (cur <= 0)
+            return;
+        pulledByAlly.set(id, cur - 1);
+        renderAlly(id);
+        onChange();
+    });
+
+    html.find('.la-rest-grant-input').on('input', function () {
+        const v = Math.max(0, parseInt(this.value, 10) || 0);
+        if (parseInt(this.value, 10) !== v)
+            this.value = String(v);
+        gmGrantRef.value = v;
+        onChange();
+    });
+}
+
+function _sumPulled(pulledByAlly) {
+    let s = 0;
+    for (const v of pulledByAlly.values())
+        s += v;
+    return s;
+}
+
+async function _applyAllyPulls(data, pulledByAlly) {
+    const lines = [];
+    for (const [allyId, amt] of pulledByAlly.entries()) {
+        if (!amt)
+            continue;
+        const ally = data.allies.find(a => a.actorId === allyId);
+        if (!ally)
+            continue;
+        const newVal = Math.max(0, ally.value - amt);
+        await _setAllyRepairs(allyId, newVal);
+        lines.push(`${ally.name} contributed ${amt} Repair${amt > 1 ? 's' : ''}`);
+    }
+    return lines;
+}
+
+async function _showEmergencyRest(mech, pilot) {
+    const allies = await _getAlliedMechs(mech);
+    const data = _snapshotMech(mech, pilot, allies);
+    /** @type {Map<string, number>} */
+    const pulledByAlly = new Map();
+    const gmGrantRef = { value: 0 };
+
+    const totals = () => {
+        const pulled = _sumPulled(pulledByAlly);
+        const grant = gmGrantRef.value;
+        const contribution = pulled + grant;
+        const total = data.mech.repairs.value + contribution;
+        const required = Math.max(0, 4 - contribution - data.mech.repairs.value);
+        return { pulled, grant, contribution, total, required, canConfirm: total >= 4 };
     };
 
     const content = await renderTemplate(TPL.emergency, data);
@@ -146,20 +265,30 @@ async function _showEmergencyRest(mech, pilot) {
                 icon: '<i class="fas fa-bolt"></i>',
                 label: 'Reinitialize',
                 callback: async () => {
-                    const { canConfirm, required } = recompute();
-                    if (!canConfirm) {
+                    const t = totals();
+                    if (!t.canConfirm) {
                         ui.notifications.warn('Not enough repairs available.');
                         return;
                     }
+                    const allyLines = await _applyAllyPulls(data, pulledByAlly);
                     const hpMax = mech.system.hp?.max ?? mech.system.hp?.value ?? 0;
                     const repairsValue = mech.system.repairs?.value ?? 0;
+                    const fromPool = t.contribution;
+                    const fromSelf = Math.max(0, 4 - fromPool);
                     await mech.update({
                         'system.structure.value': 1,
                         'system.stress.value': 1,
                         'system.hp.value': hpMax,
-                        'system.repairs.value': Math.max(0, repairsValue - required),
+                        'system.repairs.value': Math.max(0, repairsValue - fromSelf),
                     });
                     await _postReinitReport(mech, pilot);
+                    if (allyLines.length || t.grant > 0) {
+                        const lines = [...allyLines];
+                        if (t.grant > 0)
+                            lines.push(`GM grant: ${t.grant} Repair${t.grant > 1 ? 's' : ''}`);
+                        lines.push(`Consumed ${fromSelf} Repair${fromSelf !== 1 ? 's' : ''} from self`);
+                        await _postRestReport(mech, pilot, lines);
+                    }
                     setTimeout(() => _showRegularRest(mech, pilot), 80);
                 },
             },
@@ -168,25 +297,25 @@ async function _showEmergencyRest(mech, pilot) {
         default: 'confirm',
         render: (html) => {
             const $app = html.closest('.app');
-            const updateButton = () => {
-                const { canConfirm, required } = recompute();
-                $app.find('button[data-button="confirm"]').prop('disabled', !canConfirm);
-                html.find('#la-rest-required-count').text(required);
+            const updateUi = () => {
+                const t = totals();
+                html.find('#la-rest-pool-pulled').text(t.pulled);
+                html.find('#la-rest-pool-grant').text(t.grant);
+                html.find('#la-rest-pool-total').text(t.total);
+                html.find('#la-rest-required-count').text(t.required);
+                $app.find('button[data-button="confirm"]').prop('disabled', !t.canConfirm);
             };
-            html.find('.la-rest-allied-refresh').on('click', () => {
-                alliedRepairs = _getAlliedRepairs();
-                html.find('#la-rest-allied-count').text(alliedRepairs);
-                updateButton();
-            });
-            updateButton();
+            _bindAllyControls(html, data, pulledByAlly, gmGrantRef, updateUi);
+            updateUi();
             dlg.setPosition({ height: 'auto' });
         },
-    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 540 });
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 720 });
     dlg.render(true);
 }
 
 async function _showRegularRest(mech, pilot) {
-    const data = _snapshotMech(mech, pilot);
+    const allies = await _getAlliedMechs(mech);
+    const data = _snapshotMech(mech, pilot, allies);
     const content = await renderTemplate(TPL.menu, data);
 
     let resetHeat = false;
@@ -198,7 +327,9 @@ async function _showRegularRest(mech, pilot) {
     const selectedWeapons = new Set();
     /** @type {Set<number>} */
     const selectedSystems = new Set();
-    let contribute = 0;
+    /** @type {Map<string, number>} */
+    const pulledByAlly = new Map();
+    const gmGrantRef = { value: 0 };
 
     const cost = () => {
         let c = 0;
@@ -208,9 +339,10 @@ async function _showRegularRest(mech, pilot) {
         c += stressRestore * data.stressRate;
         c += selectedWeapons.size;
         c += selectedSystems.size;
-        c += contribute;
         return c;
     };
+
+    const pool = () => data.mech.repairs.value + _sumPulled(pulledByAlly) + gmGrantRef.value;
 
     const dlg = new Dialog({
         title: 'Rest',
@@ -221,12 +353,20 @@ async function _showRegularRest(mech, pilot) {
                 label: 'Confirm',
                 callback: async () => {
                     const c = cost();
-                    if (c > data.mech.repairs.value) {
+                    if (c > pool()) {
                         ui.notifications.warn('Total cost exceeds available repairs.');
                         return;
                     }
+                    const allyLines = await _applyAllyPulls(data, pulledByAlly);
+                    const grant = gmGrantRef.value;
+                    const pulled = _sumPulled(pulledByAlly);
+                    const newRepairs = Math.max(0, Math.min(
+                        data.mech.repairs.max,
+                        data.mech.repairs.value - c + pulled + grant
+                    ));
+
                     /** @type {Record<string, any>} */
-                    const updates = { 'system.repairs.value': data.mech.repairs.value - c };
+                    const updates = { 'system.repairs.value': newRepairs };
                     if (resetHeat)
                         updates['system.heat.value'] = 0;
                     if (restoreHp)
@@ -268,9 +408,11 @@ async function _showRegularRest(mech, pilot) {
                         lines.push(`Repaired ${data.destroyedSystems[idx].name}`);
                     if (clearEffects && data.effects.length > 0)
                         lines.push(`Cleared ${data.effects.length} status effect(s)`);
-                    lines.push(`Consumed ${c} Repairs`);
-                    if (contribute > 0)
-                        lines.push(`Contributed ${contribute} Repairs`);
+                    lines.push(`Consumed ${c} Repair${c !== 1 ? 's' : ''}`);
+                    for (const l of allyLines)
+                        lines.push(l);
+                    if (grant > 0)
+                        lines.push(`GM grant: ${grant} Repair${grant > 1 ? 's' : ''}`);
 
                     await _postRestReport(mech, pilot, lines);
                 },
@@ -282,8 +424,10 @@ async function _showRegularRest(mech, pilot) {
             const $app = html.closest('.app');
             const updateUi = () => {
                 const c = cost();
-                const over = c > data.mech.repairs.value;
+                const p = pool();
+                const over = c > p;
                 html.find('#la-rest-cost-current').text(c).toggleClass('la-rest-cost-over', over);
+                html.find('#la-rest-cost-pool').text(p);
                 $app.find('button[data-button="confirm"]').prop('disabled', over);
             };
 
@@ -361,20 +505,14 @@ async function _showRegularRest(mech, pilot) {
                 updateUi();
             });
 
-            html.find('#la-rest-contribute').on('input', function () {
-                const v = Math.max(0, Math.min(4, parseInt(this.value, 10) || 0));
-                if (parseInt(this.value, 10) !== v)
-                    this.value = String(v);
-                contribute = v;
-                updateUi();
-            });
+            _bindAllyControls(html, data, pulledByAlly, gmGrantRef, updateUi);
 
             renderPips('structure');
             renderPips('stress');
             updateUi();
             dlg.setPosition({ height: 'auto' });
         },
-    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 600 });
+    }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 720 });
     dlg.render(true);
 }
 

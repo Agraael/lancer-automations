@@ -183,13 +183,9 @@ const STAT_PATHS = {
  * Costs the standard move (not a quick/full action).
  * @param {Token} token
  */
-/**
- * Add a virtual movement entry to both LA and Elevation Ruler history.
- * Used for actions that cost movement without physically moving the token.
- */
+/** Add a virtual LA movement entry for actions that cost movement without physically moving the token. */
 async function addVirtualMovement(token, cost) {
     const tokenDoc = token.document;
-    // LA movement history
     const laHistory = tokenDoc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
     const moves = laHistory.moves || [];
     moves.push({
@@ -201,39 +197,6 @@ async function addVirtualMovement(token, cost) {
         startPos: { x: tokenDoc.x, y: tokenDoc.y },
     });
     await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } });
-    // Elevation Ruler combat history — update both in-memory trail and flag
-    if (game.modules.get('elevationruler')?.active && game.combat?.started) {
-        const canvasToken = canvas.tokens?.get(tokenDoc.id) ?? token;
-        // Token center (pixel position, not top-left document x/y)
-        const cx = tokenDoc.x + (canvasToken.w / 2);
-        const cy = tokenDoc.y + (canvasToken.h / 2);
-        const z = tokenDoc.elevation ?? 0;
-        // In-memory measurement history (visual trail)
-        canvasToken.elevationruler ??= {};
-        const mh = canvasToken.elevationruler.measurementHistory ?? [];
-        // If empty, add origin entry first (cost 0)
-        if (!mh.length) {
-            mh.push({ x: cx, y: cy, teleport: false, cost: 0, z });
-        }
-        // Add standing-up entry at same position with the movement cost
-        mh.push({ x: cx, y: cy, teleport: false, cost, z });
-        canvasToken.elevationruler.measurementHistory = mh;
-        // Flag persistence (speed color calculation)
-        const erFlag = tokenDoc.getFlag('elevationruler', 'movementHistory') ?? {};
-        const combatId = game.combat.id;
-        const combatData = erFlag.combatMoveData?.[combatId] ?? { lastMoveDistance: 0, lastRound: -1, numDiagonal: 0 };
-        if (combatData.lastRound < game.combat.round)
-            combatData.lastMoveDistance = cost;
-        else
-            combatData.lastMoveDistance += cost;
-        combatData.lastRound = game.combat.round;
-        const newFlag = {
-            ...erFlag,
-            lastMoveDistance: cost,
-            combatMoveData: { ...(erFlag.combatMoveData ?? {}), [combatId]: combatData },
-        };
-        await tokenDoc.setFlag('elevationruler', 'movementHistory', newFlag);
-    }
 }
 
 /** @returns {Promise<void>} */
@@ -1907,13 +1870,22 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         await fireMountWeapons(choices[0]);
     } else {
         // 2 mounts, create an AND card for mount order
-        const mountChoices = choices.map((mount, index) => ({
-            text: `Fire ${mount.name || mount.type || "Mount " + (index + 1)}`,
-            icon: mount.slots?.[0]?.weapon?.value?.img || "icons/svg/item-bag.svg",
-            callback: async () => {
-                await fireMountWeapons(mount);
-            }
-        }));
+        const mountChoices = choices.map((mount, index) => {
+            const mountLabel = mount.name || mount.type || "Mount " + (index + 1);
+            const weaponNames = (mount.slots ?? [])
+                .map(s => s.weapon?.value?.name ?? (s.weapon?.id ? actor.items.get(s.weapon.id)?.name : null))
+                .filter(Boolean);
+            const text = weaponNames.length
+                ? `Fire ${mountLabel} (${weaponNames.join(", ")})`
+                : `Fire ${mountLabel}`;
+            return {
+                text,
+                icon: mount.slots?.[0]?.weapon?.value?.img || "icons/svg/item-bag.svg",
+                callback: async () => {
+                    await fireMountWeapons(mount);
+                }
+            };
+        });
 
         await InteractiveAPI.startChoiceCard({
             title: "BARRAGE MOUNT ORDER",

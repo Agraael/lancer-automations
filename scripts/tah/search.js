@@ -84,9 +84,13 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten }
             }
             row.css({ flexWrap: 'wrap', height: 'auto', minHeight: '44px' }).prepend($(`<span style="width:100%;font-size:0.58em;color:var(--primary-color);text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;">${item._catLabel}</span>`));
             row.on('mouseenter', () => playUiSound('hover'));
-            row.on('click', () => { playUiSound('open'); item.onClick(row); });
+            row.on('click', () => {
+                playUiSound('open'); item.onClick(row);
+            });
             if (item.onRightClick)
-                row.on('contextmenu', ev => { ev.preventDefault(); playUiSound('details'); item.onRightClick(row); });
+                row.on('contextmenu', ev => {
+                    ev.preventDefault(); playUiSound('details'); item.onRightClick(row);
+                });
             scrollWrap.append(row);
         }
     }

@@ -39,8 +39,7 @@ async function initSecondaryStructureCrushingHit(state) {
     return true;
 }
 
-// Snapshot only — install is deferred to ready so we can read the setting and
-// avoid stomping on other modules when the feature is off.
+// Defer install to ready so the setting gate works and we don't stomp on other modules.
 export function registerAltStructFlowSteps(flowSteps, flows) {
     _flowSteps = flowSteps;
     _flows = flows;
@@ -110,7 +109,6 @@ function setupHooks(flowSteps, flows) {
     flows.set("CriticalMeltdownFlow", { name: "Critical Reactor Meltdown", steps: ["executeCriticalMeltdown", "printGenericCard"] });
 }
 
-// Catches modules that hook AFTER us — snapshot vs current at ready.
 function _detectPostRegisterConflicts(flowSteps) {
     const conflicts = [];
     for (const key of ALL_STEP_KEYS) {
@@ -122,8 +120,7 @@ function _detectPostRegisterConflicts(flowSteps) {
     return conflicts;
 }
 
-// Catches modules that hook BEFORE us. Stock Lancer step fns are named to match
-// their key; if the snapshot fn has a different name, someone replaced it.
+// Stock Lancer step fns are named after their key; a mismatch means someone replaced it.
 function _detectPreRegisterOverrideHijacks() {
     const hijacked = [];
     for (const key of OVERRIDE_STEP_KEYS) {
@@ -140,7 +137,7 @@ export function initAltStructReady() {
     const hasConflict = game.modules.get('lancer-alt-structure')?.active;
     const isEnabled = game.settings.get('lancer-automations', 'enableAltStruct');
 
-    // One-struct NPCs is its own opt-in, independent of the full alt-struct rules.
+    // One-struct NPCs is a separate opt-in from the full alt-struct rules.
     if (!isEnabled) {
         if (game.settings.get('lancer-automations', 'enableOneStructNpc')) {
             _flowSteps?.set('npcOneStructStep', npcOneStructStep);
@@ -237,10 +234,13 @@ function _registerChatHook() {
         return;
     }
     _chatHookRegistered = true;
-    Hooks.on("renderChatMessage", (_app, html) => {
-        html.find(".alt-struct-flow-button").on("click", function (ev) {
-            ev.stopPropagation();
-            _runAltStructFlow(this);
+    Hooks.on("renderChatMessageHTML", (_app, htmlOrEl) => {
+        const root = htmlOrEl instanceof HTMLElement ? htmlOrEl : htmlOrEl[0];
+        root?.querySelectorAll(".alt-struct-flow-button").forEach(btn => {
+            btn.addEventListener("click", function (ev) {
+                ev.stopPropagation();
+                _runAltStructFlow(this);
+            });
         });
     });
 }

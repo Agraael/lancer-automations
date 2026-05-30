@@ -23,10 +23,6 @@ function _infectionEnabled() {
     catch { return false; }
 }
 
-// ---------------------------------------------------------------------------
-// 1. Schema injection — add system.infection field to actor data models
-// ---------------------------------------------------------------------------
-
 /** Inject `infection` NumberField into actors schemas. Call during `init`. */
 export function injectInfectionSchemaField() {
     const NumberField = foundry.data.fields.NumberField;
@@ -49,24 +45,16 @@ export function injectInfectionSchemaField() {
         console.log(`${MODULE_ID} | Injected infection field into ${injected} actor schema(s)`);
 }
 
-// ---------------------------------------------------------------------------
-// 2. DamageField choices injection — add "Infection" to damage type selectors
-// ---------------------------------------------------------------------------
-
 /**
- * Add "Infection" to DamageType enum and all DamageField choices.
- * Patches via ESM live bindings (propagates to all importers including the damage HUD).
+ * Add "Infection" to DamageType enum and all DamageField choices via ESM live bindings.
  * Call during `init`.
  */
 export async function injectInfectionDamageType() {
-    // Patch DamageType enum via dynamic import of the hashed bundle.
-    // On Forge VTT, relative imports resolve to a different origin than the CDN
-    // URL used by the original <script> tag, causing a duplicate module. We find
-    // the script tag's actual URL and import relative to that instead.
+    // On Forge VTT, relative imports resolve to a different origin than the original script tag's CDN URL,
+    // causing a duplicate module. Find the entry script's actual URL and import relative to that.
     try {
         let bundleUrl = null;
 
-        // Find the lancer entry script tag to get its actual base URL
         const lancerScript = /** @type {HTMLScriptElement} */ (document.querySelector('script[type="module"][src$="/lancer.mjs"]'));
         const baseUrl = lancerScript
             ? lancerScript.src.replace(/lancer\.mjs$/, '')
@@ -81,9 +69,21 @@ export async function injectInfectionDamageType() {
 
         if (bundleUrl) {
             const bundle = await import(bundleUrl);
-            if (bundle.D && !bundle.D.Infection) {
-                bundle.D.Infection = "Infection";
+            // Minified export name varies per build; find by shape match instead of by name.
+            const isDamageTypeEnum = (obj) =>
+                obj && typeof obj === 'object' && obj.Kinetic === 'Kinetic' && obj.Energy === 'Energy' && obj.Heat === 'Heat';
+            let damageTypeEnum = null;
+            for (const exp of Object.values(bundle)) {
+                if (isDamageTypeEnum(exp)) {
+                    damageTypeEnum = exp;
+                    break;
+                }
+            }
+            if (damageTypeEnum && !damageTypeEnum.Infection) {
+                damageTypeEnum.Infection = "Infection";
                 console.log(`${MODULE_ID} | Added "Infection" to DamageType enum via bundle export`);
+            } else if (!damageTypeEnum) {
+                console.warn(`${MODULE_ID} | Could not locate DamageType enum in lancer bundle exports.`);
             }
         }
     } catch (e) {
@@ -124,10 +124,6 @@ export async function injectInfectionDamageType() {
         console.log(`${MODULE_ID} | Added "Infection" to ${patched} DamageField choice list(s)`);
 }
 
-// ---------------------------------------------------------------------------
-// 3. CSS injection — icon and damage color
-// ---------------------------------------------------------------------------
-
 export function injectInfectionCSS() {
     if (document.getElementById('la-infection-css'))
         return;
@@ -159,11 +155,9 @@ export function injectInfectionCSS() {
     document.head.appendChild(style);
 }
 
-// ---------------------------------------------------------------------------
-// 4. InfectionFlow — end-of-turn infection check
-// ---------------------------------------------------------------------------
+// InfectionFlow: end-of-turn infection check, mirrors BurnFlow but uses Heat + system.infection.
 
-/** Init infection check data — mirrors initBurnCheckData but uses Heat + system.infection. */
+/** Init infection check data. */
 async function initInfectionCheckData(state) {
     if (!_infectionEnabled())
         return false;
@@ -266,10 +260,6 @@ async function checkInfectionResult(state) {
     return await rollNormalDamage(state);
 }
 
-// ---------------------------------------------------------------------------
-// 5. Turn-end trigger — hook into combat turn changes
-// ---------------------------------------------------------------------------
-
 function onUpdateCombatInfection(combat, change, _options, _userId) {
     if (!('turn' in change) && change.round !== 1)
         return;
@@ -338,10 +328,6 @@ function _getFlowBase() {
     return typeof StatRollFlow === 'function' ? Object.getPrototypeOf(StatRollFlow) : null;
 }
 
-// ---------------------------------------------------------------------------
-// 6. Stabilize / Full Repair — clear infection
-// ---------------------------------------------------------------------------
-
 async function clearInfectionOnStabilize(state) {
     if (!_infectionEnabled())
         return true;
@@ -367,10 +353,6 @@ async function clearInfectionOnRepair(state) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// 7. Flow + hook registration
-// ---------------------------------------------------------------------------
-
 export function registerInfectionFlows(flowSteps, flows) {
     flowSteps.set('lancer-automations:initInfectionCheckData', initInfectionCheckData);
     flowSteps.set('lancer-automations:rollInfectionCheck', rollInfectionCheck);
@@ -378,7 +360,6 @@ export function registerInfectionFlows(flowSteps, flows) {
     flowSteps.set('lancer-automations:clearInfectionOnStabilize', clearInfectionOnStabilize);
     flowSteps.set('lancer-automations:clearInfectionOnRepair', clearInfectionOnRepair);
 
-    // Mirrors BurnFlow steps; printDamageCard is the system's built-in renderer
     flows.set('InfectionFlow', {
         name: 'Infection Check',
         steps: [
@@ -469,16 +450,15 @@ export function initInfectionHooks() {
         msg.updateSource({ content });
     });
 
-    // Wrap damageCalc — AppliedDamage doesn't handle Infection natively,
-    // so we intercept via click handlers and apply infection manually
+    // AppliedDamage doesn't handle Infection natively; intercept the apply click and apply manually.
     if (typeof libWrapper !== 'undefined') {
         libWrapper.register(MODULE_ID, 'CONFIG.Actor.documentClass.prototype.damageCalc',
             async function (wrapped, damage, options) {
                 await wrapped(damage, options);
             }, 'WRAPPER');
 
-        // Pre-intercept: capture infection data BEFORE system's jQuery handler
-        document.getElementById('chat-log')?.addEventListener('click', (ev) => {
+        // Capture infection data before the system's jQuery handler fires.
+        document.body.addEventListener('click', (ev) => {
             const button = ev.target?.closest?.('.lancer-damage-apply');
             if (!button)
                 return;
@@ -506,8 +486,8 @@ export function initInfectionHooks() {
             _pendingInfection = { actorUuid: targetResult.target, amount: Math.ceil(infectionDmg * multiple) };
         }, { capture: true });
 
-        // Post-intercept: apply infection AFTER system's damageCalc
-        document.getElementById('chat-log')?.addEventListener('click', async (ev) => {
+        // Apply infection after the system's damageCalc has run.
+        document.body.addEventListener('click', async (ev) => {
             const button = ev.target?.closest?.('.lancer-damage-apply');
             if (!button)
                 return;
@@ -549,7 +529,7 @@ export function initInfectionHooks() {
             if (!actor?.isOwner)
                 return;
 
-            // setTimeout ensures this runs after the system's jQuery click handler
+            // Run after the system's jQuery click handler.
             setTimeout(async () => {
                 const resistant = actor.system?.resistances?.infection;
                 const finalInfection = resistant ? Math.ceil(scaledInfection / 2) : scaledInfection;
@@ -564,8 +544,7 @@ export function initInfectionHooks() {
             }, 100);
         }, { capture: false });
 
-        // Undo infection (our .la-infection-undo or system's .lancer-damage-undo with data-infection-delta)
-        document.getElementById('chat-log')?.addEventListener('click', async (ev) => {
+        document.body.addEventListener('click', async (ev) => {
             const button = ev.target?.closest?.('.la-infection-undo, .lancer-damage-undo[data-infection-delta]');
             if (!button)
                 return;
@@ -584,11 +563,10 @@ export function initInfectionHooks() {
 
             const currentInfection = actor.system?.infection ?? 0;
             await actor.update({ 'system.infection': Math.max(currentInfection - infectionDelta, 0) });
-            // Heat undo handled by the system's own handler via data-heat-delta
+            // Heat undo is handled by the system via data-heat-delta.
         });
 
-        // Apply Heat button (infection turn-end failure card)
-        document.getElementById('chat-log')?.addEventListener('click', async (ev) => {
+        document.body.addEventListener('click', async (ev) => {
             const button = ev.target?.closest?.('.la-infection-apply');
             if (!button)
                 return;
@@ -606,7 +584,6 @@ export function initInfectionHooks() {
                 await actor.update({ 'system.heat.value': actor.system.heat.value + heat });
             }
 
-            // Swap to undo button
             button.style.display = 'none';
             const undoBtn = button.parentElement?.querySelector('.la-infection-undo');
             if (undoBtn) {
@@ -623,10 +600,6 @@ export function initInfectionHooks() {
 
     console.log(`${MODULE_ID} | Infection hooks initialized`);
 }
-
-// ---------------------------------------------------------------------------
-// 8. API for applying infection from external sources (reactions, macros, etc.)
-// ---------------------------------------------------------------------------
 
 /** Apply infection to an actor: immediately take heat + mark infection. */
 export async function applyInfection(actor, amount) {
@@ -654,10 +627,6 @@ export async function applyInfection(actor, amount) {
             </div>`
     });
 }
-
-// ---------------------------------------------------------------------------
-// 9. Sheet display — inject infection stat card next to burn on actor sheets
-// ---------------------------------------------------------------------------
 
 /** Inject infection stat card next to BURN on actor sheets. */
 export function onRenderActorSheetInfection(app, html, _data) {
@@ -719,7 +688,7 @@ function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection) {
 
     $burnCard.after($card);
 
-    // NPC sheet: prevent orphan last item from stretching too wide
+    // Cap children width so the last NPC sheet stat doesn't stretch full row.
     const $wrapRow = $burnCard.closest('.wraprow.quintuple');
     if ($wrapRow.length) {
         $wrapRow.children().css('max-width', '20%');

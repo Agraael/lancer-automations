@@ -1,5 +1,5 @@
-const SUPABASE_URL = "https://exglsurpdbmpkvqdfvid.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2xzdXJwZGJtcGt2cWRmdmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MTcyNzAsImV4cCI6MjA5MzQ5MzI3MH0.p6oLn61mhe9hxThh-bwkVIADvSU6oyG4VnAkhkJmHJU";
+import { getSupabase } from "./supabase-client.js";
+
 const MODULE_NAMESPACE = "lancer-automations";
 const INSTALL_ID_SETTING = "dataInstallId";
 const CONSENT_SETTING = "dataConsent";
@@ -15,11 +15,8 @@ async function _upsertUser(userHash, role) {
     const moduleVersion = game.modules.get(MODULE_NAMESPACE)?.version || "unknown";
     const language = game.i18n.lang || "unknown";
 
-    const { createClient } = window.supabase;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
     try {
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from(TABLE)
             .upsert({
                 user_hash: userHash,

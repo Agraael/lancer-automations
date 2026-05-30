@@ -142,7 +142,6 @@ export function getTokenCategory(token) {
 }
 
 function getWreckMode(category) {
-    // Map squad/pilot to their base categories for settings lookup.
     const settingCat = (category === 'squad' || category === 'pilot') ? 'human' : category;
     try {
         return game.settings.get(MODULE_ID, `wreckMode_${settingCat}`) || 'token';
@@ -151,13 +150,64 @@ function getWreckMode(category) {
     }
 }
 
-function categorySpawnsTerrain(category) {
+/** @returns {'none'|'terrain'|'aura'} */
+function getWreckTerrainMode(category) {
     const settingCat = (category === 'squad' || category === 'pilot') ? 'human' : category;
+    let raw;
     try {
-        return game.settings.get(MODULE_ID, `wreckTerrain_${settingCat}`) === true;
+        raw = game.settings.get(MODULE_ID, `wreckTerrain_${settingCat}`);
     } catch {
-        return category === 'mech' || category === 'monstrosity';
+        raw = null;
     }
+    // Legacy boolean storage: true=terrain, false=none.
+    if (raw === true)
+        return 'terrain';
+    if (raw === false)
+        return 'none';
+    if (raw === 'terrain' || raw === 'aura' || raw === 'none')
+        return raw;
+    return (category === 'mech' || category === 'monstrosity') ? 'aura' : 'none';
+}
+
+function buildWreckAuraFlag() {
+    const aura = {
+        id: foundry.utils.randomID(),
+        name: 'LA_Wreck_Aura',
+        enabled: true,
+        radius: 0,
+        innerRadius: '',
+        radiusOffset: 0,
+        position: 'CENTER',
+        lineType: 1,
+        lineWidth: 4,
+        lineColor: '#8B4513',
+        lineColorAnimation: null,
+        lineOpacity: 0.8,
+        lineDashSize: 15,
+        lineGapSize: 10,
+        lineDashOffsetAnimation: 0,
+        fillType: 2,
+        fillColor: '#8B4513',
+        fillColorAnimation: null,
+        fillOpacity: 0.5,
+        fillTexture: 'modules/terrain-height-tools/textures/hatching-skullcrossbones.png',
+        fillTextureOffset: { x: 0, y: 0 },
+        fillTextureOffsetAnimation: null,
+        fillTextureScale: { x: 100, y: 100 },
+        ownerVisibility: { default: true, hovered: true, controlled: true, dragging: true, targeted: true, turn: true },
+        nonOwnerVisibility: { default: true, hovered: true, controlled: true, dragging: true, targeted: true, turn: true },
+        effects: [],
+        macros: [],
+        sequencerEffects: [],
+        onlyEnabledInCombat: false,
+        unified: false,
+        keyPressMode: 'DISABLED',
+        keyToPress: 'AltLeft',
+        elevationAware: false,
+        movementPenalty: 1,
+        terrainHeightTools: { rulerOnDrag: 'NONE', targetTokens: '', onlyWhenAltPressed: false, onlyWhenTargeted: false },
+    };
+    return { 'grid-aware-auras': { auras: [aura] } };
 }
 
 const CATEGORY_FALLBACKS = {
@@ -308,6 +358,7 @@ async function getOrCreateWreckActor() {
             displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
             displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
             texture: { src: `modules/${MODULE_ID}/icons/tombstone.svg` },
+            flags: { [MODULE_ID]: { awarenessMode: 'simple' } },
         },
     });
     log('Created Template Wreck actor');
@@ -324,7 +375,9 @@ export async function preLoadImageForAll(src, push = false) {
     if (push) {
         game.socket.emit(`module.${MODULE_ID}`, { action: 'preLoadImageForAll', payload: src });
     }
-    await loadTexture(src);
+    // v13 namespaced loadTexture under foundry.canvas; the bare global is deprecated.
+    const load = /** @type {any} */ (foundry).canvas?.loadTexture ?? /** @type {any} */ (globalThis).loadTexture;
+    await load(src);
     return src;
 }
 
@@ -391,8 +444,17 @@ async function wreckIt(token) {
     const playWreckSound = token.document.getFlag(MODULE_ID, 'playWreckSound') ?? true;
     const playWreckEffect = token.document.getFlag(MODULE_ID, 'playWreckEffect') ?? true;
     const terrainOverride = token.document.getFlag(MODULE_ID, 'terrainOverride');
-    const shouldSpawnTerrain = terrainOverride === 'yes'
-        || (terrainOverride !== 'no' && categorySpawnsTerrain(category));
+    // Per-token override accepts: 'none'/'terrain'/'aura' (explicit), 'yes'/'no' (legacy boolean).
+    const categoryMode = getWreckTerrainMode(category);
+    let terrainMode = categoryMode;
+    if (terrainOverride === 'no')
+        terrainMode = 'none';
+    else if (terrainOverride === 'yes')
+        terrainMode = categoryMode === 'none' ? 'terrain' : categoryMode;
+    else if (terrainOverride === 'terrain' || terrainOverride === 'aura' || terrainOverride === 'none')
+        terrainMode = terrainOverride;
+    const shouldSpawnTerrain = terrainMode === 'terrain';
+    const shouldAttachAura = terrainMode === 'aura';
 
     const imgString = token.document.getFlag(MODULE_ID, 'wreckImgPath');
     const effString = token.document.getFlag(MODULE_ID, 'wreckEffectPath');
@@ -473,6 +535,7 @@ async function wreckIt(token) {
                                         manual_token_size: token.document.getFlag('lancer', 'manual_token_size') ?? false,
                                     },
                                     ...(token.document.flags?.['token-factions'] ? { 'token-factions': token.document.flags['token-factions'] } : {}),
+                                    ...(shouldAttachAura && game.modules.get('grid-aware-auras')?.active ? buildWreckAuraFlag() : {}),
                                 }
                             };
                             const textureSrc = imgString || `modules/${MODULE_ID}/icons/tombstone.svg`;
@@ -561,7 +624,9 @@ export function tileHUDButton(app, html) {
     icon.classList.add('fas', 'fa-person-rays');
     button.appendChild(icon);
     button.addEventListener('mouseup', () => unWreckTile(tile));
-    html.find('.col.right').append(button);
+    // v13 ApplicationV2 HUDs pass HTMLElement; v12 passed jQuery. Handle both.
+    const root = html instanceof HTMLElement ? html : html[0];
+    root?.querySelector('.col.right')?.appendChild(button);
 }
 
 async function unWreckTile(tile) {
@@ -655,117 +720,162 @@ export async function preWreck(document, _change, userId) {
 // ---------------------------------------------------------------------------
 
 export function initWreckTokenConfig() {
-    Hooks.on('renderTokenConfig', (app, html, data) => {
-        if (!game.settings.get(MODULE_ID, 'enableWrecks'))
-            return;
-        const tokenDoc = app.token ?? app.object;
-        if (!tokenDoc?.actor)
-            return;
-        const actorType = tokenDoc.actor.type;
-        if (!['mech', 'npc', 'pilot'].includes(actorType))
-            return;
+    const handler = (app, html, data) => _renderWreckTab(app, html, data);
+    Hooks.on('renderTokenConfig', handler);
+    Hooks.on('renderPrototypeTokenConfig', handler);
+}
 
-        const $html = html instanceof $ ? html : $(html);
+function _renderWreckTab(app, html, data) {
+    const tokenDoc = app.token ?? app.object;
+    if (!tokenDoc?.actor)
+        return;
+    const actorType = tokenDoc.actor.type;
+    if (!['mech', 'npc', 'pilot', 'deployable'].includes(actorType))
+        return;
 
-        // Add L.A tab nav item.
-        const $nav = $html.find('a.item[data-tab="resources"]');
-        if ($nav.length && !$html.find('a.item[data-tab="la"]').length) {
-            $nav.after(`<a class="item" data-tab="la"><i class="fas fa-cog"></i> L.A</a>`);
-        }
+    const el = typeof html?.querySelector === 'function' ? html : html?.[0];
+    if (!el)
+        return;
 
-        // Add L.A tab content.
-        if ($html.find('div.tab[data-tab="la"]').length)
-            return;
+    // Add nav entry once
+    const nav = el.querySelector('a[data-action="tab"][data-tab="resources"]');
+    if (nav && !el.querySelector('a[data-action="tab"][data-tab="la"]')) {
+        nav.insertAdjacentHTML('afterend',
+            `<a data-action="tab" data-group="sheet" data-tab="la"><i class="fas fa-cog" inert></i><span>L.A</span></a>`);
+    }
 
-        const flags = data.object?.flags?.[MODULE_ID] ?? {};
-        const imgPath = flags.wreckImgPath ?? '';
-        const effPath = flags.wreckEffectPath ?? '';
-        const sndPath = flags.wreckSoundPath ?? '';
-        const scale = flags.wreckScale ?? 1;
-        const spawnImg = flags.spawnWreckImage ?? true;
-        const playSound = flags.playWreckSound ?? true;
-        const playEffect = flags.playWreckEffect ?? true;
-        const wreckMode = flags.wreckMode ?? 'default';
-        const modeOpt = (val, label) => `<option value="${val}" ${wreckMode === val ? 'selected' : ''}>${label}</option>`;
-        const terrainOverride = flags.terrainOverride ?? 'default';
-        const tOpt = (val, label) => `<option value="${val}" ${terrainOverride === val ? 'selected' : ''}>${label}</option>`;
+    // Add section once
+    if (el.querySelector('div.tab[data-tab="la"]'))
+        return;
 
-        const newHtml = $(`
-            <div class="tab" data-group="main" data-tab="la">
-                <div class="form-group">
-                    <label>Wreck Mode</label>
-                    <div class="form-fields">
-                        <select name="flags.${MODULE_ID}.wreckMode">
-                            ${modeOpt('default', 'Default (use category setting)')}
-                            ${modeOpt('token', 'Token')}
-                            ${modeOpt('tile', 'Tile')}
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Spawn Terrain</label>
-                    <div class="form-fields">
-                        <select name="flags.${MODULE_ID}.terrainOverride">
-                            ${tOpt('default', 'Default (use category setting)')}
-                            ${tOpt('yes', 'Yes')}
-                            ${tOpt('no', 'No')}
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Wreck Image Path</label>
-                    <div class="form-fields">
-                        <file-picker name="flags.${MODULE_ID}.wreckImgPath" value="${imgPath}"></file-picker>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Wreck Effect Path</label>
-                    <div class="form-fields">
-                        <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effPath}"></file-picker>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Wreck Sound Path</label>
-                    <div class="form-fields">
-                        <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${sndPath}"></file-picker>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Tile Wreck Image/Effect Scale</label>
-                    <div class="form-fields">
-                        <input type="range" name="flags.${MODULE_ID}.wreckScale" value="${scale}" step="0.1" min="0" max="5">
-                        <span class="range-value">${scale}</span>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Spawn Wreck Image</label>
-                    <div class="form-fields">
-                        <input type="checkbox" name="flags.${MODULE_ID}.spawnWreckImage" ${spawnImg ? 'checked' : ''}>
-                    </div>
-                    <p class="notes">Display wreck image when this token is destroyed.</p>
-                </div>
-                <div class="form-group">
-                    <label>Play Wreck Sound</label>
-                    <div class="form-fields">
-                        <input type="checkbox" name="flags.${MODULE_ID}.playWreckSound" ${playSound ? 'checked' : ''}>
-                    </div>
-                    <p class="notes">Play sound effect when this token is wrecked.</p>
-                </div>
-                <div class="form-group">
-                    <label>Play Wreck Effect</label>
-                    <div class="form-fields">
-                        <input type="checkbox" name="flags.${MODULE_ID}.playWreckEffect" ${playEffect ? 'checked' : ''}>
-                    </div>
-                    <p class="notes">Play visual effect when this token is wrecked.</p>
-                </div>
+    const flags = data.object?.flags?.[MODULE_ID] ?? data.source?.flags?.[MODULE_ID] ?? {};
+    const showWreck = game.settings.get(MODULE_ID, 'enableWrecks') && actorType !== 'deployable';
+
+    const wreckHtml = showWreck ? _buildWreckSectionHtml(flags) : '';
+    const awarenessHtml = _buildAwarenessSectionHtml(flags);
+    const rulerHtml = _buildRulerSectionHtml(flags);
+
+    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la">${rulerHtml}${wreckHtml}${awarenessHtml}</div>`;
+    const resourcesTab = el.querySelector('div.tab[data-tab="resources"]');
+    if (resourcesTab)
+        resourcesTab.insertAdjacentHTML('afterend', tabHtml);
+
+    if (typeof app.setPosition === 'function')
+        app.setPosition({ height: 'auto' });
+}
+
+function _buildRulerSectionHtml(flags) {
+    const ignoreRuler = flags.ignoreRulerAutoElevation === true;
+    return `
+        <div class="form-group">
+            <label>Ignore Ruler Auto-Elevation</label>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.ignoreRulerAutoElevation" data-dtype="Boolean" ${ignoreRuler ? 'checked' : ''}>
             </div>
-        `);
-        $html.find('div.tab[data-tab="resources"]').after(newHtml);
+        </div>
+    `;
+}
 
-        if (typeof app.setPosition === 'function') {
-            app.setPosition({ height: 'auto' });
-        }
-    });
+function _buildWreckSectionHtml(flags) {
+    const imgPath = flags.wreckImgPath ?? '';
+    const effPath = flags.wreckEffectPath ?? '';
+    const sndPath = flags.wreckSoundPath ?? '';
+    const scale = flags.wreckScale ?? 1;
+    const spawnImg = flags.spawnWreckImage ?? true;
+    const playSound = flags.playWreckSound ?? true;
+    const playEffect = flags.playWreckEffect ?? true;
+    const wreckMode = flags.wreckMode ?? 'default';
+    const modeOpt = (val, label) => `<option value="${val}" ${wreckMode === val ? 'selected' : ''}>${label}</option>`;
+    const terrainOverride = flags.terrainOverride ?? 'default';
+    const tOpt = (val, label) => `<option value="${val}" ${terrainOverride === val ? 'selected' : ''}>${label}</option>`;
+    return `
+        <div class="form-group">
+            <label>Wreck Mode</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.wreckMode">
+                    ${modeOpt('default', 'Default (use category setting)')}
+                    ${modeOpt('token', 'Token')}
+                    ${modeOpt('tile', 'Tile')}
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>On Wreck</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.terrainOverride">
+                    ${tOpt('default', 'Default (use category setting)')}
+                    ${tOpt('none', 'Nothing')}
+                    ${tOpt('terrain', 'THT Difficult Terrain')}
+                    ${tOpt('aura', 'Aura (movement +1)')}
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Wreck Image Path</label>
+            <div class="form-fields">
+                <file-picker name="flags.${MODULE_ID}.wreckImgPath" value="${imgPath}"></file-picker>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Wreck Effect Path</label>
+            <div class="form-fields">
+                <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effPath}"></file-picker>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Wreck Sound Path</label>
+            <div class="form-fields">
+                <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${sndPath}"></file-picker>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Tile Wreck Image/Effect Scale</label>
+            <div class="form-fields">
+                <input type="range" name="flags.${MODULE_ID}.wreckScale" value="${scale}" step="0.1" min="0" max="5" data-dtype="Number">
+                <span class="range-value">${scale}</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Spawn Wreck Image</label>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.spawnWreckImage" data-dtype="Boolean" ${spawnImg ? 'checked' : ''}>
+            </div>
+            <p class="notes">Display wreck image when this token is destroyed.</p>
+        </div>
+        <div class="form-group">
+            <label>Play Wreck Sound</label>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.playWreckSound" data-dtype="Boolean" ${playSound ? 'checked' : ''}>
+            </div>
+            <p class="notes">Play sound effect when this token is wrecked.</p>
+        </div>
+        <div class="form-group">
+            <label>Play Wreck Effect</label>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.playWreckEffect" data-dtype="Boolean" ${playEffect ? 'checked' : ''}>
+            </div>
+            <p class="notes">Play visual effect when this token is wrecked.</p>
+        </div>
+    `;
+}
+
+function _buildAwarenessSectionHtml(flags) {
+    const mode = flags.awarenessMode ?? 'default';
+    const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
+    return `
+        <div class="form-group">
+            <label>Detection Visual</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.awarenessMode" data-dtype="String">
+                    ${opt('default', 'Default (silhouette + scan)')}
+                    ${opt('simple', 'Simple Object (rotating outline)')}
+                    ${opt('visible', 'Visible (no overlay)')}
+                    ${opt('ignore', 'Ignore (not detected)')}
+                </select>
+            </div>
+            <p class="notes">Controls Battle Awareness display. Non-default modes also disable Sensor detection on this token.</p>
+        </div>
+    `;
 }
 
 // ---------------------------------------------------------------------------

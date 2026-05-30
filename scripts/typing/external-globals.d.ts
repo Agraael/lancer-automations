@@ -138,7 +138,6 @@ interface Actor {
 
 interface Token {
     actor?: Actor | null;
-    elevationruler?: { measurementHistory?: any[];[key: string]: any };
     _movement?: { points: number[];[key: string]: any } | null;
     effects?: PIXI.Container & { bg?: any;[key: string]: any };
 }
@@ -196,17 +195,6 @@ interface CONFIG {
             pixelsToGridUnits(pixels: number): number;
             [key: string]: any;
         };
-        [key: string]: any;
-    };
-    elevationruler?: {
-        SPEED?: {
-            ATTRIBUTES?: { [key: string]: any };
-            CATEGORIES?: any[];
-            tokenSpeed?: (token: any) => number;
-            maximumCategoryDistance?: (token: any, cat: any, ts?: number) => number;
-            [key: string]: any;
-        };
-        MovePenalty?: any;
         [key: string]: any;
     };
 }

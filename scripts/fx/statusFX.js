@@ -3,6 +3,8 @@
  */
 /*global TokenMagic */
 
+import { getIsoProvider } from '../setup/iso-settings.js';
+
 const MODULE_ID = 'lancer-automations';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
@@ -831,6 +833,30 @@ const flyingEffect = [
     }
 ];
 
+const flyingEffectIso = [
+    {
+        filterType: "transform",
+        filterId: "FlyingBob",
+        padding: 0,
+        translationX: 0,
+        translationY: 0,
+        animated: {
+            translationX: {
+                animType: "cosOscillation",
+                val1: 0,
+                val2: -0.0355,
+                loopDuration: 2000
+            },
+            translationY: {
+                animType: "cosOscillation",
+                val1: 0,
+                val2: 0.0212,
+                loopDuration: 2000
+            }
+        }
+    }
+];
+
 const corePowerEffect = [
     {
         filterType: "xbloom",
@@ -1095,6 +1121,12 @@ async function _doReconcileStatusFX(actor) {
                 let preset = entry.preset;
                 if (entry.key === 'dangerZone' && isEnkiduFrame(actor)) {
                     preset = enkiduDangerZoneEffect;
+                }
+                if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene)) {
+                    const base = entry.name === 'Hover'
+                        ? flyingEffectIso.map(f => ({ ...f, filterId: f.filterId.replace('Flying', 'Hover') }))
+                        : flyingEffectIso;
+                    preset = base;
                 }
                 console.log('[LA-FX]   ADD', entry.name, 'flag(before) =', _flagFilterIds(token));
                 await token.TMFXaddUpdateFilters(preset);

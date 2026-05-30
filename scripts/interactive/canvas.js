@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, $, Ray */
+/* global canvas, PIXI, game, ui, $, Ray, Hooks */
 
 import {
     isHexGrid, offsetToCube, cubeDistance,
@@ -8,6 +8,7 @@ import {
     snapTokenCenter, getOccupiedGridSpaces, getInRangeOffsets, isPositionInRange
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { getIsoProvider } from "../setup/iso-settings.js";
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard
@@ -25,6 +26,30 @@ import { _rulerMove } from "../main.js";
 export function pointerToWorld(event) {
     return canvas.stage.worldTransform.applyInverse(event.global);
 }
+
+const _LA_PICKER_OVERRIDE = Symbol('la-picker-override');
+
+/** Suppress TokenLayer's release-on-click. Returns a restorer that only undoes our override. */
+function suppressTokenLayerClick() {
+    const layer = canvas.tokens;
+    if (!layer)
+        return () => {};
+    const prev = layer._onClickLeft;
+    const stub = () => {};
+    stub[_LA_PICKER_OVERRIDE] = true;
+    layer._onClickLeft = stub;
+    return () => {
+        if (canvas.tokens?._onClickLeft === stub)
+            canvas.tokens._onClickLeft = prev;
+    };
+}
+
+// Scene change wipes any orphan picker stub left behind by a crashed handler.
+Hooks.on('canvasTearDown', () => {
+    const layer = canvas.tokens;
+    if (layer?._onClickLeft?.[_LA_PICKER_OVERRIDE])
+        delete layer._onClickLeft;
+});
 
 /** @returns {PIXI.Graphics} */
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
@@ -57,6 +82,80 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
         canvas.stage.addChild(highlight);
     }
     return highlight;
+}
+
+/**
+ * Hex range highlight (gray, low-alpha) with animated wave pulse, matching the
+ * visual used by choose-token / knockback cards. Returns a destroy() function.
+ */
+export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false } = {}) {
+    const rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, includeSelf);
+
+    const pulseGraphic = new PIXI.Graphics();
+    if (canvas.tokens?.parent) {
+        canvas.tokens.parent.addChildAt(pulseGraphic, canvas.tokens.parent.getChildIndex(canvas.tokens));
+    } else {
+        canvas.stage.addChild(pulseGraphic);
+    }
+
+    const inRangeSetForPulse = getInRangeOffsets(casterToken, range, { includeSelf: true });
+    const originOffsets = getOccupiedOffsets(casterToken);
+    const hexesByDist = new Map();
+    for (const key of inRangeSetForPulse) {
+        const [col, row] = key.split(',').map(Number);
+        let minDist = Infinity;
+        for (const o of originOffsets) {
+            const d = isHexGrid()
+                ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+            if (d < minDist)
+                minDist = d;
+        }
+        if (minDist === 0)
+            continue;
+        if (!hexesByDist.has(minDist))
+            hexesByDist.set(minDist, []);
+        hexesByDist.get(minDist).push({ col, row });
+    }
+
+    const periodMs = 3200;
+    const ringWidth = 1.1;
+    const gridSize = canvas.grid.size;
+    const wavePulse = () => {
+        pulseGraphic.clear();
+        const t = (performance.now() % periodMs) / periodMs;
+        const cur = t * (range + 1);
+        for (const [dist, list] of hexesByDist) {
+            const delta = Math.abs(dist - cur);
+            if (delta > ringWidth)
+                continue;
+            const alpha = 0.035 * (1 - delta / ringWidth);
+            pulseGraphic.lineStyle(0);
+            pulseGraphic.beginFill(0x929292, alpha);
+            for (const { col, row } of list) {
+                if (isHexGrid())
+                    drawHexAt(pulseGraphic, col, row);
+                else {
+                    const c = getHexCenter(col, row);
+                    pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                }
+            }
+            pulseGraphic.endFill();
+        }
+    };
+    canvas.app.ticker.add(wavePulse);
+
+    return () => {
+        canvas.app.ticker.remove(wavePulse);
+        if (rangeHighlight) {
+            if (rangeHighlight.parent)
+                rangeHighlight.parent.removeChild(rangeHighlight);
+            rangeHighlight.destroy();
+        }
+        if (pulseGraphic.parent)
+            pulseGraphic.parent.removeChild(pulseGraphic);
+        pulseGraphic.destroy();
+    };
 }
 
 
@@ -290,15 +389,21 @@ export function chooseToken(casterToken, options = {}) {
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
+        const restoreLayerClick = suppressTokenLayerClick();
 
+        let safeMove, safeClick, safeAbort, safeKey;
         const doCleanup = () => {
             canvas.app.ticker.remove(cursorPulse);
             if (wavePulse)
                 canvas.app.ticker.remove(wavePulse);
-            canvas.stage.off('click', clickHandler);
-            canvas.stage.off('rightdown', abortHandler);
-            canvas.stage.off('pointermove', moveHandler);
-            document.removeEventListener('keydown', keyHandler);
+            if (safeClick)
+                canvas.stage.off('click', safeClick);
+            if (safeAbort)
+                canvas.stage.off('rightdown', safeAbort);
+            if (safeMove)
+                canvas.stage.off('pointermove', safeMove);
+            if (safeKey)
+                document.removeEventListener('keydown', safeKey);
             if (rangeHighlight) {
                 if (rangeHighlight.parent) {
                     rangeHighlight.parent.removeChild(rangeHighlight);
@@ -328,6 +433,7 @@ export function chooseToken(casterToken, options = {}) {
             });
 
             canvas.tokens.interactiveChildren = prevInteractive;
+            restoreLayerClick();
             _removeInfoCard(cardEl);
             closeStackPopup();
         };
@@ -543,8 +649,12 @@ export function chooseToken(casterToken, options = {}) {
                     <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
                     <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
                     ${isSelected ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
-                row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,100,0,0.4)'; });
-                row.addEventListener('mouseleave', () => { row.style.background = isSelected ? 'rgba(255,100,0,0.25)' : 'transparent'; });
+                row.addEventListener('mouseenter', () => {
+                    row.style.background = 'rgba(255,100,0,0.4)';
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.background = isSelected ? 'rgba(255,100,0,0.25)' : 'transparent';
+                });
                 row.addEventListener('click', (e) => {
                     e.stopPropagation();
                     toggleTokenSelection(token);
@@ -620,11 +730,24 @@ export function chooseToken(casterToken, options = {}) {
             refreshCard();
         }
 
-        canvas.stage.on('pointermove', moveHandler);
-
-        canvas.stage.on('click', clickHandler);
-        canvas.stage.on('rightdown', abortHandler);
-        document.addEventListener('keydown', keyHandler);
+        const safe = (fn) => function safeHandler(...args) {
+            try {
+                return fn.apply(this, args);
+            } catch (e) {
+                console.error('chooseToken handler crash, cleaning up:', e);
+                try {
+                    doCancel();
+                } catch { /* */ }
+            }
+        };
+        safeMove = safe(moveHandler);
+        safeClick = safe(clickHandler);
+        safeAbort = safe(abortHandler);
+        safeKey = safe(keyHandler);
+        canvas.stage.on('pointermove', safeMove);
+        canvas.stage.on('click', safeClick);
+        canvas.stage.on('rightdown', safeAbort);
+        document.addEventListener('keydown', safeKey);
     }), _title);
 }
 
@@ -642,7 +765,7 @@ export function chooseToken(casterToken, options = {}) {
  * placeZone(token, { size: 2, statusEffects: ["impaired", "lockon"] });
  * ```
  *
- * **Difficult terrain zone** (imposes movement penalty via ElevationRuler):
+ * **Difficult terrain zone** (imposes movement penalty):
  * ```js
  * placeZone(token, { size: 2, difficultTerrain: { movementPenalty: 1, isFlatPenalty: true } });
  * ```
@@ -659,7 +782,7 @@ export function chooseToken(casterToken, options = {}) {
  * @param {Object} [options.hooks={}] - templatemacro hooks (created, deleted, entered, left, turnStart, turnEnd, ...)
  * @param {Object} [options.dangerous] - Shortcut: `{ damageType, damageValue }` — triggers ENG check on entry/turn start
  * @param {string[]} [options.statusEffects] - Shortcut: array of status effect IDs to apply to tokens inside
- * @param {Object} [options.difficultTerrain] - Shortcut: `{ movementPenalty, isFlatPenalty }` — sets ElevationRuler movement cost
+ * @param {Object} [options.difficultTerrain] - Shortcut: `{ movementPenalty, isFlatPenalty }` — sets movement cost
  * @param {string} [options.title] - Card title
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
@@ -787,6 +910,8 @@ export async function placeZone(casterToken, options = {}) {
             canvas.app.ticker.add(wavePulse);
         }
 
+        const restoreLayerClick = suppressTokenLayerClick();
+
         const doCleanup = () => {
             if (wavePulse)
                 canvas.app.ticker.remove(wavePulse);
@@ -799,6 +924,7 @@ export async function placeZone(casterToken, options = {}) {
             if (pulseGraphic.parent)
                 pulseGraphic.parent.removeChild(pulseGraphic);
             pulseGraphic.destroy();
+            restoreLayerClick();
             _removeInfoCard(cardEl);
         };
 
@@ -994,35 +1120,35 @@ export async function placeZone(casterToken, options = {}) {
 }
 
 /**
- * Safely cancels a ruler drag in progress by removing the aborted destination from elevationruler measurement history.
- * Should be called synchronously within a preUpdateToken hook.
+ * Trim the token's native movement history so a cancelled drag doesn't leave a phantom waypoint.
+ * Called from preUpdateToken / triggered-cancel paths.
  * @param {Token} token
  */
-export function cancelRulerDrag(token, moveInfo = null) {
-    if (!game.modules.get("elevationruler")?.active)
+export function cancelRulerDrag(token, _moveInfo = null) {
+    const doc = token?.document;
+    const history = doc?._source?._movementHistory;
+    if (!Array.isArray(history) || history.length === 0)
         return;
-    const history = token.elevationruler?.measurementHistory;
-
-    if (history && history.length >= 1) {
-        // Find the most recent waypoint in history that matches the token's exact current position.
-        // elevationruler's history stores bounding center coordinates (x, y) for waypoints.
-        const center = token.getCenterPoint({ x: token.document.x, y: token.document.y });
-        // Find the last index that matches the current center (-1 if not found)
-        const matchIndex = history.findLastIndex(pt =>
-            Math.abs(pt.x - center.x) < 2 && Math.abs(pt.y - center.y) < 2
-        );
-
-        if (matchIndex !== -1) {
-            // Keep up to AND INCLUDING the matched point (= where the token actually is).
-            history.length = matchIndex + 1;
-        } else {
-            history.pop();
+    const cx = doc.x, cy = doc.y;
+    let lastValidIdx = -1;
+    for (let i = history.length - 1; i >= 0; i--) {
+        const w = history[i];
+        if (Math.abs((w.x ?? 0) - cx) < 2 && Math.abs((w.y ?? 0) - cy) < 2) {
+            lastValidIdx = i; break;
         }
+    }
+    if (lastValidIdx === history.length - 1)
+        return;
+    const trimmed = history.slice(0, lastValidIdx + 1);
+    try {
+        doc.update({ _movementHistory: trimmed }, { diff: false });
+    } catch (e) {
+        console.warn('lancer-automations | cancelRulerDrag trim failed', e);
     }
 }
 
 /**
- * Apply pre-resolved knockback moves to tokens with elevationruler integration.
+ * Apply pre-resolved knockback moves.
  * Used by knockBackToken (after the destination picker resolves) and the socket handler.
  * @param {Array<{tokenId: string, updateData: {x: number, y: number}}>} moveList - Per-token resolved destinations.
  * @param {Token|null} triggeringToken - Token that caused the knockback. Required for `triggerSelf` reactions; warns when null.
@@ -1084,7 +1210,8 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
             let maxH = 0;
             for (const o of getOccupiedOffsets(t, dest)) {
                 const h = getHexGroundElevation(o.col, o.row, terrainAPI);
-                if (h > maxH) maxH = h;
+                if (h > maxH)
+                    maxH = h;
             }
             dest.elevation = maxH;
         }
@@ -1095,7 +1222,7 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
 /**
  * Move a token to a destination, bypassing normal movement rules (like knockback).
  * If no destination is provided, shows an interactive card with range highlight.
- * Records movement in both lancer-automations history and ElevationRuler.
+ * Records movement in lancer-automations history.
  * @param {Token} token - The token to move
  * @param {Object} [options={}]
  * @param {{x: number, y: number}} [options.destination] - Destination center point. If omitted, interactive mode.
@@ -1144,14 +1271,22 @@ export async function moveToken(token, options = {}) {
             canvas.app.ticker.add(cursorPulse);
             let wavePulse = null;
 
+            const restoreLayerClick = suppressTokenLayerClick();
+            let safeMove, safeClick, safeAbort, safeKey;
+
             const doCleanup = () => {
                 canvas.app.ticker.remove(cursorPulse);
                 if (wavePulse)
                     canvas.app.ticker.remove(wavePulse);
-                canvas.stage.off('click', clickHandler);
-                canvas.stage.off('rightdown', abortHandler);
-                canvas.stage.off('pointermove', moveHandler);
-                document.removeEventListener('keydown', keyHandler);
+                if (safeClick)
+                    canvas.stage.off('click', safeClick);
+                if (safeAbort)
+                    canvas.stage.off('rightdown', safeAbort);
+                if (safeMove)
+                    canvas.stage.off('pointermove', safeMove);
+                if (safeKey)
+                    document.removeEventListener('keydown', safeKey);
+                restoreLayerClick();
                 if (rangeHighlight) {
                     if (rangeHighlight.parent)
                         rangeHighlight.parent.removeChild(rangeHighlight); rangeHighlight.destroy();
@@ -1185,7 +1320,8 @@ export async function moveToken(token, options = {}) {
 
             const inRangeSet = range >= 0 ? getInRangeOffsets(token, range, { includeSelf: true }) : null;
             const isDestInRange = (snappedX, snappedY) => {
-                if (!inRangeSet) return true;
+                if (!inRangeSet)
+                    return true;
                 return getOccupiedOffsets(token, { x: snappedX, y: snappedY })
                     .some(o => inRangeSet.has(`${o.col},${o.row}`));
             };
@@ -1251,16 +1387,22 @@ export async function moveToken(token, options = {}) {
                 trace.lineStyle(2, 0xffff00, 0.8);
                 trace.beginFill(0xffff00, 0.3);
                 for (const o of getOccupiedOffsets(token)) {
-                    if (isHexGrid()) drawHexAt(trace, o.col, o.row);
-                    else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
+                    if (isHexGrid())
+                        drawHexAt(trace, o.col, o.row);
+                    else {
+                        const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                    }
                 }
                 trace.endFill();
                 // Target position (green for teleport)
                 trace.lineStyle(2, 0x00cc66, 0.8);
                 trace.beginFill(0x00cc66, 0.3);
                 for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
-                    if (isHexGrid()) drawHexAt(trace, o.col, o.row);
-                    else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
+                    if (isHexGrid())
+                        drawHexAt(trace, o.col, o.row);
+                    else {
+                        const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                    }
                 }
                 trace.endFill();
                 // Dashed line
@@ -1314,10 +1456,25 @@ export async function moveToken(token, options = {}) {
                 }
             };
 
-            canvas.stage.on('click', clickHandler);
-            canvas.stage.on('rightdown', abortHandler);
-            canvas.stage.on('pointermove', moveHandler);
-            document.addEventListener('keydown', keyHandler);
+            const safe = (fn) => function safeHandler(...args) {
+                try {
+                    return fn.apply(this, args);
+                } catch (e) {
+                    console.error('moveToken handler crash, cleaning up:', e);
+                    try {
+                        doCleanup();
+                    } catch { /* */ }
+                    resolve(null);
+                }
+            };
+            safeMove = safe(moveHandler);
+            safeClick = safe(clickHandler);
+            safeAbort = safe(abortHandler);
+            safeKey = safe(keyHandler);
+            canvas.stage.on('click', safeClick);
+            canvas.stage.on('rightdown', safeAbort);
+            canvas.stage.on('pointermove', safeMove);
+            document.addEventListener('keydown', safeKey);
         }), _title);
         if (!picked)
             return null;
@@ -1355,13 +1512,15 @@ export async function moveToken(token, options = {}) {
                 const off = pathOffsets[i];
                 const blocked = allTokens.find(other => {
                     const otherIsIntangible = !!other.actor?.statuses?.has('intangible');
-                    if (movingIsIntangible !== otherIsIntangible) return false;
+                    if (movingIsIntangible !== otherIsIntangible)
+                        return false;
                     const otherOffsets = getOccupiedOffsets(other);
                     return otherOffsets.some(oo => oo.col === off.col && oo.row === off.row);
                 });
                 if (blocked) {
                     ui.notifications.warn(`Movement blocked by ${blocked.name}.`);
-                    if (i === 0) return null; // Blocked immediately, can't move
+                    if (i === 0)
+                        return null; // Blocked immediately, can't move
                     // Stop at last free hex
                     const lastFree = pathOffsets[i - 1];
                     const lastCenter = getHexCenter(lastFree.col, lastFree.row);
@@ -1418,36 +1577,9 @@ export async function moveToken(token, options = {}) {
         lancerSegmentDistance: moveCost,
         lancerTerrainPenalty: 0
     };
-    if (options.teleport) moveFlags.teleport = true;
+    if (options.teleport)
+        moveFlags.teleport = true;
     const doc = await token.document.update(updateData, moveFlags);
-
-    // Patch ElevationRuler history (same pattern as knockback)
-    if (game.modules.get("elevationruler")?.active && doc?.object) {
-        const tokenObj = doc.object;
-        if (!tokenObj.elevationruler)
-            tokenObj.elevationruler = {};
-        let history = tokenObj.elevationruler.measurementHistory;
-        if (!history)
-            history = tokenObj.elevationruler.measurementHistory = [];
-        const gridUnitsToPixels = CONFIG.GeometryLib.utils.gridUnitsToPixels;
-        const zValue = gridUnitsToPixels(token.document.elevation ?? 0);
-        const last = history.at(-1);
-        let addedNative = false;
-        if (last && Math.abs(last.x - endCenter.x) < 2 && Math.abs(last.y - endCenter.y) < 2) {
-            addedNative = true;
-            last.x = endCenter.x; last.y = endCenter.y;
-            last.cost = moveCost; last.teleport = !!options.teleport;
-            if (last.z === undefined)
-                last.z = zValue;
-        }
-        if (!addedNative) {
-            history.push(
-                { ...startCenter, z: zValue, teleport: false, cost: 0 },
-                { ...endCenter, z: zValue, teleport: !!options.teleport, cost: moveCost }
-            );
-        }
-    }
-
     return doc;
 }
 const _title = "TELEPORT"; // for _queueCard
@@ -1484,11 +1616,19 @@ export function knockBackToken(tokens, distance, options = {}) {
 
         canvas.stage.addChild(cursorPreview);
 
+        const restoreLayerClick = suppressTokenLayerClick();
+        let safeMove, safeClick, safeAbort, safeKey;
+
         const doCleanup = () => {
-            canvas.stage.off('click', clickHandler);
-            canvas.stage.off('rightdown', abortHandler);
-            canvas.stage.off('pointermove', moveHandler);
-            document.removeEventListener('keydown', keyHandler);
+            if (safeClick)
+                canvas.stage.off('click', safeClick);
+            if (safeAbort)
+                canvas.stage.off('rightdown', safeAbort);
+            if (safeMove)
+                canvas.stage.off('pointermove', safeMove);
+            if (safeKey)
+                document.removeEventListener('keydown', safeKey);
+            restoreLayerClick();
 
             if (rangeHighlight) {
                 if (rangeHighlight.parent)
@@ -1617,8 +1757,11 @@ export function knockBackToken(tokens, distance, options = {}) {
             trace.lineStyle(2, 0xffff00, 0.8);
             trace.beginFill(0xffff00, 0.3);
             for (const o of getOccupiedOffsets(token)) {
-                if (isHexGrid()) drawHexAt(trace, o.col, o.row);
-                else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
+                if (isHexGrid())
+                    drawHexAt(trace, o.col, o.row);
+                else {
+                    const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                }
             }
             trace.endFill();
 
@@ -1626,8 +1769,11 @@ export function knockBackToken(tokens, distance, options = {}) {
             trace.lineStyle(2, 0xff6400, 0.8);
             trace.beginFill(0xff6400, 0.3);
             for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
-                if (isHexGrid()) drawHexAt(trace, o.col, o.row);
-                else { const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize); }
+                if (isHexGrid())
+                    drawHexAt(trace, o.col, o.row);
+                else {
+                    const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                }
             }
             trace.endFill();
 
@@ -1805,10 +1951,25 @@ export function knockBackToken(tokens, distance, options = {}) {
         updateVisuals();
         updateCard();
 
-        canvas.stage.on('pointermove', moveHandler);
-        canvas.stage.on('click', clickHandler);
-        canvas.stage.on('rightdown', abortHandler);
-        document.addEventListener('keydown', keyHandler);
+        const safe = (fn) => function safeHandler(...args) {
+            try {
+                return fn.apply(this, args);
+            } catch (e) {
+                console.error('knockBackToken handler crash, cleaning up:', e);
+                try {
+                    doCleanup();
+                } catch { /* */ }
+                resolve([]);
+            }
+        };
+        safeMove = safe(moveHandler);
+        safeClick = safe(clickHandler);
+        safeAbort = safe(abortHandler);
+        safeKey = safe(keyHandler);
+        canvas.stage.on('pointermove', safeMove);
+        canvas.stage.on('click', safeClick);
+        canvas.stage.on('rightdown', safeAbort);
+        document.addEventListener('keydown', safeKey);
     }), _title);
 }
 
@@ -2012,6 +2173,7 @@ export function placeToken(options = {}) {
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
+        const restoreLayerClick = suppressTokenLayerClick();
 
         const getProtoOffsets = (centerCol, centerRow) => {
             if (protoWidth <= 1 && protoHeight <= 1)
@@ -2062,14 +2224,19 @@ export function placeToken(options = {}) {
             }
         };
 
+        let safeMove, safeClick, safeRight, safeKey;
         const doCleanup = () => {
             canvas.app.ticker.remove(cursorPulse);
             if (wavePulse)
                 canvas.app.ticker.remove(wavePulse);
-            canvas.stage.off('click', clickHandler);
-            canvas.stage.off('rightdown', rightHandler);
-            canvas.stage.off('pointermove', moveHandler);
-            document.removeEventListener('keydown', keyHandler);
+            if (safeClick)
+                canvas.stage.off('click', safeClick);
+            if (safeRight)
+                canvas.stage.off('rightdown', safeRight);
+            if (safeMove)
+                canvas.stage.off('pointermove', safeMove);
+            if (safeKey)
+                document.removeEventListener('keydown', safeKey, true);
 
             if (rangeHighlight) {
                 if (rangeHighlight.parent)
@@ -2090,6 +2257,7 @@ export function placeToken(options = {}) {
             }
 
             canvas.tokens.interactiveChildren = prevInteractive;
+            restoreLayerClick();
             if (cardEl)
                 _removeInfoCard(cardEl);
         };
@@ -2238,6 +2406,12 @@ export function placeToken(options = {}) {
             label.anchor.set(0.5);
             label.x = center.x;
             label.y = center.y - gridSize * 0.45;
+            const iso = getIsoProvider();
+            if (iso) {
+                label.rotation = iso.reverseRotation;
+                label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+                label.scale.set(iso.counterScale, 1 / iso.counterScale);
+            }
             container.addChild(label);
             container._labelText = label;
 
@@ -2300,30 +2474,261 @@ export function placeToken(options = {}) {
             }
         };
 
+        const ascendKeys = new Set([
+            ...(game.keybindings.get('core', 'zoomIn') ?? []).map(b => b.key),
+            'NumpadAdd', 'KeyE',
+        ]);
+        const descendKeys = new Set([
+            ...(game.keybindings.get('core', 'zoomOut') ?? []).map(b => b.key),
+            'NumpadSubtract', 'KeyQ',
+        ]);
         const keyHandler = (event) => {
             if (event.key === "Escape") {
                 doCleanup();
                 resolve(null);
                 return;
             }
-            if ((event.key === '[' || event.key === ']') && placements.length > 0) {
-                const last = placements[placements.length - 1];
-                const step = event.key === ']' ? 1 : -1;
-                last.elevation = (typeof last.elevation === 'number' ? last.elevation : 0) + step;
-                if (last.graphics?._labelText) {
-                    const e = last.elevation;
-                    last.graphics._labelText.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
-                }
-                refreshCard();
-                event.preventDefault();
+            let step = 0;
+            if (ascendKeys.has(event.code))
+                step = 1;
+            else if (descendKeys.has(event.code))
+                step = -1;
+            if (step === 0)
+                return;
+            // Always swallow the key so it can't reach Foundry's controlled-token elevation handler.
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            if (placements.length === 0)
+                return;
+            const last = placements[placements.length - 1];
+            last.elevation = (typeof last.elevation === 'number' ? last.elevation : 0) + step;
+            if (last.graphics?._labelText) {
+                const e = last.elevation;
+                last.graphics._labelText.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
             }
+            refreshCard();
         };
 
         refreshCard();
 
-        canvas.stage.on('pointermove', moveHandler);
-        canvas.stage.on('click', clickHandler);
-        canvas.stage.on('rightdown', rightHandler);
-        document.addEventListener('keydown', keyHandler);
+        const safe = (fn) => function safeHandler(...args) {
+            try {
+                return fn.apply(this, args);
+            } catch (e) {
+                console.error('placeToken handler crash, cleaning up:', e);
+                try {
+                    doCleanup();
+                } catch { /* */ }
+                resolve(null);
+            }
+        };
+        safeMove = safe(moveHandler);
+        safeClick = safe(clickHandler);
+        safeRight = safe(rightHandler);
+        safeKey = safe(keyHandler);
+        canvas.stage.on('pointermove', safeMove);
+        canvas.stage.on('click', safeClick);
+        canvas.stage.on('rightdown', safeRight);
+        document.addEventListener('keydown', safeKey, true);
     }), _title);
+}
+
+/** Cardless single-target toggle picker. Click toggles game.user.targets and exits. */
+export function pickSingleTargetToggle(casterToken = null, { includeSelf = false } = {}) {
+    return new Promise((resolve) => {
+        const allTokens = canvas.tokens.placeables.filter(t => {
+            if (!includeSelf && t.id === casterToken?.id)
+                return false;
+            if (t.document.hidden)
+                return false;
+            return true;
+        });
+
+        const cursorPreview = new PIXI.Graphics();
+        canvas.stage.addChild(cursorPreview);
+        const cursorPulse = () => {
+            cursorPreview.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
+        };
+        canvas.app.ticker.add(cursorPulse);
+
+        const prevInteractive = canvas.tokens.interactiveChildren;
+        canvas.tokens.interactiveChildren = false;
+        const restoreLayerClick = suppressTokenLayerClick();
+
+        let safeMove, safeClick, safeAbort, safeKey;
+        let stackPopupEl = null;
+        let stackOutsideHandler = null;
+        const closeStackPopup = () => {
+            if (stackPopupEl) {
+                stackPopupEl.remove();
+                stackPopupEl = null;
+            }
+            if (stackOutsideHandler) {
+                document.removeEventListener('pointerdown', stackOutsideHandler, true);
+                stackOutsideHandler = null;
+            }
+        };
+
+        const doCleanup = () => {
+            canvas.app.ticker.remove(cursorPulse);
+            if (safeClick)
+                canvas.stage.off('click', safeClick);
+            if (safeAbort)
+                canvas.stage.off('rightdown', safeAbort);
+            if (safeMove)
+                canvas.stage.off('pointermove', safeMove);
+            if (safeKey)
+                document.removeEventListener('keydown', safeKey);
+            if (cursorPreview.parent)
+                cursorPreview.parent.removeChild(cursorPreview);
+            cursorPreview.destroy();
+            canvas.tokens.interactiveChildren = prevInteractive;
+            restoreLayerClick();
+            closeStackPopup();
+        };
+
+        const toggleTarget = (token) => {
+            const already = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
+            token.setTarget(!already, { releaseOthers: false });
+            doCleanup();
+            resolve(token);
+        };
+
+        const drawCursorHighlight = (tx, ty) => {
+            cursorPreview.clear();
+            const hoveredToken = allTokens.find(token => {
+                const b = token.bounds;
+                return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
+            }) || null;
+            const color = hoveredToken ? 0x0088ff : 0xff0000;
+            const gridSize = canvas.grid.size;
+            cursorPreview.lineStyle(2, color, 0.8);
+            cursorPreview.beginFill(color, 0.4);
+            if (hoveredToken) {
+                if (isHexGrid()) {
+                    for (const off of getOccupiedOffsets(hoveredToken))
+                        drawHexAt(cursorPreview, off.col, off.row);
+                } else {
+                    cursorPreview.drawRect(
+                        hoveredToken.document.x,
+                        hoveredToken.document.y,
+                        hoveredToken.document.width * gridSize,
+                        hoveredToken.document.height * gridSize
+                    );
+                }
+            } else {
+                const cur = pixelToOffset(tx, ty);
+                if (isHexGrid()) {
+                    drawHexAt(cursorPreview, cur.col, cur.row);
+                } else {
+                    const c = getHexCenter(cur.col, cur.row);
+                    cursorPreview.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                }
+            }
+            cursorPreview.endFill();
+        };
+
+        const moveHandler = (event) => {
+            const { x: tx, y: ty } = pointerToWorld(event);
+            drawCursorHighlight(tx, ty);
+        };
+
+        const showStackPicker = (tokens, screenX, screenY) => {
+            closeStackPopup();
+            const el = document.createElement('div');
+            el.className = 'la-stack-picker';
+            el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
+            for (const token of tokens) {
+                const isTargeted = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
+                const row = document.createElement('div');
+                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${isTargeted ? 'background:rgba(255,100,0,0.25);' : ''}`;
+                row.innerHTML = `
+                    <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
+                    <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
+                    ${isTargeted ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
+                row.addEventListener('mouseenter', () => {
+                    row.style.background = 'rgba(255,100,0,0.4)';
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.background = isTargeted ? 'rgba(255,100,0,0.25)' : 'transparent';
+                });
+                row.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleTarget(token);
+                });
+                el.appendChild(row);
+            }
+            document.body.appendChild(el);
+            stackPopupEl = el;
+            const r = el.getBoundingClientRect();
+            if (r.right > window.innerWidth)
+                el.style.left = `${Math.max(0, window.innerWidth - r.width - 4)}px`;
+            if (r.bottom > window.innerHeight)
+                el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
+            stackOutsideHandler = (e) => {
+                if (stackPopupEl && !stackPopupEl.contains(/** @type {Node} */ (e.target)))
+                    closeStackPopup();
+            };
+            setTimeout(() => document.addEventListener('pointerdown', stackOutsideHandler, true), 0);
+        };
+
+        const clickHandler = (event) => {
+            const { x: tx, y: ty } = pointerToWorld(event);
+            const tokensHere = allTokens.filter(token => {
+                const b = token.bounds;
+                return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
+            });
+            if (tokensHere.length === 0)
+                return;
+            if (tokensHere.length === 1) {
+                toggleTarget(tokensHere[0]);
+                return;
+            }
+            const oe = event?.data?.originalEvent;
+            showStackPicker(tokensHere, (oe?.clientX ?? 0) + 10, (oe?.clientY ?? 0) + 10);
+        };
+
+        const abortHandler = (event) => {
+            if (event.data.button === 2) {
+                if (stackPopupEl) {
+                    closeStackPopup();
+                    return;
+                }
+                doCleanup();
+                resolve(null);
+            }
+        };
+
+        const keyHandler = (event) => {
+            if (event.key === 'Escape') {
+                if (stackPopupEl) {
+                    closeStackPopup();
+                    return;
+                }
+                doCleanup();
+                resolve(null);
+            }
+        };
+
+        const safe = (fn) => function safeHandler(...args) {
+            try {
+                return fn.apply(this, args);
+            } catch (e) {
+                console.error('pickSingleTargetToggle handler crash, cleaning up:', e);
+                try {
+                    doCleanup();
+                } catch { /* */ }
+                resolve(null);
+            }
+        };
+        safeMove = safe(moveHandler);
+        safeClick = safe(clickHandler);
+        safeAbort = safe(abortHandler);
+        safeKey = safe(keyHandler);
+        canvas.stage.on('pointermove', safeMove);
+        canvas.stage.on('click', safeClick);
+        canvas.stage.on('rightdown', safeAbort);
+        document.addEventListener('keydown', safeKey);
+    });
 }

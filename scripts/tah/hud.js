@@ -3,7 +3,7 @@
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction } from '../interactive/deployables.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
@@ -311,7 +311,8 @@ export class LancerHUD {
         this._favIconPositioner = () => {
             const c1Pos = c1.position();
             const labelPos = menuLabel.position();
-            if (!c1Pos || !labelPos) return;
+            if (!c1Pos || !labelPos)
+                return;
             const c1Bottom = c1Pos.top + c1.outerHeight();
             const labelTop = c1Pos.top + labelPos.top;
             favIcon.css({
@@ -383,7 +384,9 @@ export class LancerHUD {
                 });
                 dispToggle.find('span').text('▶');
             };
-            dispToggle.on('mouseenter', () => { playUiSound('statusHover'); openDisp(); });
+            dispToggle.on('mouseenter', () => {
+                playUiSound('statusHover'); openDisp();
+            });
             dispToggle.on('mouseleave', closeDisp);
             dispDetail.on('mouseenter', openDisp);
             dispDetail.on('mouseleave', closeDisp);
@@ -465,12 +468,22 @@ export class LancerHUD {
         const c3 = this._makeCol('');
         const c4 = this._makeCol('');
         c1.css({ position: 'relative', zIndex: 4 });
-        c2.css({ position: 'absolute', top: 0, left: c1.outerWidth(), display: 'none', zIndex: 3 });
-        c3.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 2 });
-        c4.css({ position: 'absolute', top: 0, left: 0,                   display: 'none', zIndex: 1 });
+        // Pin absolute children to c1's actual y instead of hud's padding edge. In v13 some root
+        // CSS shifts hud's padding/margin so `top:0` no longer matches c1's normal-flow top.
+        const c1Top = () => c1.position()?.top ?? 0;
+        c2.css({ position: 'absolute', top: c1Top(), left: c1.outerWidth(), display: 'none', zIndex: 3 });
+        c3.css({ position: 'absolute', top: c1Top(), left: 0,               display: 'none', zIndex: 2 });
+        c4.css({ position: 'absolute', top: c1Top(), left: 0,               display: 'none', zIndex: 1 });
         hud.append(c2, c3, c4);
         hud.append(favIcon);
         requestAnimationFrame(() => this._favIconPositioner?.());
+        // c1 height/width changes when search bar opens, combat bar toggles, or rows expand/collapse.
+        // Reposition the floating favorites tab on every change.
+        try {
+            this._favResizeObserver?.disconnect();
+            this._favResizeObserver = new ResizeObserver(() => this._favIconPositioner?.());
+            this._favResizeObserver.observe(c1[0]);
+        } catch { /* ResizeObserver unsupported */ }
         this._c2 = c2;
         this._c3 = c3;
         this._c4 = c4;
@@ -675,7 +688,8 @@ export class LancerHUD {
             }
             const bindings = /** @type {any[]} */ (game.keybindings.get('lancer-automations', 'tah.toggleSearch') ?? []);
             const match = bindings.some(b => {
-                if (b.key !== ev.code) return false;
+                if (b.key !== ev.code)
+                    return false;
                 const mods = b.modifiers ?? [];
                 return ev.altKey   === mods.includes('Alt')
                     && ev.ctrlKey  === mods.includes('Control')
@@ -712,18 +726,22 @@ export class LancerHUD {
         };
         const isOverFavIcon = (ev) => {
             const r = favIconInner[0]?.getBoundingClientRect();
-            if (!r) return false;
+            if (!r)
+                return false;
             return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
         };
         const enterFav = () => {
-            if (favHovering) return;
+            if (favHovering)
+                return;
             favHovering = true;
             _cancelCollapse();
             applyFavStyle();
-            if (!clickToOpen) openFavorites();
+            if (!clickToOpen)
+                openFavorites();
         };
         const leaveFav = () => {
-            if (!favHovering) return;
+            if (!favHovering)
+                return;
             favHovering = false;
             applyFavStyle();
         };
@@ -737,16 +755,20 @@ export class LancerHUD {
                 document.removeEventListener('click', this._favDocHandlers.click, true);
         }
         const docMoveHandler = (ev) => {
-            if (!this._el) return;
+            if (!this._el)
+                return;
             const over = isOverFavIcon(ev);
-            if (over) enterFav();
-            else leaveFav();
+            if (over)
+                enterFav();
+            else
+                leaveFav();
         };
         document.addEventListener('mousemove', docMoveHandler);
         let docClickHandler = null;
         if (clickToOpen) {
             docClickHandler = (ev) => {
-                if (!this._el) return;
+                if (!this._el)
+                    return;
                 if (isOverFavIcon(ev)) {
                     ev.stopPropagation();
                     openFavorites();
@@ -833,7 +855,7 @@ export class LancerHUD {
             const aOff = anchorRow.offset();
             const eOff = this._el.offset();
             if (aOff && eOff)
-                col.css({ top: aOff.top - eOff.top - 18 });
+                col.css({ top: aOff.top - eOff.top - 22 });
         }
 
         if (!filteredItems.length) {
@@ -926,9 +948,11 @@ export class LancerHUD {
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
             const isFavoritable = !item.isSectionLabel && !!item.onClick && !!this._favKey(item);
-            if (isFavoritable && this._isFavorite(item)) this._applyFavStyle(row);
+            if (isFavoritable && this._isFavorite(item))
+                this._applyFavStyle(row);
             row.on('contextmenu', async (ev) => {
-                if (!ev.ctrlKey) return;
+                if (!ev.ctrlKey)
+                    return;
                 ev.preventDefault();
                 ev.stopImmediatePropagation();
                 if (!isFavoritable) {
@@ -937,8 +961,10 @@ export class LancerHUD {
                 }
                 const nowFav = await this._toggleFavorite(item);
                 playUiSound('toggle');
-                if (nowFav) this._applyFavStyle(row);
-                else this._clearFavStyle(row);
+                if (nowFav)
+                    this._applyFavStyle(row);
+                else
+                    this._clearFavStyle(row);
             });
 
             // if (hasChildren && rawChildren !== null && !rawChildren.length)
@@ -995,7 +1021,9 @@ export class LancerHUD {
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
 
-            if (!hasChildren || item.isLogPanel || item.isGlossaryPanel)
+            // Hover sound on leaf rows (and Log / Glossary) only in hover-mode. Click-to-open
+            // mode plays sound on click, not on hover, matching other rows.
+            if ((!hasChildren || item.isLogPanel || item.isGlossaryPanel) && !this._clickToOpen)
                 row.on('mouseenter', () => playUiSound('hover'));
 
             if (col !== this._c4 && !this._clickToOpen) {
@@ -1046,6 +1074,32 @@ export class LancerHUD {
                 });
             }
 
+            // Click-to-open mode: Log / Glossary panels don't register the hover handler above,
+            // so they need an explicit click binding (hover-mode rows above already handle them).
+            if (this._clickToOpen && (item.isLogPanel || item.isGlossaryPanel)) {
+                row.on('click', () => {
+                    playUiSound('open');
+                    $('.la-hud-popup').remove();
+                    // Behave like a normal row: clear sibling actives in this column, mark self active,
+                    // close any child column drilldowns and the other panel.
+                    col.find('.la-hud-active').each(function() {
+                        const r = $(this);
+                        r.css({ background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT })
+                            .removeClass('la-hud-active');
+                    });
+                    this._setActive(col, row);
+                    this._statusPanelInstance?.close();
+                    closeCol(this._c3, 80);
+                    closeCol(this._c4, 80);
+                    if (item.isLogPanel) {
+                        this._glossaryPanelInstance?.close();
+                        this._logPanelInstance?.open(row);
+                    } else {
+                        this._logPanelInstance?.close();
+                        this._glossaryPanelInstance?.open(row);
+                    }
+                });
+            }
             if (item.onClick) {
                 row.on('click', async () => {
                     playUiSound('open');
@@ -1124,12 +1178,17 @@ export class LancerHUD {
                     }
                     this._setActive(col, row);
                     playUiSound();
+                    // Close any panels (log / glossary / status) before drilling into a new child column.
+                    this._logPanelInstance?.close();
+                    this._glossaryPanelInstance?.close();
+                    this._statusPanelInstance?.close();
+                    const freshChildren = item.getChildren ? item.getChildren() : rawChildren;
                     if (col === this._c2) {
                         closeCol(this._c4, 80);
-                        this._openChildCol(col, this._c3, item, rawChildren, row);
+                        this._openChildCol(col, this._c3, item, freshChildren, row);
                     } else if (col === this._c3) {
                         this._c4AnchorRow = row;
-                        this._openChildCol(this._c3, this._c4, item, rawChildren, row);
+                        this._openChildCol(this._c3, this._c4, item, freshChildren, row);
                     }
                 };
                 if (this._clickToOpen)
@@ -1381,6 +1440,25 @@ export class LancerHUD {
                 });
             }
         }
+        for (const lid of getActorDeployables(actor)) {
+            const depInfo = getDeployableInfoSync(lid, actor);
+            const name = depInfo?.name ?? lid;
+            const label = `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${name}`;
+            const icon  = getActivationIcon({ activation: depInfo?.activation }) ?? 'systems/lancer/assets/icons/deployable.svg';
+            deployableRows.push({
+                label,
+                icon,
+                hoverData: { actor, item: null, action: null, category: 'Deployables' },
+                onClick: () => deployDeployable(actor, lid, null, false),
+                onRightClick: async (/** @type {any} */ row) => {
+                    const resolved = await resolveDeployable(lid, actor);
+                    const dep = resolved.deployable;
+                    if (!dep)
+                        return;
+                    this._showItemPopup({ cssClass: 'la-hud-popup la-hud-deploy-popup', dataKey: 'deploy-name', dataValue: dep.name, title: dep.name, subtitle: 'Extra Deployable', bodyHtml: laRenderDeployables([dep]), theme: 'deployable', item: null, row });
+                },
+            });
+        }
 
         return {
             label: 'Deployables',
@@ -1625,7 +1703,7 @@ export class LancerHUD {
             label: 'Free Actions',
             colLabel: 'Free Actions',
             getItems: () => this._enrichHoverData([
-                ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets at the start of your next scene.' }) }] : []),
+                ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }] : []),
                 ...(actor.type !== 'deployable' ? [this._simpleItem('Squeeze', 'modules/lancer-automations/icons/contract.svg', { name: 'Squeeze', activation: 'Free' }, 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.')] : []),
                 ...this._getActionsByActivation(actor, 'Free', 'Actions'),
             ], { actor, category: 'Actions' }),
@@ -1676,12 +1754,22 @@ export class LancerHUD {
                     },
                 });
             }
+            // Generic untrained trigger (1d20+0), like alternative sheets' "Other Skill".
+            skillItems.push({
+                label: 'Other Skill',
+                badge: '+0',
+                badgeColor: '#777',
+                icon: null,
+                hoverData: { actor, item: null, action: { name: 'Other Skill' }, category: 'Skills' },
+                onClick:     () => /** @type {any} */ (actor).beginStatFlow?.('system.other_skill', 'Other Skill'),
+                broadcastFn: (_t, a) => /** @type {any} */ (a)?.beginStatFlow?.('system.other_skill', 'Other Skill'),
+            });
         }
 
         if (isNpc) {
             return {
-                label: 'Skills',
-                colLabel: 'Skills',
+                label: 'Attributes',
+                colLabel: 'Attributes',
                 getItems: () => [
                     ...statsItems,
                 ],
@@ -1689,8 +1777,8 @@ export class LancerHUD {
         }
 
         return {
-            label: 'Skills',
-            colLabel: 'Skills',
+            label: 'Attributes',
+            colLabel: 'Attributes',
             getItems: () => [
                 { label: 'Stats',   childColLabel: 'Stats',   getChildren: () => statsItems },
                 ...(skillItems.length ? [{ label: 'Skills', childColLabel: 'Skills', getChildren: () => skillItems }] : []),
@@ -1714,14 +1802,17 @@ export class LancerHUD {
 
         const gameplayItems = [
             { label: 'Full Repair',   icon: 'modules/lancer-automations/icons/auto-repair.svg',  onClick: () => /** @type {any} */ (actor)?.beginFullRepairFlow(), broadcastFn: (_t, a) => /** @type {any} */ (a).beginFullRepairFlow() },
-            { label: 'Link to Token', icon: 'modules/lancer-automations/icons/pin.svg', onClick: async () => {
-                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
-                const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
-                if (!picked || !picked.length) return;
-                const target = picked[0];
-                await token.document.setFlag('lancer-automations', 'ownerActorUuid', target.actor.uuid);
-                await token.document.setFlag('lancer-automations', 'ownerName', target.actor.name ?? '');
-            } },
+            { label: 'Link to Token',
+                icon: 'modules/lancer-automations/icons/pin.svg',
+                onClick: async () => {
+                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
+                    if (!picked || !picked.length)
+                        return;
+                    const target = picked[0];
+                    await token.document.setFlag('lancer-automations', 'ownerActorUuid', target.actor.uuid);
+                    await token.document.setFlag('lancer-automations', 'ownerName', target.actor.name ?? '');
+                } },
             ...(isMechOrNpc ? [
                 {
                     label: 'Structure',
@@ -1766,28 +1857,28 @@ export class LancerHUD {
                     onValueChanged: (newVal) => actor?.update({ 'system.overcharge': newVal }),
                 }];
             })() : []),
+            ...(actor?.system?.repairs ? [{
+                inputCell: true,
+                subtype: 'increment',
+                name: 'Repairs',
+                icon: 'modules/lancer-automations/icons/auto-repair.svg',
+                noColor: true,
+                min: 0,
+                max: actor.system.repairs.max ?? actor.system.repcap ?? 0,
+                getValue: () => actor?.system?.repairs?.value ?? 0,
+                onValueChanged: (newVal) => actor?.update({ 'system.repairs.value': newVal }),
+            }] : []),
         ];
 
-        const hasERHistory = game.modules.get('elevationruler')?.active
-            && (() => {
-                try {
-                    return game.settings.get('elevationruler', 'token-ruler-combat-history');
-                } catch {
-                    return false;
-                }
-            })();
         const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection')
             || game.settings.get('lancer-automations', 'enableBoostOffer');
 
         const movementItems = [
             { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.' }) },
             { label: 'Fall', icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token) },
-            // History tools: reset always available, revert only with ER history.
             { label: 'Reset History',  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false) },
-            ...(hasERHistory ? [
-                { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
-                { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true) },
-            ] : []),
+            { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token) },
+            { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true) },
             // Move Cap editable input when cap tracking is on, otherwise just show base speed.
             ...(capEnabled ? [{
                 inputCell: true,
@@ -2196,7 +2287,6 @@ export class LancerHUD {
                     { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
                     { label: 'Core Bonus',  childColLabel: 'Core Bonus',  getChildren: () => this._coreBonusItems(actor) },
-                    { label: 'Reserves',    childColLabel: 'Reserves',    getChildren: () => this._catReserves({ source: actor.system?.pilot?.value, typeFilter: 'Mech' }).getItems() },
                 ];
                 const intLids = [
                     ...(frame.system?.traits ?? []).flatMap((/** @type {any} */ t) => t.integrated ?? []),
@@ -2205,6 +2295,7 @@ export class LancerHUD {
                 const intDepLids = /** @type {string[]} */ (frame.system?.core_system?.deployables ?? []);
                 if (intLids.length || intDepLids.length)
                     rows.push({ label: 'Integrated', childColLabel: 'Integrated', getChildren: () => this._frameIntegratedItems(frame, actor, intLids, intDepLids) });
+                rows.push({ label: 'Reserves',    childColLabel: 'Reserves',    getChildren: () => this._catReserves({ source: actor.system?.pilot?.value, typeFilter: 'Mech' }).getItems() });
                 return rows;
             },
         };
@@ -3135,14 +3226,16 @@ export class LancerHUD {
             const img = entry.iconOverride ?? macro?.img ?? entry.icon;
             const name = entry.name ?? macro?.name ?? '(missing macro)';
             const iconHtml = this._macroIconHtml(img, 20, entry.iconInvert);
+            // Wrap in flex span so v13 TAH's column-direction row doesn't push the icon onto a separate line.
+            const labelOk = `<span style="display:inline-flex;align-items:center;gap:0;white-space:nowrap;">${iconHtml}${name}</span>`;
             if (!macro) {
                 return {
-                    label: `${iconHtml}<s style="opacity:0.7">${name}</s>`,
+                    label: `<span style="display:inline-flex;align-items:center;gap:0;white-space:nowrap;">${iconHtml}<s style="opacity:0.7">${name}</s></span>`,
                     onRightClick: (row) => this._openMacroRowPopup(entry, null, row),
                 };
             }
             return {
-                label: iconHtml + name,
+                label: labelOk,
                 onClick:      () => macro.execute(),
                 onRightClick: (row) => this._openMacroRowPopup(entry, macro, row),
             };
@@ -3275,7 +3368,9 @@ export class LancerHUD {
                     });
                 });
                 const drop = html.find('.la-tah-macro-drop');
-                drop.on('dragover', (ev) => { ev.preventDefault(); drop.css('border-color', 'var(--primary-color)'); });
+                drop.on('dragover', (ev) => {
+                    ev.preventDefault(); drop.css('border-color', 'var(--primary-color)');
+                });
                 drop.on('dragleave', () => drop.css('border-color', '#888'));
                 drop.on('drop', async (ev) => {
                     ev.preventDefault();
@@ -3454,8 +3549,16 @@ export class LancerHUD {
             }];
         } : () => [];
 
+        const patchProfileRefresh = (children, builder) => {
+            for (const c of children) {
+                if (c._profile)
+                    c.refreshCol4 = builder;
+            }
+            return children;
+        };
+
         if (actor.type === 'pilot') {
-            return [...addRightClicks(addHover(laHudItemChildren(weapon, {
+            const buildPilot = () => [...addRightClicks(addHover(laHudItemChildren(weapon, {
                 defaultActions: [
                     {
                         label: 'FIGHT',
@@ -3480,13 +3583,14 @@ export class LancerHUD {
                 showPopup: (popup, row) => this._showPopupAt(popup, row),
                 onActivate,
             })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] }), ...rangeToggle()];
+            return patchProfileRefresh(buildPilot(), buildPilot);
         }
         // Mech: sys.size === "Superheavy". NPC weapons store it in sys.weapon_type ("Superheavy Rifle", etc.).
         const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy'
             || String(sys.weapon_type || '').toLowerCase().startsWith('superheavy');
         const bypassMount = mount ?? { slots: [{ weapon: { value: weapon } }] };
         const attackLabel = isSuperHeavy ? 'BARRAGE' : 'SKIRMISH';
-        return [...addRightClicks(addHover(laHudItemChildren(weapon, {
+        const buildMech = () => [...addRightClicks(addHover(laHudItemChildren(weapon, {
             defaultActions: [
                 {
                     label: attackLabel,
@@ -3516,6 +3620,7 @@ export class LancerHUD {
             showPopup: (popup, row) => this._showPopupAt(popup, row),
             onActivate,
         })), attackLabel, bypassMount), ...rangeToggle()];
+        return patchProfileRefresh(buildMech(), buildMech);
     }
 
     _getInvadeOptions(actor) {
@@ -3895,13 +4000,15 @@ export class LancerHUD {
 
     _collectFavorites() {
         const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
-        if (!favs.length) return [];
+        if (!favs.length)
+            return [];
         const favSet = new Set(favs);
         const results = [];
         const seen = new Set();
         const walk = (items, catLabel) => {
             for (const item of (items ?? [])) {
-                if (item.isSectionLabel) continue;
+                if (item.isSectionLabel)
+                    continue;
                 if (item.onClick) {
                     const key = this._favKey(item);
                     if (key && favSet.has(key) && !seen.has(key)) {
@@ -3914,7 +4021,8 @@ export class LancerHUD {
             }
         };
         for (const cat of (this._categories ?? [])) {
-            if (cat.isStatusPanel) continue;
+            if (cat.isStatusPanel)
+                continue;
             walk(cat.getItems?.(), cat.label);
         }
         return results;
@@ -3944,18 +4052,22 @@ export class LancerHUD {
 
     _isFavorite(item) {
         const key = this._favKey(item);
-        if (!key) return false;
+        if (!key)
+            return false;
         const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
         return favs.includes(key);
     }
 
     async _toggleFavorite(item) {
         const key = this._favKey(item);
-        if (!key) return false;
+        if (!key)
+            return false;
         const favs = [...(/** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [])];
         const idx = favs.indexOf(key);
-        if (idx >= 0) favs.splice(idx, 1);
-        else favs.push(key);
+        if (idx >= 0)
+            favs.splice(idx, 1);
+        else
+            favs.push(key);
         await /** @type {any} */ (game.user).setFlag('lancer-automations', 'tahFavorites', favs);
         return idx < 0;
     }

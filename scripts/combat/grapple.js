@@ -1,13 +1,6 @@
 import * as actionFX from '../fx/actionFX.js';
 
-// grapple.js — Grapple automation for Lancer via lancer-automations
-//
-// Token flags (MODULE_ID / 'grappleState'):
-//   Grappled : { grapplerIds: string[], immobilizedSide: "grappled"|"grapplers"|null }
-//   Grappler : { grappledIds: string[] }  — one grappler can pin multiple targets
-//
-// Only 'grappled' is applied visually. IMMOBILIZED uses the flagged-effects system.
-// ENGAGED is managed by overwatch.js based on proximity — not set here.
+// IMMOBILIZED uses flagged-effects; ENGAGED is managed by overwatch.js, not here.
 
 const MODULE_ID = 'lancer-automations';
 
@@ -71,7 +64,7 @@ async function updateImmobilized(api, grappledToken, isInit = false) {
     else if (grappledSize > grapplerSize)
         newImmobilizedSide = "grapplers";
     else
-        // Equal size: on init grappled starts immobilized; after a HULL contest preserve the winner's result.
+        // Equal size: init defaults grappled = immobilized; HULL contest preserves the winner.
         newImmobilizedSide = isInit ? "grappled" : state.immobilizedSide;
 
     await setGrappleState(grappledToken, { ...state, immobilizedSide: newImmobilizedSide });

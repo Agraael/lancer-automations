@@ -1683,7 +1683,7 @@ export class StartupScriptEditor extends FormApplication {
         const name = (formData.name ?? "").trim();
         if (!name) {
             ui.notifications.warn('Script name is required.');
-            return;
+            throw new Error('Script name is required.');
         }
 
         const entry = {

@@ -10,7 +10,9 @@ import { playUiSound } from './sound.js';
 let _statsExpanded = false;
 
 /** Collapse the stats detail panel (call when the HUD closes). */
-export function resetStatsExpanded() { _statsExpanded = false; }
+export function resetStatsExpanded() {
+    _statsExpanded = false;
+}
 
 /** Linear interpolation between two RGB colours. t=0→colour1, t=1→colour2. */
 function lerpColor(r1, g1, b1, r2, g2, b2, t) {
@@ -113,7 +115,7 @@ export function buildStatsHtml(actor, token = null) {
     const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
     const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
     const coreHtml = hasCoreSystem
-        ? `${SEP}<span title="Core Power" style="color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#555'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
+        ? `${SEP}<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#555'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
         : '';
 
     const expanded = _statsExpanded ? 'display:flex;flex-direction:column' : 'display:none';
@@ -164,7 +166,8 @@ export function buildStatsEl(actor, token = null) {
         detail.css({ display: 'none', overflow: 'hidden' });
     }
     const openDetail = () => {
-        if (_statsExpanded) return;
+        if (_statsExpanded)
+            return;
         _statsExpanded = true;
         detail.stop(true).css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
             .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function () {
@@ -173,19 +176,24 @@ export function buildStatsEl(actor, token = null) {
         toggle.find('span').text('◀');
     };
     const closeDetail = () => {
-        if (!_statsExpanded) return;
+        if (!_statsExpanded)
+            return;
         _statsExpanded = false;
         detail.stop(true).animate({ width: 0, opacity: 0 }, 120, function () {
             $(this).css({ display: 'none', width: '', opacity: '' });
         });
         toggle.find('span').text('▶');
     };
-    el.on('mouseenter', () => { playUiSound('details'); openDetail(); });
+    el.on('mouseenter', () => {
+        playUiSound('details'); openDetail();
+    });
     el.on('mouseleave', closeDetail);
     toggle.on('click', (ev) => {
         ev.stopPropagation();
-        if (_statsExpanded) closeDetail();
-        else openDetail();
+        if (_statsExpanded)
+            closeDetail();
+        else
+            openDetail();
     });
     return el;
 }

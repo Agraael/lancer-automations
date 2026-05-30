@@ -1,6 +1,29 @@
-/* global canvas, PIXI, game, ui, $ */
+/* global canvas, PIXI, game, ui, $, Hooks */
 
 // --- Info Card Helpers (internal) ---
+
+/**
+ * SVGs in lancer-automations/icons/ (and Foundry's icons/svg/) are white-on-transparent by design.
+ * On light card headers/buttons they vanish. Returns true if the icon path should be inverted to render black.
+ * Icons under a /black/ subfolder are already black and must NOT be inverted.
+ */
+export function isWhiteSvgIcon(iconPath) {
+    if (typeof iconPath !== 'string' || !iconPath.endsWith('.svg'))
+        return false;
+    if (iconPath.includes('/black/'))
+        return false;
+    return iconPath.includes('/white/')
+        || iconPath.includes('modules/lancer-automations/')
+        || iconPath.startsWith('icons/svg/');
+}
+
+const _ELEV_KEY_LABELS = { KeyQ: 'Q', KeyE: 'E', KeyA: 'A', KeyD: 'D', KeyW: 'W', KeyS: 'S' };
+function _elevationKeyLabels() {
+    const labelOf = (k) => _ELEV_KEY_LABELS[k] ?? k.replace(/^Key/, '');
+    const up = game.keybindings?.get?.('core', 'zoomIn')?.[0]?.key;
+    const down = game.keybindings?.get?.('core', 'zoomOut')?.[0]?.key;
+    return { up: up ? labelOf(up) : 'E', down: down ? labelOf(down) : 'Q' };
+}
 
 export const _cardDefaults = {
     chooseToken: { title: "SELECT TARGETS", icon: "fas fa-crosshairs" },
@@ -204,7 +227,7 @@ export function _createInfoCard(type, opts) {
         dynamicHtml = `
             ${selectorHtml}
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
-            <div style="font-size:0.78em; opacity:0.75; margin:-4px 0 4px 0;">Use <kbd>[</kbd> / <kbd>]</kbd> to adjust the last placed token's elevation.</div>
+            <div style="font-size:0.78em; opacity:0.75; margin:-4px 0 4px 0;">Use <kbd>${_elevationKeyLabels().down}</kbd> / <kbd>${_elevationKeyLabels().up}</kbd> to adjust the last placed token's elevation.</div>
             <div class="la-placed-tokens" data-role="token-list">
                 <div class="la-empty-state">No tokens placed</div>
             </div>`;
@@ -237,7 +260,7 @@ export function _createInfoCard(type, opts) {
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
         <div class="lancer lancer-hud window-content">
             <div class="lancer-header ${headerClass} medium">
-                ${/[./]/.test(icon) ? `<img src="${icon}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border:none;transform:scale(1.5);transform-origin:center;">` : `<i class="${icon} i--m" style="color:#000;"></i>`}
+                ${/[./]/.test(icon) ? `<img src="${icon}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border:none;transform:scale(1.5);transform-origin:center;${isWhiteSvgIcon(icon) ? 'filter:invert(1);' : ''}">` : `<i class="${icon} i--m" style="color:#000;"></i>`}
                 <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden; flex:1;">
                     <span>${title}</span>
                     ${origin ? `<span style="font-size:0.7em; font-weight:normal; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${origin}</span>` : ''}
@@ -262,9 +285,29 @@ export function _createInfoCard(type, opts) {
         </div>
     </div>`;
 
-    const container = $('#hudzone').length ? $('#hudzone') : $('body');
+    // v13: Lancer system v3 creates #hudzone lazily (only when a Lancer HUD is shown).
+    // Ensure we have an LA fallback hudzone (#la-hudzone) at the same screen position so
+    // cards always land in the correct spot, with or without Lancer HUDs visible.
+    let container = $('#hudzone');
+    if (!container.length) {
+        let laHud = $('#la-hudzone');
+        if (!laHud.length) {
+            laHud = $('<div id="la-hudzone" class="lancer-hud-zone" style="position:fixed;bottom:0;right:var(--sidebar-width,38px);z-index:70;display:flex;flex-direction:column-reverse;align-items:flex-end;pointer-events:none;"></div>');
+            $('body').append(laHud);
+        }
+        container = laHud;
+    }
     container.append(html);
     const cardEl = $('.la-info-card').last();
+
+    // Re-parent the card into Lancer's real #hudzone if it appears later (DAMAGE ROLL / ATTACK HUD opens).
+    const reparentHook = Hooks.on('renderApplication', () => {
+        const realHud = document.getElementById('hudzone');
+        if (realHud && cardEl[0].parentElement?.id !== 'hudzone') {
+            realHud.appendChild(cardEl[0]);
+        }
+    });
+    cardEl[0]._laReparentHook = reparentHook;
 
     cardEl.find('[data-action="confirm"]').on('click', () => onConfirm());
     cardEl.find('[data-action="confirm-vote"]').on('click', () => opts.onConfirmVote?.());
@@ -280,6 +323,9 @@ export function _createInfoCard(type, opts) {
         });
     }
 
+    // v13: #hudzone (Lancer system v3) is already anchored bottom-right next to the sidebar
+    // and stacks its children (Lancer HUDs + LA cards) automatically. No JS positioning needed.
+
     // Slide up from bottom + fade in
     cardEl.css({ transform: 'translateY(30px)', opacity: 0 });
     cardEl.animate(
@@ -289,7 +335,6 @@ export function _createInfoCard(type, opts) {
             $(this).css('transform', 'translateY(0)');
         }
     );
-    // CSS transition handles the transform animation
     setTimeout(() => cardEl.css('transform', 'translateY(0)'), 10);
 
     // Track on visual stack
@@ -405,7 +450,8 @@ export function _updateInfoCard(cardEl, type, data) {
                        </div>`
                     : '';
                 const elev = typeof placement.elevation === 'number' ? placement.elevation : 0;
-                const elevHtml = `<span class="la-selected-target-elev" title="Elevation (use [ / ] keys)" style="margin-left:auto; margin-right:6px; font-size:0.85em; opacity:0.9; white-space:nowrap;"><i class="fas fa-arrows-alt-v"></i> ${elev}</span>`;
+                const _ek = _elevationKeyLabels();
+                const elevHtml = `<span class="la-selected-target-elev" title="Elevation (use ${_ek.down} / ${_ek.up} keys)" style="margin-left:auto; margin-right:6px; font-size:0.85em; opacity:0.9; white-space:nowrap;"><i class="fas fa-arrows-alt-v"></i> ${elev}</span>`;
                 listEl.append(`
                     <div class="la-selected-target" data-placement-index="${idx}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
                         ${imgHtml}
@@ -463,12 +509,7 @@ export function _updateInfoCard(cardEl, type, data) {
             const disabledClass = (data.disabled || choice.disabled) ? "la-choice-disabled" : "";
             const iconHtml = choice.icon
                 ? (/[./]/.test(choice.icon)
-                    ? (() => {
-                        const ic = choice.icon;
-                        const isWhite = ic.endsWith('.svg') && !ic.includes('/black/') && (ic.includes('/white/') || ic.includes('modules/lancer-automations/') || ic.startsWith('icons/svg/'));
-                        const filt = isWhite ? 'filter:invert(1);' : '';
-                        return `<img src="${ic}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;${filt}">`;
-                    })()
+                    ? `<img src="${choice.icon}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;${isWhiteSvgIcon(choice.icon) ? 'filter:invert(1);' : ''}">`
                     : `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`)
                 : '';
             const statusHtml = isDone
@@ -591,6 +632,13 @@ export function _updateInfoCard(cardEl, type, data) {
 export function _removeInfoCard(cardEl) {
     if (!cardEl || cardEl.length === 0)
         return;
+
+    // Tear down the reparent hook so it doesn't leak.
+    const reparentHook = cardEl[0]?._laReparentHook;
+    if (reparentHook) {
+        Hooks.off('renderApplication', reparentHook);
+        cardEl[0]._laReparentHook = null;
+    }
 
     // Pop from visual stack
     const stackIdx = _cardVisualStack.findIndex(el => el[0] === cardEl[0]);

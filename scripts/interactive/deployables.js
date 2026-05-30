@@ -67,7 +67,8 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
                 displayName: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
                 displayBars: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
                 disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
-                bar1: { attribute: 'hp' }
+                bar1: { attribute: 'hp' },
+                flags: { 'lancer-automations': { awarenessMode: 'simple' } }
             }
         });
 
@@ -174,7 +175,8 @@ export async function spawnHardCover(originToken, options = {}) {
                 displayName: CONST.TOKEN_DISPLAY_MODES.HOVER,
                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                 disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
-                bar1: { attribute: 'hp' }
+                bar1: { attribute: 'hp' },
+                flags: { 'lancer-automations': { awarenessMode: 'simple' } }
             }
         });
 
@@ -309,7 +311,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
     if (lid.startsWith('Compendium.') || /^Actor\.[A-Za-z0-9]+$/.test(lid)) {
         try {
             const doc = /** @type {any} */ (await fromUuid(lid));
-            if (doc?.documentName === 'Actor' && doc.type === 'deployable') {
+            if (doc?.documentName === 'Actor') {
                 return {
                     deployable: doc,
                     source: lid.startsWith('Compendium.') ? 'compendium' : 'actor'
@@ -485,14 +487,16 @@ function _findWorldDeployable(lid, ownerActor) {
     const all = /** @type {any[]} */ (game.actors?.contents ?? []).filter(
         a => a.type === 'deployable' && a.system?.lid === lid
     );
-    if (!all.length) return null;
+    if (!all.length)
+        return null;
     if (ownerActor) {
         const owned = all.find(a => {
             const ownerVal = a.system?.owner;
             return ownerVal === ownerActor.uuid || ownerVal === ownerActor.id ||
                    ownerVal?.id === ownerActor.uuid || ownerVal?.id === ownerActor.id;
         });
-        if (owned) return owned;
+        if (owned)
+            return owned;
     }
     return all[0];
 }
@@ -500,6 +504,13 @@ function _findWorldDeployable(lid, ownerActor) {
 export function getDeployableInfoSync(lid, ownerActor = null) {
     if (!lid)
         return null;
+    if (typeof lid === 'string' && /^Actor\.[A-Za-z0-9]+$/.test(lid)) {
+        try {
+            const doc = /** @type {any} */ (fromUuidSync(lid));
+            if (doc?.documentName === 'Actor')
+                return { name: doc.name, img: doc.img, activation: doc.system?.activation ?? null };
+        } catch { /* fall through */ }
+    }
     const worldActor = _findWorldDeployable(lid, ownerActor);
     if (worldActor)
         return { name: worldActor.name, img: worldActor.img, activation: worldActor.system?.activation ?? null };
@@ -724,7 +735,8 @@ export async function placeDeployable(options = /** @type {any} */({})) {
     if (result && originToken) {
         const deployedTokens = Array.isArray(result) ? result : [result];
         for (const t of deployedTokens) {
-            if (t) playDeployableFX(t);
+            if (t)
+                playDeployableFX(t);
         }
     }
 
@@ -761,11 +773,14 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
         playActionFxByActivation(depInfo.activation, sourceToken, depInfo.name);
     }
     await _printDeployableCard(parentItem);
+    const extraOpts = getExtraDeployableOpts(parentItem ?? actor, deployableLid) || {};
     await placeDeployable({
         deployable: deployableLid,
         ownerActor: actor,
         systemItem: parentItem,
         consumeUse: consumeUse ?? false,
+        range: extraOpts.range ?? null,
+        count: extraOpts.count ?? null,
     });
 }
 
@@ -1148,7 +1163,8 @@ export async function addExtraActions(target, actions) {
         }
         for (const action of newActions) {
             const a = /** @type {any} */ (action);
-            if (!a._sourceItemId) a._sourceItemId = doc.id;
+            if (!a._sourceItemId)
+                a._sourceItemId = doc.id;
         }
     }
 
@@ -1286,13 +1302,18 @@ export async function reloadExtraAction(actor, actionName) {
 // Per-extra-deployable range/count overrides. Keyed by LID or UUID, stored on whatever document
 // holds the extras (Item or Actor). When set, these override the item-level deployRange / deployCount
 // flags for that specific deployable.
+// Foundry setFlag treats dots in object keys as nested paths; encode them so UUIDs (which contain dots) stay flat.
+function _encodeOptsKey(key) {
+    return String(key).replace(/\./g, '$DOT$');
+}
+
 export function getExtraDeployableOpts(target, key) {
     if (!target || !key)
         return null;
     const t = /** @type {any} */ (target);
     const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
     const map = doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {};
-    return map[key] ?? null;
+    return map[_encodeOptsKey(key)] ?? null;
 }
 
 export async function setExtraDeployableOpts(target, key, opts) {
@@ -1300,8 +1321,9 @@ export async function setExtraDeployableOpts(target, key, opts) {
         return null;
     const t = /** @type {any} */ (target);
     const doc = (t.documentName === 'Item') ? t : (t.actor ?? t.document ?? t);
-    const map = { ...doc.getFlag?.('lancer-automations', 'extraDeployableOpts') };
-    const cur = { ...map[key] };
+    const map = { ...(doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {}) };
+    const encoded = _encodeOptsKey(key);
+    const cur = { ...map[encoded] };
     for (const [k, v] of Object.entries(opts || {})) {
         if (v == null || v === '')
             delete cur[k];
@@ -1309,9 +1331,9 @@ export async function setExtraDeployableOpts(target, key, opts) {
             cur[k] = v;
     }
     if (Object.keys(cur).length === 0)
-        delete map[key];
+        delete map[encoded];
     else
-        map[key] = cur;
+        map[encoded] = cur;
     await doc.setFlag('lancer-automations', 'extraDeployableOpts', map);
     return doc;
 }
@@ -1965,8 +1987,8 @@ export async function openDeployableMenu(actor) {
         </style>
         <div class="lancer-dialog-base">
             <div class="lancer-dialog-header">
-                <div class="lancer-dialog-title">DEPLOY SYSTEM ITEMS</div>
-                <div class="lancer-dialog-subtitle">Select a deployable to place on the battlefield.</div>
+                <div class="lancer-dialog-title">DEPLOY ACTORS</div>
+                <div class="lancer-dialog-subtitle">Select an actor to place on the battlefield.</div>
             </div>
             <div class="lancer-items-grid">
                 ${items.map(item => `
@@ -1998,7 +2020,7 @@ export async function openDeployableMenu(actor) {
     `;
 
     const dialog = new Dialog({
-        title: "Deploy System Items",
+        title: "Deploy Actors",
         content: content,
         buttons: {
             deploy: {
@@ -2342,17 +2364,21 @@ export async function rechargeSystem(actorOrToken, targetName) {
     }
 
     const depletedItems = actor.items.filter(item => {
-        if (item.type === 'mech_weapon' || item.type === 'pilot_weapon') return false;
-        if (item.system?.type?.toLowerCase() === 'weapon') return false;
+        if (item.type === 'mech_weapon' || item.type === 'pilot_weapon')
+            return false;
+        if (item.system?.type?.toLowerCase() === 'weapon')
+            return false;
         const sys = item.system;
         const tags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
         const hasLimited = tags.some(t => t.lid === 'tg_limited');
         const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
         if (hasLimited) {
             const val = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
-            if (val <= 0) return true;
+            if (val <= 0)
+                return true;
         }
-        if (hasRecharge && sys.charged === false) return true;
+        if (hasRecharge && sys.charged === false)
+            return true;
         return false;
     });
 
@@ -2368,7 +2394,8 @@ export async function rechargeSystem(actorOrToken, targetName) {
         formatText: (item) => `Recharge ${item.name}`
     });
 
-    if (!chosen) return null;
+    if (!chosen)
+        return null;
 
     const sys = chosen.system;
     const tags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];

@@ -4,29 +4,49 @@ import { removeGlobalBonus, removeConstantBonus } from '../bonuses/genericBonuse
 import { playUiSound } from './sound.js';
 
 function getBonusDetailStr(/** @type {any} */ b) {
-    if (b.type === 'accuracy')   return `Accuracy +${b.val}`;
-    if (b.type === 'difficulty') return `Difficulty +${b.val}`;
-    if (b.type === 'stat')       return `${b.stat?.split('.').pop() || b.stat} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
-    if (b.type === 'damage')     return (b.damage || []).map((/** @type {any} */ d) => `${d.val} ${d.type}`).join(' + ');
-    if (b.type === 'tag')        return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val}`;
-    if (b.type === 'range')      return `${b.rangeMode === 'override' ? 'Set' : 'Add'} ${b.rangeType} ${b.val}`;
+    if (b.type === 'accuracy')
+        return `Accuracy +${b.val}`;
+    if (b.type === 'difficulty')
+        return `Difficulty +${b.val}`;
+    if (b.type === 'stat')
+        return `${b.stat?.split('.').pop() || b.stat} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
+    if (b.type === 'damage')
+        return (b.damage || []).map((/** @type {any} */ d) => `${d.val} ${d.type}`).join(' + ');
+    if (b.type === 'tag')
+        return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} ${b.tagName} ${b.val}`;
+    if (b.type === 'range')
+        return `${b.rangeMode === 'override' ? 'Set' : 'Add'} ${b.rangeType} ${b.val}`;
     if (b.type === 'immunity') {
-        if (b.subtype === 'effect' && b.effects)                                    return `Immunity: ${b.effects.join(', ')}`;
-        if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes) return `${b.subtype}: ${b.damageTypes.join(', ')}`;
-        if (b.subtype === 'crit')  return 'Crit immunity';
-        if (b.subtype === 'hit')   return 'Hit immunity';
-        if (b.subtype === 'miss')  return 'Miss immunity';
+        if (b.subtype === 'effect' && b.effects)
+            return `Immunity: ${b.effects.join(', ')}`;
+        if ((b.subtype === 'damage' || b.subtype === 'resistance') && b.damageTypes)
+            return `${b.subtype}: ${b.damageTypes.join(', ')}`;
+        if (b.subtype === 'crit')
+            return 'Crit immunity';
+        if (b.subtype === 'hit')
+            return 'Hit immunity';
+        if (b.subtype === 'miss')
+            return 'Miss immunity';
         return b.subtype;
     }
     if (b.type === 'target_modifier') {
         const labels = {
-            invisible: 'Invisible (50% miss)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
-            ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
-            crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
+            invisible: 'Invisible (50% miss)',
+            no_invisible: 'Not Invisible',
+            no_cover: 'No Cover',
+            soft_cover: 'Soft Cover',
+            hard_cover: 'Hard Cover',
+            ap: 'Armor Piercing',
+            half_damage: 'Half Damage',
+            paracausal: 'Cannot be Reduced',
+            crit: 'Force Crit',
+            hit: 'Force Hit',
+            miss: 'Force Miss'
         };
         return `Target: ${labels[b.subtype] || b.subtype}`;
     }
-    if (b.type === 'multi' && Array.isArray(b.bonuses)) return b.bonuses.map(getBonusDetailStr).join(' | ');
+    if (b.type === 'multi' && Array.isArray(b.bonuses))
+        return b.bonuses.map(getBonusDetailStr).join(' | ');
     return b.type || '?';
 }
 
@@ -62,7 +82,9 @@ export class StatusPanel {
         if (this._panel) {
             const panel = this._panel;
             this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function() { $(this).remove(); });
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function() {
+                $(this).remove();
+            });
         }
     }
 
@@ -170,8 +192,7 @@ export class StatusPanel {
                     const t = la.consumption?.trigger;
                     const triggerLabel = Array.isArray(t) ? t.join(', ') : t;
                     label = `Consume: ${typeof la.consumption === 'string' ? la.consumption : (triggerLabel ?? la.consumption?.type ?? 'Effect')}`;
-                }
-                else if (la?.linkedBonusId)
+                } else if (la?.linkedBonusId)
                     label = 'Bonus Effect';
                 const stackStr = sc && sc > 1 ? ` ×${sc}` : '';
                 if (effects.length > 1 || stackStr)
@@ -236,7 +257,9 @@ export class StatusPanel {
                 if (!$(this).data('active'))
                     $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
                 const self = $(this);
-                tooltipTimer = setTimeout(() => { tooltipEl = showTooltip(self, s); }, 600);
+                tooltipTimer = setTimeout(() => {
+                    tooltipEl = showTooltip(self, s);
+                }, 600);
             }).on('mouseleave', function() {
                 clearTimeout(tooltipTimer); tooltipTimer = null;
                 tooltipEl?.remove(); tooltipEl = null;
@@ -258,7 +281,8 @@ export class StatusPanel {
                         const eff = effects[0];
                         await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                     } else {
-                        for (const t of this._tokens) await /** @type {any} */ (t).toggleEffect(s);
+                        for (const t of this._tokens)
+                            await /** @type {any} */ (t).toggleEffect(s);
                     }
                     updateRowBadge(rowEl, s);
                     setRowActive(rowEl, isActive(s));
@@ -280,7 +304,8 @@ export class StatusPanel {
                     // Right-click on inactive: same as left-click toggle
                     this._incDepth();
                     try {
-                        for (const t of this._tokens) await /** @type {any} */ (t).toggleEffect(s);
+                        for (const t of this._tokens)
+                            await /** @type {any} */ (t).toggleEffect(s);
                         updateRowBadge(rowEl, s);
                         setRowActive(rowEl, isActive(s));
                     } finally {
@@ -299,7 +324,8 @@ export class StatusPanel {
                         // Broadcast removal to all other tokens
                         for (const t of this._tokens.slice(1)) {
                             const te = [...t.actor.effects].find(e => e.statuses?.has(s.id) && !e.disabled);
-                            if (te) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [te.id]);
+                            if (te)
+                                await t.actor.deleteEmbeddedDocuments('ActiveEffect', [te.id]);
                         }
                     }
                     updateRowBadge(rowEl, s);
@@ -319,7 +345,9 @@ export class StatusPanel {
         if (laApi?.executeEffectManager) {
             const emBtn = $(`<button class="la-hud-util-btn">Effect Manager</button>`);
             emBtn.on('mouseenter', () => playUiSound('statusHover'));
-            emBtn.on('click', () => { playUiSound('toggle'); laApi.executeEffectManager(); });
+            emBtn.on('click', () => {
+                playUiSound('toggle'); laApi.executeEffectManager();
+            });
             rightEl.append(emBtn);
         }
         const clearBtn = $(`<button class="la-hud-util-btn la-hud-util-btn--secondary">Clear All Effects</button>`);
@@ -349,11 +377,14 @@ export class StatusPanel {
 
             const getCustomBadge = (/** @type {string} */ name) => {
                 const effs = getCustomEffects(name);
-                if (!effs.length) return '';
+                if (!effs.length)
+                    return '';
                 const totalStack = hasSC ? effs.reduce((sum, /** @type {any} */ e) => sum + (e.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
                 const parts = [];
-                if (hasSC && totalStack > 1) parts.push(`×${totalStack}`);
-                if (effs.length > 1) parts.push(`[${effs.length}]`);
+                if (hasSC && totalStack > 1)
+                    parts.push(`×${totalStack}`);
+                if (effs.length > 1)
+                    parts.push(`[${effs.length}]`);
                 return parts.join(' ');
             };
 
@@ -399,12 +430,14 @@ export class StatusPanel {
                             const eff = effs[0];
                             await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                         } else if (effs.length === 0) {
-                            for (const t of this._tokens) await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
+                            for (const t of this._tokens)
+                                await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
                         } else {
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [effs[0].id]);
                             for (const t of this._tokens.slice(1)) {
                                 const eff = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
-                                if (eff) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
+                                if (eff)
+                                    await t.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             }
                         }
                         updateCRow();
@@ -425,7 +458,8 @@ export class StatusPanel {
                     if (effs.length === 0) {
                         this._incDepth();
                         try {
-                            for (const t of this._tokens) await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
+                            for (const t of this._tokens)
+                                await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
                             updateCRow();
                         } finally {
                             this._decDepth();
@@ -442,7 +476,8 @@ export class StatusPanel {
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             for (const t of this._tokens.slice(1)) {
                                 const oe = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
-                                if (oe) await t.actor.deleteEmbeddedDocuments('ActiveEffect', [oe.id]);
+                                if (oe)
+                                    await t.actor.deleteEmbeddedDocuments('ActiveEffect', [oe.id]);
                             }
                         }
                         updateCRow();
@@ -480,8 +515,12 @@ export class StatusPanel {
                     </div>
                     <i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>
                 </div>`);
-                row.find('.la-bonus-del').on('mouseenter', function() { $(this).css('opacity', '1'); })
-                    .on('mouseleave', function() { $(this).css('opacity', '0.45'); })
+                row.find('.la-bonus-del').on('mouseenter', function() {
+                    $(this).css('opacity', '1');
+                })
+                    .on('mouseleave', function() {
+                        $(this).css('opacity', '0.45');
+                    })
                     .on('click', async (ev) => {
                         ev.stopPropagation();
                         if (kind === 'global')

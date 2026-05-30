@@ -160,68 +160,6 @@ function getConflictRules() {
                 await game.settings.set('csm-lancer-qol', 'enableWipOnDeath', false);
             }
         },
-        // ── Movement Cap / Boost work best with ER movement history ──
-        {
-            id: 'movement-cap-no-history',
-            label: 'Movement Cap and Boost Detection need <b>Combat Movement History</b> enabled in Elevation Ruler. Auto-fix will enable it.',
-            check() {
-                if (!game.modules.get('elevationruler')?.active)
-                    return false;
-                // Stock ER may not have this setting — safe check.
-                try {
-                    if (game.settings.get('elevationruler', 'token-ruler-combat-history'))
-                        return false;
-                } catch {
-                    return false;
-                }
-                try {
-                    return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
-                        || game.settings.get(MODULE_ID, 'enableBoostOffer')
-                        || game.settings.get(MODULE_ID, 'experimentalBoostDetection');
-                } catch {
-                    return false;
-                }
-            },
-            async fix() {
-                try {
-                    await game.settings.set('elevationruler', 'token-ruler-combat-history', true);
-                } catch (e) {
-                    console.warn(`${MODULE_ID} | Could not enable ER combat history:`, e);
-                }
-            }
-        },
-
-        // ── ER fork required for movement features ──
-        {
-            id: 'upstream-er-detected',
-            label: 'Movement Cap Detection and Boost Detection can\'t run on your current Elevation Ruler install (Lasossis\'s fork is required). '
-                + 'Auto-fix will disable those two features. '
-                + 'Switch to the fork to re-enable them: <a href="https://github.com/Agraael/Lancer-elevationRuler-Fork" target="_blank" rel="noopener">Agraael/Lancer-elevationRuler-Fork</a>.',
-            check() {
-                if (!game.modules.get('elevationruler')?.active)
-                    return false;
-                const erApi = game.modules.get('elevationruler')?.api;
-                if (erApi?.moveTokenTo)
-                    return false;
-                try {
-                    return game.settings.get(MODULE_ID, 'enableMovementCapDetection')
-                        || game.settings.get(MODULE_ID, 'enableBoostOffer')
-                        || game.settings.get(MODULE_ID, 'experimentalBoostDetection');
-                } catch {
-                    return false;
-                }
-            },
-            async fix() {
-                for (const key of ['enableMovementCapDetection', 'enableBoostOffer', 'experimentalBoostDetection']) {
-                    try {
-                        await game.settings.set(MODULE_ID, key, false);
-                    } catch (e) {
-                        console.warn(`${MODULE_ID} | Could not disable ${key}:`, e);
-                    }
-                }
-            }
-        },
-
         // ── Built-in Speed Provider vs standalone lancer-speed-provider ──
         {
             id: 'speedprovider-vs-standalone',

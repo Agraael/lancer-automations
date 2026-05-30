@@ -1,4 +1,4 @@
-/* global Hooks, game, Color, CONFIG, dragRuler, ui, CONST */
+/* global Hooks, game, Color, CONST */
 
 const MODULE_ID = 'lancer-automations';
 const ENABLED = 'enableBuiltinSpeedProvider';
@@ -98,155 +98,65 @@ function getColor(key, fallback) {
     }
 }
 
-function applyElevationRulerCategories() {
-    if (!CONFIG.elevationruler?.SPEED)
-        return;
-    CONFIG.elevationruler.SPEED.ATTRIBUTES.WALK = 'actor.system.speed';
-    CONFIG.elevationruler.SPEED.CATEGORIES = [
-        { name: 'lancer-automations.speed.standard', color: getColor(COLOR_STANDARD, '#1e88e5'), multiplier: 1 },
-        { name: 'lancer-automations.speed.boost', color: getColor(COLOR_BOOST, '#ffc107'), multiplier: 2 },
-        { name: 'lancer-automations.speed.over-boost', color: getColor(COLOR_OVER_BOOST, '#d81b60'), multiplier: 3 },
-        { name: 'Unreachable', color: Color.from(0), multiplier: Number.POSITIVE_INFINITY }
-    ];
-    CONFIG.elevationruler.SPEED.tokenSpeed = tokenSpeed;
-    CONFIG.elevationruler.SPEED.maximumCategoryDistance = maximumCategoryDistance;
-}
+/**
+ * Speed tier ranges for a token: cumulative max distances in grid units.
+ * Used by LancerTokenRuler to color segments. Returns [] if the token can't move.
+ */
+export function getSpeedRanges(token) {
+    const actor = token?.actor;
+    if (!actor || isStunned(token)) return [];
+    const speed = tokenSpeed(token);
+    if (!speed) return [];
+    const boost = getBoostLegBonus(actor);
 
-function maximumCategoryDistance(token, speedCategory, ts) {
-    const tSpeed = ts ?? CONFIG.elevationruler.SPEED.tokenSpeed(token);
-    const CATS = CONFIG.elevationruler.SPEED.CATEGORIES;
-    if (speedCategory.name === 'Unreachable')
-        return tSpeed * Number.POSITIVE_INFINITY;
-    const idx = CATS.indexOf(speedCategory);
+    const prone = hasActiveStatus(actor, 'prone');
+    const startedStatuses = token.combatant?.getFlag(MODULE_ID, 'speedProvider.turn-status') ?? [];
+    const startedProne = startedStatuses.some(e => typeof e === 'string' && e.endsWith('prone'));
+    const slowed = prone || hasActiveStatus(actor, 'slow');
 
-    const startedProne = token.combatant
-        ?.getFlag(MODULE_ID, 'speedProvider.turn-status')
-        ?.includes('prone');
-    const prone = hasActiveStatus(token.actor, 'prone');
-    const firstMove = prone || !startedProne;
-    const slowed = hasActiveStatus(token.actor, 'slow');
-
-    if (
-        isStunned(token)
-        || (idx === 2 && !canOvercharge(token.actor))
-        || (idx > 0 && (prone || slowed))
-        || (idx === 0 && !firstMove)
-    )
-        return 0;
-
-    const accum = idx > 0 ? maximumCategoryDistance(token, CATS[idx - 1], tSpeed) : 0;
-    return accum + tSpeed + (idx > 0 ? getBoostLegBonus(token.actor) : 0);
+    const ranges = [];
+    let acc = 0;
+    if (prone || !startedProne) {
+        acc += speed;
+        ranges.push({ name: 'standard', color: getColor(COLOR_STANDARD, '#1e88e5'), max: acc });
+    }
+    if (!slowed) {
+        acc += speed + boost;
+        ranges.push({ name: 'boost', color: getColor(COLOR_BOOST, '#ffc107'), max: acc });
+    }
+    if (!slowed && canOvercharge(actor)) {
+        acc += speed + boost;
+        ranges.push({ name: 'over-boost', color: getColor(COLOR_OVER_BOOST, '#d81b60'), max: acc });
+    }
+    return ranges;
 }
 
 function registerSettings() {
     game.settings.register(MODULE_ID, ENABLED, {
         name: 'Built-in Speed Provider',
-        hint: 'Provide drag-ruler / elevation-ruler tiers from this module. Disable the standalone "lancer-speed-provider" module if active.',
+        hint: 'Color the token ruler with Lancer speed tiers (standard / boost / over-boost). Disable the standalone "lancer-speed-provider" module if active.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
         requiresReload: true
     });
-
-    const refreshColor = (catName) => (val) => {
-        if (!CONFIG.elevationruler?.SPEED?.CATEGORIES)
-            return;
-        const c = CONFIG.elevationruler.SPEED.CATEGORIES.find(x => x.name === catName);
-        if (c)
-            c.color = Color.from(val);
-    };
-
     game.settings.register(MODULE_ID, COLOR_STANDARD, {
-        name: 'Speed Color: Standard',
-        scope: 'client',
-        type: String,
-        default: '#1e88e5',
-        config: false,
-        onChange: refreshColor('lancer-automations.speed.standard')
+        name: 'Speed Color: Standard', scope: 'client', type: String, default: '#1e88e5', config: false
     });
     game.settings.register(MODULE_ID, COLOR_BOOST, {
-        name: 'Speed Color: Boost',
-        scope: 'client',
-        type: String,
-        default: '#ffc107',
-        config: false,
-        onChange: refreshColor('lancer-automations.speed.boost')
+        name: 'Speed Color: Boost', scope: 'client', type: String, default: '#ffc107', config: false
     });
     game.settings.register(MODULE_ID, COLOR_OVER_BOOST, {
-        name: 'Speed Color: Over-boost',
-        scope: 'client',
-        type: String,
-        default: '#d81b60',
-        config: false,
-        onChange: refreshColor('lancer-automations.speed.over-boost')
+        name: 'Speed Color: Over-boost', scope: 'client', type: String, default: '#d81b60', config: false
+    });
+    game.settings.register(MODULE_ID, 'speedProvider.colorFreeMovement', {
+        name: 'Speed Color: Free Movement', scope: 'client', type: String, default: '#ffffff', config: false
     });
 }
 
 Hooks.once('init', () => {
     registerSettings();
-    if (!isEnabled())
-        return;
-
-    if (conflictModuleActive()) {
-        Hooks.once('ready', () => {
-            ui.notifications.warn('lancer-automations: built-in speed provider is on but lancer-speed-provider is also active. Disable one of them.');
-        });
-        return;
-    }
-
-    if (game.modules.get('elevationruler')?.active)
-        applyElevationRulerCategories();
-});
-
-Hooks.once('dragRuler.ready', (SpeedProvider) => {
-    if (!isEnabled() || conflictModuleActive())
-        return;
-
-    class LancerAutoSpeedProvider extends SpeedProvider {
-        get colors() {
-            return [
-                { id: 'standard', default: 0x1e88e5, name: 'Standard' },
-                { id: 'boost', default: 0xffc107, name: 'Boost' },
-                { id: 'over-boost', default: 0xd81b60, name: 'Over-boost' }
-            ];
-        }
-
-        get defaultUnreachableColor() {
-            return 0x000000;
-        }
-
-        getRanges(token) {
-            const actor = token.actor;
-            const speed = tokenSpeed(token);
-            const boostBonus = getBoostLegBonus(actor);
-            if (isStunned(token))
-                return [{ range: -1, color: 'standard' }];
-
-            const prone = hasActiveStatus(actor, 'prone');
-            const startedStatuses = token.combatant
-                ?.getFlag(MODULE_ID, 'speedProvider.turn-status') ?? [];
-            const startedProne = startedStatuses.some(e => e.endsWith('prone'));
-            const slowed = prone || hasActiveStatus(actor, 'slow');
-
-            let range = speed;
-            const ranges = [];
-            if (prone || !startedProne) {
-                ranges.push({ range, color: 'standard' });
-                range += speed + boostBonus;
-            }
-            if (!slowed) {
-                ranges.push({ range, color: 'boost' });
-                range += speed + boostBonus;
-            }
-            if (!slowed && canOvercharge(actor)) {
-                ranges.push({ range, color: 'over-boost' });
-            }
-            return ranges;
-        }
-    }
-
-    /** @type {any} */ (globalThis).dragRuler.registerModule(MODULE_ID, LancerAutoSpeedProvider);
 });
 
 Hooks.once('lancer.registerFlows', (steps, flows) => {

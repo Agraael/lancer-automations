@@ -1,12 +1,11 @@
 /**
- * Custom TokenMagic filters for lancer-automations.
- * Registers filter types at import time (before any hooks fire).
+ * Custom TokenMagic filters (fracture, chains). FilterType isn't exported from the v13 bundle, so we
+ * dynamic-import TokenMagic's source at 'ready' (not 'init'): re-importing it at init would re-run its
+ * init hook and crash on a duplicate libWrapper.register.
  */
-import { FilterType } from '../../../../modules/tokenmagic/module/tokenmagicBundle.js';
+let FilterType = null;
 
-// ---------------------------------------------------------------------------
-// FilterFracture — Voronoi F2-F1 glowing cracks with noise distortion
-// ---------------------------------------------------------------------------
+// FilterFracture — Voronoi F2-F1 glowing cracks with noise distortion.
 
 const fractureFragment = `
 precision mediump float;
@@ -189,10 +188,7 @@ export class FilterFracture extends PIXI.Filter {
         }
     }
 
-    /**
-     * Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord,
-     * plus self-driven time animation.
-     */
+    // Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord + self-driven time.
     apply(filterManager, input, output, clear) {
         const now = performance.now();
         const dt = (now - this._lastTime) / 1000;
@@ -260,35 +256,75 @@ export class FilterFracture extends PIXI.Filter {
         filterManager.applyFilter(this, input, output, clear);
     }
 
-    get time() { return this.uniforms.time; }
-    set time(value) { this.uniforms.time = value; }
+    get time() {
+        return this.uniforms.time;
+    }
+    set time(value) {
+        this.uniforms.time = value;
+    }
 
-    get color() { return PIXI.utils.rgb2hex(this.uniforms.color); }
-    set color(value) { new PIXI.Color(value).toRgbArray(this.uniforms.color); }
+    get color() {
+        return PIXI.utils.rgb2hex(this.uniforms.color);
+    }
+    set color(value) {
+        new PIXI.Color(value).toRgbArray(this.uniforms.color);
+    }
 
-    get intensity() { return this.uniforms.intensity; }
-    set intensity(value) { this.uniforms.intensity = value; }
+    get intensity() {
+        return this.uniforms.intensity;
+    }
+    set intensity(value) {
+        this.uniforms.intensity = value;
+    }
 
-    get scale() { return this.uniforms.scale; }
-    set scale(value) { this.uniforms.scale = value; }
+    get scale() {
+        return this.uniforms.scale;
+    }
+    set scale(value) {
+        this.uniforms.scale = value;
+    }
 
-    get crackWidth() { return this.uniforms.crackWidth; }
-    set crackWidth(value) { this.uniforms.crackWidth = value; }
+    get crackWidth() {
+        return this.uniforms.crackWidth;
+    }
+    set crackWidth(value) {
+        this.uniforms.crackWidth = value;
+    }
 
-    get opacity() { return this.uniforms.opacity; }
-    set opacity(value) { this.uniforms.opacity = value; }
+    get opacity() {
+        return this.uniforms.opacity;
+    }
+    set opacity(value) {
+        this.uniforms.opacity = value;
+    }
 
-    get warpStrength() { return this.uniforms.warpStrength; }
-    set warpStrength(value) { this.uniforms.warpStrength = value; }
+    get warpStrength() {
+        return this.uniforms.warpStrength;
+    }
+    set warpStrength(value) {
+        this.uniforms.warpStrength = value;
+    }
 
-    get noiseScale() { return this.uniforms.noiseScale; }
-    set noiseScale(value) { this.uniforms.noiseScale = value; }
+    get noiseScale() {
+        return this.uniforms.noiseScale;
+    }
+    set noiseScale(value) {
+        this.uniforms.noiseScale = value;
+    }
 
-    get maskAmount() { return this.uniforms.maskAmount; }
-    set maskAmount(value) { this.uniforms.maskAmount = value; }
+    get maskAmount() {
+        return this.uniforms.maskAmount;
+    }
+    set maskAmount(value) {
+        this.uniforms.maskAmount = value;
+    }
 
-    get blend() { return this.uniforms.blend; }
-    set blend(value) { this.uniforms.blend = Math.floor(value); }
+    get blend() {
+        return this.uniforms.blend;
+    }
+    set blend(value) {
+        this.uniforms.blend = Math.floor(value);
+    }
 }
 
 FilterFracture.defaults = {
@@ -304,9 +340,7 @@ FilterFracture.defaults = {
     blend: 2,
 };
 
-// ---------------------------------------------------------------------------
-// FilterChains — Crossing chain-link pattern overlay
-// ---------------------------------------------------------------------------
+// FilterChains — crossing chain-link pattern overlay.
 
 const chainsFragment = `
 precision mediump float;
@@ -498,29 +532,61 @@ export class FilterChains extends PIXI.Filter {
         filterManager.applyFilter(this, input, output, clear);
     }
 
-    get time() { return this.uniforms.time; }
-    set time(value) { this.uniforms.time = value; }
+    get time() {
+        return this.uniforms.time;
+    }
+    set time(value) {
+        this.uniforms.time = value;
+    }
 
-    get color() { return PIXI.utils.rgb2hex(this.uniforms.color); }
-    set color(value) { new PIXI.Color(value).toRgbArray(this.uniforms.color); }
+    get color() {
+        return PIXI.utils.rgb2hex(this.uniforms.color);
+    }
+    set color(value) {
+        new PIXI.Color(value).toRgbArray(this.uniforms.color);
+    }
 
-    get intensity() { return this.uniforms.intensity; }
-    set intensity(value) { this.uniforms.intensity = value; }
+    get intensity() {
+        return this.uniforms.intensity;
+    }
+    set intensity(value) {
+        this.uniforms.intensity = value;
+    }
 
-    get scale() { return this.uniforms.scale; }
-    set scale(value) { this.uniforms.scale = value; }
+    get scale() {
+        return this.uniforms.scale;
+    }
+    set scale(value) {
+        this.uniforms.scale = value;
+    }
 
-    get linkWidth() { return this.uniforms.linkWidth; }
-    set linkWidth(value) { this.uniforms.linkWidth = value; }
+    get linkWidth() {
+        return this.uniforms.linkWidth;
+    }
+    set linkWidth(value) {
+        this.uniforms.linkWidth = value;
+    }
 
-    get linkGap() { return this.uniforms.linkGap; }
-    set linkGap(value) { this.uniforms.linkGap = value; }
+    get linkGap() {
+        return this.uniforms.linkGap;
+    }
+    set linkGap(value) {
+        this.uniforms.linkGap = value;
+    }
 
-    get opacity() { return this.uniforms.opacity; }
-    set opacity(value) { this.uniforms.opacity = value; }
+    get opacity() {
+        return this.uniforms.opacity;
+    }
+    set opacity(value) {
+        this.uniforms.opacity = value;
+    }
 
-    get blend() { return this.uniforms.blend; }
-    set blend(value) { this.uniforms.blend = Math.floor(value); }
+    get blend() {
+        return this.uniforms.blend;
+    }
+    set blend(value) {
+        this.uniforms.blend = Math.floor(value);
+    }
 }
 
 FilterChains.defaults = {
@@ -535,8 +601,71 @@ FilterChains.defaults = {
 };
 
 /**
- * Register custom filters into TokenMagic's FilterType at import time.
+ * Register fracture/chains on TokenMagic's FilterType. Patches two objects: the source module's
+ * FilterType (so the effect renders) and the bundle's internal one (so TokenMagic's updateToken
+ * reconstruction doesn't error). webpack minifies the bundle export name, so we find it by shape.
  */
-FilterType.fracture = FilterFracture;
-FilterType.chains = FilterChains;
-console.log('lancer-automations | Registered custom TMFX filters');
+Hooks.once('ready', async () => {
+    if (!game.modules.get('tokenmagic')?.active)
+        return;
+
+    // 1) Source-module patch (keeps the visual effect rendering).
+    try {
+        const mod = await import('/modules/tokenmagic/module/tokenmagic.js');
+        FilterType = mod?.FilterType ?? null;
+    } catch (e) {
+        console.warn('lancer-automations | TokenMagic source import failed; custom filters disabled.', e);
+        return;
+    }
+    if (!FilterType) {
+        console.warn('lancer-automations | TokenMagic FilterType export not found; custom filters disabled.');
+        return;
+    }
+    FilterType.fracture = FilterFracture;
+    FilterType.chains = FilterChains;
+    console.log('lancer-automations | Registered fracture/chains on source FilterType');
+
+    // 2) Bundle-internal patch: scan bundle module exports for the FilterType by shape (stock keys).
+    try {
+        const chunkArr = /** @type {any} */ (self).webpackChunktokenmagic;
+        if (!Array.isArray(chunkArr))
+            return;
+        let webpackRequire = null;
+        chunkArr.push([['__la_capture_tmfx_filterType__'], {}, (r) => {
+            webpackRequire = r;
+        }]);
+        if (!webpackRequire?.m)
+            return;
+        const STOCK_KEYS = ['adjustment', 'glow', 'outline', 'blur'];
+        let bundleFT = null;
+        for (const id of Object.keys(webpackRequire.m)) {
+            let mod;
+            try {
+                mod = webpackRequire(id);
+            } catch {
+                continue;
+            }
+            if (!mod)
+                continue;
+            for (const key of Object.keys(mod)) {
+                const v = mod[key];
+                if (!v || typeof v !== 'object')
+                    continue;
+                if (!STOCK_KEYS.every(k => k in v))
+                    continue;
+                bundleFT = v;
+                console.log('lancer-automations | Found bundle FilterType (module', id, ', export', key, ')');
+                break;
+            }
+            if (bundleFT)
+                break;
+        }
+        if (bundleFT && bundleFT !== FilterType) {
+            bundleFT.fracture = FilterFracture;
+            bundleFT.chains = FilterChains;
+            console.log('lancer-automations | Registered fracture/chains on bundle FilterType');
+        }
+    } catch (e) {
+        console.warn('lancer-automations | Bundle FilterType patch failed; updateToken reconstruction may still log errors.', e);
+    }
+});

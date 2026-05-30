@@ -64,10 +64,6 @@ export function playUiSound(variant = 'open', { force = false } = {}) {
     }).catch(() => { /* ignore */ });
 }
 
-// ---------------------------------------------------------------------------
-// Damage / stat feedback sounds
-// ---------------------------------------------------------------------------
-
 const STATS_BASE = 'modules/lancer-automations/FX/audio/Stats';
 
 /** Per-damage-type folder + playback scale. File list is discovered at runtime. */
@@ -199,7 +195,7 @@ function _wasRecentlyDamaged(actorId) {
     return !!(t && Date.now() - t < DAMAGE_APPLY_WINDOW_MS);
 }
 
-// Pre-warm the folder caches on ready so the first damage doesn't pay a browse latency hit.
+// Pre-warm the folder caches so the first damage doesn't pay a browse latency hit.
 Hooks.once('ready', () => {
     for (const cfg of Object.values(DAMAGE_SOUNDS))
         _listFolderFiles(cfg.folder);
@@ -237,7 +233,7 @@ $(document).on('click', '.lancer-damage-apply', (ev) => {
         const audioOn = _damageVolume() > 0;
         const PHYSICAL = new Set(['kinetic', 'energy', 'explosive', 'variable']);
         const physTypes = [...types].filter((t) => PHYSICAL.has(t));
-        // Defer per-type sounds/FX until we know whether the damage was absorbed.
+        // Defer per-type FX until we know whether the damage was absorbed.
         setTimeout(() => {
             if (!actor)
                 return;

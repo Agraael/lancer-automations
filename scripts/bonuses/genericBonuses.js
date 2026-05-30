@@ -3,6 +3,7 @@ import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "../activations/reaction-manager.js";
 import { getWeaponType } from "../tools/misc-tools.js";
 import { playBonusAddedFX } from "../fx/actionFX.js";
+import { accDiffTargetToken } from "../combat/grid-helpers.js";
 
 /**
  * Session cache for compiled lambda conditions.
@@ -319,7 +320,7 @@ function createGenericBonusStep(flowType) {
                         }
                     } else if (prev === 'target') {
                         accDiff.targets.forEach(t => {
-                            if (bonus.applyTo.includes(t.target?.id)) {
+                            if (bonus.applyTo.includes(accDiffTargetToken(t)?.id)) {
                                 if (bonus.type === 'difficulty') {
                                     t.difficulty -= val;
                                 } else {
@@ -329,7 +330,7 @@ function createGenericBonusStep(flowType) {
                         });
                     }
 
-                    const matching = accDiff.targets?.filter(t => bonus.applyTo.includes(t.target?.id)) ?? [];
+                    const matching = accDiff.targets?.filter(t => bonus.applyTo.includes(accDiffTargetToken(t)?.id)) ?? [];
                     if (!matching.length) {
                         appliedMode.set(bonus.id, null);
                         continue;
@@ -344,7 +345,7 @@ function createGenericBonusStep(flowType) {
                         appliedMode.set(bonus.id, 'base');
                     } else {
                         matching.forEach(t => {
-                            if (!r.disabledByUser.has(`${bonus.id}:${t.target?.id}`)) {
+                            if (!r.disabledByUser.has(`${bonus.id}:${accDiffTargetToken(t)?.id}`)) {
                                 if (bonus.type === 'difficulty') {
                                     t.difficulty += val;
                                 } else {
@@ -378,19 +379,17 @@ function createGenericBonusStep(flowType) {
                     t.cover = 2;
             };
 
-            // Apply target modifiers to matching targets in acc_diff or damage_hud_data
             const applyTargetModifiers = (hudData) => {
                 if (r.targetModifiers.length === 0)
                     return;
                 for (const t of (hudData.targets || [])) {
                     for (const mod of r.targetModifiers) {
                         if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0) {
-                            if (!mod.applyTo.includes(t.target?.id))
+                            if (!mod.applyTo.includes(accDiffTargetToken(t)?.id))
                                 continue;
                         }
                         if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
                             continue;
-                        // Attack card modifiers (acc_diff targets)
                         if (mod.subtype === 'invisible' && t.plugins?.invisibility) {
                             t.plugins.invisibility.data = 1;
                         } else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) {
@@ -449,7 +448,7 @@ function createGenericBonusStep(flowType) {
                 const applyDmgModsToTargets = (targets) => {
                     for (const t of targets) {
                         for (const mod of dmgMods) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id))
+                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(accDiffTargetToken(t)?.id))
                                 continue;
                             if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
                                 continue;
@@ -493,7 +492,7 @@ function createGenericBonusStep(flowType) {
                             continue;
                         $allCards.each(function (cardIndex) {
                             const hudTarget = hudTargets[cardIndex];
-                            if (!hudTarget || !mod.applyTo.includes(hudTarget.target?.id))
+                            if (!hudTarget || !mod.applyTo.includes(accDiffTargetToken(hudTarget)?.id))
                                 return;
                             const $card = $(this);
                             // Find and click the matching checkbox in the target card.
@@ -563,7 +562,7 @@ function createGenericBonusStep(flowType) {
                 const originals = new Map();
                 for (const t of (state.data.acc_diff?.targets || [])) {
                     for (const mod of attackMods) {
-                        const key = `${t.target?.id}::${mod.subtype}`;
+                        const key = `${accDiffTargetToken(t)?.id}::${mod.subtype}`;
                         if ((mod.subtype === 'invisible' || mod.subtype === 'no_invisible') && t.plugins?.invisibility)
                             originals.set(key, t.plugins.invisibility.data);
                         else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype))
@@ -572,7 +571,7 @@ function createGenericBonusStep(flowType) {
                 }
 
                 const injectModToggles = () => {
-                    const $form = $('form#accdiff');
+                    const $form = $('form[id^="accdiff"]');
                     if ($form.length === 0)
                         return;
                     $form.find('.la-target-modifier-section, .la-tmod-row').remove();
@@ -598,14 +597,14 @@ function createGenericBonusStep(flowType) {
                         modEnabled.set(mKey, on);
                         const reactorToken = resolveReactorToken(mod, state);
                         for (const t of (state.data.acc_diff?.targets || [])) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(t.target?.id))
+                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(accDiffTargetToken(t)?.id))
                                 continue;
                             if (!evaluateApplyToCondition(mod, t, state, reactorToken))
                                 continue;
                             if (on) {
                                 applyOneModifier(t, mod);
                             } else {
-                                const oKey = `${t.target?.id}::${mod.subtype}`;
+                                const oKey = `${accDiffTargetToken(t)?.id}::${mod.subtype}`;
                                 if (mod.subtype === 'invisible' && t.plugins?.invisibility)
                                     t.plugins.invisibility.data = 0;
                                 else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
@@ -1037,12 +1036,12 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
         if (bonus.type === 'difficulty')
             val = -val;
 
-        const $plusBtn = $('form#accdiff button[data-tooltip="Add global accuracy"]');
-        const $minusBtn = $('form#accdiff button[data-tooltip="Add global difficulty"]');
+        const $plusBtn = $('form[id^="accdiff"] button[data-tooltip="Add global accuracy"]');
+        const $minusBtn = $('form[id^="accdiff"] button[data-tooltip="Add global difficulty"]');
 
         if ($plusBtn.length === 0 || $minusBtn.length === 0) {
-            const $plusBtnAlt = $('form#accdiff button:has(.cci-accuracy)');
-            const $minusBtnAlt = $('form#accdiff button:has(.cci-difficulty)');
+            const $plusBtnAlt = $('form[id^="accdiff"] button:has(.cci-accuracy)');
+            const $minusBtnAlt = $('form[id^="accdiff"] button:has(.cci-difficulty)');
 
             if ($plusBtnAlt.length > 0 && $minusBtnAlt.length > 0) {
                 const clickCount = Math.abs(val);
@@ -1100,7 +1099,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     };
 
     const injectIntoCard = () => {
-        const $form = $('form#accdiff');
+        const $form = $('form[id^="accdiff"]');
         if ($form.length === 0)
             return false;
 
@@ -1161,15 +1160,17 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
     injectIntoCard();
 
-    // Always watch for Svelte re-renders so we re-inject with the current effective list.
-    // Disconnects when the dialog closes (form#accdiff removed), not on a fixed timer.
+    // Re-inject on Svelte re-renders; only disconnect once the form was actually seen,
+    // otherwise the first pre-render mutation would tear us down before v3's HUD finishes.
     let reinjectPending = false;
+    let formWasSeen = false;
     const observer = new MutationObserver(() => {
-        const $form = $('form#accdiff');
+        const $form = $('form[id^="accdiff"]');
         if ($form.length === 0) {
-            observer.disconnect();
+            if (formWasSeen) observer.disconnect();
             return;
         }
+        formWasSeen = true;
         if ($form.find('.csm-global-bonus-row').length === 0 && !reinjectPending) {
             reinjectPending = true;
             setTimeout(() => {
@@ -1230,7 +1231,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     };
 
     const tryInjectTargeted = () => {
-        const $form = $('form#accdiff');
+        const $form = $('form[id^="accdiff"]');
         if ($form.length === 0)
             return false;
 
@@ -1368,10 +1369,10 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     tryInjectTargeted();
 
     // Observer for dynamic target changes
-    const $form = $('form#accdiff');
+    const $form = $('form[id^="accdiff"]');
     const observeTarget = $form.length > 0 ? $form[0] : document.body;
     const observer = new MutationObserver(() => {
-        if ($('form#accdiff').length === 0) {
+        if ($('form[id^="accdiff"]').length === 0) {
             observer.disconnect();
             return;
         }
@@ -1504,12 +1505,15 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
 
         bonusStates.forEach((bonus, index) => {
             const $row = $(renderBonusRow(bonus, index));
+            _remapSvelteScopes($row, $form);
             $myContainer.append($row);
         });
+        // Remap the header / any pre-existing children that were appended above.
+        _remapSvelteScopes($myContainer, $form);
 
         // Inject target modifier rows (global and per-target)
         const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
-        const currentTargetIds = (state.data.damage_hud_data?.targets || []).map(t => t.target?.id);
+        const currentTargetIds = (state.data.damage_hud_data?.targets || []).map(t => accDiffTargetToken(t)?.id);
         const globalTMods = targetModifiers.filter(m => {
             if (!Array.isArray(m.applyTo) || m.applyTo.length === 0)
                 return true;
@@ -1529,6 +1533,7 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                     </label>
                 </div>
             `);
+            _remapSvelteScopes($row, $form);
             $myContainer.append($row);
         }
 
@@ -1558,7 +1563,8 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                     const $card = $(this);
                     // Match by card index -> hudTargets[index].target.id
                     const hudTarget = hudTargets[cardIndex];
-                    const tokenId = hudTarget && (mod.applyTo || []).includes(hudTarget.target?.id) ? hudTarget.target.id : null;
+                    const hudTokenId = accDiffTargetToken(hudTarget)?.id;
+                    const tokenId = hudTarget && hudTokenId && (mod.applyTo || []).includes(hudTokenId) ? hudTokenId : null;
                     if (!tokenId)
                         return;
                     const guardClass = `la-tmod-dmg-${mod.id || mod.subtype}-${tokenId}`;
@@ -1579,15 +1585,17 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         return true;
     };
 
-    let prevTargetSig = (state.data?.damage_hud_data?.targets || []).map(t => t.target?.id).sort().join(',');
+    let prevTargetSig = (state.data?.damage_hud_data?.targets || []).map(t => accDiffTargetToken(t)?.id).sort().join(',');
     let reinjectPending = false;
+    let formWasSeen = false;
 
     const observer = new MutationObserver(() => {
         const $form = $('#damage-hud');
         if ($form.length === 0) {
-            observer.disconnect();
+            if (formWasSeen) observer.disconnect();
             return;
         }
+        formWasSeen = true;
 
         const hudData = state.data?.damage_hud_data;
         if (!hudData) {
@@ -1595,7 +1603,7 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         }
 
         const currentTargets = hudData.targets || [];
-        const sig = currentTargets.map(t => t.target?.id).sort().join(',');
+        const sig = currentTargets.map(t => accDiffTargetToken(t)?.id).sort().join(',');
         const hasContainer = $form.find('.csm-bonus-container').length > 0;
         const targetCount = currentTargets.length;
         const cardsFound = $form.find('.damage-hud-target-card').length;
@@ -1658,7 +1666,7 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
             }
 
             const newResolved = targetedBonuses.map(bonus => {
-                const ht = currentTargets.find(ht => (bonus.applyTo || []).includes(ht.target?.id));
+                const ht = currentTargets.find(ht => (bonus.applyTo || []).includes(accDiffTargetToken(ht)?.id));
                 return ht ? { ...bonus } : null;
             }).filter(Boolean);
 
@@ -1692,7 +1700,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
 
     $form.find('.damage-hud-target-card').each(function(cardIndex) {
         const $card = $(this);
-        const tokenId = hudTargets[cardIndex]?.target?.id;
+        const tokenId = accDiffTargetToken(hudTargets[cardIndex])?.id;
         if (!tokenId)
             return;
 
@@ -1725,6 +1733,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
                     <div style="display:flex;align-items:center;">${damageComponents}</div>
                 </div>
             `);
+            _remapSvelteScopes($row, $form);
 
             // Visual row goes after the AP/Paracausal/Half-damage config row
             $card.find('.damage-target-config').after($row);
@@ -1790,6 +1799,27 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
  * Pre-fills from the weapon's knockback tag if present; otherwise unchecked but visible.
  * Stores the enabled/value state on state.data._csmKnockback for the knockback damage step.
  */
+// Each Lancer release rebuilds with a fresh svelte scope hash; detect rather than hardcode.
+function _detectSvelteScope($form, selector) {
+    const refs = $form.find(selector);
+    for (let i = 0; i < refs.length; i++) {
+        for (const cls of refs[i].classList) {
+            if (cls.startsWith('svelte-')) return cls;
+        }
+    }
+    return '';
+}
+
+// Swap LA's hardcoded svelte scope classes for v3's live ones so templates don't need per-release edits.
+function _remapSvelteScopes($wrapper, $form) {
+    const containerScope = _detectSvelteScope($form, 'label.container');
+    const valueScope = _detectSvelteScope($form, '.reliable-value, .damage-hud-section');
+    const accdiffScope = _detectSvelteScope($form, '.accdiff-grid, .accdiff-other-grid');
+    if (containerScope) $wrapper.find('.svelte-wt0sk2').addClass(containerScope).removeClass('svelte-wt0sk2');
+    if (valueScope) $wrapper.find('.svelte-1tnd08e').addClass(valueScope).removeClass('svelte-1tnd08e');
+    if (accdiffScope) $wrapper.find('.svelte-k5ear2').addClass(accdiffScope).removeClass('svelte-k5ear2');
+}
+
 export function injectKnockbackCheckbox(state) {
     if (!state.data)
         state.data = {};
@@ -1828,15 +1858,17 @@ export function injectKnockbackCheckbox(state) {
         const checked = state.data._csmKnockback.enabled;
         const val = state.data._csmKnockback.value;
 
-        // Build the HTML matching the Reliable checkbox pattern
+        const containerScope = _detectSvelteScope($form, 'label.container');
+        const valueScope = _detectSvelteScope($form, '.reliable-value');
+
         const $row = $(`
             <div class="csm-knockback-row" style="grid-area: knockback; display: flex; align-items: center; gap: 4px;">
-                <label class="container svelte-wt0sk2" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
-                    <input type="checkbox" class="csm-knockback-checkbox svelte-wt0sk2" ${checked ? 'checked' : ''}>
-                    <i class="mdi mdi-arrow-expand-all i--s svelte-wt0sk2"></i>
+                <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
+                    <input type="checkbox" class="csm-knockback-checkbox ${containerScope}" ${checked ? 'checked' : ''}>
+                    <i class="mdi mdi-arrow-expand-all i--s ${containerScope}"></i>
                     <span style="text-wrap: nowrap;">Knockback</span>
                 </label>
-                <input class="csm-knockback-value reliable-value svelte-1tnd08e"
+                <input class="csm-knockback-value reliable-value ${valueScope}"
                        type="number" value="${val}" min="1"
                        style="width: 3em; ${checked ? '' : 'display:none;'}">
             </div>
@@ -1862,14 +1894,17 @@ export function injectKnockbackCheckbox(state) {
     // Try immediately
     doInject();
 
-    // MutationObserver to re-inject on Svelte re-renders
+    // MutationObserver to re-inject on Svelte re-renders. The formWasSeen flag prevents the
+    // observer from disconnecting on the first mutation BEFORE the HUD has finished rendering.
     let reinjectPending = false;
+    let formWasSeen = false;
     const observer = new MutationObserver(() => {
         const $form = $('#damage-hud');
         if ($form.length === 0) {
-            observer.disconnect();
+            if (formWasSeen) observer.disconnect();
             return;
         }
+        formWasSeen = true;
         if ($form.find('.csm-knockback-row').length === 0 && !reinjectPending) {
             reinjectPending = true;
             setTimeout(() => {
@@ -1943,12 +1978,13 @@ export function injectNoBonusDmgCheckbox(state) {
         }
 
         const checked = state.la_extraData._csmNoBonusDmg.enabled;
+        const containerScope = _detectSvelteScope($form, 'label.container');
 
         const $row = $(`
             <div class="csm-no-bonus-dmg-row" style="grid-area: nobonusdmg; display: flex; align-items: center; margin-top: 4px;">
-                <label class="container svelte-wt0sk2" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
-                    <input type="checkbox" class="csm-no-bonus-dmg-checkbox svelte-wt0sk2" ${checked ? 'checked' : ''}>
-                    <i class="mdi mdi-cancel i--s svelte-wt0sk2"></i>
+                <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
+                    <input type="checkbox" class="csm-no-bonus-dmg-checkbox ${containerScope}" ${checked ? 'checked' : ''}>
+                    <i class="mdi mdi-cancel i--s ${containerScope}"></i>
                     <span style="text-wrap: nowrap;">No Bonus Dmg</span>
                 </label>
             </div>
@@ -1968,12 +2004,14 @@ export function injectNoBonusDmgCheckbox(state) {
     doInject();
 
     let reinjectPending = false;
+    let formWasSeen = false;
     const observer = new MutationObserver(() => {
         const $form = $('#damage-hud');
         if ($form.length === 0) {
-            observer.disconnect();
+            if (formWasSeen) observer.disconnect();
             return;
         }
+        formWasSeen = true;
         if ($form.find('.csm-no-bonus-dmg-row').length === 0 && !reinjectPending) {
             reinjectPending = true;
             setTimeout(() => {

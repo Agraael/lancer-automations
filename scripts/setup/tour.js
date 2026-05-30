@@ -328,7 +328,9 @@ function _tahDrillStep(id, title, content, drillPath, finalPrefix) {
                 await openRow(p);
             for (let i = 0; i < 40; i++) {
                 const target = findRow(finalPrefix);
-                if (target) { target.classList.add(cls); break; }
+                if (target) {
+                    target.classList.add(cls); break;
+                }
                 await new Promise((r) => setTimeout(r, 50));
             }
         },
@@ -496,6 +498,7 @@ let _tahPrevControlled = [];
 let _tahDemoToken = null;
 let _tahDemoAddedToCombat = false;
 let _tahCreatedCombat = false;
+let _tahPrevTurnIdx = null;
 
 function _waitForTokenDialog() {
     return new Promise((resolve) => {
@@ -557,6 +560,8 @@ async function _ensureTAHOpen() {
 
     // Combat must exist, the token must be a combatant, AND the combat must
     // be started for the combat-bar (action economy, movement) to render.
+    const hadStartedCombat = !!game.combat?.started;
+    const prevTurnIdx = game.combat?.turn ?? null;
     if (!game.combat) {
         const combat = await Combat.create({ scene: canvas.scene.id, active: true });
         if (combat)
@@ -570,6 +575,20 @@ async function _ensureTAHOpen() {
         try {
             await game.combat.startCombat();
         } catch { /* ignore */ }
+    }
+
+    // Demo token must be the CURRENT combatant for #la-combat-bar to render.
+    // Without this, joining an in-progress combat puts the bar on whoever's turn it is.
+    if (game.combat?.started) {
+        const cmb = game.combat.combatants.find(c => c.tokenId === target.id);
+        const idx = cmb ? game.combat.turns.findIndex(c => c.id === cmb.id) : -1;
+        if (cmb && idx >= 0 && game.combat.combatant?.id !== cmb.id) {
+            if (hadStartedCombat)
+                _tahPrevTurnIdx = prevTurnIdx;
+            try {
+                await game.combat.update({ turn: idx });
+            } catch { /* ignore */ }
+        }
     }
 
     for (let i = 0; i < 30; i++) {
@@ -586,6 +605,11 @@ async function _ensureTAHOpen() {
 }
 
 async function _restoreAfterTAH() {
+    // Restore the previously-active turn before touching combatants so combat tracker UI stays sane.
+    try {
+        if (_tahPrevTurnIdx !== null && game.combat)
+            await game.combat.update({ turn: _tahPrevTurnIdx });
+    } catch { /* ignore */ }
     try {
         if (_tahDemoToken && _tahDemoAddedToCombat)
             await /** @type {any} */ (_tahDemoToken.document).toggleCombatant?.(false);
@@ -606,6 +630,7 @@ async function _restoreAfterTAH() {
     _tahDemoToken = null;
     _tahDemoAddedToCombat = false;
     _tahCreatedCombat = false;
+    _tahPrevTurnIdx = null;
 }
 
 let _tahTour;
@@ -712,7 +737,9 @@ function _closeEffectManager() {
     if (!el)
         return;
     const dlg = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).element?.[0] === el || /** @type {any} */ (w).element?.[0]?.contains(el));
-    try { /** @type {any} */ (dlg)?.close?.(); } catch { /* ignore */ }
+    try {
+        /** @type {any} */ (dlg)?.close?.();
+    } catch { /* ignore */ }
 }
 
 export async function startConfigTour() {
@@ -791,7 +818,7 @@ function _movementWarningDialog() {
                     <div class="lancer-dialog-subtitle">Please read this once.</div>
                 </div>
                 <div style="padding: 8px 10px; line-height: 1.5;">
-                    <p style="margin: 0 0 8px;">Movement and the automation around it (Overwatch, Engagement, reactions on move, boost split, etc.) hooks into Foundry's move pipeline. With the Lancer fork of Elevation Ruler it now works reliably for most cases: the multi step stacks (Boost &amp; Move, Overcharge &amp; Boost &amp; Move) advance on <code>onMove</code> / <code>onActivation</code>, which fire post commit, so each leg has settled before the next one runs.</p>
+                    <p style="margin: 0 0 8px;">Movement and the automation around it (Overwatch, Engagement, reactions on move, boost split, etc.) hooks into Foundry's v13 move pipeline. The multi step stacks (Boost &amp; Move, Overcharge &amp; Boost &amp; Move) advance on <code>onMove</code> / <code>onActivation</code>, which fire post commit, so each leg has settled before the next one runs.</p>
                     <p style="margin: 0 0 8px;">It's only medium stable though, so a few caveats:</p>
                     <ul style="margin: 0 0 8px 18px;">
                         <li>Be wary on <b>very vertical maps</b>: heavy climbing / hover / big elevation deltas can throw off the cost math, and the longer chains (3 leg Overcharge path) have the most surface to misbehave.</li>

@@ -1,0 +1,25 @@
+<div class="la-waypoint-label {{cssClass}}">
+	<div class="la-line la-line-cost">
+		{{#if action.img}}
+		<div class="la-img" style="background-image: url('{{action.img}}');"></div>
+		{{else if action.icon}}
+		<i class="la-icon {{action.icon}}"></i>
+		{{/if}}
+		<span class="la-total">{{totalCost}}{{#if units}} {{units}}{{/if}}</span>
+		{{#if deltaCost}}<span class="la-delta">+ {{deltaCost}}</span>{{/if}}
+	</div>
+	{{#if showSecondLine}}
+	<div class="la-line la-line-elev">
+		{{#if elevArrow}}
+		<i class="la-icon {{elevArrow}}"></i>
+		<span class="la-elev">{{elevAbs}}{{#if units}} {{units}}{{/if}}</span>
+		{{/if}}
+		{{#if penalty}}
+		<i class="la-icon la-penalty fa-solid fa-triangle-exclamation"></i>
+		<span class="la-penalty-value">{{penalty}}{{#if units}} {{units}}{{/if}}</span>
+		{{else if penaltyZone}}
+		<i class="la-icon la-penalty fa-solid fa-triangle-exclamation" data-tooltip="Movement penalty zone (no cost on gridless)"></i>
+		{{/if}}
+	</div>
+	{{/if}}
+</div>

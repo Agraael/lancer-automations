@@ -32,7 +32,8 @@ const JB2A_FALLBACKS = {
     'jb2a.impact.009.white':   { src: 'jb2a.impact.009.orange', tint: 0xffffff },
     'jb2a.impact.010.blue':    { src: 'jb2a.impact.010.orange', tint: 0xffffff },
     'jb2a.impact.012.green02': { src: 'jb2a.impact.012.blue', tint: 0x208030 },
-    'jb2a.impact.boulder.02':            { src: 'jb2a.impact.earth.01.browngreen.0' },
+    'jb2a.impact.boulder.02':            { src: '' },
+    'jb2a.impact.earth.01.browngreen.0': { src: 'jb2a.impact_themed.ice_shard.blue', tint: 0x8b5a2b },
     'jb2a.impact.ground_crack.white.01': { src: 'jb2a.impact.ground_crack.orange.01' },
 
     'jb2a.template_circle.out_pulse.02.burst.greenorange': { src: 'jb2a.template_circle.out_pulse.02.burst.bluewhite', tint: 0xff8800 },

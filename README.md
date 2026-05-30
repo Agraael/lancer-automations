@@ -27,7 +27,7 @@ I started by tweaking existing modules for the [Lancer system](https://foundryvt
 
 At its core, this module is an event-driven automation engine. Almost anything that happens during a Lancer session can fire a trigger: movement, attacks, damage, status changes, turn transitions. On top of that engine sit tools for managing effects with duration, building complex bonuses, running interactive prompts during play (choose a target, knock a token back, place a zone), and more.
 
-The end goal is to move everything I need for my campaign into this module, so it functions as a full extension of the Lancer system for FoundryVTT v12.
+The end goal is to move everything I need for my campaign into this module, so it functions as a full extension of the Lancer system for FoundryVTT v13.
 
 > Some features may overlap or not fully integrate with each other. This is a work in progress.
 
@@ -71,8 +71,8 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 | Module | Description |
 |--------|-------------|
-| [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT |
-| FoundryVTT v12 | The version I'm currently working on |
+| [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT, v3.0.0 or newer |
+| FoundryVTT v13.351+ | The version I'm currently working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 | [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required for API hooks |
@@ -88,7 +88,6 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Syntax highlighting in the evaluate/activation code editors |
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
-| [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) (or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork)) | Required for boost detection, movement history accuracy, and difficult terrain penalty calculation |
 | [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix so you can have more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
@@ -322,9 +321,9 @@ Several functions handle deploying tokens or weapons onto the scene:
 
 ### Movement History & Revert
 
-The module optionally tracks each token's movement path during their turn. This is most accurate when used with [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork). Movement-tracking API (`getMovementHistory`, `getCumulativeMoveData`, `clearMoveData`, etc.) is documented in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
+The module tracks each token's movement path during combat using Foundry v13's native movement history. Movement-tracking API (`getMovementHistory`, `getCumulativeMoveData`, `clearMoveData`, etc.) is documented in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
 
-To open the movement history dialog, press **R** (default keybinding, configurable in FoundryVTT's keybinding settings) with a token selected, or right-click the revert button in the token HUD.
+To open the movement history dialog, press **H** (default keybinding, configurable in FoundryVTT's keybinding settings) with a token selected, or right-click the revert button in the token HUD.
 
 ![Movement history dialog](doc/img/movement-history-dialog.png)
 
@@ -340,7 +339,7 @@ You can also call these directly:
 
 ## TemplateMacro: Lancer Tools
 
-[TemplateMacro](https://github.com/Agraael/templatemacro) is a fork of a dead module that I fixed for FoundryVTT v12. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
+[TemplateMacro](https://github.com/Agraael/templatemacro) started as a fork of a dead module but has since been almost entirely rewritten and refactored for FoundryVTT v13. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
 
 > All three zone tools below are also available from code via `api.placeZone(...)`. See [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md) for the `placeZone` options (`statusEffects`, `dangerous`, `difficultTerrain`, `fillColor`, etc.).
 
@@ -356,7 +355,7 @@ A zone that deals damage to tokens on entry or at specific trigger points (e.g. 
 
 ### Difficult Terrain
 
-A zone that imposes a movement penalty on tokens moving through it. When used with [my Elevation Ruler fork](https://github.com/Agraael/Lancer-elevationRuler-Fork), the penalty is factored into the movement cost display in real time, so you can see exactly how much movement is consumed.
+A zone that imposes a movement penalty on tokens moving through it. The penalty is factored into the built-in Lancer Automations Ruler's movement cost display in real time, so you can see exactly how much movement is consumed.
 
 <br clear="right"/>
 
@@ -717,7 +716,7 @@ You can also register default activations by code instead of through the UI. See
 
 ### Boost Detection (Experimental)
 
-Requires [Elevation Ruler](https://foundryvtt.com/packages/elevationruler) or [my fork](https://github.com/Agraael/Lancer-elevationRuler-Fork). Enable in module settings.
+Uses the built-in Lancer Automations Ruler. Enable both the ruler and boost detection in module settings.
 
 The module tracks cumulative drag movement for each token during their turn. When movement exceeds the token's base Speed, a boost is detected. The `onMove` trigger data gains:
 
@@ -802,7 +801,7 @@ The Vision tab gathers everything that affects how tokens see and block sight.
 
 ### Keybindings
 
-All keybindings (movement history reset, TAH search, and the Elevation Ruler fork's bindings if installed) are listed under **Configure Controls > Lancer Automations**.
+All keybindings (movement history reset, TAH search, and the Lancer Automations Ruler bindings: free movement, debug movement, flying mode, elevation up/down, etc.) are listed under **Configure Controls > Lancer Automations**.
 
 ---
 

@@ -10,9 +10,7 @@
         <i class="fas fa-exclamation-triangle"></i>
         <div>
             <div class="la-rest-emergency-title">CATASTROPHIC DAMAGE DETECTED</div>
-            <div class="la-rest-emergency-sub">
-                Chassis recovery requires <b>4</b> repairs total. Contributions from allies&rsquo; recent rest reports are credited automatically.
-            </div>
+            <div class="la-rest-emergency-sub">Chassis recovery requires <b>4</b> repairs total.</div>
         </div>
     </div>
 
@@ -22,15 +20,55 @@
             <div class="la-rest-recovery-value">{{mech.repairs.value}}</div>
         </div>
         <div class="la-rest-recovery-cell">
-            <div class="la-rest-recovery-label">
-                Allied
-                <button type="button" class="la-rest-allied-refresh" title="Re-scan recent chat for contributions"><i class="fas fa-sync"></i></button>
-            </div>
-            <div class="la-rest-recovery-value" id="la-rest-allied-count">{{alliedRepairs}}</div>
+            <div class="la-rest-recovery-label">Allies</div>
+            <div class="la-rest-recovery-value" id="la-rest-pool-pulled">0</div>
+        </div>
+        <div class="la-rest-recovery-cell">
+            <div class="la-rest-recovery-label">GM Grant</div>
+            <div class="la-rest-recovery-value" id="la-rest-pool-grant">0</div>
+        </div>
+        <div class="la-rest-recovery-cell">
+            <div class="la-rest-recovery-label">Pool</div>
+            <div class="la-rest-recovery-value" id="la-rest-pool-total">{{mech.repairs.value}}</div>
         </div>
         <div class="la-rest-recovery-cell la-rest-recovery-required">
             <div class="la-rest-recovery-label">Still Required</div>
             <div class="la-rest-recovery-value" id="la-rest-required-count">4</div>
         </div>
     </div>
+
+    {{#if hasAllies}}
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">ALLY REPAIR POOL</div>
+        <div class="la-rest-section-body">
+            <div class="la-rest-allies-row">
+                {{#each allies}}
+                <div class="la-rest-ally-card" data-ally-id="{{actorId}}">
+                    <img class="la-rest-ally-portrait" src="{{img}}" alt="">
+                    <div class="la-rest-ally-name" title="{{ownerName}}">{{name}}</div>
+                    <div class="la-rest-ally-repairs"><img src="{{../repairIcon}}" alt=""><span>{{value}}</span><span class="la-rest-ally-sep">/</span><span>{{max}}</span></div>
+                    <div class="la-rest-ally-stepper">
+                        <button type="button" class="la-rest-ally-step-down">−</button>
+                        <span class="la-rest-ally-pulled">0</span>
+                        <button type="button" class="la-rest-ally-step-up">+</button>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+    </div>
+    {{/if}}
+
+    {{#if isGM}}
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">GM FREE REPAIR</div>
+        <div class="la-rest-section-body">
+            <div class="la-rest-grant-row">
+                <label for="la-rest-grant">Free Repairs</label>
+                <input id="la-rest-grant" class="la-rest-grant-input" type="number" min="0" value="0">
+                <span class="la-rest-grant-suffix">added to pool, no source</span>
+            </div>
+        </div>
+    </div>
+    {{/if}}
 </div>

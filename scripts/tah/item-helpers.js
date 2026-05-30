@@ -56,21 +56,30 @@ export function getItemStatus(itemOrAction, extraAction = null) {
     let badgeColor = '#3a9e6e'; // green = ready
 
     const pushLoaded = (loaded) => {
-        if (loaded === false) { parts.push('⬡'); unavailable = true; badgeColor = '#c33'; }
-        else parts.push('⬢');
+        if (loaded === false) {
+            parts.push('⬡'); unavailable = true; badgeColor = '#c33';
+        } else
+            parts.push('⬢');
     };
     const pushCharged = (charged) => {
-        if (charged === false) { parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33'; }
-        else parts.push(rechargeIcon(true));
+        if (charged === false) {
+            parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33';
+        } else
+            parts.push(rechargeIcon(true));
     };
     const pushUses = (usesField) => {
         let val = 0, max = 0;
         if (usesField != null) {
-            if (typeof usesField === 'number') val = usesField;
-            else { val = usesField.value ?? 0; max = usesField.max ?? 0; }
+            if (typeof usesField === 'number')
+                val = usesField;
+            else {
+                val = usesField.value ?? 0; max = usesField.max ?? 0;
+            }
         }
-        if (val <= 0) { unavailable = true; badgeColor = '#c33'; }
-        else if (val < max && badgeColor !== '#c33') badgeColor = '#cc7700';
+        if (val <= 0) {
+            unavailable = true; badgeColor = '#c33';
+        } else if (val < max && badgeColor !== '#c33')
+            badgeColor = '#cc7700';
         parts.push(`${val}/${max}`);
     };
 
@@ -314,13 +323,17 @@ export function appendItemPips(item, popup, depthCallbacks) {
                 if (actHasLoading) {
                     const loaded = s.loaded !== false;
                     const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
-                    pip.on('click', async () => { playUiSound('toggle'); await patchAct({ loaded: !loaded }); rebuildAct(); });
+                    pip.on('click', async () => {
+                        playUiSound('toggle'); await patchAct({ loaded: !loaded }); rebuildAct();
+                    });
                     actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
                 }
                 if (actHasRecharge) {
                     const charged = s.charged !== false;
                     const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-                    pip.on('click', async () => { playUiSound('toggle'); await patchAct({ charged: !charged }); rebuildAct(); });
+                    pip.on('click', async () => {
+                        playUiSound('toggle'); await patchAct({ charged: !charged }); rebuildAct();
+                    });
                     actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
                 }
                 if (actHasLimited && s.uses != null) {
@@ -353,7 +366,8 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const extraAction = depthCallbacks?.action;
     if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI) {
         const eaWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-        if (!pipsWrap.length) popup.children().last().prepend(eaWrap);
+        if (!pipsWrap.length)
+            popup.children().last().prepend(eaWrap);
         const rebuildEa = () => {
             const ea = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(a => a.name === extraAction.name);
             const charged = ea ? ea.charged !== false : extraAction.charged !== false;

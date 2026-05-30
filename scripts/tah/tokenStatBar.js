@@ -1,6 +1,8 @@
 // Custom multi-bar hub drawn under Lancer tokens + resource grid in token HUD.
 // Replaces vanilla bar1/bar2 for mech/npc/deployable actors. Disabled by default.
 
+import { getIsoProvider } from '../setup/iso-settings.js';
+
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatBar';
 const SETTING_DEFAULT_HIDDEN = 'statBarDefaultHidden';
@@ -132,6 +134,30 @@ function isLancerCombatant(actor) {
     }
     const t = actor.type;
     return t === 'mech' || t === 'npc' || t === 'deployable' || t === 'pilot';
+}
+
+const ISO_SETTING_STATBAR = 'iso.statBar';
+const ISO_SETTING_RETICLE = 'iso.targetReticle';
+const ISO_SETTING_HITZONE = 'iso.clickZone';
+
+function _getIsoState(token, settingKey = ISO_SETTING_STATBAR) {
+    try {
+        if (!game.settings.get(MODULE_ID, settingKey))
+            return null;
+    } catch {
+        return null;
+    }
+    const provider = getIsoProvider(token?.scene);
+    if (!provider)
+        return null;
+    if (provider.isTokenDisabled(token))
+        return null;
+    return {
+        reverseRotation: provider.reverseRotation,
+        reverseSkewX: provider.reverseSkewX,
+        reverseSkewY: provider.reverseSkewY,
+        counterScale: provider.counterScale,
+    };
 }
 
 function hasMechStats(actor) {
@@ -691,7 +717,13 @@ function _ensureSyncTicker(token) {
             _syncTickers.delete(token.id);
             return;
         }
-        entry.wrapper.position.set(token.position.x, token.position.y);
+        const active = _activeForId(token.id) ?? token;
+        const iso = _getIsoState(active);
+        if (iso && active.mesh) {
+            entry.wrapper.position.set(active.mesh.position.x, active.mesh.position.y);
+        } else {
+            entry.wrapper.position.set(active.position.x, active.position.y);
+        }
     };
     _syncTickers.set(token.id, tick);
     canvas.app.ticker.add(tick);
@@ -705,12 +737,29 @@ function _removeSyncTicker(tokenId) {
     }
 }
 
+// Returns the active Token instance for an id: the drag preview if one exists in
+// canvas.tokens.preview, otherwise the source token. Both share the same id in v13.
+function _activeForId(tokenId) {
+    const previews = canvas.tokens?.preview?.children ?? [];
+    for (const p of previews) {
+        if (p?.document?.id === tokenId && p.mesh)
+            return p;
+    }
+    return canvas.tokens?.get?.(tokenId) ?? null;
+}
+
 function _syncHubPosition(token) {
     const entry = _overlayHubs.get(token.id);
     if (!entry) {
         return;
     }
-    entry.wrapper.position.set(token.position.x, token.position.y);
+    const active = _activeForId(token.id) ?? token;
+    const iso = _getIsoState(active);
+    if (iso && active.mesh) {
+        entry.wrapper.position.set(active.mesh.position.x, active.mesh.position.y);
+    } else {
+        entry.wrapper.position.set(active.position.x, active.position.y);
+    }
     _ensureSyncTicker(token);
 }
 
@@ -822,13 +871,28 @@ function drawStatHub() {
 
     const wrapper = new PIXI.Container();
     wrapper.name = `la-hub-wrapper-${token.id}`;
-    wrapper.position.set(token.position.x, token.position.y);
     overlay.addChild(wrapper);
 
     const container = new PIXI.Container();
     container.name = 'la-stat-hub';
-    container.position.set((token.w - width) / 2, startY);
     wrapper.addChild(container);
+
+    const iso = _getIsoState(token);
+    if (iso && token.mesh) {
+        wrapper.position.set(token.mesh.position.x, token.mesh.position.y);
+        wrapper.rotation = iso.reverseRotation;
+        wrapper.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+        // K = 1/sqrt(sqrt(3)) ≈ 0.76 cancels the True Iso aspect change.
+        const k = 0.76;
+        wrapper.scale.set(k, 1 / k);
+        container.position.set(-width / 2, (token.h / 2) + 3 - rowHeight);
+    } else {
+        wrapper.position.set(token.position.x, token.position.y);
+        wrapper.rotation = 0;
+        wrapper.skew.set(0, 0);
+        wrapper.scale.set(1, 1);
+        container.position.set((token.w - width) / 2, startY);
+    }
 
     _overlayHubs.set(token.id, { wrapper, hub: container });
 
@@ -1168,7 +1232,9 @@ function drawElevationBadge(token) {
         token.tooltip.visible = false;
     }
 
-    const elevation = token.document?.elevation;
+    // Round so mid-animation interpolated values don't show as long floats.
+    const raw = token.document?.elevation;
+    const elevation = Number.isFinite(raw) ? Math.round(raw) : raw;
     if (!Number.isFinite(elevation) || elevation === 0) {
         return;
     }
@@ -1247,8 +1313,27 @@ function drawElevationBadge(token) {
 
     // Align the cell body with the status icon row (y=0).
     const badgeY = isPositive ? -arrowH : 0;
-    badge.position.set(token.w - cellW, badgeY);
-    token.addChild(badge);
+    const iso = _getIsoState(token);
+    if (iso && token.mesh) {
+        badge.pivot.set(cellW / 2, cellH / 2);
+        badge.rotation = iso.reverseRotation;
+        badge.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+        const k = 0.76;
+        badge.scale.set(k, 1 / k);
+        const cosR = Math.cos(iso.reverseRotation);
+        const sinR = Math.sin(iso.reverseRotation);
+        const lx = token.w / 2 - cellW / 2;
+        const ly = -token.h / 2 + cellH / 2;
+        const offsetX = (cosR * k * lx) + (-sinR * (1 / k) * ly);
+        const offsetY = (sinR * k * lx) + (cosR * (1 / k) * ly);
+        const worldX = token.mesh.position.x + offsetX;
+        const worldY = token.mesh.position.y + offsetY;
+        badge.position.set(worldX - token.position.x, worldY - token.position.y);
+        token.addChild(badge);
+    } else {
+        badge.position.set(token.w - cellW, badgeY);
+        token.addChild(badge);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1287,8 +1372,9 @@ function injectLancerHud(hud, html, actor) {
 
     // Top: Overshield, [Infection], Burn. Infection cell hidden when integration is disabled.
     let infectionOn = false;
-    try { infectionOn = !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration'); }
-    catch { /* setting not registered */ }
+    try {
+        infectionOn = !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration');
+    } catch { /* setting not registered */ }
     const topInner =
         cell('system.overshield.value', sys?.overshield?.value ?? 0, COLORS.overshield, 'Overshield') +
         (infectionOn ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
@@ -1622,13 +1708,10 @@ export function initTokenStatBar() {
     });
 
     // Refresh visibility + position sync.
-    Hooks.on('refreshToken', (token) => {
+    const refreshLancerToken = (token) => {
         if (!isEnabled() || !isLancerCombatant(token?.actor)) {
             return;
         }
-
-        // Elevation badge.
-        drawElevationBadge(token);
 
         // Create hub if missing.
         if (!_overlayHubs.has(token.id)) {
@@ -1641,26 +1724,139 @@ export function initTokenStatBar() {
         if (!_overlayHubs.has(token.id)) {
             return;
         }
-        // Position sync.
+        // Position sync (updates wrapper.position to active mesh.position).
         _syncHubPosition(token);
+
+        // Must run after _syncHubPosition so the badge reads the fresh wrapper.position.
+        drawElevationBadge(token);
 
         const show = shouldShowBars(token);
         fadeBars(token, show ? 1 : 0);
 
-        // Nameplate offset.
         const entry = _overlayHubs.get(token.id);
         const nameplate = token.nameplate;
-        if (nameplate?.visible && entry) {
+        if (nameplate) {
             if (token._laBaseNameplateY === undefined) {
                 token._laBaseNameplateY = nameplate.position.y;
             }
-            if (show) {
-                nameplate.position.y = token._laBaseNameplateY + (token.bars?.height ?? 0) + 8;
+            if (token._laBaseNameplateX === undefined) {
+                token._laBaseNameplateX = nameplate.position.x;
+            }
+            if (nameplate.anchor && token._laBaseNameplateAnchorX === undefined) {
+                token._laBaseNameplateAnchorX = nameplate.anchor.x;
+                token._laBaseNameplateAnchorY = nameplate.anchor.y;
+            }
+            const iso = _getIsoState(token);
+            if (iso && token.mesh && entry?.wrapper && entry?.hub) {
+                nameplate.anchor?.set(0.5, 0.5);
+                nameplate.rotation = iso.reverseRotation;
+                nameplate.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+                const k = 0.76;
+                nameplate.scale.set(k, 1 / k);
+                entry.wrapper.transform.updateLocalTransform();
+                const localBelow = show
+                    ? new PIXI.Point(0, entry.hub.position.y + (entry.hub.height || 0) + 8)
+                    : new PIXI.Point(0, (token.h ?? 0) / 2 + 8);
+                const wp = entry.wrapper.localTransform.apply(localBelow);
+                nameplate.position.set(wp.x - token.position.x, wp.y - token.position.y);
             } else {
-                nameplate.position.y = token._laBaseNameplateY;
+                if (nameplate.anchor && token._laBaseNameplateAnchorX !== undefined) {
+                    nameplate.anchor.set(token._laBaseNameplateAnchorX, token._laBaseNameplateAnchorY);
+                }
+                nameplate.rotation = 0;
+                nameplate.skew.set(0, 0);
+                nameplate.scale.set(1, 1);
+                if (nameplate.visible && entry) {
+                    nameplate.position.x = token._laBaseNameplateX;
+                    nameplate.position.y = show
+                        ? token._laBaseNameplateY + (token.bars?.height ?? 0) + 8
+                        : token._laBaseNameplateY;
+                }
             }
         }
-    });
+
+        // Status effect icons (token.effects container).
+        const effects = token.effects;
+        if (effects && !effects.destroyed) {
+            if (token._laBaseEffectsX === undefined) {
+                token._laBaseEffectsX = effects.position.x;
+                token._laBaseEffectsY = effects.position.y;
+            }
+            const isoFx = _getIsoState(token);
+            if (isoFx && token.mesh) {
+                effects.pivot.set(0, 0);
+                effects.rotation = isoFx.reverseRotation;
+                effects.skew.set(isoFx.reverseSkewX, isoFx.reverseSkewY);
+                const k = 0.76;
+                effects.scale.set(k, 1 / k);
+                const cosR = Math.cos(isoFx.reverseRotation);
+                const sinR = Math.sin(isoFx.reverseRotation);
+                const lx = -(token.w ?? 0) / 2;
+                const ly = -(token.h ?? 0) / 2;
+                const offX = (cosR * k * lx) + (-sinR * (1 / k) * ly);
+                const offY = (sinR * k * lx) + (cosR * (1 / k) * ly);
+                const wx = token.mesh.position.x + offX;
+                const wy = token.mesh.position.y + offY;
+                effects.position.set(wx - token.position.x, wy - token.position.y);
+            } else {
+                effects.rotation = 0;
+                effects.skew.set(0, 0);
+                effects.scale.set(1, 1);
+                effects.position.set(token._laBaseEffectsX, token._laBaseEffectsY);
+            }
+        }
+
+        // Reticle would draw under our overlay bars, so move it into the overlay. In iso, also re-center it.
+        const isoTgt = _getIsoState(token, ISO_SETTING_RETICLE);
+        const tgtOverlay = getHubOverlay();
+        for (const g of [token.targetArrows, token.targetPips]) {
+            if (!g || g.destroyed)
+                continue;
+            if (tgtOverlay) {
+                if (g.parent !== tgtOverlay)
+                    tgtOverlay.addChild(g);
+                g.zIndex = 1;
+            }
+            if (isoTgt && token.mesh) {
+                g.rotation = isoTgt.reverseRotation;
+                g.skew.set(isoTgt.reverseSkewX, isoTgt.reverseSkewY);
+                const k = 0.76;
+                g.scale.set(k, 1 / k);
+                const cosR = Math.cos(isoTgt.reverseRotation);
+                const sinR = Math.sin(isoTgt.reverseRotation);
+                const cx = (cosR * k * ((token.w ?? 0) / 2)) - (sinR * (1 / k) * ((token.h ?? 0) / 2));
+                const cy = (sinR * k * ((token.w ?? 0) / 2)) + (cosR * (1 / k) * ((token.h ?? 0) / 2));
+                g.position.set(token.mesh.position.x - cx, token.mesh.position.y - cy);
+            } else {
+                g.rotation = 0;
+                g.skew.set(0, 0);
+                g.scale.set(1, 1);
+                // overlay is in canvas.tokens space, so token.position lands at the native cell
+                g.position.set(token.position.x, token.position.y);
+            }
+        }
+
+        // Extend hitArea onto the sprite. Foundry resets it to the cell each refresh, so this re-applies.
+        const isoHit = _getIsoState(token, ISO_SETTING_HITZONE);
+        if (isoHit && token.mesh) {
+            token.hitArea = {
+                contains: (x, y) => {
+                    if (token.shape?.contains?.(x, y))
+                        return true;
+                    if (!token.mesh)
+                        return false;
+                    const lx = token.mesh.position.x - token.position.x;
+                    const ly = token.mesh.position.y - token.position.y;
+                    const hw = (token.w ?? 0) / 2;
+                    const hh = (token.h ?? 0) / 2;
+                    return x >= lx - hw && x <= lx + hw && y >= ly - hh && y <= ly + hh;
+                },
+            };
+        } else if (token.shape && token.hitArea !== token.shape) {
+            token.hitArea = token.shape;
+        }
+    };
+    Hooks.on('refreshToken', refreshLancerToken);
 
     // Alt-key peek.
     window.addEventListener('keydown', (ev) => {
@@ -1704,6 +1900,7 @@ export function initTokenStatBar() {
             }
             try {
                 tok.drawBars();
+                refreshLancerToken(tok);
             } catch (e) {
                 console.warn(`${MODULE_ID} | drawBars sweep failed`, e);
             }
@@ -1714,9 +1911,38 @@ export function initTokenStatBar() {
     }
     Hooks.on('canvasReady', sweepLancerTokens);
 
+    // Rebuild bars when an iso flag toggles so they pick up the new transform.
+    Hooks.on('updateScene', (scene, changes) => {
+        if (scene.id !== canvas.scene?.id)
+            return;
+        const touchesIso = foundry.utils.hasProperty(changes, 'flags.isometric-perspective')
+            || foundry.utils.hasProperty(changes, 'flags.grape_juice-isometrics');
+        if (!touchesIso)
+            return;
+        requestAnimationFrame(() => {
+            for (const tok of canvas.tokens?.placeables ?? []) {
+                if (!isLancerCombatant(tok.actor))
+                    continue;
+                try {
+                    tok.drawBars();
+                    refreshLancerToken(tok);
+                } catch (e) {
+                    console.warn(`${MODULE_ID} | iso refresh`, e);
+                }
+            }
+        });
+    });
+
     // Cleanup on token removal.
     Hooks.on('destroyToken', (token) => {
         _removeOverlayHub(token.id);
+        // reticle lives in the overlay now, so the token's own destroy won't reach it
+        for (const g of [token.targetArrows, token.targetPips]) {
+            if (g && !g.destroyed && g.parent && g.parent !== token) {
+                g.parent.removeChild(g);
+                g.destroy();
+            }
+        }
     });
 
     Hooks.on('drawToken', (token) => {

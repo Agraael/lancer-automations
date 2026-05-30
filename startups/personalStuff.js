@@ -22,12 +22,20 @@ const ZDA_TEMPLATE = {
     fillTextureOffset: { x: 0, y: 0 },
     fillTextureScale: { x: 100, y: 100 },
     ownerVisibility: {
-        default: true, hovered: true, controlled: true,
-        dragging: true, targeted: true, turn: true,
+        default: true,
+        hovered: true,
+        controlled: true,
+        dragging: true,
+        targeted: true,
+        turn: true,
     },
     nonOwnerVisibility: {
-        default: true, hovered: true, controlled: false,
-        dragging: false, targeted: true, turn: true,
+        default: true,
+        hovered: true,
+        controlled: false,
+        dragging: false,
+        targeted: true,
+        turn: true,
     },
     effects: [],
     macros: [],
@@ -39,11 +47,14 @@ const ZDA_TEMPLATE = {
 };
 
 async function ensureZDAAura(tokenDoc) {
-    if (!game.modules.get('grid-aware-auras')?.active) return;
+    if (!game.modules.get('grid-aware-auras')?.active)
+        return;
     const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
-    if (auras.some(a => a.name === 'ZDA')) return;
+    if (auras.some(a => a.name === 'ZDA'))
+        return;
     const actor = tokenDoc.actor;
-    if (!actor) return;
+    if (!actor)
+        return;
     const sensors = actor.system?.sensor_range ?? 10;
     const aura = foundry.utils.deepClone(ZDA_TEMPLATE);
     aura.id = foundry.utils.randomID();
@@ -53,10 +64,13 @@ async function ensureZDAAura(tokenDoc) {
 
 // Create ZDA on token creation.
 Hooks.on('createToken', async (tokenDoc, _options, userId) => {
-    if (userId !== game.user.id) return;
-    if (!game.modules.get('grid-aware-auras')?.active) return;
+    if (userId !== game.user.id)
+        return;
+    if (!game.modules.get('grid-aware-auras')?.active)
+        return;
     const actorType = tokenDoc.actor?.type;
-    if (!['mech', 'npc', 'pilot'].includes(actorType)) return;
+    if (!['mech', 'npc', 'pilot'].includes(actorType))
+        return;
     await ensureZDAAura(tokenDoc);
 });
 
@@ -69,7 +83,8 @@ window.toggleLancerZDA = async function () {
     }
     for (const token of controlled) {
         const actorType = token.actor?.type;
-        if (!['mech', 'npc', 'pilot'].includes(actorType)) continue;
+        if (!['mech', 'npc', 'pilot'].includes(actorType))
+            continue;
         const existingAuras = token.document.getFlag('grid-aware-auras', 'auras') || [];
         const zdaAura = existingAuras.find(a => a.name === 'ZDA');
         if (zdaAura) {

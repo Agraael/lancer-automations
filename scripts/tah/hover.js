@@ -165,7 +165,7 @@ function getSensorRange(actor) {
  * @param {any|null} item
  * @returns {Promise<number|null>}
  */
-async function getAttackRange(actionName, actor, item) {
+export async function getAttackRange(actionName, actor, item) {
     const name = (actionName ?? '').toLowerCase().trim();
 
     // No preview
@@ -353,6 +353,13 @@ async function _renameStaleTeamAuras(tokenDoc) {
         await tokenDoc.setFlag('grid-aware-auras', 'auras', next);
 }
 
+function _hexToInt(hex) {
+    if (typeof hex !== 'string')
+        return 0xffffff;
+    const m = /#?([0-9a-f]{6})/i.exec(hex);
+    return m ? Number.parseInt(m[1], 16) : 0xffffff;
+}
+
 function _buildPersistentTemplate(auraName, token) {
     const def = AURA_DEFS[auraName];
     if (!def)
@@ -364,6 +371,18 @@ function _buildPersistentTemplate(auraName, token) {
         opacity = game.settings.get('lancer-automations', def.settingOpacity) ?? 1;
     } catch { /* use defaults */ }
 
+    // Pulse the line alpha while keeping the aura colour stable.
+    const colorInt = _hexToInt(color);
+    const lineColorAnimation = {
+        duration: 2500,
+        easingFunc: 'linear',
+        keyframes: [
+            { color: colorInt, alpha: 1, position: 0 },
+            { color: colorInt, alpha: 0.22, position: 0.5 },
+            { color: colorInt, alpha: 1, position: 1 }
+        ]
+    };
+
     const tpl = {
         unified: true,
         name: token ? _teamSuffixedName(auraName, token) : auraName,
@@ -371,17 +390,24 @@ function _buildPersistentTemplate(auraName, token) {
         onlyEnabledInCombat: false,
         keyPressMode: 'DISABLED',
         keyToPress: 'AltLeft',
+        innerRadius: '',
+        position: 'CENTER',
         lineType: 2,
         lineWidth: 3,
         lineColor: color,
+        lineColorAnimation,
         lineOpacity: opacity,
         lineDashSize: def.lineDashSize,
         lineGapSize: def.lineGapSize,
+        lineDashOffsetAnimation: 15,
+        radiusOffset: 0,
         fillType: 0,
         fillColor: color,
+        fillColorAnimation: null,
         fillOpacity: 0.1,
         fillTexture: '',
         fillTextureOffset: { x: 0, y: 0 },
+        fillTextureOffsetAnimation: null,
         fillTextureScale: { x: 100, y: 100 },
         ownerVisibility: {
             default: false,
@@ -401,8 +427,10 @@ function _buildPersistentTemplate(auraName, token) {
         },
         effects: [],
         macros: [],
+        sequencerEffects: [],
         terrainHeightTools: getTHTConfig(),
-        elevationAware: auraName !== 'LA_custom_measure'
+        elevationAware: auraName !== 'LA_custom_measure',
+        movementPenalty: 0
     };
     _scaleAuraStroke(tpl);
     return tpl;

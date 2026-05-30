@@ -71,7 +71,8 @@ export function laPositionPopup(popup, html) {
  * @returns {string}  Plain text with <br> separators, safe to embed in innerHTML
  */
 export function laFormatDetailHtml(rawHtml) {
-    if (!rawHtml) return '';
+    if (!rawHtml)
+        return '';
     const withBreaks = String(rawHtml)
         .replaceAll(/<\/p>/gi, '\n')
         .replaceAll(/<br\s*\/?>/gi, '\n')
@@ -90,7 +91,8 @@ export function laFormatDetailHtml(rawHtml) {
  * @returns {string}
  */
 export function laRenderTags(tags, resolveStr) {
-    if (!tags?.length) return '';
+    if (!tags?.length)
+        return '';
     const resolve = resolveStr ?? (s => s);
     const chips = tags.map(t => {
         const raw = String(t._resolvedName ?? t.name ?? t.lid ?? t.id ?? '');
@@ -109,7 +111,8 @@ export function laRenderTags(tags, resolveStr) {
  * @returns {string}
  */
 export function laRenderTextSection(label, text, labelColor, resolveStr) {
-    if (!text) return '';
+    if (!text)
+        return '';
     const resolve = resolveStr ?? (s => s);
     return `<div style="margin-bottom:6px;">${laPopupSectionLabel(label, labelColor)}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(resolve(text))}</div></div>`;
 }
@@ -121,7 +124,8 @@ export function laRenderTextSection(label, text, labelColor, resolveStr) {
  * @returns {string}
  */
 export function laRenderActions(actions, resolveStr) {
-    if (!actions?.length) return '';
+    if (!actions?.length)
+        return '';
     const resolve = resolveStr ?? (s => s);
     const items = actions.map(a => {
         const aEffect = laFormatDetailHtml(resolve(a.detail || a.effect || ''));
@@ -139,7 +143,8 @@ export function laRenderActions(actions, resolveStr) {
  * @returns {string}
  */
 export function laRenderDeployables(deployableActors) {
-    if (!deployableActors?.length) return '';
+    if (!deployableActors?.length)
+        return '';
     const items = deployableActors.map(dep => {
         const ds = dep.system;
         const statPairs = [
@@ -183,11 +188,15 @@ export function laRenderDeployables(deployableActors) {
  * @returns {string}
  */
 function _renderAttackLine(bonus, acc) {
-    if (!bonus && !acc) return '';
+    if (!bonus && !acc)
+        return '';
     let parts = [];
-    if (bonus) parts.push(`+${bonus} <i class="cci cci-reticule" title="Flat Attack Bonus"></i>`);
-    if (acc > 0) parts.push(`+${acc} <i class="cci cci-accuracy" title="Accuracy"></i>`);
-    else if (acc < 0) parts.push(`${acc} <i class="cci cci-difficulty" title="Difficulty"></i>`);
+    if (bonus)
+        parts.push(`+${bonus} <i class="cci cci-reticule" title="Flat Attack Bonus"></i>`);
+    if (acc > 0)
+        parts.push(`+${acc} <i class="cci cci-accuracy" title="Accuracy"></i>`);
+    else if (acc < 0)
+        parts.push(`${acc} <i class="cci cci-difficulty" title="Difficulty"></i>`);
     return `<div style="font-size:0.88em;color:#ccc;margin-bottom:4px;">${parts.join('&nbsp;&nbsp;')}</div>`;
 }
 
@@ -200,7 +209,8 @@ export function laRenderWeaponProfile(p, showName) {
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
         : '';
     const rangeHtml = (() => {
-        if (!p.range?.length) return '';
+        if (!p.range?.length)
+            return '';
         const rangeStr = p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ');
         let baseStr = '';
         if (p.base_range?.length) {
@@ -258,16 +268,22 @@ export function laRenderWeaponMod(modName, modItem) {
  * @returns {string}
  */
 function laRenderBonusList(bonuses) {
-    if (!bonuses?.length) return '';
+    if (!bonuses?.length)
+        return '';
     const activeKeys = (map) => Object.entries(map ?? {}).filter(([, v]) => v).map(([k]) => k);
     const lines = bonuses.map(b => {
         // Lancer system bonuses use `lid`; LA custom bonuses use `type`
         const kind = b.lid ?? b.type ?? '';
-        if (kind === 'accuracy')   return `Accuracy +${b.val}`;
-        if (kind === 'difficulty') return `Difficulty +${b.val}`;
-        if (kind === 'stat')       return `${(b.stat ?? b.id ?? '').split('.').pop() || kind} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
-        if (kind === 'damage')     return (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
-        if (kind === 'tag')        return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${b.tagName}${b.val ? ` ${b.val}` : ''}`;
+        if (kind === 'accuracy')
+            return `Accuracy +${b.val}`;
+        if (kind === 'difficulty')
+            return `Difficulty +${b.val}`;
+        if (kind === 'stat')
+            return `${(b.stat ?? b.id ?? '').split('.').pop() || kind} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
+        if (kind === 'damage')
+            return (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
+        if (kind === 'tag')
+            return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${b.tagName}${b.val ? ` ${b.val}` : ''}`;
         if (kind === 'range') {
             // Lancer system format: range_types map + optional weapon_types/weapon_sizes filters
             const rangeTypes = activeKeys(b.range_types);
@@ -278,11 +294,14 @@ function laRenderBonusList(bonuses) {
             return `${sign}${b.val} ${rangeStr}${filterStr}`;
         }
         if (kind === 'immunity') {
-            if (b.subtype === 'effect' && b.effects)   return `Immunity: ${b.effects.join(', ')}`;
-            if (b.subtype === 'damage' || b.subtype === 'resistance') return `${b.subtype}: ${(b.damageTypes || []).join(', ')}`;
+            if (b.subtype === 'effect' && b.effects)
+                return `Immunity: ${b.effects.join(', ')}`;
+            if (b.subtype === 'damage' || b.subtype === 'resistance')
+                return `${b.subtype}: ${(b.damageTypes || []).join(', ')}`;
             return `Immunity: ${b.subtype}`;
         }
-        if (kind === 'multi' && Array.isArray(b.bonuses)) return b.bonuses.map(bb => laRenderBonusList([bb])).join('');
+        if (kind === 'multi' && Array.isArray(b.bonuses))
+            return b.bonuses.map(bb => laRenderBonusList([bb])).join('');
         return kind || '?';
     });
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('BONUSES', '#1565c0')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${lines.map(l => `<div>· ${l}</div>`).join('')}</div></div>`;
@@ -301,9 +320,12 @@ export function laRenderModBody(modItem) {
     const tagsHtml    = laRenderTags(ms?.tags ?? []);
     const bonusesHtml = laRenderBonusList(ms?.bonuses ?? []);
     const addedParts  = [];
-    if (ms?.added_tags?.length)   addedParts.push(`Tags: ${ms.added_tags.map(t => String(t.name ?? t.lid ?? '').replaceAll('{VAL}', t.val ?? '')).join(', ')}`);
-    if (ms?.added_damage?.length) addedParts.push(`+Damage: ${ms.added_damage.map(d => `${d.val} ${d.type}`).join(' + ')}`);
-    if (ms?.added_range?.length)  addedParts.push(`+Range: ${ms.added_range.map(r => `${r.val} ${r.type}`).join(', ')}`);
+    if (ms?.added_tags?.length)
+        addedParts.push(`Tags: ${ms.added_tags.map(t => String(t.name ?? t.lid ?? '').replaceAll('{VAL}', t.val ?? '')).join(', ')}`);
+    if (ms?.added_damage?.length)
+        addedParts.push(`+Damage: ${ms.added_damage.map(d => `${d.val} ${d.type}`).join(' + ')}`);
+    if (ms?.added_range?.length)
+        addedParts.push(`+Range: ${ms.added_range.map(r => `${r.val} ${r.type}`).join(', ')}`);
     const addedHtml = addedParts.length
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ADDS', '#ff8c00')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${addedParts.map(p => `<div>· ${p}</div>`).join('')}</div></div>`
         : '';
@@ -426,7 +448,8 @@ export function laRenderWeaponBody(profiles, opts = {}) {
  * @returns {string}
  */
 export function laRenderActionDetail(action, opts = {}) {
-    if (!action) return '';
+    if (!action)
+        return '';
     const { sourceName = null } = opts;
     const sourceHtml = sourceName
         ? `<div style="font-size:0.72em;color:#777;margin-bottom:6px;">From: ${sourceName}</div>`

@@ -344,7 +344,7 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         pct: opts.max ? Math.max(0, Math.min(100, ((Number(value) || 0) / opts.max) * 100)) : 0,
         icon: getStatIcon(label),
     });
-    // Lancer stores caps as either .max or .value depending on the field; take whichever is larger.
+    // Lancer caps live on either .max or .value; take the larger.
     const cap = (f) => Math.max(Number(f?.max) || 0, Number(f?.value) || 0);
     data.journalStats = [
         cell('HP', cap(actor.system.hp)),
@@ -376,33 +376,22 @@ function _buildScanData(target, customName = '', scanIndex = '') {
     return data;
 }
 
+// Delegate to v3's ScanFlow so the system's own scan entry points route through LA's overridden steps.
 export async function performSystemScan(target, createJournal = false, customName = '', ownership = null) {
     const actor = target.actor;
     if (!actor)
         return;
-    console.log('lancer-automations | Scanning', target);
-
-    let scanIndex = '';
-    let journalUuid = null;
-    if (createJournal) {
-        const result = await createScanJournalEntry(target, customName, ownership);
-        if (result) {
-            scanIndex = result.scanIndex;
-            journalUuid = result.uuid;
-        }
+    const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
+    if (!Flow) {
+        ui.notifications.error('lancer-automations: ScanFlow not registered.');
+        return;
     }
-    if (!scanIndex)
-        scanIndex = '—';
-
-    const data = _buildScanData(target, customName, scanIndex);
-    data.journalUuid = journalUuid;
-
-    const content = await renderTemplate(TPL.chat, data);
-    ChatMessage.create({
-        author: game.user.id,
-        content,
-        flags: { core: { canPopout: true } },
-    });
+    const flow = new Flow(actor.uuid, { target });
+    flow.state.data.la_customName = customName;
+    flow.state.data.la_ownership = ownership;
+    flow.state.data.la_chatCard = true;
+    flow.state.data.la_createJournal = !!createJournal;
+    await flow.begin();
 }
 
 /** @param {Token|TokenDocument} target @param {string} customName @param {object|null} ownership */
@@ -411,57 +400,91 @@ export async function createScanJournalEntry(target, customName = '', ownership 
         ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
         return null;
     }
-
-    let folder = game.folders.getName(FOLDER_NAME);
-    if (!folder) {
-        try {
-            folder = await Folder.create({ name: FOLDER_NAME, type: 'JournalEntry' });
-        } catch {
-            ui.notifications.error(`${FOLDER_NAME} does not exist and must be created manually by a user with permissions to do so.`);
-            return null;
-        }
-    }
-
-    const allJournals = _getAllJournalsInFolder(folder);
     const actor = target.actor;
-    const matching = allJournals.filter((e) => e.name.includes(actor.name));
-
-    let scanIndex;
-    let entry;
-    let entryName;
-
-    if (matching.length === 1) {
-        entry = matching[0];
-        entryName = entry.name;
-        const m = entryName.match(/SCAN:\s*(\d+)/i);
-        scanIndex = m ? m[1] : _zeroPad(allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1, NUMBER_PADDING);
-    } else {
-        const count = allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1;
-        scanIndex = _zeroPad(count, NUMBER_PADDING);
-        const labelName = customName?.trim()?.length ? customName.trim() : actor.name;
-        entryName = `${NAME_PREFIX}${scanIndex} - ${labelName}`;
+    if (!actor)
+        return null;
+    const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
+    if (!Flow) {
+        ui.notifications.error('lancer-automations: ScanFlow not registered.');
+        return null;
     }
+    const flow = new Flow(actor.uuid, { target });
+    flow.state.data.la_customName = customName;
+    flow.state.data.la_ownership = ownership;
+    flow.state.data.la_chatCard = false;
+    flow.state.data.la_createJournal = true;
+    await flow.begin();
 
-    const data = _buildScanData(target, customName, scanIndex);
+    const folder = game.folders.getName(FOLDER_NAME);
+    if (!folder)
+        return null;
+    const matching = folder.contents.filter((e) => e.name.includes(actor.name) && e.name.startsWith(NAME_PREFIX));
+    if (!matching.length)
+        return null;
+    const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
+    const m = entry.name.match(/SCAN:\s*(\d+)/i);
+    return { scanIndex: m ? m[1] : '', uuid: entry.uuid };
+}
+
+async function laPrintScanCard(state) {
+    // Per-flow flag wins; fall back to the system's scanOutputs setting.
+    const allowChat = state.data?.la_chatCard ?? null;
+    if (allowChat === false)
+        return true;
+    if (allowChat === null) {
+        const scanOutputs = game.settings.get(game.system.id, 'scanOutputs');
+        if (!['both', 'chat'].includes(scanOutputs))
+            return true;
+    }
+    if (!state.data?.target)
+        throw new TypeError('Scan flow requires a target.');
+
+    const customName = state.data.la_customName || '';
+    const data = _buildScanData(state.data.target, customName);
+    data.journalUuid = null;
+
+    const content = await renderTemplate(TPL.chat, data);
+    await ChatMessage.create({
+        author: game.user.id,
+        content,
+        flags: { core: { canPopout: true } },
+    });
+    return true;
+}
+
+async function laPostProcessScanJournal(state) {
+    const allowJournal = state.data?.la_createJournal ?? null;
+    if (allowJournal === false)
+        return true;
+    if (allowJournal === null) {
+        const scanOutputs = game.settings.get(game.system.id, 'scanOutputs');
+        if (!['both', 'journal'].includes(scanOutputs))
+            return true;
+    }
+    if (!state.data?.target)
+        return true;
+    const actor = state.data.target.actor;
+    if (!actor)
+        return true;
+
+    const folder = game.folders.getName(FOLDER_NAME);
+    if (!folder)
+        return true;
+    const matching = folder.contents.filter((e) => e.name.includes(actor.name) && e.name.startsWith(NAME_PREFIX));
+    if (!matching.length)
+        return true;
+    const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
+
+    const m = entry.name.match(/SCAN:\s*(\d+)/i);
+    const scanIndex = m ? m[1] : '';
+    const customName = state.data.la_customName || '';
+    const data = _buildScanData(state.data.target, customName, scanIndex);
     const html = await renderTemplate(TPL.overview, data);
 
-    if (matching.length === 1) {
-        const pages = entry.pages.contents;
-        if (pages.length === 0) {
-            await entry.createEmbeddedDocuments('JournalEntryPage', [{ name: entryName, type: 'text', text: { content: html }, sort: 0 }]);
-        } else {
-            await pages[0].update({ name: entryName, text: { content: html } });
-            if (pages.length > 1)
-                await entry.deleteEmbeddedDocuments('JournalEntryPage', pages.slice(1).map((p) => p.id));
-        }
-    } else {
-        entry = await JournalEntry.create({ folder: folder.id, name: entryName });
-        await entry.createEmbeddedDocuments('JournalEntryPage', [
-            { name: entryName, type: 'text', text: { content: html }, sort: 0 },
-        ]);
-    }
-
-    const finalOwnership = ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
+    const page = entry.pages.contents[0];
+    if (page)
+        await page.update({ text: { content: html } });
+    const finalOwnership = state.data.la_ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
     await entry.update({
         ownership: finalOwnership,
         'flags.lancer-automations.scan': {
@@ -472,8 +495,27 @@ export async function createScanJournalEntry(target, customName = '', ownership 
             scannedAt: Date.now(),
         },
     });
-    entry.sheet.render(false);
-    return { scanIndex, uuid: entry.uuid };
+    return true;
+}
+
+function _wrapCreateScanJournal(flowSteps) {
+    const original = flowSteps.get('createScanJournal');
+    if (!original || original.__laWrapped)
+        return;
+    const wrapped = async function laCreateScanJournalGate(state) {
+        if (state.data?.la_createJournal === false)
+            return true;
+        return original(state);
+    };
+    wrapped.__laWrapped = true;
+    flowSteps.set('createScanJournal', wrapped);
+}
+
+export function registerScanFlowSteps(flowSteps, flows) {
+    flowSteps.set('printScanCard', laPrintScanCard);
+    _wrapCreateScanJournal(flowSteps);
+    flowSteps.set('lancer-automations:postProcessScanJournal', laPostProcessScanJournal);
+    flows.get('ScanFlow')?.insertStepAfter('createScanJournal', 'lancer-automations:postProcessScanJournal');
 }
 
 export async function performGMInputScan(targets, scanTitle, requestingUserName = null) {
@@ -821,8 +863,9 @@ export async function executeGenerateScan(targetsArg) {
     dlg.render(true);
 }
 
-Hooks.on('renderChatMessage', (_msg, html) => {
-    html.find('.la-scan-open-btn').on('click', async (ev) => {
+Hooks.on('renderChatMessageHTML', (_msg, htmlOrEl) => {
+    const root = htmlOrEl instanceof HTMLElement ? htmlOrEl : htmlOrEl[0];
+    root?.querySelector('.la-scan-open-btn')?.addEventListener('click', async (ev) => {
         ev.preventDefault();
         const uuid = ev.currentTarget.dataset.journalUuid;
         if (!uuid)

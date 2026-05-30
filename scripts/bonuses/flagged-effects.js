@@ -9,6 +9,22 @@ function log(...args) {
 let notificationQueue = [];
 let notificationTimer = null;
 
+// Notifications queued while >0 get whispered to the token's owners + GMs instead of broadcast.
+let _onInitDepth = 0;
+
+export function isInOnInitTriggerContext() {
+    return _onInitDepth > 0;
+}
+
+export async function runInOnInitTriggerContext(fn) {
+    _onInitDepth++;
+    try {
+        return await fn();
+    } finally {
+        _onInitDepth--;
+    }
+}
+
 function _isStatBarActive() {
     try {
         return game.settings.get('lancer-automations', 'tokenStatBar') === true;
@@ -47,19 +63,35 @@ function _getSavedStatuses() {
 function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix, icon) {
     if (!notifyOptions)
         return;
-    // Normalize token
     const tokenObj = /** @type {any} */ (token).object || token;
     notificationQueue.push({
         token: tokenObj,
         effectName,
         prefix: notifyOptions.prefixText || defaultPrefix,
         source: notifyOptions.source,
-        icon
+        icon,
+        whisper: notifyOptions.whisper === true || isInOnInitTriggerContext()
     });
 
     if (notificationTimer)
         clearTimeout(notificationTimer);
     notificationTimer = setTimeout(dispatchNotifications, 100);
+}
+
+// Users who should see whispered notifications for a token: GMs + token owners.
+function _whisperTargetsForToken(token) {
+    const actor = token?.actor;
+    const ids = new Set();
+    for (const u of game.users) {
+        if (!u.active) continue;
+        if (u.isGM) {
+            ids.add(u.id);
+            continue;
+        }
+        if (actor && actor.testUserPermission(u, 'OWNER'))
+            ids.add(u.id);
+    }
+    return [...ids];
 }
 
 async function dispatchNotifications() {
@@ -70,41 +102,41 @@ async function dispatchNotifications() {
     notificationQueue = [];
     notificationTimer = null;
 
-    // Group by token
-    const tokenGroups = new Map();
+    // Split by (tokenId, whisper) so each output message is fully public OR fully whispered.
+    const groups = new Map();
     for (const item of data) {
-        if (!tokenGroups.has(item.token.id)) {
-            tokenGroups.set(item.token.id, { token: item.token, updates: [] });
+        const key = `${item.token.id}::${item.whisper ? 'w' : 'p'}`;
+        if (!groups.has(key))
+            groups.set(key, { token: item.token, whisper: item.whisper, updates: [] });
+        groups.get(key).updates.push(item);
+    }
+
+    const renderLine = (u) => {
+        const iconHtml = u.icon ? `<img src="${u.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
+        const actionText = `${iconHtml}${u.prefix} <strong>${u.effectName}</strong>`;
+        let sourceText = "";
+        if (u.source) {
+            const name = typeof u.source === 'object' ? u.source.name : u.source;
+            if (name)
+                sourceText = ` with ${name}`;
         }
-        tokenGroups.get(item.token.id).updates.push(item);
-    }
+        return `<li>${actionText}${sourceText}</li>`;
+    };
 
-    let fullContent = "";
-    for (const [tokenId, group] of tokenGroups) {
-        const token = group.token;
-        const updates = group.updates;
-        const lines = updates.map(u => {
-            let iconHtml = u.icon ? `<img src="${u.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
-            let actionText = `${iconHtml}${u.prefix} <strong>${u.effectName}</strong>`;
-
-            let sourceText = "";
-            if (u.source) {
-                const name = typeof u.source === 'object' ? u.source.name : u.source;
-                if (name)
-                    sourceText = ` with ${name}`;
-            }
-
-            return `<li>${actionText}${sourceText}</li>`;
-        });
-
-        fullContent += `<div><strong>${token.name}:</strong><ul>${lines.join("")}</ul></div>`;
-    }
-
-    if (fullContent) {
-        await ChatMessage.create({
-            content: `<div class="lancer-automations-notification">${fullContent}</div>`,
-            speaker: ChatMessage.getSpeaker({ token: data[0].token.document || data[0].token })
-        });
+    for (const { token, whisper, updates } of groups.values()) {
+        const lines = updates.map(renderLine).join("");
+        const content = `<div class="lancer-automations-notification"><div><strong>${token.name}:</strong><ul>${lines}</ul></div></div>`;
+        const messageData = {
+            content,
+            speaker: ChatMessage.getSpeaker({ token: token.document || token })
+        };
+        if (whisper) {
+            const targets = _whisperTargetsForToken(token);
+            if (targets.length === 0)
+                continue;
+            messageData.whisper = targets;
+        }
+        await ChatMessage.create(messageData);
     }
 }
 

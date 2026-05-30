@@ -1,7 +1,10 @@
-/* global canvas, CONST, game */
+/* global canvas, CONST, game, fromUuidSync */
 import { getHexGroundElevation } from "./terrain-utils.js";
 
-// Shared grid helper functions used across lancer-automations modules.
+// Lancer v3 changed acc_diff targets from `{target: Token}` to `{targetUuid: string}`.
+export function accDiffTargetToken(t) {
+    return t?.targetUuid ? (fromUuidSync(t.targetUuid)?.object ?? null) : null;
+}
 
 /**
  * Returns dimensions clamped to a minimum of 1 grid unit.
@@ -195,6 +198,15 @@ export function measureGridDistance(c1, c2) {
 }
 
 export function getOccupiedOffsets(token, overridePos = null) {
+    // v13: getOccupiedGridSpaceOffsets returns {i,j} grid offsets directly.
+    const doc = token.document ?? token;
+    if (typeof doc.getOccupiedGridSpaceOffsets === 'function') {
+        const pos = overridePos
+            ? { x: overridePos.x, y: overridePos.y, width: doc.width, height: doc.height }
+            : { x: doc.x, y: doc.y, width: doc.width, height: doc.height };
+        return doc.getOccupiedGridSpaceOffsets(pos).map(o => ({ col: o.j, row: o.i }));
+    }
+    // v12 fallback (Lancer system extension on the Token class).
     if (typeof token.getOccupiedSpaces === 'function') {
         const dx = overridePos ? (overridePos.x - token.x) : 0;
         const dy = overridePos ? (overridePos.y - token.y) : 0;
@@ -204,7 +216,6 @@ export function getOccupiedOffsets(token, overridePos = null) {
         });
     }
 
-    const doc = token.document;
     const x = overridePos ? overridePos.x : doc.x;
     const y = overridePos ? overridePos.y : doc.y;
     const gridSize = canvas.grid.size;
@@ -253,7 +264,9 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
     if (includeElevation === undefined) {
         try {
             includeElevation = !!game.settings.get('lancer-automations', 'count3DDistance');
-        } catch { includeElevation = false; }
+        } catch {
+            includeElevation = false;
+        }
     }
     let planarDist;
     if (!isHexGrid()) {
@@ -298,9 +311,13 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
 
 /** Combat-elevation flag: setting on AND THT active. */
 export function isElevationCheckActive() {
-    if (!globalThis.terrainHeightTools) return false;
-    try { return !!game.settings.get('lancer-automations', 'count3DDistance'); }
-    catch { return false; }
+    if (!globalThis.terrainHeightTools)
+        return false;
+    try {
+        return !!game.settings.get('lancer-automations', 'count3DDistance');
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -309,9 +326,11 @@ export function isElevationCheckActive() {
  * @returns {number}
  */
 export function getOriginElevation(originOrToken) {
-    if (!originOrToken) return 0;
+    if (!originOrToken)
+        return 0;
     const doc = originOrToken.document ?? (typeof originOrToken.elevation === 'number' ? originOrToken : null);
-    if (doc) return doc.elevation ?? 0;
+    if (doc)
+        return doc.elevation ?? 0;
     if (typeof originOrToken.x === 'number' && typeof originOrToken.y === 'number') {
         const off = pixelToOffset(originOrToken.x, originOrToken.y);
         return getHexGroundElevation(off.col, off.row);
@@ -356,18 +375,22 @@ export function getInRangeOffsets(origin, range, opts = {}) {
     }
 
     if (!elevAware) {
-        if (!includeSelf) for (const k of selfKeys) candidates.delete(k);
+        if (!includeSelf)
+            for (const k of selfKeys)
+                candidates.delete(k);
         return candidates;
     }
 
     const sceneDist = canvas.scene.grid.distance || 1;
     const result = new Set();
     for (const key of candidates) {
-        if (!includeSelf && selfKeys.has(key)) continue;
+        if (!includeSelf && selfKeys.has(key))
+            continue;
         const [col, row] = key.split(',').map(Number);
         const hexElev = getHexGroundElevation(col, row);
         const elevAbove = Math.round((hexElev - originElev) / sceneDist);
-        if (elevAbove > range) continue;
+        if (elevAbove > range)
+            continue;
         result.add(key);
     }
     return result;
@@ -385,7 +408,8 @@ export function isPositionInRange(origin, target, range) {
     const isPoint = target && !target.document && typeof target.x === 'number' && typeof target.y === 'number';
     const targetOffsets = isPoint ? [pixelToOffset(target.x, target.y)] : getOccupiedOffsets(target);
     for (const o of targetOffsets) {
-        if (inRange.has(`${o.col},${o.row}`)) return true;
+        if (inRange.has(`${o.col},${o.row}`))
+            return true;
     }
     return false;
 }
@@ -452,22 +476,7 @@ export function getMovementPathHexes(token, change) {
         y: y + (token.document.height * canvas.grid.size / 2)
     });
 
-    // Try different ways Foundry stores path data during preUpdateToken
-    let rulerSegments = null;
     let newMoveStartRayIndex = 0;
-    if (game.modules.get("elevationruler")?.active) {
-        const ruler = canvas.controls.ruler;
-        if (ruler && ruler.segments && ruler.segments.length > 0) {
-            rulerSegments = ruler.segments;
-            newMoveStartRayIndex = ruler.history ? ruler.history.length : 0;
-            rawPoints.push(rulerSegments[0].ray.A);
-            for (const seg of rulerSegments) {
-                rawPoints.push(seg.ray.B);
-            }
-        }
-    }
-
-    // Fallback to token._movement.points
     if (rawPoints.length === 0 && token._movement && token._movement.points) {
         const movePoints = token._movement.points;
         rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y));
@@ -511,12 +520,7 @@ export function getMovementPathHexes(token, change) {
         const adjustedP1 = { x: p1.x + alignOffset.x, y: p1.y + alignOffset.y };
         const adjustedP2 = { x: p2.x + alignOffset.x, y: p2.y + alignOffset.y };
 
-        let pathOffsets = null;
-        if (rulerSegments && rulerSegments[i] && rulerSegments[i]._calculatedPath && rulerSegments[i]._calculatedPath.length > 0) {
-            pathOffsets = rulerSegments[i]._calculatedPath;
-        } else {
-            pathOffsets = canvas.grid.getDirectPath([adjustedP1, adjustedP2]);
-        }
+        const pathOffsets = canvas.grid.getDirectPath([adjustedP1, adjustedP2]);
 
         for (const step of pathOffsets) {
             const stepHexCenter = getHexCenter(step.j, step.i);
@@ -583,8 +587,7 @@ export function getMovementPathHexes(token, change) {
             pathHexes.historyStartIndex = 0;
     }
 
-    // Force all steps before historyStartIndex to be history,
-    // overriding elevationruler's global assessment.
+    // Force all steps before historyStartIndex to be history.
     for (let i = 0; i < pathHexes.length; i++) {
         pathHexes[i].isHistory = i < pathHexes.historyStartIndex;
     }

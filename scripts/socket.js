@@ -407,7 +407,9 @@ const HANDLERS = {
         const actor = game.actors.get(payload.actorId);
         if (actor)
             await actor.update(payload.data);
+        emitAck('updateActorSystemAck', payload.requestId);
     },
+    updateActorSystemAck: ({ requestId }) => resolveAck(requestId),
 
     voteCardRequest: (payload) => {
         if (!payload.allVoterUserIds?.includes(game.user.id))

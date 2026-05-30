@@ -658,6 +658,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* v13 Lancer's @layer lancer rules inject a light text color in dark themes; force black on
+       the panel's light status rows so labels stay readable. */
+    color: #000;
 }
 
 .la-status-badge {
@@ -792,3 +795,31 @@ input.la-status-search {
     background: #fff;
     transition: left 0.15s;
 }
+
+/* Lancer TokenRuler waypoint label */
+.la-waypoint-label {
+    position: absolute;
+    left: var(--position-x);
+    top: var(--position-y);
+    transform: translate(-50%, -100%) scale(var(--ui-scale, 1));
+    transform-origin: 50% 100%;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: var(--font-primary, sans-serif);
+    pointer-events: none;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.la-waypoint-label .la-line { display: flex; align-items: center; gap: 4px; }
+.la-waypoint-label .la-img { width: 14px; height: 14px; background-size: contain; background-repeat: no-repeat; }
+.la-waypoint-label .la-icon { font-size: 12px; }
+.la-waypoint-label .la-delta { color: #ffc107; }
+.la-waypoint-label .la-elev { color: #9ecbff; }
+.la-waypoint-label .la-penalty,
+.la-waypoint-label .la-penalty-value { color: #ff7043; }

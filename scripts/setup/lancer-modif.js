@@ -513,10 +513,7 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex) {
     new GenericFlow(item.actor.uuid, { itemUuid, ammoIndex }).begin();
 }
 
-// ===========================================================================
-// UseAmmoFlow — standalone flow for using ammo from a mech_system
-// ===========================================================================
-
+// UseAmmoFlow: standalone flow for using ammo from a mech_system.
 async function initUseAmmoData(state) {
     if (!state.data?.itemUuid || state.data.ammoIndex == null)
         throw new TypeError('UseAmmoFlow requires itemUuid and ammoIndex in state.data');
@@ -690,14 +687,7 @@ export function injectDisabledCSS() {
     document.head.appendChild(style);
 }
 
-// ===========================================================================
-// Template Patching (runtime, no file edits needed)
-// ===========================================================================
-
-/**
- * Patch stat-roll-card template to support embedButtons.
- * Recompiles and registers as a Handlebars partial, overriding the system's version.
- */
+// Patch stat-roll-card to support embedButtons; runtime override of the system's partial.
 export async function patchStatRollCardTemplate() {
     const path = 'systems/lancer/templates/chat/stat-roll-card.hbs';
     try {
@@ -715,11 +705,8 @@ export async function patchStatRollCardTemplate() {
     }
 }
 
-// ===========================================================================
-// Ammo Editor (injected into mech_system item sheets via renderItemSheet)
-// ===========================================================================
-
-/** Build ammo editor HTML. gen-control data attrs handled by Lancer's sheet listeners. */
+// Ammo editor injected into mech_system item sheets via renderItemSheet.
+// gen-control data attrs are handled by Lancer's sheet listeners.
 function _buildAmmoEditorHTML(item) {
     const ammoArr = item.system?.ammo ?? [];
     const path = 'system.ammo';
@@ -792,10 +779,6 @@ export function onRenderItemSheet(app, html, _data) {
     }
 }
 
-// ===========================================================================
-// Melee Cover Fix (strip cover from melee non-throw attacks)
-// ===========================================================================
-
 /**
  * Per RAW, cover only applies to ranged attacks and melee throws.
  * The system always sets cover regardless of attack type -- this zeroes it for non-throw melee.
@@ -827,11 +810,7 @@ export function registerMeleeCoverFix(flowSteps, flows) {
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:stripCoverForMelee');
 }
 
-// ===========================================================================
-// Extra Trackable Attributes
-// ===========================================================================
-
-/** Add action_tracker fields to token resource bar options. Call during `ready`. */
+// Add action_tracker fields to token resource bar options; call during ready.
 export function registerExtraTrackableAttributes() {
     const ta = CONFIG.Actor.trackableAttributes;
     if (!ta)
@@ -851,10 +830,6 @@ export function registerExtraTrackableAttributes() {
     _push(ta.pilot, 'value', 'action_tracker.move');
 }
 
-// ===========================================================================
-// Custom Flow Dispatch (intercepts .flow-button clicks for module-registered flows)
-// ===========================================================================
-
 /**
  * Intercepts .flow-button clicks for module-registered flows that the system
  * doesn't know about (it only handles hardcoded types). Uses capture phase
@@ -872,7 +847,7 @@ const SYSTEM_FLOW_TYPES = new Set([
 ]);
 
 export function initCustomFlowDispatch() {
-    document.getElementById('chat-log')?.addEventListener('click', (ev) => {
+    document.body.addEventListener('click', (ev) => {
         const button = ev.target?.closest?.('.flow-button[data-flow-type]');
         if (!button)
             return;
@@ -938,10 +913,6 @@ export function initCustomFlowDispatch() {
         }
     }, { capture: true });
 }
-
-// ===========================================================================
-// LCP Data Repair
-// ===========================================================================
 
 /**
  * Call via API: game.modules.get('lancer-automations').api.repairLCPData()

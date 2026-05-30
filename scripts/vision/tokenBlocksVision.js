@@ -56,7 +56,6 @@ function _getTokenElevationBounds(token) {
     const grid = canvas?.grid?.distance ?? 1;
     const elevation = doc.elevation ?? 0;
 
-    // token.losHeight (from wall-height) is elevation + heightPortion. Use it directly as top.
     let losTotal = token.losHeight;
     if (typeof losTotal !== 'number') {
         const flagHeight = doc.flags?.['wall-height']?.tokenHeight;
@@ -68,7 +67,7 @@ function _getTokenElevationBounds(token) {
         }
     }
 
-    // Wall sits 0.1 below LOS height so same-height tokens (source at losHeight) peek above.
+    // Sit 0.1 below LOS height so same-height tokens peek above.
     const top = Math.max(elevation + 0.01, losTotal - 0.1);
     return { bottom: elevation, top };
 }
@@ -108,15 +107,11 @@ function _addEdges(token) {
         return;
     const prefix = _edgePrefix(token);
     const { top, bottom } = _getTokenElevationBounds(token);
-    // Terrain-wall semantics: LIMITED sense blocks after the second crossing.
-    // Outside sees up to the far edge of the shape (sees the token, not past it).
-    // Inside sees out (only one edge between the source and outside).
-    // Wall Height's _testEdgeInclusion reads edge.object and calls getWallBounds(edge.object),
-    // which falls back to wall.document then reads .flags['wall-height']. We give it a stub.
+    // Wall Height's _testEdgeInclusion reads edge.object.document.flags['wall-height']; give it a stub.
     const wallStub = { document: { flags: { 'wall-height': { top, bottom } } } };
     for (let i = 0; i < segments.length; i++) {
         const id = `${prefix}${i}`;
-        const edge = new foundry.canvas.edges.Edge(segments[i][0], segments[i][1], {
+        const edge = new foundry.canvas.geometry.edges.Edge(segments[i][0], segments[i][1], {
             id,
             object: /** @type {any} */(wallStub),
             type: 'wall',

@@ -21,17 +21,22 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'statRollTargeting', type: 'boolean' },
     { key: 'enablePathHexCalculation', type: 'boolean' },
     { key: 'enableMovementCapDetection', type: 'boolean' },
+    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
     { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
-    { type: 'section', label: 'Speed Provider (drag-ruler / elevation-ruler)', collapsible: true, collapsed: true },
-    { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Built-in Speed Provider', hint: 'Provide ruler tiers from this module instead of the standalone lancer-speed-provider. Reload after toggling.' },
+    { key: 'autoTokenElevation', type: 'boolean', label: 'Auto-elevate Tokens on Terrain', hint: 'When a token is created or moved, set its elevation to the top of the highest solid THT terrain under it.' },
+    { type: 'section', label: 'Lancer Automations Ruler', collapsible: true, collapsed: true },
+    { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Enable Lancer Automations Ruler', hint: 'Custom token/canvas ruler with Lancer speed tiers, free/debug movement modes, and THT elevation readout. Reload after toggling.' },
+    { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' },
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Speed Color: Standard' },
     { key: 'speedProvider.colorBoost', type: 'color', label: 'Speed Color: Boost' },
     { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Speed Color: Over-boost' },
+    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Speed Color: Free Movement' },
+    { key: 'enableTacticalDistance', type: 'boolean', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
 ];
 
 const WRECKS_FIELDS = [
@@ -67,28 +72,42 @@ const WRECKS_FIELDS = [
                     { value: 'tile', label: 'Tile', selected: cur === 'tile' },
                 ];
             };
+            const terrainChoices = (key) => {
+                let cur = game.settings.get(MODULE_ID, key);
+                if (cur === true)
+                    cur = 'terrain';
+                else if (cur === false)
+                    cur = 'none';
+                else if (cur !== 'terrain' && cur !== 'aura' && cur !== 'none')
+                    cur = 'none';
+                return [
+                    { value: 'none', label: 'Nothing', selected: cur === 'none' },
+                    { value: 'terrain', label: 'THT Terrain', selected: cur === 'terrain' },
+                    { value: 'aura', label: 'Aura (movement +1)', selected: cur === 'aura' },
+                ];
+            };
             return {
-                columns: ['Category', 'Mode', 'Terrain'],
+                columns: ['Category', 'Mode', 'On Wreck'],
                 rows: [
                     { label: 'Mech',
                         cells: [
                             { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
-                            { isBoolean: true, name: 'wreckTerrain_mech', checked: game.settings.get(MODULE_ID, 'wreckTerrain_mech') },
+                            { isSelect: true, name: 'wreckTerrain_mech', choices: terrainChoices('wreckTerrain_mech') },
                         ]},
                     { label: 'Human / Pilot / Squad',
                         cells: [
                             { isSelect: true, name: 'wreckMode_human', choices: modeChoices('wreckMode_human') },
-                            { isBoolean: true, name: 'wreckTerrain_human', checked: game.settings.get(MODULE_ID, 'wreckTerrain_human') },
+                            { isSelect: true, name: 'wreckTerrain_human', choices: terrainChoices('wreckTerrain_human') },
                         ]},
                     { label: 'Monstrosity',
                         cells: [
                             { isSelect: true, name: 'wreckMode_monstrosity', choices: modeChoices('wreckMode_monstrosity') },
-                            { isBoolean: true, name: 'wreckTerrain_monstrosity', checked: game.settings.get(MODULE_ID, 'wreckTerrain_monstrosity') },
+                            { isSelect: true, name: 'wreckTerrain_monstrosity', choices: terrainChoices('wreckTerrain_monstrosity') },
                         ]},
                     { label: 'Biological',
                         cells: [
                             { isSelect: true, name: 'wreckMode_biological', choices: modeChoices('wreckMode_biological') },
-                            { isBoolean: true, name: 'wreckTerrain_biological', checked: game.settings.get(MODULE_ID, 'wreckTerrain_biological') },
+                            { isSelect: true, name: 'wreckTerrain_biological', choices: terrainChoices('wreckTerrain_biological') },
                         ]},
                 ],
             };
@@ -119,9 +138,10 @@ const TOKENS_DISPLAY_FIELDS = [
     { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
     { key: 'showStatusEffectsHudButton', type: 'boolean' },
+    { key: 'showCombatStateHudButton', type: 'boolean' },
+    { key: 'showTargetStateHudButton', type: 'boolean' },
     { key: 'showRevertMovementHudButton', type: 'boolean' },
     { type: 'moduleBoolean', module: 'temporary-custom-statuses', key: 'enableHud', label: 'Custom Status HUD Button' },
-    { type: 'moduleBoolean', module: 'elevationruler', key: 'history-hud-button', label: 'Elevation Ruler History HUD Button' },
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
@@ -153,16 +173,24 @@ const TAH_FIELDS = [
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.maxColumnItems', type: 'number' },
     { key: 'tah.rangePreview', type: 'boolean' },
-    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean' },
     { key: 'tah.auraUseAltKey', type: 'boolean' },
+    { key: 'tah.aboveActorSheets', type: 'boolean' },
     { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
-    { key: 'tah.resetPosition', type: 'button', label: 'Reset TAH Position', icon: 'fas fa-undo', hint: 'Reset the HUD to its default screen position.',
+    { key: 'tah.resetPosition',
+        type: 'button',
+        label: 'Reset TAH Position',
+        icon: 'fas fa-undo',
+        hint: 'Reset the HUD to its default screen position.',
         clientAllowed: true,
         onClick: async () => {
             await game.settings.set(MODULE_ID, 'tah.position', null);
             ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
         } },
-    { key: 'tah.clearAuras', type: 'button', label: 'Clear & Rebuild TAH Auras (Scene)', icon: 'fas fa-broom', hint: 'Remove all TAH-created auras from every token on the current scene, then re-apply configured defaults.',
+    { key: 'tah.clearAuras',
+        type: 'button',
+        label: 'Clear & Rebuild TAH Auras (Scene)',
+        icon: 'fas fa-broom',
+        hint: 'Remove all TAH-created auras from every token on the current scene, then re-apply configured defaults.',
         onClick: async () => {
             if (!canvas?.scene)
                 return ui.notifications.warn('No active scene.');
@@ -177,29 +205,40 @@ const TAH_FIELDS = [
                     cleared++;
                 }
             }
-            for (const tok of tokens) await applyDefaultAuras(tok);
+            for (const tok of tokens)
+                await applyDefaultAuras(tok);
             ui.notifications.info(`Cleared TAH auras from ${cleared} token(s) and rebuilt defaults.`);
         } },
-    { key: 'tah.clearMacros', type: 'button', label: 'Clear TAH Macros', icon: 'fas fa-trash', hint: 'Remove every macro from the TAH Macros category for this client.',
+    { key: 'tah.clearMacros',
+        type: 'button',
+        label: 'Clear TAH Macros',
+        icon: 'fas fa-trash',
+        hint: 'Remove every macro from the TAH Macros category for this client.',
         clientAllowed: true,
         onClick: async () => {
             const confirmed = await Dialog.confirm({
                 title: 'Clear TAH Macros',
                 content: '<p>Remove every macro from the TAH Macros category? This cannot be undone.</p>',
             });
-            if (!confirmed) return;
+            if (!confirmed)
+                return;
             await game.settings.set(MODULE_ID, 'tah.macroList', []);
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info('TAH Macros cleared.');
         } },
-    { key: 'tah.clearFavorites', type: 'button', label: 'Clear TAH Favorites', icon: 'fas fa-star', hint: 'Remove every favorite (★) marked through the TAH. Saved per user.',
+    { key: 'tah.clearFavorites',
+        type: 'button',
+        label: 'Clear TAH Favorites',
+        icon: 'fas fa-star',
+        hint: 'Remove every favorite (★) marked through the TAH. Saved per user.',
         clientAllowed: true,
         onClick: async () => {
             const confirmed = await Dialog.confirm({
                 title: 'Clear TAH Favorites',
                 content: '<p>Remove every favorite marker? This cannot be undone.</p>',
             });
-            if (!confirmed) return;
+            if (!confirmed)
+                return;
             await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites', []);
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info('TAH Favorites cleared.');
@@ -240,7 +279,6 @@ const TAH_FIELDS = [
     },
 ];
 
-// ── Sounds tab ──────────────────────────────────────────────────────────────
 // Per-action FX functions. Same list as the settings registered in tah/index.js.
 const ACTION_FX_KEYS = [
     'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
@@ -367,10 +405,10 @@ const VISION_FIELDS = [
     },
     { type: 'button',
         key: 'refreshLancerVisionTokens',
-        label: 'Refresh Tokens (Active Scene)',
+        label: 'Refresh Tokens (All Scenes + Actors)',
         icon: 'fas fa-sync',
-        hint: 'Apply Lancer detection modes (Sensors, Awareness, Basic Vision range) to every token on the active scene without overwriting existing per-token entries.',
-        onClick: () => globalThis.lancerAutoVisionSetup?.(true),
+        hint: 'Adds missing Lancer detection modes and reorders them so Sensors take priority over Awareness. Touches every actor prototype and every placed token in every scene.',
+        onClick: () => globalThis.lancerAutoVisionSetup?.(false),
     },
 
     { type: 'section', label: 'Basic Vision' },
@@ -426,26 +464,29 @@ const TOOLS_FIELDS = [
     },
 ];
 
-const ER_FORK_TITLE = "Lancer Ruler (Lasossis's Fork)";
-const erKb = (key) => ({ type: 'keybinding', module: 'elevationruler', key, requireTitle: ER_FORK_TITLE });
+const laKb = (key) => ({ type: 'keybinding', module: 'lancer-automations', key });
 
 const CONTROL_FIELDS = [
     { type: 'section', label: 'Lancer Automations' },
-    { type: 'keybinding', module: 'lancer-automations', key: 'resetMovement' },
-    { type: 'keybinding', module: 'lancer-automations', key: 'tah.toggleSearch' },
+    laKb('resetMovement'),
+    laKb('tah.toggleSearch'),
 
-    { type: 'section', label: 'Elevation Ruler (fork)', requireForkTitle: { module: 'elevationruler', title: ER_FORK_TITLE } },
-    erKb('incrementElevation'),
-    erKb('decrementElevation'),
-    erKb('addWaypoint'),
-    erKb('removeWaypoint'),
-    erKb('addWaypointTokenRuler'),
-    erKb('removeWaypointTokenRuler'),
-    erKb('togglePathfinding'),
-    erKb('forceToGround'),
-    erKb('teleport'),
-    erKb('freeMovement'),
-    erKb('debugMovement'),
+    { type: 'section', label: 'Movement' },
+    laKb('freeMovement'),
+    laKb('debugMovement'),
+];
+
+const ISO_FIELDS = [
+    { key: 'iso.statBar', type: 'boolean' },
+    { key: 'iso.tacticalDistance', type: 'boolean' },
+    { key: 'iso.waypointLabel', type: 'boolean' },
+    { key: 'iso.elevationAnimation', type: 'boolean' },
+    { key: 'iso.restoreAnchor', type: 'boolean' },
+    { key: 'iso.scrollingText', type: 'boolean' },
+    { key: 'iso.targetReticle', type: 'boolean' },
+    { key: 'iso.clickZone', type: 'boolean' },
+    { key: 'iso.selectionMarquee', type: 'boolean' },
+    { key: 'iso.moduleLabels', type: 'boolean' },
 ];
 
 const TAB_DEFS = [
@@ -456,11 +497,16 @@ const TAB_DEFS = [
     { id: 'tah', label: 'Token Action HUD', icon: 'fas fa-th-list', fields: TAH_FIELDS },
     { id: 'sounds', label: 'Sounds', icon: 'fas fa-volume-high', fields: SOUNDS_FIELDS },
     { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
+    { id: 'iso', label: 'Isometric', icon: 'fas fa-cube', fields: ISO_FIELDS, condition: () => !!game.modules.get('isometric-perspective')?.active || !!game.modules.get('grape_juice-isometrics')?.active },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
     { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
 ];
+
+function _visibleTabs() {
+    return TAB_DEFS.filter(t => !t.condition || t.condition());
+}
 
 export function getExportableModuleBooleanFields() {
     /** @type {{ module: string, key: string }[]} */
@@ -489,20 +535,38 @@ export function getExportableKeybindingFields() {
 }
 
 const KEY_DISPLAY = {
-    ArrowLeft: '🡸', ArrowRight: '🡺', ArrowUp: '🡹', ArrowDown: '🡻',
-    Backquote: '`', Backslash: '\\',
-    BracketLeft: '[', BracketRight: ']',
-    Comma: ',', Equal: '=',
-    Meta: '⊞', MetaLeft: '⊞', MetaRight: '⊞', OsLeft: '⊞', OsRight: '⊞',
+    ArrowLeft: '🡸',
+    ArrowRight: '🡺',
+    ArrowUp: '🡹',
+    ArrowDown: '🡻',
+    Backquote: '`',
+    Backslash: '\\',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Comma: ',',
+    Equal: '=',
+    Meta: '⊞',
+    MetaLeft: '⊞',
+    MetaRight: '⊞',
+    OsLeft: '⊞',
+    OsRight: '⊞',
     Minus: '-',
-    NumpadAdd: 'Numpad+', NumpadSubtract: 'Numpad-',
-    Period: '.', Quote: "'", Semicolon: ';', Slash: '/'
+    NumpadAdd: 'Numpad+',
+    NumpadSubtract: 'Numpad-',
+    Period: '.',
+    Quote: "'",
+    Semicolon: ';',
+    Slash: '/'
 };
 function _displayKey(code) {
-    if (code in KEY_DISPLAY) return KEY_DISPLAY[code];
-    if (typeof code !== 'string') return String(code);
-    if (code.startsWith('Digit')) return code.slice(5);
-    if (code.startsWith('Key')) return code.slice(3);
+    if (code in KEY_DISPLAY)
+        return KEY_DISPLAY[code];
+    if (typeof code !== 'string')
+        return String(code);
+    if (code.startsWith('Digit'))
+        return code.slice(5);
+    if (code.startsWith('Key'))
+        return code.slice(3);
     return code;
 }
 function _formatBinding(b) {
@@ -543,7 +607,8 @@ function _buildItem(f) {
     if (f.type === 'section') {
         if (f.requireForkTitle) {
             const m = game.modules.get(f.requireForkTitle.module);
-            if (!m?.active || m.title !== f.requireForkTitle.title) return null;
+            if (!m?.active || m.title !== f.requireForkTitle.title)
+                return null;
         }
         return { type: 'section', label: f.label, isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed };
     }
@@ -559,11 +624,14 @@ function _buildItem(f) {
     }
     if (f.type === 'keybinding') {
         const mod = game.modules.get(f.module);
-        if (!mod?.active) return null;
-        if (f.requireTitle && mod.title !== f.requireTitle) return null;
+        if (!mod?.active)
+            return null;
+        if (f.requireTitle && mod.title !== f.requireTitle)
+            return null;
         const fullKey = `${f.module}.${f.key}`;
         const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
-        if (!action) return null;
+        if (!action)
+            return null;
         const bindings = /** @type {any[]} */ (game.keybindings.bindings?.get(fullKey)) ?? [];
         return {
             type: 'keybinding',
@@ -673,10 +741,6 @@ function _buildItem(f) {
         isLocked: _isLockedForUser(f.key)
     };
 }
-
-// ---------------------------------------------------------------------------
-// FCS lock injection (unchanged from original settingsMenus.js)
-// ---------------------------------------------------------------------------
 
 function _getFCSData() {
     if (!game.modules.get('force-client-settings')?.active)
@@ -789,13 +853,10 @@ function _injectFCSLocks(html, fields, _app) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Unified configuration window
-// ---------------------------------------------------------------------------
-
 /** @param {string} key */
 async function _previewSettingSound(key) {
-    if (!key) return;
+    if (!key)
+        return;
     const sound = await import('../tah/sound.js');
     const fx = await import('../fx/actionFX.js');
     if (key.startsWith('tah.uiSound.')) {
@@ -821,11 +882,13 @@ async function _previewSettingSound(key) {
  */
 function _readFormSettings(form) {
     const map = new Map();
-    if (!form) return map;
+    if (!form)
+        return map;
     const els = form.querySelectorAll('input[name], select[name], textarea[name]');
     for (const el of /** @type {any} */ (els)) {
         const name = el.name;
-        if (!name) continue;
+        if (!name)
+            continue;
         let value;
         if (el.type === 'checkbox') {
             value = !!el.checked;
@@ -852,15 +915,20 @@ function _patchSettingsGet(formMap) {
             const cfg = /** @type {any} */ (game.settings.settings.get(`${namespace}.${key}`));
             const raw = formMap.get(key);
             try {
-                if (cfg?.type === Boolean) return Boolean(raw);
-                if (cfg?.type === Number) return raw === null ? cfg.default : Number(raw);
-                if (cfg?.type === String) return raw == null ? "" : String(raw);
+                if (cfg?.type === Boolean)
+                    return Boolean(raw);
+                if (cfg?.type === Number)
+                    return raw === null ? cfg.default : Number(raw);
+                if (cfg?.type === String)
+                    return raw == null ? "" : String(raw);
             } catch { /* fall through */ }
             return raw;
         }
         return original(namespace, key);
     };
-    return () => { game.settings.get = original; };
+    return () => {
+        game.settings.get = original;
+    };
 }
 
 /** @param {any} $h2 @param {boolean} collapsed */
@@ -887,7 +955,7 @@ export class LancerAutomationsConfig extends FormApplication {
             id: 'lancer-automations-config',
             title: 'Lancer Automations Configuration',
             template: TEMPLATE_PATH,
-            width: 760,
+            width: 860,
             height: 720,
             resizable: true,
             closeOnSubmit: true,
@@ -897,7 +965,7 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     getData() {
-        const tabs = TAB_DEFS.map((tab, idx) => ({
+        const tabs = _visibleTabs().map((tab, idx) => ({
             id: tab.id,
             label: tab.label,
             icon: tab.icon,
@@ -930,10 +998,14 @@ export class LancerAutomationsConfig extends FormApplication {
                     return;
                 }
                 const modifiers = [];
-                if (ev.altKey)   modifiers.push('Alt');
-                if (ev.ctrlKey)  modifiers.push('Control');
-                if (ev.shiftKey) modifiers.push('Shift');
-                if (ev.metaKey)  modifiers.push('Meta');
+                if (ev.altKey)
+                    modifiers.push('Alt');
+                if (ev.ctrlKey)
+                    modifiers.push('Control');
+                if (ev.shiftKey)
+                    modifiers.push('Shift');
+                if (ev.metaKey)
+                    modifiers.push('Meta');
                 document.removeEventListener('keydown', handler, true);
                 onDone({ key: ev.code, modifiers });
             };
@@ -957,7 +1029,8 @@ export class LancerAutomationsConfig extends FormApplication {
             const row = btn.closest('.la-keybinding-row');
             const fullKey = row?.dataset.fullKey;
             const idx = parseInt(btn.dataset.idx, 10);
-            if (!fullKey || Number.isNaN(idx)) return;
+            if (!fullKey || Number.isNaN(idx))
+                return;
             const original = btn.outerHTML;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
@@ -979,7 +1052,8 @@ export class LancerAutomationsConfig extends FormApplication {
             const row = btn.closest('.la-keybinding-row');
             const fullKey = row?.dataset.fullKey;
             const idx = parseInt(btn.dataset.idx, 10);
-            if (!fullKey || Number.isNaN(idx)) return;
+            if (!fullKey || Number.isNaN(idx))
+                return;
             const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
             current.splice(idx, 1);
             await writeBindings(fullKey, current);
@@ -988,7 +1062,8 @@ export class LancerAutomationsConfig extends FormApplication {
             ev.preventDefault();
             const row = ev.currentTarget.closest('.la-keybinding-row');
             const fullKey = row?.dataset.fullKey;
-            if (!fullKey) return;
+            if (!fullKey)
+                return;
             const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
             const defaults = (action?.editable ?? []).map(/** @type {any} */ b => ({ key: b.key, modifiers: [...(b.modifiers ?? [])] }));
             await writeBindings(fullKey, defaults);
@@ -999,7 +1074,8 @@ export class LancerAutomationsConfig extends FormApplication {
             const row = btn.closest('.la-keybinding-row');
             const binds = row?.querySelector('.la-kb-binds');
             const fullKey = row?.dataset.fullKey;
-            if (!fullKey || !binds) return;
+            if (!fullKey || !binds)
+                return;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
             placeholder.textContent = 'Press a key… (Esc to cancel)';
@@ -1086,7 +1162,8 @@ export class LancerAutomationsConfig extends FormApplication {
             /** @type {Text[]} */
             const textNodes = [];
             let n;
-            while ((n = walker.nextNode())) textNodes.push(/** @type {Text} */ (n));
+            while ((n = walker.nextNode()))
+                textNodes.push(/** @type {Text} */ (n));
             for (const node of textNodes) {
                 const text = node.nodeValue ?? '';
                 re.lastIndex = 0;
@@ -1148,7 +1225,9 @@ export class LancerAutomationsConfig extends FormApplication {
             }
         };
         $search.on('input', (/** @type {any} */ ev) => applyFilter(ev.currentTarget.value));
-        $clear.on('click', () => { $search.val(''); applyFilter(''); });
+        $clear.on('click', () => {
+            $search.val(''); applyFilter('');
+        });
 
         const idleStyle    = { color: 'var(--primary-color)', 'border-color': 'var(--primary-color)', background: 'rgba(255,255,255,0.5)' };
         const hoverStyle   = { color: '#fff',                 'border-color': 'var(--primary-color)', background: 'var(--primary-color)' };
@@ -1229,7 +1308,8 @@ export class LancerAutomationsConfig extends FormApplication {
                     sfxSubs.add(f.sub);
                 else if (f.type === 'compactStatusFx') {
                     for (const it of (f.items ?? [])) {
-                        if (it?.sub) sfxSubs.add(it.sub);
+                        if (it?.sub)
+                            sfxSubs.add(it.sub);
                     }
                 }
             }

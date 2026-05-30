@@ -108,27 +108,47 @@
     </div>
     {{/if}}
 
+    {{#if hasAllies}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">ALLIED CONTRIBUTION</div>
+        <div class="la-rest-section-title">ALLY REPAIR POOL</div>
         <div class="la-rest-section-body">
-            <div class="lancer-info-box">
-                <i class="fas fa-info-circle"></i>
-                <span>Donate repairs for an ally's destroyed mech. The amount is deducted from this pilot and surfaces in the chat report so their emergency reinit can pick it up.</span>
-            </div>
-            <div class="la-rest-contribute-row">
-                <label for="la-rest-contribute">Contribute</label>
-                <input id="la-rest-contribute" type="number" min="0" max="4" value="0">
-                <span class="la-rest-contribute-suffix">repairs</span>
+            <div class="la-rest-allies-row">
+                {{#each allies}}
+                <div class="la-rest-ally-card" data-ally-id="{{actorId}}">
+                    <img class="la-rest-ally-portrait" src="{{img}}" alt="">
+                    <div class="la-rest-ally-name" title="{{ownerName}}">{{name}}</div>
+                    <div class="la-rest-ally-repairs"><img src="{{../repairIcon}}" alt=""><span>{{value}}</span><span class="la-rest-ally-sep">/</span><span>{{max}}</span></div>
+                    <div class="la-rest-ally-stepper">
+                        <button type="button" class="la-rest-ally-step-down">−</button>
+                        <span class="la-rest-ally-pulled">0</span>
+                        <button type="button" class="la-rest-ally-step-up">+</button>
+                    </div>
+                </div>
+                {{/each}}
             </div>
         </div>
     </div>
+    {{/if}}
+
+    {{#if isGM}}
+    <div class="la-rest-section">
+        <div class="la-rest-section-title">GM FREE REPAIR</div>
+        <div class="la-rest-section-body">
+            <div class="la-rest-grant-row">
+                <label for="la-rest-grant">Free Repairs</label>
+                <input id="la-rest-grant" class="la-rest-grant-input" type="number" min="0" value="0">
+                <span class="la-rest-grant-suffix">added to pool, no source</span>
+            </div>
+        </div>
+    </div>
+    {{/if}}
 
     <div class="la-rest-cost-tally">
         <div class="la-rest-cost-tally-label">REPAIR COST</div>
         <div class="la-rest-cost-tally-value">
             <span id="la-rest-cost-current">0</span>
             <span class="la-rest-cost-tally-sep">/</span>
-            <span>{{mech.repairs.value}}</span>
+            <span id="la-rest-cost-pool">{{mech.repairs.value}}</span>
         </div>
     </div>
 </div>

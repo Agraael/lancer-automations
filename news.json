@@ -2,6 +2,98 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-05-30-v13-released",
+            "date": "2026-05-30",
+            "title": "LaSossis Module V13 Migration",
+            "body": [
+                "<p>AAAAAAAAAAAAAAAAAAAAAAHHH! V13 modules are out.</p>",
+                "<p>Sorry, v12 support is over now.</p>",
+                "<p>There is a lot of updates across all my modules. I recommend reading about it on the <a href=\"https://www.patreon.com/posts/159590452\" target=\"_blank\" rel=\"noopener\">Patreon post</a>, sorry it's a bit long.</p>",
+                "<p>Remember to make a backup. And... careful not to press the counter a second time. Would be nice not to mess up the number.</p>",
+                "<p>Anyway, more than 600 users now, that's damn huge. Thanks again.</p>",
+                "<p>Also, since there are starting to be a lot of you, I got curious. Where you play from, how you found this, how often, how big your table is, that kinda stuff. All optional, kinda like collectioning. Feel free to fill what you want, or not.</p>",
+                "<p>byebye.</p>"
+            ],
+            "poll": {
+                "tableName": "poll_community",
+                "expiresAt": "2026-06-29",
+                "title": "Community check-in",
+                "intro": "All fields optional. One submission per install.",
+                "fields": [
+                    {
+                        "name": "country",
+                        "label": "Country",
+                        "type": "text",
+                        "placeholder": "e.g. France"
+                    },
+                    {
+                        "name": "city",
+                        "label": "City",
+                        "type": "text",
+                        "placeholder": "e.g. Rennes"
+                    },
+                    {
+                        "name": "discovery_source",
+                        "label": "How did you discover the module?",
+                        "type": "select",
+                        "options": [
+                            {
+                                "value": "discord",
+                                "label": "Discord"
+                            },
+                            {
+                                "value": "github",
+                                "label": "GitHub"
+                            },
+                            {
+                                "value": "patreon",
+                                "label": "Patreon"
+                            },
+                            {
+                                "value": "friend",
+                                "label": "A friend"
+                            },
+                            {
+                                "value": "other",
+                                "label": "Other"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "play_frequency",
+                        "label": "How often do you play Lancer?",
+                        "type": "select",
+                        "options": [
+                            {
+                                "value": "weekly",
+                                "label": "Weekly"
+                            },
+                            {
+                                "value": "biweekly",
+                                "label": "Biweekly"
+                            },
+                            {
+                                "value": "monthly",
+                                "label": "Monthly"
+                            },
+                            {
+                                "value": "occasionally",
+                                "label": "Occasionally"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "table_size",
+                        "label": "Average table size (number of players)",
+                        "type": "number",
+                        "min": 1,
+                        "max": 12,
+                        "placeholder": "e.g. 4"
+                    }
+                ]
+            }
+        },
+        {
             "id": "2026-05-21-v13-where-i-stand",
             "date": "2026-05-21",
             "title": "Lancer System v13 is out, and i'm not on v13",

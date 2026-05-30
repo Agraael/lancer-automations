@@ -131,11 +131,43 @@ export function openExtrasDialog(actor) {
         `;
     };
 
+    const encodeKey = (k) => String(k).replace(/\./g, '$DOT$');
+    const commitAllInputs = async (html) => {
+        const map = { ...(actor.getFlag('lancer-automations', 'extraDeployableOpts') || {}) };
+        const readOne = (sel, prop) => {
+            html.find(sel).each((_i, el) => {
+                const uuid = $(el).data('uuid');
+                if (!uuid)
+                    return;
+                const k = encodeKey(uuid);
+                const raw = String($(el).val() ?? '').trim();
+                const val = raw === '' ? null : Number(raw);
+                const cur = { ...map[k] };
+                if (val == null || Number.isNaN(val))
+                    delete cur[prop];
+                else
+                    cur[prop] = val;
+                if (Object.keys(cur).length === 0)
+                    delete map[k];
+                else
+                    map[k] = cur;
+            });
+        };
+        readOne('.la-extras-dep-range', 'range');
+        readOne('.la-extras-dep-count', 'count');
+        await actor.setFlag('lancer-automations', 'extraDeployableOpts', map);
+    };
+
     const dlg = new Dialog({
         title: 'Extras',
         content: `<div class="la-extras-body">${renderContent()}</div>`,
-        buttons: { close: { label: 'Close' } },
-        default: 'close',
+        buttons: {
+            save: {
+                label: 'Save',
+                callback: (html) => commitAllInputs(html),
+            },
+        },
+        default: 'save',
         render: (html) => {
             const wire = () => {
                 html.find('.la-extras-act-icon').on('click', () => {

@@ -20,6 +20,45 @@ function isRelevantActor(actorId) {
     );
 }
 
+const SETTING_ABOVE_SHEETS = 'tah.aboveActorSheets';
+
+function _isAboveSheetsEnabled() {
+    try {
+        return !!game.settings.get(MODULE, SETTING_ABOVE_SHEETS);
+    } catch {
+        return true;
+    }
+}
+
+function _updateTahZIndex() {
+    const hudEl = document.getElementById('la-hud');
+    if (!hudEl)
+        return;
+    if (!_isAboveSheetsEnabled()) {
+        hudEl.style.zIndex = '';
+        return;
+    }
+    let maxZ = 0;
+    const sheetEls = Array.from(document.querySelectorAll('.window-app.sheet.actor, .application.sheet.actor'));
+    for (const el of sheetEls) {
+        const z = parseInt(/** @type {HTMLElement} */ (el).style.zIndex || '0');
+        if (z > maxZ)
+            maxZ = z;
+    }
+    hudEl.style.zIndex = maxZ > 0 ? String(maxZ + 1) : '';
+}
+
+let _zRescheduled = false;
+function _scheduleTahZUpdate() {
+    if (_zRescheduled)
+        return;
+    _zRescheduled = true;
+    requestAnimationFrame(() => {
+        _zRescheduled = false;
+        _updateTahZIndex();
+    });
+}
+
 Hooks.on('init', () => {
     game.settings.register(MODULE, SETTING, {
         name: 'Token Action HUD',
@@ -34,6 +73,20 @@ Hooks.on('init', () => {
                 hud.unbind();
         },
     });
+    game.settings.register(MODULE, SETTING_ABOVE_SHEETS, {
+        name: 'TAH Above Actor Sheets',
+        hint: 'Keep the TAH on top of open actor sheets.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true,
+        onChange: _scheduleTahZUpdate,
+    });
+    Hooks.on('renderActorSheet', _scheduleTahZUpdate);
+    Hooks.on('renderActorSheetV2', _scheduleTahZUpdate);
+    Hooks.on('closeActorSheet', _scheduleTahZUpdate);
+    Hooks.on('closeActorSheetV2', _scheduleTahZUpdate);
+    document.addEventListener('mousedown', _scheduleTahZUpdate, { capture: true });
     game.keybindings.register(MODULE, 'tah.toggleSearch', {
         name: 'TAH: Toggle Search',
         hint: 'Open or close the Token Action HUD search bar.',
@@ -83,11 +136,11 @@ Hooks.on('init', () => {
     });
     game.settings.register(MODULE, 'tah.rangePreviewOnAttackCard', {
         name: 'Range Preview on Attack Card',
-        hint: 'Show attacker range on the canvas when an attack card prints, while TAH is open.',
+        hint: 'Pulse the attacker\'s weapon/tech range on the canvas when an attack card prints.',
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
     });
     game.settings.register(MODULE, 'tah.uiSoundVolume', {
         name: 'UI Sound Volume',
@@ -309,13 +362,7 @@ Hooks.on('updateToken', (_doc, change, options) => {
 });
 
 Hooks.once('ready', () => {
-    if (!game.modules.get('elevationruler')?.active)
-        return;
     const actionIds = [
-        'incrementElevation', 'decrementElevation',
-        'addWaypoint', 'removeWaypoint',
-        'addWaypointTokenRuler', 'removeWaypointTokenRuler',
-        'togglePathfinding', 'forceToGround', 'teleport',
         'freeMovement', 'debugMovement'
     ];
     const getBoundKeys = () => {
@@ -324,7 +371,7 @@ Hooks.once('ready', () => {
         if (!bindings?.get)
             return set;
         for (const id of actionIds) {
-            const list = bindings.get(`elevationruler.${id}`) ?? [];
+            const list = bindings.get(`lancer-automations.${id}`) ?? [];
             for (const b of list) {
                 if (b?.key)
                     set.add(b.key);
@@ -351,32 +398,26 @@ Hooks.once('ready', () => {
     });
 });
 
-// Per-grid-cell drag tick: uses libWrapper on _onDragLeftMove so we get every
-// mousemove during drag, then deduplicates by the preview clone's grid offset.
+// v13's MouseInteractionManager captures callbacks at construction; wrapping Token._onDragLeftMove never fires.
 const _dragLastCell = new WeakMap();
 Hooks.once('ready', () => {
-    if (!game.modules.get('lib-wrapper')?.active)
-        return;
-    libWrapper.register('lancer-automations', 'Token.prototype._onDragLeftMove', function (wrapped, event) {
-        const result = wrapped.call(this, event);
-        try {
-            const clones = event?.interactionData?.clones ?? [];
-            const gridSize = canvas.grid.size;
-            for (const clone of clones) {
-                const doc = clone.document;
-                const cx = doc.x + (doc.width * gridSize / 2);
-                const cy = doc.y + (doc.height * gridSize / 2);
-                const off = canvas.grid.getOffset({ x: cx, y: cy });
-                const key = `${off.i},${off.j}`;
-                const prev = _dragLastCell.get(clone);
-                if (prev !== key) {
-                    _dragLastCell.set(clone, key);
-                    if (prev !== undefined)
-                        playUiSound('tokenDrag');
+    if (!game.modules.get('lib-wrapper')?.active) return;
+    libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args) {
+        if (action === 'dragLeftMove' && this.object instanceof foundry.canvas.placeables.Token) {
+            try {
+                const dest = event?.interactionData?.destination;
+                if (dest) {
+                    const off = canvas.grid.getOffset(dest);
+                    const key = `${off.i},${off.j}`;
+                    const prev = _dragLastCell.get(this.object);
+                    if (prev !== key) {
+                        _dragLastCell.set(this.object, key);
+                        if (prev !== undefined) playUiSound('tokenDrag');
+                    }
                 }
-            }
-        } catch { /* ignore */ }
-        return result;
+            } catch { /* ignore */ }
+        }
+        return wrapped.call(this, action, event, ...args);
     }, 'WRAPPER');
 });
 
@@ -513,8 +554,9 @@ Hooks.on('deleteCombat', () => {
 
 // ── Persistent range auras — combat auto-toggle + data refresh ─────────────
 
-import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview } from './hover.js';
+import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview, getAttackRange } from './hover.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
+import { createPulsingRangeHighlight } from '../interactive/canvas.js';
 
 Hooks.on('combatStart', (combat) => {
     for (const c of combat.combatants) {
@@ -601,50 +643,41 @@ Hooks.once('ready', () => {
     if (!original)
         return;
     game.lancer.flowSteps.set('showAttackHUD', async function(state, options) {
-        let token = null;
-        let activated = false;
-        let range = null;
-        const reassert = () => {
-            if (activated && token)
-                setTimeout(() => activateRangePreview(token, range), 0);
-        };
-        const onControl = (t) => {
-            if (t?.id === token?.id)
-                reassert();
-        };
-        const onTarget = (_u, t) => {
-            if (t?.id === token?.id)
-                reassert();
-        };
-        const onHover = (t) => {
-            if (t?.id === token?.id)
-                reassert();
-        };
+        let destroy = null;
         try {
-            if (enabled()
-                && game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')
-                && hud._token) {
-                token = state.actor?.getActiveTokens?.()[0];
+            if (game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')) {
+                const token = state.actor?.getActiveTokens?.()[0];
                 if (token) {
-                    range = await _computeAttackHudRange(state);
-                    if (range != null) {
-                        await activateRangePreview(token, range);
-                        activated = true;
-                        Hooks.on('controlToken', onControl);
-                        Hooks.on('targetToken', onTarget);
-                        Hooks.on('hoverToken', onHover);
+                    const range = await _computeAttackHudRange(state);
+                    if (range != null && range > 0) {
+                        destroy = createPulsingRangeHighlight(token, range, { includeSelf: true });
                     }
                 }
             }
             return await original(state, options);
         } finally {
-            if (activated) {
-                Hooks.off('controlToken', onControl);
-                Hooks.off('targetToken', onTarget);
-                Hooks.off('hoverToken', onHover);
-                if (token)
-                    deactivateRangePreview(token);
-            }
+            if (destroy) destroy();
         }
     });
+
+    const origPrint = game.lancer?.flowSteps?.get?.('printActionUseCard');
+    if (origPrint) {
+        game.lancer.flowSteps.set('printActionUseCard', async function(state, options) {
+            try {
+                if (game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')) {
+                    const actor = state.actor;
+                    const actionName = state.data?.action?.name ?? state.data?.title ?? '';
+                    const token = actor?.getActiveTokens?.()[0];
+                    if (token && actionName) {
+                        const range = await getAttackRange(actionName, actor, null);
+                        if (range != null && range > 0) {
+                            const destroy = createPulsingRangeHighlight(token, range, { includeSelf: true });
+                            setTimeout(() => destroy(), 3500);
+                        }
+                    }
+                }
+            } catch (e) { /* non-fatal */ }
+            return await origPrint(state, options);
+        });
+    }
 });
