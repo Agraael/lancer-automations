@@ -495,8 +495,9 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             }
             const waypointKey = `${Math.round(waypoint.x ?? 0)}|${Math.round(waypoint.y ?? 0)}|${Math.round((waypoint.elevation ?? 0) * 1000)}`;
             // Capture the tier color now so the polyline matches the hex paint (same cumulative cost).
+            const isForcedHere = waypoint.action === 'forced' || waypoint.next?.action === 'forced';
             let tierColor = null;
-            if (settingOn() && waypoint.action !== 'forced'
+            if (settingOn() && !isForcedHere
                 && !(waypoint.stage !== 'passed' && isForceDebugMovement())
                 && !(waypoint.stage !== 'passed' && isForceFreeMovement())) {
                 const tier = this._tierForWaypoint(waypoint);
@@ -517,7 +518,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             return base;
         if (!(base.alpha > 0))
             return base;
-        if (waypoint.action === 'forced')
+        if (waypoint.action === 'forced' || waypoint.next?.action === 'forced')
             return { ...base, color: forceMoveColor(), alpha: 0.35 };
         if (waypoint.stage !== 'passed') {
             if (isForceDebugMovement())

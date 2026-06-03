@@ -632,6 +632,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
         groundElevGrid = footprintShapesAt(tokenDoc, startOff, typeById).top;
     } catch { /* ignore */ }
     let prevTerrainTop = groundElevGrid;
+    let prevCellTop = groundElevGrid;
     let tokenElev = defaultIgnoreElev ? storedElevGrid : Math.max(storedElevGrid, groundElevGrid);
     const dragOffsetGrid = getDragElevationOffset?.() ?? 0;
     let userOffsetApplied = false;
@@ -780,13 +781,23 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
                     ? Math.max(0, climbCellsBilled - 1) * sceneDistance
                     : 0;
                 const stepClimbCost = (flying || noClimbStep) ? 0 : climbCellsBilled * sceneDistance;
-                segCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
+                if (flying) {
+                    const speedNow = lancerSpeed(tokenDoc);
+                    const hCum = horizontalCost / sceneDistance;
+                    const cellCap = speedNow > 0 ? Math.max(1, Math.ceil(hCum / speedNow)) * speedNow : 0;
+                    const moveGrid = segClimbVU > cellCap ? Math.max(hCum, segClimbVU) : hCum;
+                    segCumCost = moveGrid * sceneDistance + terrainCost;
+                } else {
+                    segCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
+                }
                 stepCentroids.push({ x: ctr.x, y: ctr.y, cost: segCumCost });
-                if (stepDelta !== 0) {
+                const visualTerrainDelta = noTerrainClimb ? 0 : (cellTop - prevCellTop);
+                const visualStepDelta = visualTerrainDelta + manualDelta;
+                if (visualStepDelta !== 0) {
                     climbCells.push({
                         x: (prevCtr.x + ctr.x) / 2,
                         y: (prevCtr.y + ctr.y) / 2,
-                        delta: stepDelta
+                        delta: visualStepDelta
                     });
                 }
                 if (penalty > 0) {
@@ -808,6 +819,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
 
                 prevFootprintKeys = new Set(footprint.map(o => `${o.i},${o.j}`));
                 prevTerrainTop = newTerrainTop;
+                prevCellTop = cellTop;
                 prevCtr = ctr;
                 prev = curr;
             }
@@ -819,13 +831,11 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
         if (horizontalCost === 0)
             horizontalCost = Number(seg.distance) || 0;
 
-        // v12 Lancer flying rule: V is free within ceil(H/SPEED)*SPEED per segment;
-        // over the cap (strict >), segment cost = max(H, V). Terrain still adds on top.
         let segCost;
         if (flying) {
             const speed = lancerSpeed(tokenDoc);
             const segHGrid = horizontalCost / sceneDistance;
-            const flyVCapVU = speed > 0 ? Math.ceil(segHGrid / speed) * speed : 0;
+            const flyVCapVU = speed > 0 ? Math.max(1, Math.ceil(segHGrid / speed)) * speed : 0;
             if (segClimbVU > flyVCapVU) {
                 const moveCost = Math.max(segHGrid, segClimbVU) * sceneDistance;
                 verticalCost = moveCost - horizontalCost;
@@ -834,8 +844,6 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
                 verticalCost = 0;
                 segCost = horizontalCost + terrainCost;
             }
-            if (stepCentroids.length)
-                stepCentroids[stepCentroids.length - 1].cost = segCost;
         } else {
             segCost = horizontalCost + verticalCost + terrainCost + malus;
         }
@@ -851,20 +859,31 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             for (const c of stepCentroids) c.cost = 0;
         }
 
-        seg.cost = segCost;
         seg.lancerVerticalCost = verticalCost;
         seg.lancerTerrainPenalty = terrainCost;
         seg.lancerClimbMalus = malus;
 
+        const groupStartCum = cumCost;
+        const subCount = toIdx - fromIdx;
+        const equalShare = subCount > 0 ? segCost / subCount : segCost;
+        let groupAcc = 0;
+        for (let subI = fromIdx; subI < toIdx; subI++) {
+            const subSeg = result.segments[subI];
+            if (!subSeg) continue;
+            const portion = (subI === toIdx - 1) ? (segCost - groupAcc) : equalShare;
+            subSeg.cost = portion;
+            groupAcc += portion;
+            if (subSeg.to) subSeg.to.cost = groupStartCum + groupAcc;
+        }
+
         cumDistance += horizontalCost;
-        cumCost += segCost;
+        cumCost = groupStartCum + segCost;
         totalTerrain += terrainCost;
         totalMalus += malus;
         totalVertical += verticalCost;
 
         if (seg.to) {
             seg.to.distance = cumDistance;
-            seg.to.cost = cumCost;
             seg.to.lancerTerrainPenalty = terrainCost;
             seg.to.lancerClimbMalus = malus;
             seg.to.lancerVerticalCost = totalVertical;

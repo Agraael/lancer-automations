@@ -966,32 +966,64 @@ export async function repairLCPData() {
 
         let fixed = 0;
 
-        // Fix compendium items (Lancer uses world-scope packs: world.mech-items, world.npc-items, etc.)
-        const lancerPacks = ['world.mech-items', 'world.pilot-items', 'world.npc-items'];
-        for (const packId of lancerPacks) {
-            let pack = game.packs.get(packId);
-            if (!pack)
-                continue;
-            const wasLocked = pack.locked;
-            if (wasLocked) {
-                await pack.configure({ locked: false });
-                // pack.locked getter can read a stale snapshot; re-fetch live reference
-                pack = game.packs.get(packId) ?? pack;
+        // swallow locked-compendium toasts; one persistent warn summarises at the end
+        const _origError = ui.notifications.error.bind(ui.notifications);
+        const _lockedRe = /locked compendium/i;
+        ui.notifications.error = (msg, opts) => {
+            const s = typeof msg === 'string' ? msg : String(msg ?? '');
+            if (_lockedRe.test(s)) {
+                console.warn('lancer-automations | suppressed:', s);
+                return null;
             }
-            if (pack.locked) {
-                ui.notifications.warn(`Could not unlock "${packId}"; skipping.`);
-                continue;
-            }
-            for (const doc of await pack.getDocuments()) {
-                try {
-                    if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid))
-                        fixed++;
-                } catch (e) {
-                    console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
+            return _origError(msg, opts);
+        };
+
+        const lockedPacks = [];
+        try {
+            const lancerPacks = ['world.mech-items', 'world.pilot-items', 'world.npc-items'];
+            for (const packId of lancerPacks) {
+                let pack = game.packs.get(packId);
+                if (!pack)
+                    continue;
+                const wasLocked = pack.locked;
+                if (wasLocked) {
+                    await pack.configure({ locked: false });
+                    pack = game.packs.get(packId) ?? pack;
                 }
+                if (pack.locked) {
+                    lockedPacks.push(packId);
+                    continue;
+                }
+                let packFailed = false;
+                for (const doc of await pack.getDocuments()) {
+                    if (packFailed)
+                        break;
+                    try {
+                        if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid))
+                            fixed++;
+                    } catch (e) {
+                        const msg = String(e?.message ?? e);
+                        if (_lockedRe.test(msg)) {
+                            packFailed = true;
+                            lockedPacks.push(packId);
+                            console.warn(`lancer-automations | ${packId} rejected updates, aborting pack`);
+                        } else {
+                            console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
+                        }
+                    }
+                }
+                if (wasLocked)
+                    await (game.packs.get(packId) ?? pack).configure({ locked: true });
             }
-            if (wasLocked)
-                await (game.packs.get(packId) ?? pack).configure({ locked: true });
+        } finally {
+            ui.notifications.error = _origError;
+        }
+        if (lockedPacks.length) {
+            ui.notifications.warn(
+                `Could not write to ${lockedPacks.join(', ')}. Open the Compendium tab, right-click each pack, ` +
+                `pick "Toggle Edit Lock", and re-run.`,
+                { permanent: true }
+            );
         }
 
         // Fix actor-owned items
