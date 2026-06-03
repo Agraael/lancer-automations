@@ -58,17 +58,6 @@
     {{/each}}
     {{/if}}
 
-    {{#if templates.length}}
-    <div class="la-scan-section-title">
-        <span class="la-scan-section-pill" style="background:{{section.template}}">NPC TEMPLATES</span>
-    </div>
-    {{#each templates}}
-    <div class="la-scan-card" style="border-left-color:{{../section.template}};">
-        <div class="la-scan-card-title">{{name}}</div>
-    </div>
-    {{/each}}
-    {{/if}}
-
     {{#if coreBonuses.length}}
     <div class="la-scan-section-title">
         <span class="la-scan-section-pill" style="background:{{section.core}}">CORE BONUSES</span>
@@ -96,10 +85,10 @@
             </div>
             <div class="la-scan-summary-row">
                 {{#if ranges.length}}
-                <span><span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                <span><span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;color:#000;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
                 {{/if}}
                 {{#if damages.length}}
-                <span><span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                <span><span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;color:#000;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
                 {{/if}}
             </div>
         </summary>
@@ -192,50 +181,69 @@
     {{/if}}
 
     {{#if isNpc}}
-    {{#each npcFeatureGroups}}
+    {{!-- CLASS / TEMPLATE --}}
     <div class="la-scan-section-title">
-        <span class="la-scan-section-pill" style="background:{{../section.feature}};">{{origin}}</span>
+        <span class="la-scan-section-pill" style="background:{{section.template}};">CLASS / TEMPLATE</span>
     </div>
+    {{#each npcClasses}}
+    <div class="la-scan-card la-scan-origin-card" style="border-left-color:{{../section.template}};">
+        {{#if img}}<img src="{{img}}" alt="" class="la-scan-origin-icon">{{/if}}
+        <span class="la-scan-origin-name">{{name}}</span>
+        <span class="la-scan-origin-kind">CLASS</span>
+    </div>
+    {{/each}}
+    {{#each npcTemplates}}
+    <div class="la-scan-card la-scan-origin-card" style="border-left-color:{{../section.template}};">
+        {{#if img}}<img src="{{img}}" alt="" class="la-scan-origin-icon">{{/if}}
+        <span class="la-scan-origin-name">{{name}}</span>
+        <span class="la-scan-origin-kind">TEMPLATE</span>
+    </div>
+    {{/each}}
 
-    {{#each weapons}}
-    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.weapon}};">
+    {{!-- WEAPON --}}
+    {{#if npcWeaponsFlat.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.weapon}};">WEAPON</span>
+    </div>
+    {{#each npcWeaponsFlat}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.weapon}};">
         {{#if isExoticUnknown}}
         <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title" style="color:{{../../section.weapon}};">{{name}}</div>
+            <div class="la-scan-card-title" style="color:{{../section.weapon}};">{{name}}{{#if origin}} <span style="font-size:0.7em;opacity:0.55;">· {{origin}}</span>{{/if}}</div>
             <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
         </summary>
         {{else}}
         <summary class="la-scan-card-summary la-scan-summary-weapon">
             <div class="la-scan-summary-row">
                 <span class="la-scan-card-title">{{name}}{{#if uses}} <span style="font-size:0.78em;color:#666;">[{{uses}}]</span>{{/if}}</span>
-                <span class="la-scan-card-subtitle">WEAPON{{#if attackBonus}} · ATK {{attackBonus}}{{/if}}{{#if accuracyText}} · {{accuracyText}}{{/if}}</span>
+                <span class="la-scan-card-subtitle">WEAPON{{#if attackBonus}} · ATK {{attackBonus}}{{/if}}{{#if accuracyText}} · {{accuracyText}}{{/if}}{{#if origin}} · <span style="opacity:0.65;">{{origin}}</span>{{/if}}</span>
                 {{#if tags.length}}<span class="la-scan-tag-row">{{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}</span>{{/if}}
             </div>
             <div class="la-scan-summary-row">
                 {{#if ranges.length}}
-                <span><span class="la-scan-row-label" style="background:{{../../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                <span><span class="la-scan-row-label" style="background:{{../section.range}};">RANGE</span> {{#each ranges}}<span style="margin-right:6px;color:#000;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
                 {{/if}}
                 {{#if damages.length}}
-                <span><span class="la-scan-row-label" style="background:{{../../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
+                <span><span class="la-scan-row-label" style="background:{{../section.damage}};">DAMAGE</span> {{#each damages}}<span style="margin-right:6px;color:#000;"><b>{{val}}</b> {{type}}</span>{{/each}}</span>
                 {{/if}}
             </div>
         </summary>
         <div class="la-scan-card-body la-scan-card-details">
             {{#if trigger}}
             <div style="margin-top:4px;">
-                <span class="la-scan-row-label" style="background:{{../../section.trigger}};">TRIGGER</span>
+                <span class="la-scan-row-label" style="background:{{../section.trigger}};">TRIGGER</span>
                 {{{trigger}}}
             </div>
             {{/if}}
             {{#if onHit}}
             <div style="margin-top:4px;">
-                <span class="la-scan-row-label" style="background:{{../../section.onHit}};">ON HIT</span>
+                <span class="la-scan-row-label" style="background:{{../section.onHit}};">ON HIT</span>
                 {{{onHit}}}
             </div>
             {{/if}}
             {{#if effect}}
             <div style="margin-top:4px;">
-                <span class="la-scan-row-label" style="background:{{../../section.effect}};">EFFECT</span>
+                <span class="la-scan-row-label" style="background:{{../section.effect}};">EFFECT</span>
                 {{{effect}}}
             </div>
             {{/if}}
@@ -243,18 +251,23 @@
         {{/if}}
     </details>
     {{/each}}
+    {{/if}}
 
-    {{#each tech}}
-    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.tech}};">
+    {{!-- SYSTEMS --}}
+    {{#if npcSystemsFlat.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.system}};">SYSTEMS</span>
+    </div>
+    {{#each npcSystemsFlat}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.system}};">
         {{#if isExoticUnknown}}
         <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title" style="color:{{../../section.tech}};">{{name}}</div>
+            <div class="la-scan-card-title" style="color:{{../section.system}};">{{name}}{{#if origin}} <span style="font-size:0.7em;opacity:0.55;">· {{origin}}</span>{{/if}}</div>
             <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
         </summary>
         {{else}}
         <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title">{{name}}</div>
-            <div class="la-scan-card-subtitle">TECH</div>
+            <div class="la-scan-card-title">{{name}}{{#if origin}} <span style="font-size:0.72em;opacity:0.55;font-weight:normal;">· {{origin}}</span>{{/if}}</div>
             {{#if tags.length}}
             <div style="margin:4px 0;">
                 {{#each tags}}<span class="la-scan-tag">{{this}}</span>{{/each}}
@@ -265,13 +278,18 @@
         {{/if}}
     </details>
     {{/each}}
+    {{/if}}
 
-    {{#each features}}
-    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../../section.feature}};">
+    {{!-- TRAIT --}}
+    {{#if npcTraitsFlat.length}}
+    <div class="la-scan-section-title">
+        <span class="la-scan-section-pill" style="background:{{section.trait}};">TRAIT</span>
+    </div>
+    {{#each npcTraitsFlat}}
+    <details class="la-scan-card la-scan-collapsible" style="border-left-color:{{../section.trait}};">
         {{#if isExoticUnknown}}
         <summary class="la-scan-card-summary">
-            <div class="la-scan-card-title" style="color:{{../../section.feature}};">{{name}}</div>
-            <div class="la-scan-card-body" style="opacity:0.7;font-style:italic;">???</div>
+            <div class="la-scan-card-title" style="color:{{../section.trait}};">{{name}}{{#if origin}} <span style="font-size:0.7em;opacity:0.55;">· {{origin}}</span>{{/if}}</div>
         </summary>
         {{else}}
         <summary class="la-scan-card-summary">
@@ -286,7 +304,7 @@
         {{/if}}
     </details>
     {{/each}}
-    {{/each}}
+    {{/if}}
     {{/if}}
 
     <div class="la-scan-footer">

@@ -23,17 +23,17 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 ---
 
-I started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) in FoundryVTT, and it spiraled into something much bigger. This is inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
+Started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) and grew from there. Inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
 
-At its core, this module is an event-driven automation engine. Almost anything that happens during a Lancer session can fire a trigger: movement, attacks, damage, status changes, turn transitions. On top of that engine sit tools for managing effects with duration, building complex bonuses, running interactive prompts during play (choose a target, knock a token back, place a zone), and more.
+A Lancer system extension for Foundry v13: QoL and UI fixes, custom token stat bars, HUD, ruler, isometric handling, interactive tools, and an event-driven automation engine to wire anything together.
 
-The end goal is to move everything I need for my campaign into this module, so it functions as a full extension of the Lancer system for FoundryVTT v13.
+> Some features may overlap or not fully integrate with each other. Work in progress.
 
-> Some features may overlap or not fully integrate with each other. This is a work in progress.
+## 📘 [Read the full API reference →](doc/API_REFERENCE.md)
 
-Full API docs: [doc/API_REFERENCE.md](doc/API_REFERENCE.md)
+Trigger schemas, function signatures, every option. Split across `doc/API_*.md` (Combat, Effects, Interactive, HowTo). Start there if you're writing activation code, macros, or hooking the engine from another module.
 
-It's pretty tedious to maintain this big readme file, so keep in mind there are way way way more features (especially if you take the forked versions of some modules) in the release you'll get. Be sure to read the tours/tutorial and explore a bit, or ask questions on Discord.
+The README hits highlights; the docs and the in-app tours are the source of truth, and there's much more in the release than what's listed below.
 
 ---
 
@@ -55,7 +55,6 @@ It's pretty tedious to maintain this big readme file, so keep in mind there are 
 - [API Reference](#api-reference)
 - [NPC Implementation Examples](#npc-implementation-examples)
 - [Lancer System Additions](#lancer-system-additions)
-- [Planned Features](#planned-features)
 - [Support](#support)
 
 ---
@@ -1069,13 +1068,6 @@ Basically it works like Burn damage but for Heat. Check out https://cornylius.it
 
 ![infection_damage_card](doc/img/infection_damage_card.png)
 ![infection_roll](doc/img/infection_roll.png)
-
----
-
-## Planned Features
-
-- More built-in item activations for the personal activation set
-- new custom token bar hud ?
 
 ---
 

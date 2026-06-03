@@ -82,14 +82,16 @@ const DAMAGE_SOUNDS = {
 
 /** Single-file stat change sounds. */
 const STAT_SOUNDS = {
-    hp_loss:    { src: `${STATS_BASE}/hp_loss.wav`,    scale: 0.2 },
-    hp_heal:    { src: `${STATS_BASE}/hp_heal.wav`,    scale: 0.2 },
-    heat_clean: { src: `${STATS_BASE}/heat_clean.wav`, scale: 0.05 },
-    miss:       { src: `${STATS_BASE}/miss.wav`, scale: 0.7 },
-    crit:       { src: `${STATS_BASE}/crit.mp3`, scale: 0.5 },
-    hit:        { src: `${STATS_BASE}/hit.mp3`,  scale: 0.2 },
-    success:    { src: `${STATS_BASE}/success.wav`, scale: 0.4 },
-    fail:       { src: `${STATS_BASE}/fail.mp3`,    scale: 0.4 },
+    hp_loss:     { src: `${STATS_BASE}/hp_loss.wav`,     scale: 0.2 },
+    hp_heal:     { src: `${STATS_BASE}/hp_heal.wav`,     scale: 0.2 },
+    heat_clean:  { src: `${STATS_BASE}/heat_clean.wav`,  scale: 0.05 },
+    stress_hit:  { src: `${STATS_BASE}/stress_hit.wav`,  scale: 0.2 },
+    stress_heal: { src: `${STATS_BASE}/stress_heal.mp3`, scale: 0.2 },
+    miss:        { src: `${STATS_BASE}/miss.wav`,        scale: 0.7 },
+    crit:        { src: `${STATS_BASE}/crit.mp3`,        scale: 0.5 },
+    hit:         { src: `${STATS_BASE}/hit.mp3`,         scale: 0.2 },
+    success:     { src: `${STATS_BASE}/success.wav`,     scale: 0.4 },
+    fail:        { src: `${STATS_BASE}/fail.mp3`,        scale: 0.4 },
 };
 
 const STATUS_SFX_SOUNDS = {
@@ -276,6 +278,8 @@ Hooks.on('preUpdateActor', (actor, change) => {
         prev.infection = Number(s.infection ?? 0);
     if (change?.system?.overshield?.value !== undefined)
         prev.overshield = Number(s.overshield?.value ?? 0);
+    if (change?.system?.bond_state?.stress?.value !== undefined)
+        prev.pilotStress = Number(s.bond_state?.stress?.value ?? 0);
     if (Object.keys(prev).length)
         _prevStatsByActor.set(actor.id, prev);
 });
@@ -321,4 +325,35 @@ Hooks.on('updateActor', (actor, change) => {
         if (newOvershield > prev.overshield)
             playDamageSound('overshield');
     }
+    const newPilotStress = change?.system?.bond_state?.stress?.value;
+    if (newPilotStress !== undefined && prev.pilotStress !== undefined) {
+        if (newPilotStress > prev.pilotStress && !duringDamage) {
+            playStatsSound('stress_hit');
+            _playPilotStressPuff(actor);
+        } else if (newPilotStress < prev.pilotStress) {
+            playStatsSound('stress_heal');
+        }
+    }
 });
+
+function _playPilotStressPuff(actor) {
+    if (typeof Sequence === 'undefined' || typeof Sequencer === 'undefined')
+        return;
+    const token = actor?.getActiveTokens?.()?.[0];
+    if (!token)
+        return;
+    const primary = 'jb2a.smoke.puff.centered.dark_black';
+    const fallback = 'jb2a.smoke.puff.centered.grey';
+    const jb2a = !!game.modules.get('jb2a_patreon')?.active;
+    const file = jb2a ? primary : fallback;
+    try {
+        Sequencer.Preloader.preloadForClients([file]).then(() => {
+            new Sequence()
+                .effect()
+                .file(file)
+                .atLocation(token)
+                .scaleToObject(2)
+                .play();
+        });
+    } catch { /* ignore */ }
+}

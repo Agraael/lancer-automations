@@ -4,7 +4,7 @@ import { getMinGridDistance } from '../combat/grid-helpers.js';
 import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
 
 const MODULE_ID = 'lancer-automations';
-const ENABLED = 'enableTacticalDistance';
+const MODE_KEY = 'enableTacticalDistance'; // values: 'off' | 'combat' | 'always' (legacy boolean migrated below)
 const LABEL_KEY = '_laTacticalLabel';
 
 function _getIsoState(token) {
@@ -23,12 +23,23 @@ function _getIsoState(token) {
     };
 }
 
-function settingOn() {
+function getMode() {
     try {
-        return !!game.settings.get(MODULE_ID, ENABLED);
+        const v = game.settings.get(MODULE_ID, MODE_KEY);
+        if (v === true)  return 'always'; // legacy bool
+        if (v === false) return 'off';
+        if (v === 'off' || v === 'combat' || v === 'always') return v;
+        return 'off';
     } catch {
-        return false;
+        return 'off';
     }
+}
+
+function shouldShow() {
+    const m = getMode();
+    if (m === 'off') return false;
+    if (m === 'always') return true;
+    return !!game.combat; // combat (started or not)
 }
 
 function makeLabel() {
@@ -111,20 +122,41 @@ function updateLabelsFor(previewToken) {
             continue;
         }
         if (!target.visible) {
-            removeLabel(target); continue;
+            removeLabel(target);
+            continue;
         }
         const label = ensureLabel(target);
-        label.text = buildLabelText(previewToken, target);
+        const text = buildLabelText(previewToken, target);
+        if (label.text !== text)
+            label.text = text;
         positionLabel(target, label);
     }
 }
 
+// coalesce refreshToken bursts (1 update per animation frame per dragged preview)
+let _pendingPreview = null;
+let _rafQueued = false;
+function _queueUpdate(previewToken) {
+    _pendingPreview = previewToken;
+    if (_rafQueued)
+        return;
+    _rafQueued = true;
+    requestAnimationFrame(() => {
+        _rafQueued = false;
+        const t = _pendingPreview;
+        _pendingPreview = null;
+        if (!t || t.destroyed)
+            return;
+        updateLabelsFor(t);
+    });
+}
+
 Hooks.on('refreshToken', (token) => {
-    if (!settingOn())
+    if (!shouldShow())
         return;
     if (!token.isPreview)
         return;
-    updateLabelsFor(token);
+    _queueUpdate(token);
 });
 
 Hooks.on('destroyToken', (token) => {
@@ -134,12 +166,17 @@ Hooks.on('destroyToken', (token) => {
 });
 
 Hooks.once('init', () => {
-    game.settings.register(MODULE_ID, ENABLED, {
+    game.settings.register(MODULE_ID, MODE_KEY, {
         name: 'Tactical Distance Labels',
         hint: 'While dragging a token, show its distance and elevation delta below every other visible token.',
         scope: 'client',
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
+        default: 'combat',
         config: false
     });
 });
+
+// also clear labels on combat lifecycle so "combat" mode removes stale ones
+Hooks.on('deleteCombat', clearAll);
+Hooks.on('combatStart', clearAll);

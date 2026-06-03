@@ -266,11 +266,21 @@ function _buildEdgeSources(token) {
     return added;
 }
 
+let _pendingRefresh = false;
 function _refreshVision() {
     if (!canvas?.perception) {
         return;
     }
-    canvas.perception.update({ refreshVision: true });
+    if (_pendingRefresh) {
+        return;
+    }
+    _pendingRefresh = true;
+    requestAnimationFrame(() => {
+        _pendingRefresh = false;
+        if (canvas?.perception) {
+            canvas.perception.update({ refreshVision: true });
+        }
+    });
 }
 
 function _isVisionRelevantChange(change) {

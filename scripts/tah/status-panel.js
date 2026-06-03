@@ -98,8 +98,16 @@ export class StatusPanel {
             const sid = el.attr('data-status-id');
             const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
             const nowActive = effects.length > 0;
+            const nowPerm = nowActive && effects.some(/** @type {any} */ e => {
+                const la = /** @type {any} */ (e.flags)?.['lancer-automations'];
+                const dur = la?.duration ?? /** @type {any} */ (e.flags)?.['csm-lancer-qol']?.duration;
+                return dur?.label === 'permanent';
+            });
             el.data('active', nowActive);
-            el.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
+            el.data('permanent', nowPerm);
+            const bg = nowActive ? (nowPerm ? '#f0e0a0' : '#b8d4f0') : BG_DEFAULT;
+            const border = nowActive ? (nowPerm ? '#a07020' : '#1a4a7a') : 'transparent';
+            el.css({ background: bg, borderLeftColor: border });
             const totalStack = hasSC ? effects.reduce((sum, /** @type {any} */ e) => sum + (e.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
             const parts = [];
             if (hasSC && totalStack > 1)
@@ -148,9 +156,23 @@ export class StatusPanel {
         const customSaved = [...customMap.values()];
 
         // ── Data helpers ───────────────────────────────────────────────────────
+        // active first, alphabetic within each group
+        const activeStatusIds = new Set();
+        for (const e of /** @type {any} */ (actor.effects)) {
+            if (e.disabled)
+                continue;
+            for (const sid of (e.statuses ?? []))
+                activeStatusIds.add(sid);
+        }
         const allStatuses = (/** @type {any} */ (CONFIG).statusEffects ?? [])
             .filter(/** @type {any} */ s => s.id)
-            .sort(/** @type {any} */ (a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
+            .sort(/** @type {any} */ (a, b) => {
+                const aA = activeStatusIds.has(a.id);
+                const bA = activeStatusIds.has(b.id);
+                if (aA !== bA)
+                    return aA ? -1 : 1;
+                return (a.name ?? a.id).localeCompare(b.name ?? b.id);
+            });
 
         const getEffectsForStatus = (/** @type {string} */ sid) =>
             /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e => e.statuses?.has(sid) && !e.disabled);
@@ -159,6 +181,25 @@ export class StatusPanel {
             hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
 
         const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
+
+        // permanent if any active effect declares duration.label === 'permanent'
+        const isPermanent = (/** @type {any} */ s) => {
+            for (const eff of getEffectsForStatus(s.id)) {
+                const la = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                const dur = la?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
+                if (dur?.label === 'permanent')
+                    return true;
+            }
+            return false;
+        };
+
+        // active-row colors: yellow when any active effect is permanent, blue otherwise
+        const ACTIVE_BG_NORMAL    = '#b8d4f0';
+        const ACTIVE_BORDER_NORMAL = '#1a4a7a';
+        const ACTIVE_BG_PERM      = '#f0e0a0';
+        const ACTIVE_BORDER_PERM  = '#a07020';
+        const activeBg     = (/** @type {boolean} */ perm) => perm ? ACTIVE_BG_PERM : ACTIVE_BG_NORMAL;
+        const activeBorder = (/** @type {boolean} */ perm) => perm ? ACTIVE_BORDER_PERM : ACTIVE_BORDER_NORMAL;
 
         const isCustomActive = (/** @type {string} */ name) =>
             /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ e =>
@@ -205,9 +246,13 @@ export class StatusPanel {
         };
 
         // ── In-place helpers ───────────────────────────────────────────────────
-        const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive) => {
+        const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive, /** @type {boolean} */ perm = false) => {
             rowEl.data('active', nowActive);
-            rowEl.css({ background: nowActive ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: nowActive ? '#1a4a7a' : 'transparent' });
+            rowEl.data('permanent', nowActive && perm);
+            rowEl.css({
+                background: nowActive ? activeBg(perm) : BG_DEFAULT,
+                borderLeftColor: nowActive ? activeBorder(perm) : 'transparent'
+            });
         };
         const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
             rowEl.find('.la-status-badge').text(getStatusBadge(s));
@@ -240,15 +285,17 @@ export class StatusPanel {
         const gridEl = $(`<div class="lancer-scroll la-hud-status-grid"></div>`);
         for (const s of allStatuses) {
             const active = isActive(s);
+            const perm   = active && isPermanent(s);
             const badge  = getStatusBadge(s);
-            const bg     = active ? '#b8d4f0' : BG_DEFAULT;
-            const border = active ? '#1a4a7a' : 'transparent';
+            const bg     = active ? activeBg(perm) : BG_DEFAULT;
+            const border = active ? activeBorder(perm) : 'transparent';
             const rowEl = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};" data-status-id="${s.id}">
                 <img class="la-status-row__img" src="${s.icon ?? s.img ?? ''}" onerror="this.style.display='none'">
                 <span class="la-status-name">${game.i18n.localize(s.name ?? s.id)}</span>
                 <span class="la-status-badge">${badge}</span>
             </div>`);
             rowEl.data('active', active);
+            rowEl.data('permanent', perm);
 
             let tooltipEl = /** @type {any} */ (null);
             let tooltipTimer = null;
@@ -264,7 +311,8 @@ export class StatusPanel {
                 clearTimeout(tooltipTimer); tooltipTimer = null;
                 tooltipEl?.remove(); tooltipEl = null;
                 const a = $(this).data('active');
-                $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
+                const p = $(this).data('permanent');
+                $(this).css({ background: a ? activeBg(p) : BG_DEFAULT, borderLeftColor: a ? activeBorder(p) : 'transparent' });
             });
 
             // Left-click: toggle / increment / open subtype manager
@@ -285,7 +333,7 @@ export class StatusPanel {
                             await /** @type {any} */ (t).toggleEffect(s);
                     }
                     updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s));
+                    setRowActive(rowEl, isActive(s), isPermanent(s));
                 } finally {
                     this._decDepth();
                 }
@@ -307,7 +355,7 @@ export class StatusPanel {
                         for (const t of this._tokens)
                             await /** @type {any} */ (t).toggleEffect(s);
                         updateRowBadge(rowEl, s);
-                        setRowActive(rowEl, isActive(s));
+                        setRowActive(rowEl, isActive(s), isPermanent(s));
                     } finally {
                         this._decDepth();
                     }
@@ -329,7 +377,7 @@ export class StatusPanel {
                         }
                     }
                     updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s));
+                    setRowActive(rowEl, isActive(s), isPermanent(s));
                 } finally {
                     this._decDepth();
                 }

@@ -153,6 +153,9 @@ function registerSettings() {
     game.settings.register(MODULE_ID, 'speedProvider.colorFreeMovement', {
         name: 'Speed Color: Free Movement', scope: 'client', type: String, default: '#ffffff', config: false
     });
+    game.settings.register(MODULE_ID, 'speedProvider.colorForceMovement', {
+        name: 'Speed Color: Force Movement', scope: 'client', type: String, default: '#8B5CF6', config: false
+    });
 }
 
 Hooks.once('init', () => {

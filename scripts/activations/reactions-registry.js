@@ -1816,6 +1816,14 @@ export function getDefaultGeneralReactionRegistry() {
         }
     };
 
+    function _guardianBulwarkAuraMode() {
+        try {
+            return game.settings.get('lancer-automations', 'guardianBulwarkAuraMode') || 'always';
+        } catch {
+            return 'always';
+        }
+    }
+
     const _guardianAuraPending = new Set();
     builtInDefaults["Guardian Aura"] = {
         category: "Automation",
@@ -1833,6 +1841,9 @@ export function getDefaultGeneralReactionRegistry() {
                     return triggerData.statusId === 'guardian';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const mode = _guardianBulwarkAuraMode();
+                    if (mode === 'off')
+                        return;
                     if (api.findAura(reactorToken, "LA_Guardian") || _guardianAuraPending.has(reactorToken.id))
                         return;
                     _guardianAuraPending.add(reactorToken.id);
@@ -1850,6 +1861,7 @@ export function getDefaultGeneralReactionRegistry() {
                             lineGapSize: 10,
                             fillType: 0,
                             lineDashOffsetAnimation: -5,
+                            onlyEnabledInCombat: mode === 'combat',
                             nonOwnerVisibility: { default: true }
                         }));
                     } finally {
@@ -1897,6 +1909,9 @@ export function getDefaultGeneralReactionRegistry() {
                     return triggerData.statusId === 'bulwark';
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    const mode = _guardianBulwarkAuraMode();
+                    if (mode === 'off')
+                        return;
                     if (api.findAura(reactorToken, "LA_Bulwark") || _bulwarkAuraPending.has(reactorToken.id))
                         return;
                     _bulwarkAuraPending.add(reactorToken.id);
@@ -1914,6 +1929,7 @@ export function getDefaultGeneralReactionRegistry() {
                             lineGapSize: 10,
                             fillType: 0,
                             lineDashOffsetAnimation: -5,
+                            onlyEnabledInCombat: mode === 'combat',
                             nonOwnerVisibility: { default: true }
                         }));
                     } finally {

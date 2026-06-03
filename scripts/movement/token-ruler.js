@@ -66,6 +66,15 @@ function freeMoveColor() {
     }
 }
 
+function forceMoveColor() {
+    try {
+        const hex = game.settings.get(MODULE_ID, 'speedProvider.colorForceMovement') || '#8B5CF6';
+        return parseInt(hex.replace('#', ''), 16);
+    } catch {
+        return 0x8B5CF6;
+    }
+}
+
 class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
     static get WAYPOINT_LABEL_TEMPLATE() {
         if (!settingOn())
@@ -115,6 +124,9 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         this._pendingClimbCells = [];
         this._pendingTerrainCells = [];
         this._pendingSegmentLines = [];
+        // super.refresh() repopulates this via _getGridHighlightStyle.
+        const _g = /** @type {any} */ (globalThis);
+        _g._laHexPaintCellsOrdered = [];
         const result = super.refresh(options);
         try {
             this._flushClimbArrows();
@@ -187,68 +199,84 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             return ((Math.round(ar + (br - ar) * t) << 16) | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t));
         };
 
-        // Flatten all segments into one continuous polyline so cross-segment colour transitions (e.g. tier <-> free white) gradient cleanly.
-        const allPts = [];
-        let widthRef = 4;
-        for (const seg of segLines ?? []) {
-            if (!Array.isArray(seg.centroids) || seg.centroids.length < 2)
-                continue;
-            widthRef = seg.style?.width ?? widthRef;
-            const fallback = PIXI.Color.shared.setValue(seg.style?.color ?? 0xffffff).toNumber();
-            for (let i = 0; i < seg.centroids.length; i++) {
-                const c = seg.centroids[i];
-                // Skip duplicate join point (each segment's first centroid = previous segment's last).
-                if (allPts.length && i === 0)
+        const validSegs = (segLines ?? []).filter(s => Array.isArray(s.centroids) && s.centroids.length >= 2);
+        if (validSegs.length > 0) {
+            const firstSeg = validSegs[0];
+            const widthRef = firstSeg.style?.width ?? 4;
+            const fallback = PIXI.Color.shared.setValue(firstSeg.style?.color ?? 0xffffff).toNumber();
+
+            // One point per waypoint, using Foundry's black-dot center calc + tier color.
+            // Hex paint iterates reverse so we reverse first.
+            const _g = /** @type {any} */ (globalThis);
+            const hexOrdered = (_g._laHexPaintCellsOrdered ?? []).slice().reverse();
+            const isForce = validSegs.some(s => s.isForce);
+            const isFree = validSegs.some(s => s.isFree);
+            const renderPts = [];
+            const seenKey = new Set();
+            for (const e of hexOrdered) {
+                const key = e.waypointKey ?? `fallback:${e.cellKey}`;
+                if (seenKey.has(key))
                     continue;
-                const raw = seg.isFree
-                    ? freeMoveColor()
-                    : (this._tierColorAtDistance((seg.baseCum ?? 0) + (c.cost ?? 0)) ?? fallback);
-                allPts.push({ x: c.x, y: c.y, color: PIXI.Color.shared.setValue(raw).toNumber() });
-            }
-        }
-
-        if (allPts.length >= 2 && widthRef > 0) {
-            const alpha = 1;
-            if (outlineThickness > 0) {
-                const outlineG = new PIXI.Graphics();
-                outlineG.lineStyle({
-                    width: widthRef + outlineThickness * 2,
-                    color: outlineColor,
-                    alpha,
-                    join: PIXI.LINE_JOIN.ROUND,
-                    cap: PIXI.LINE_CAP.ROUND
-                });
-                outlineG.moveTo(allPts[0].x, allPts[0].y);
-                for (let i = 1; i < allPts.length; i++)
-                    outlineG.lineTo(allPts[i].x, allPts[i].y);
-                lineLayer.addChild(outlineG);
-            }
-
-            const innerG = new PIXI.Graphics();
-            const lineOpts = { width: widthRef, alpha, join: PIXI.LINE_JOIN.ROUND, cap: PIXI.LINE_CAP.ROUND };
-            innerG.moveTo(allPts[0].x, allPts[0].y);
-            for (let i = 1; i < allPts.length; i++) {
-                const a = allPts[i - 1], b = allPts[i];
-                if (a.color === b.color) {
-                    innerG.lineStyle({ ...lineOpts, color: a.color });
-                    innerG.lineTo(b.x, b.y);
+                seenKey.add(key);
+                let px, py;
+                if (e.waypointCenter) {
+                    px = e.waypointCenter.x;
+                    py = e.waypointCenter.y;
                 } else {
-                    const N = 8;
-                    for (let k = 1; k <= N; k++) {
-                        const t = k / N;
-                        const x = a.x + (b.x - a.x) * t;
-                        const y = a.y + (b.y - a.y) * t;
-                        innerG.lineStyle({ ...lineOpts, color: lerpColor(a.color, b.color, (k - 0.5) / N) });
-                        innerG.lineTo(x, y);
+                    const c = canvas.grid.getCenterPoint(e.offset);
+                    px = c.x; py = c.y;
+                }
+                const raw = isForce
+                    ? forceMoveColor()
+                    : (isFree
+                        ? freeMoveColor()
+                        : (e.tierColor ?? fallback));
+                renderPts.push({ x: px, y: py, color: PIXI.Color.shared.setValue(raw).toNumber() });
+            }
+
+            if (renderPts.length >= 2 && widthRef > 0) {
+                const alpha = 1;
+                if (outlineThickness > 0) {
+                    const outlineG = new PIXI.Graphics();
+                    outlineG.lineStyle({
+                        width: widthRef + outlineThickness * 2,
+                        color: outlineColor,
+                        alpha,
+                        join: PIXI.LINE_JOIN.ROUND,
+                        cap: PIXI.LINE_CAP.ROUND
+                    });
+                    outlineG.moveTo(renderPts[0].x, renderPts[0].y);
+                    for (let i = 1; i < renderPts.length; i++)
+                        outlineG.lineTo(renderPts[i].x, renderPts[i].y);
+                    lineLayer.addChild(outlineG);
+                }
+
+                const innerG = new PIXI.Graphics();
+                const lineOpts = { width: widthRef, alpha, join: PIXI.LINE_JOIN.ROUND, cap: PIXI.LINE_CAP.ROUND };
+                innerG.moveTo(renderPts[0].x, renderPts[0].y);
+                for (let i = 1; i < renderPts.length; i++) {
+                    const a = renderPts[i - 1], b = renderPts[i];
+                    if (a.color === b.color) {
+                        innerG.lineStyle({ ...lineOpts, color: a.color });
+                        innerG.lineTo(b.x, b.y);
+                    } else {
+                        const N = 8;
+                        for (let k = 1; k <= N; k++) {
+                            const t = k / N;
+                            const x = a.x + (b.x - a.x) * t;
+                            const y = a.y + (b.y - a.y) * t;
+                            innerG.lineStyle({ ...lineOpts, color: lerpColor(a.color, b.color, (k - 0.5) / N) });
+                            innerG.lineTo(x, y);
+                        }
                     }
                 }
+                lineLayer.addChild(innerG);
             }
-            lineLayer.addChild(innerG);
         }
 
         if (Array.isArray(cells) && cells.length) {
             const fontSize = Math.max(10, Math.round(canvas.grid.size * 0.15));
-            const textStyle = new PIXI.TextStyle({
+            const textStyle = foundry.canvas.containers.PreciseText.getTextStyle({
                 fontFamily: 'Signika',
                 fontSize,
                 fontWeight: '700',
@@ -259,7 +287,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             });
             for (const c of cells) {
                 const label = `${c.delta > 0 ? '↑' : '↓'}${Math.abs(c.delta)}`;
-                const text = new PIXI.Text(label, textStyle);
+                const text = new foundry.canvas.containers.PreciseText(label, textStyle);
                 text.anchor.set(0.5, 0.5);
                 text.position.set(c.x, c.y);
                 _applyIsoCounter(text);
@@ -269,7 +297,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
 
         if (Array.isArray(tCells) && tCells.length) {
             const fontSize = Math.max(10, Math.round(canvas.grid.size * 0.15));
-            const warnStyle = new PIXI.TextStyle({
+            const warnStyle = foundry.canvas.containers.PreciseText.getTextStyle({
                 fontFamily: 'Signika',
                 fontSize,
                 fontWeight: '700',
@@ -279,7 +307,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                 align: 'center'
             });
             for (const c of tCells) {
-                const text = new PIXI.Text('⚠', warnStyle);
+                const text = new foundry.canvas.containers.PreciseText('⚠', warnStyle);
                 text.anchor.set(0.5, 0.5);
                 text.position.set(c.x, c.y);
                 _applyIsoCounter(text);
@@ -363,6 +391,8 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             return base;
         if (!base.width)
             return base;
+        if (waypoint.action === 'forced')
+            return { ...base, color: forceMoveColor() };
         if (waypoint.stage !== 'passed') {
             if (isForceDebugMovement())
                 return { ...base, alpha: 0 };
@@ -370,6 +400,8 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                 return { ...base, color: freeMoveColor() };
         } else {
             const md = this._passedMoveData(waypoint);
+            if (md && md.isForceMovement)
+                return { ...base, color: forceMoveColor() };
             if (md && (md.isFreeMovement || !md.isDrag))
                 return { ...base, color: freeMoveColor() };
             // No LA entry but a real movementId = debug-mode move; skip drawing it.
@@ -390,6 +422,9 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         // Debug moves draw no cost decorations.
         if (waypoint?.stage !== 'passed' && isForceDebugMovement())
             return this._computeSegmentStyle(waypoint);
+        // auto-climb sub-segment: the group's polyline handles it, hide the native line.
+        if (waypoint?.measurement?.lancerSkipNativeSegment === true)
+            return { width: 0 };
         const cells = waypoint?.measurement?.lancerClimbCells;
         if (waypoint?.stage !== 'passed' && Array.isArray(cells) && cells.length && Array.isArray(this._pendingClimbCells)) {
             this._pendingClimbCells.push(...cells);
@@ -407,7 +442,8 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         if (Array.isArray(centroids) && centroids.length >= 2 && Array.isArray(this._pendingSegmentLines)) {
             const baseCum = this._segmentBaseCumulative(waypoint);
             const isFree = style.color === freeMoveColor();
-            this._pendingSegmentLines.push({ centroids, style, baseCum, isFree });
+            const isForce = waypoint.action === 'forced' || style.color === forceMoveColor();
+            this._pendingSegmentLines.push({ centroids, style, baseCum, isFree, isForce });
             return { ...style, width: 0 };
         }
         // No polyline to draw (e.g. gridless), so keep the native line.
@@ -440,11 +476,49 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
     }
 
     _getGridHighlightStyle(waypoint, offset) {
+        // Silent region-boundary waypoint (animation slowdown only).
+        if (waypoint._laSilent)
+            return { alpha: 0 };
         const base = super._getGridHighlightStyle(waypoint, offset);
+        // Tag each painted cell with its waypoint key + Foundry's shape center; _flushClimbArrows
+        // uses these to draw the polyline through the same point as the black dot.
+        if (base?.alpha > 0) {
+            const _g = /** @type {any} */ (globalThis);
+            _g._laHexPaintCellsOrdered = _g._laHexPaintCellsOrdered || [];
+            let wc = waypoint.center;
+            if (!wc) {
+                try {
+                    wc = this.token.document.getCenterPoint(waypoint);
+                } catch {
+                    wc = null;
+                }
+            }
+            const waypointKey = `${Math.round(waypoint.x ?? 0)}|${Math.round(waypoint.y ?? 0)}|${Math.round((waypoint.elevation ?? 0) * 1000)}`;
+            // Capture the tier color now so the polyline matches the hex paint (same cumulative cost).
+            let tierColor = null;
+            if (settingOn() && waypoint.action !== 'forced'
+                && !(waypoint.stage !== 'passed' && isForceDebugMovement())
+                && !(waypoint.stage !== 'passed' && isForceFreeMovement())) {
+                const tier = this._tierForWaypoint(waypoint);
+                if (tier === null)
+                    tierColor = 0x000000;
+                else if (tier !== undefined)
+                    tierColor = tier.color;
+            }
+            _g._laHexPaintCellsOrdered.push({
+                cellKey: `(${offset.i},${offset.j})`,
+                offset: { i: offset.i, j: offset.j },
+                waypointKey,
+                waypointCenter: wc ? { x: wc.x, y: wc.y } : null,
+                tierColor
+            });
+        }
         if (!settingOn())
             return base;
         if (!(base.alpha > 0))
             return base;
+        if (waypoint.action === 'forced')
+            return { ...base, color: forceMoveColor(), alpha: 0.35 };
         if (waypoint.stage !== 'passed') {
             if (isForceDebugMovement())
                 return { ...base, alpha: 0 };
@@ -452,6 +526,8 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                 return { ...base, color: freeMoveColor(), alpha: 0.35 };
         } else {
             const md = this._passedMoveData(waypoint);
+            if (md && md.isForceMovement)
+                return { ...base, color: forceMoveColor(), alpha: 0.35 };
             if (md && (md.isFreeMovement || !md.isDrag))
                 return { ...base, color: freeMoveColor(), alpha: 0.35 };
             if (waypoint.movementId && md === null

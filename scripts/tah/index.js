@@ -134,6 +134,14 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.showAidHandleInteractSqueeze', {
+        name: 'Aid / Handle / Interact / Squeeze Actions',
+        hint: 'Show these four basic actions in the Actions category.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
     game.settings.register(MODULE, 'tah.rangePreviewOnAttackCard', {
         name: 'Range Preview on Attack Card',
         hint: 'Pulse the attacker\'s weapon/tech range on the canvas when an attack card prints.',
@@ -196,7 +204,7 @@ Hooks.on('init', () => {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'hit', 'crit', 'success', 'fail']) {
+    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail']) {
         game.settings.register(MODULE, `tah.statSound.${e}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });
@@ -422,13 +430,21 @@ Hooks.once('ready', () => {
 });
 
 let _pendingDeselect = null;
+let _pendingSelectSound = false;
+let _pendingHudUpdate = false;
 Hooks.on('controlToken', (_token, controlled) => {
     if (controlled) {
         if (_pendingDeselect) {
             clearTimeout(_pendingDeselect);
             _pendingDeselect = null;
         }
-        playUiSound('tokenSelect');
+        if (!_pendingSelectSound) {
+            _pendingSelectSound = true;
+            requestAnimationFrame(() => {
+                _pendingSelectSound = false;
+                playUiSound('tokenSelect');
+            });
+        }
     } else {
         if (_pendingDeselect)
             clearTimeout(_pendingDeselect);
@@ -439,13 +455,19 @@ Hooks.on('controlToken', (_token, controlled) => {
     }
     if (!enabled())
         return;
-    const all = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(t =>
-        ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner
-    );
-    if (all.length > 0)
-        hud.bind(all);
-    else
-        hud.unbind();
+    if (_pendingHudUpdate)
+        return;
+    _pendingHudUpdate = true;
+    requestAnimationFrame(() => {
+        _pendingHudUpdate = false;
+        const all = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(t =>
+            ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner
+        );
+        if (all.length > 0)
+            hud.bind(all);
+        else
+            hud.unbind();
+    });
 });
 
 // ── Actor data changed (HP, heat, structure, action tracker…) ────────────────
@@ -584,6 +606,24 @@ Hooks.on('deleteCombat', (combat) => {
         if (tok)
             disableCombatAuras(tok);
     }
+});
+
+Hooks.on('deleteCombatant', (/** @type {any} */ combatant) => {
+    const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
+    if (!tok) return;
+    // if token is still in another active combat, leave auras alone
+    let stillInCombat = false;
+    for (const c of (game.combats?.contents ?? [])) {
+        /** @type {any} */
+        const combat = c;
+        if (!combat.active) continue;
+        if (combat.combatants?.some?.((/** @type {any} */ x) => x.token?.id === tok.id)) {
+            stillInCombat = true;
+            break;
+        }
+    }
+    if (stillInCombat) return;
+    disableCombatAuras(tok);
 });
 
 Hooks.on('updateActor', (actor) => {

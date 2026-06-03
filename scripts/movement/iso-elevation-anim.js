@@ -39,6 +39,23 @@ function _isoElevationDelta(elevation) {
 const _smoothBump = new WeakMap();
 const BUMP_EASE = 0.22;
 
+// Debug accumulator. `globalThis._laIsoDebugOn = true` to record, `globalThis._laIsoDebug = null`
+// to clear before a move, then drag the token and inspect `globalThis._laIsoDebug[<tokenId>]`.
+function _laIsoDebug(token, frame) {
+    const _g = /** @type {any} */ (globalThis);
+    if (!_g._laIsoDebugOn) return;
+    const id = token.document?.id;
+    if (!id) return;
+    _g._laIsoDebug = _g._laIsoDebug ?? {};
+    let buf = _g._laIsoDebug[id];
+    if (!buf) {
+        buf = { tokenName: token.document?.name, tokenId: id, autoClimbOn: null, frames: [] };
+        try { buf.autoClimbOn = !!game.settings.get('lancer-automations', 'enableClimbWaypoints'); } catch { /* ignore */ }
+        _g._laIsoDebug[id] = buf;
+    }
+    buf.frames.push(frame);
+}
+
 Hooks.on('refreshToken', (token) => {
     if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.elevationAnimation))
         return;
@@ -70,9 +87,11 @@ Hooks.on('refreshToken', (token) => {
         || (mv.origin.elevation ?? 0) !== (mv.destination.elevation ?? 0)
     );
     let target;
+    let _dbgStartGround, _dbgDestGround, _dbgInterp, _dbgDElev, _dbgT, _dbgElevClimbed, _dbgClimbing;
     if (isMoving) {
         const startGround = _thtGroundAt(mv.origin.x + w / 2, mv.origin.y + h / 2);
         const destGround = _thtGroundAt(mv.destination.x + w / 2, mv.destination.y + h / 2);
+        _dbgStartGround = startGround; _dbgDestGround = destGround;
         let interpolatedTerrain;
         if (startGround === destGround) {
             interpolatedTerrain = startGround;
@@ -80,12 +99,35 @@ Hooks.on('refreshToken', (token) => {
             // t derived from doc.elev so flying ramps naturally across the move.
             const dElev = (mv.destination.elevation ?? 0) - (mv.origin.elevation ?? 0);
             const t = dElev !== 0 ? (elev - (mv.origin.elevation ?? 0)) / dElev : 0;
+            _dbgDElev = dElev; _dbgT = t;
             interpolatedTerrain = startGround + (destGround - startGround) * t;
         }
-        target = animGround - interpolatedTerrain;
+        _dbgInterp = interpolatedTerrain;
+        _dbgElevClimbed = elev - (mv.origin.elevation ?? 0);
+        target = animGround - elev;
     } else {
-        target = -animGround;
+        target = animGround - elev;
     }
+
+    _laIsoDebug(token, {
+        ts: Date.now(),
+        isMoving,
+        elev,
+        animGround,
+        target,
+        climbing: _dbgClimbing,
+        elevDelta: _dbgElevClimbed,
+        startGround: _dbgStartGround,
+        destGround: _dbgDestGround,
+        dElev: _dbgDElev,
+        t: _dbgT,
+        interpolatedTerrain: _dbgInterp,
+        docPos: { x: doc.x, y: doc.y },
+        mvOrigin: mv ? { x: mv.origin.x, y: mv.origin.y, elevation: mv.origin.elevation } : null,
+        mvDest: mv ? { x: mv.destination.x, y: mv.destination.y, elevation: mv.destination.elevation } : null,
+        passedCount: mv?.passed?.waypoints?.length ?? 0,
+        pendingCount: mv?.pending?.waypoints?.length ?? 0
+    });
 
     let st = _smoothBump.get(token);
     if (!st) {

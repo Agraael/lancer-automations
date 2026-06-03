@@ -157,6 +157,14 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="tokens"]`,
     },
     {
+        id: 'iso',
+        tab: 'iso',
+        title: 'Isometric',
+        content: "Fixes for isometric modules (Isometric Perspective, Grape Juice). Only shows when one is active.",
+        selector: `${ROOT} .tab[data-tab="iso"]`,
+        condition: () => !!game.modules.get('isometric-perspective')?.active || !!game.modules.get('grape_juice-isometrics')?.active,
+    },
+    {
         id: 'tah',
         tab: 'tah',
         title: 'Token Action HUD',
@@ -460,17 +468,21 @@ const TAH_STEPS = [
         content: 'Ctrl+Right-click any action to mark as favorite. Hover the star tab to open the list.',
         selector: `${TAH_ROOT} .la-hud-fav-icon`,
     },
-    _tahCategoryStep('Attacks', "Skirmish, Barrage and basic attacks."),
-    _tahCategoryStep('Weapons', "Your equipped weapons by mount."),
-    _tahCategoryStep('Tech', "Tech actions and tech-tagged systems."),
-    _tahCategoryStep('Actions', "Every other action your token can take, sorted by Quick / Full / Reaction / Protocol / Free. Most common actions are under Basic"),
-    _tahCategoryStep('Deployables', "Whatever your loadout deploys."),
-    _tahCategoryStep('Systems', "Mech systems"),
-    _tahCategoryStep('Frame', "Frame info, traits, core power, talents.", ['Class', 'Pilot']),
+    _tahCategoryStep('Actions', "Your actions, grouped by activation."),
+    _tahDrillStep('actions-basic', 'Basic', "Most common Quick and Full actions.", ['actions'], 'basic'),
+    _tahDrillStep('actions-attacks', 'Attacks', "Skirmish, Barrage, Fight.", ['actions'], 'attacks'),
+    _tahCategoryStep('Weapons', "Equipped weapons by mount."),
+    _tahCategoryStep('Tech', "Tech actions and tech systems."),
+    _tahDrillStep('scan', 'Scan', "A successful scan feeds the target's data into the Glossary.", ['tech', 'basic'], 'scan'),
+    _tahCategoryStep('Deployables', "What your loadout deploys."),
+    _tahCategoryStep('Systems', "Mech systems."),
+    _tahCategoryStep('Frame', "Frame, traits, core power.", ['Class', 'Pilot']),
+    _tahCategoryStep('Talents', "Talents and their ranks."),
+    _tahCategoryStep('Attributes', "HASE skills and triggers.", ['Skills']),
     {
         id: 'utility',
         title: 'Utility',
-        content: "Utility groups the secondary stuff.",
+        content: "Secondary stuff: combat, gameplay, movement, ranges, log, glossary, misc.",
         selector: `${TAH_ROOT} .la-hud-tour-utility`,
         action: () => {
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-utility`).forEach((el) => el.classList.remove('la-hud-tour-utility'));
@@ -482,15 +494,49 @@ const TAH_STEPS = [
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-utility`).forEach((el) => el.classList.remove('la-hud-tour-utility'));
         },
     },
+    _tahDrillStep('utility-misc', 'Misc', "Vote, Downtime, Reserve, Rest, Add Extra.", ['utility'], 'misc'),
+    _tahDrillStep('add-extra', 'Add Extra', "Attach custom actions or extra deployables to the actor.", ['utility', 'misc'], 'add extra'),
+    _tahDrillStep('glossary', 'Glossary', "Scanned actors, gated by read permission.", ['utility'], 'glossary'),
     _tahCategoryStep('Statuses', "Status effects on the token."),
-    _tahDrillStep('add-extra', 'Add Extra', 'Under Utility, opens a dialog to attach custom actions or extra deployables to the actor.', ['utility', 'misc'], 'add extra'),
-    _tahDrillStep('scan', 'Scan', 'Lancer Automations has its own spin on Scan: a successful scan feeds the target\'s data into the Glossary so players can read it later.', ['tech', 'basic'], 'scan'),
-    _tahDrillStep('glossary', 'Glossary', 'Under Utility, a reference panel that shows scanned actors. Visibility is gated by who has read permission on each scanned actor.', ['utility'], 'glossary'),
+    _tahCategoryStep('Macros', "Pinned macros for quick access. Per-user."),
     {
         id: 'outro',
         title: 'And more',
         content: 'There is a lot more under the hood, but the tour would get long. Drop by Discord if you have questions.',
         selector: TAH_ROOT,
+    },
+];
+
+const RULER_STEPS = [
+    {
+        id: 'intro',
+        title: 'Lancer Ruler',
+        content: "Drag a token to use it. The ruler computes movement under Lancer rules: speed cap, terrain cost, climb, flight ceiling.",
+        selector: 'body',
+    },
+    {
+        id: 'types',
+        title: 'Movement Types',
+        content: "Walk, fly, jump, drift, and more. Each follows its own cost rules.",
+        selector: 'body',
+    },
+    {
+        id: 'm-key',
+        title: 'M Shortcut',
+        content: "Press <b>M</b> outside a drag to open a radial picker for the token's movement type. Press <b>M</b> during a drag to cycle the type for that drag only.",
+        selector: 'body',
+    },
+    {
+        id: 'force',
+        title: 'Force Movement',
+        content: "<b>Force</b> represents unintentional movement (knockback, drag, etc.). It does not trigger regular move automations like Overwatch.",
+        selector: 'body',
+    },
+    {
+        id: 'free-debug',
+        title: 'Free & Debug',
+        content: "Hold <b>V</b> for free movement (no cost, ignores terrain). Hold <b>B</b> for debug movement (skips automation hooks). <b>Ctrl+drag</b> from empty space gives the vanilla ruler.",
+        selector: 'body',
     },
 ];
 
@@ -538,9 +584,23 @@ async function _ensureTAHOpen() {
     if (document.querySelector(TAH_ROOT))
         return true;
 
+    // tahEnabled is client-scope, defaults off. Offer to turn it on for the tour.
     if (!game.settings.get(NS, 'tahEnabled')) {
-        ui.notifications.warn('Token Action HUD is disabled. Enable it in module configuration first.');
-        return false;
+        const enable = await new Promise((resolve) => {
+            new Dialog({
+                title: 'Token Action HUD',
+                content: '<p style="padding:6px 8px;">Token Action HUD is off. Enable it for the tour?</p>',
+                buttons: {
+                    yes: { icon: '<i class="fas fa-check"></i>', label: 'Enable', callback: () => resolve(true) },
+                    no:  { icon: '<i class="fas fa-times"></i>', label: 'Skip',   callback: () => resolve(false) },
+                },
+                default: 'yes',
+                close: () => resolve(false),
+            }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+        });
+        if (!enable)
+            return false;
+        await game.settings.set(NS, 'tahEnabled', true);
     }
 
     _tahPrevControlled = canvas.tokens.controlled.slice();
@@ -698,6 +758,7 @@ class _RootTour extends Tour {
 let _configTour;
 let _activationTour;
 let _effectManagerTour;
+let _rulerTour;
 
 function _ensureConfigOpen() {
     const open = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).id === 'lancer-automations-config');
@@ -770,6 +831,14 @@ export async function startEffectManagerTour() {
     } catch { /* not ready */ }
 }
 
+export async function startRulerTour() {
+    if (_rulerTour)
+        await _rulerTour.start();
+    try {
+        await game.settings.set(NS, SETTING_TOUR_DONE, true);
+    } catch { /* not ready */ }
+}
+
 // Lancer-styled welcome shown on first install and from the menu button.
 function _welcomeDialog() {
     return new Promise((resolve) => {
@@ -786,7 +855,7 @@ function _welcomeDialog() {
                     <p style="margin: 0 0 8px;">I hope you read the <a href="https://github.com/Agraael/lancer-automations#readme" target="_blank" rel="noopener"><b>README</b> on GitHub</a> a bit. If not, you should.</p>
                     <p style="margin: 0 0 8px;">Since it's a big module, here's a little tour to show the most important stuff.</p>
                     <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
-                    <p style="margin: 0; opacity: 0.85;">Shout to the 2 people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a>, it's not needed but it's nice.</p>
+                    <p style="margin: 0; opacity: 0.85;">Shout to the people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a>.</p>
                 </div>
                 <p style="padding: 6px 10px 0; font-size: 0.85em; opacity: 0.7; border-top: 1px solid rgba(120,46,34,0.2); margin-top: 6px;">You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b> &gt; <b>Tour</b>, or from Foundry's <b>Configure Tours</b> menu.</p>
             `,
@@ -855,8 +924,17 @@ async function _maybeShowMovementWarning() {
     } catch { /* not ready */ }
 }
 
-// Run all four tours back to back: configuration, activation manager, TAH, effect manager.
+// GMs see all four tours back to back, then the ruler tour. Players only see
+// the TAH tour and the ruler tour (the others mostly show GM-only forms).
 async function _runFullTour() {
+    if (!game.user.isGM) {
+        if (_tahTour)
+            _tahTour.onComplete(async () => {
+                await startRulerTour();
+            });
+        await startTahTour();
+        return;
+    }
     await _ensureConfigOpen();
     if (!_configTour)
         return;
@@ -865,6 +943,10 @@ async function _runFullTour() {
             _activationTour.onComplete(async () => {
                 if (_tahTour)
                     _tahTour.onComplete(async () => {
+                        if (_effectManagerTour)
+                            _effectManagerTour.onComplete(async () => {
+                                await startRulerTour();
+                            });
                         await startEffectManagerTour();
                     });
                 await startTahTour();
@@ -897,14 +979,14 @@ class TourMenu extends FormApplication {
 export function registerTourBootstrap() {
     console.log('lancer-automations | registerTourBootstrap called');
     game.settings.register(NS, SETTING_TOUR_DONE, {
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
 
     game.settings.register(NS, SETTING_MOVEMENT_WARNING_SHOWN, {
-        scope: 'world',
+        scope: 'client',
         config: false,
         type: Boolean,
         default: false,
@@ -927,7 +1009,7 @@ export function registerTourBootstrap() {
                 description: 'Guided walkthrough of every tab in the Lancer Automations configuration window.',
                 display: true,
                 canBeResumed: false,
-                steps: CONFIG_STEPS,
+                steps: CONFIG_STEPS.filter(s => !(/** @type {any} */ (s).condition) || /** @type {any} */ (s).condition()),
             }, ROOT);
             _activationTour = new _RootTour({
                 title: 'Lancer Automations: Activation Manager',
@@ -950,6 +1032,13 @@ export function registerTourBootstrap() {
                 canBeResumed: false,
                 steps: EFFECT_MANAGER_STEPS,
             }, EM_ROOT);
+            _rulerTour = new Tour({
+                title: 'Lancer Automations: Lancer Ruler',
+                description: 'Movement types, the M shortcut, force movement, and the free/debug keys.',
+                display: true,
+                canBeResumed: false,
+                steps: RULER_STEPS,
+            });
             const cfgStart = _configTour.start.bind(_configTour);
             _configTour.start = async () => {
                 await _ensureConfigOpen();
@@ -1008,6 +1097,7 @@ export function registerTourBootstrap() {
             game.tours.register(NS, 'activation-manager-tour', _activationTour);
             game.tours.register(NS, 'tah-tour', _tahTour);
             game.tours.register(NS, 'effect-manager-tour', _effectManagerTour);
+            game.tours.register(NS, 'ruler-tour', _rulerTour);
             console.log('lancer-automations | tours registered OK', game.tours.get(`${NS}.config-tour`), game.tours.get(`${NS}.activation-manager-tour`), game.tours.get(`${NS}.tah-tour`));
         } catch (e) {
             console.error('lancer-automations | failed to register tours', e);
@@ -1017,8 +1107,6 @@ export function registerTourBootstrap() {
     Hooks.once('setup', doRegister);
 
     Hooks.once('ready', async () => {
-        if (!game.user.isGM)
-            return;
         let done = true;
         try {
             done = !!game.settings.get(NS, SETTING_TOUR_DONE);

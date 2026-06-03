@@ -932,16 +932,20 @@ export async function repairLCPData() {
         return;
 
     try {
-        // Get raw LCP source data
-        const entryResp = await fetch('/systems/lancer/lancer.mjs');
-        const entryText = await entryResp.text();
-        const match = entryText.match(/import\s+["']\.\/([^"']+)["']/);
-        if (!match)
-            throw new Error('Could not find system bundle filename');
-        const bundle = await import(`/systems/lancer/${match[1]}`);
-        const getOfficialData = bundle.e;
-        if (!getOfficialData)
-            throw new Error('Could not resolve getOfficialData');
+        const entryText = await (await fetch('/systems/lancer/lancer.mjs')).text();
+        // v3 moved getOfficialData out of lancer.mjs into lancer-actor-<hash>.mjs.
+        const actorMatch = entryText.match(/from\s+["']\.\/(lancer-actor-[^"']+\.mjs)["']/);
+        if (!actorMatch)
+            throw new Error('Could not find lancer-actor bundle in lancer.mjs');
+        const actorText = await (await fetch(`/systems/lancer/${actorMatch[1]}`)).text();
+        // minifier renames the export each build; pull the current alias from the export block
+        const aliasMatch = actorText.match(/getOfficialData as (\w+)/);
+        if (!aliasMatch)
+            throw new Error(`Could not locate getOfficialData export in ${actorMatch[1]}`);
+        const bundle = await import(`/systems/lancer/${actorMatch[1]}`);
+        const getOfficialData = bundle[aliasMatch[1]];
+        if (typeof getOfficialData !== 'function')
+            throw new Error(`Resolved getOfficialData alias "${aliasMatch[1]}" is not callable`);
 
         ui.notifications.info('Reading LCP source data...');
         const allData = await getOfficialData(null);
@@ -964,16 +968,30 @@ export async function repairLCPData() {
 
         // Fix compendium items (Lancer uses world-scope packs: world.mech-items, world.npc-items, etc.)
         const lancerPacks = ['world.mech-items', 'world.pilot-items', 'world.npc-items'];
-        for (const pack of lancerPacks.map(id => game.packs.get(id)).filter(Boolean)) {
+        for (const packId of lancerPacks) {
+            let pack = game.packs.get(packId);
+            if (!pack)
+                continue;
             const wasLocked = pack.locked;
-            if (wasLocked)
+            if (wasLocked) {
                 await pack.configure({ locked: false });
+                // pack.locked getter can read a stale snapshot; re-fetch live reference
+                pack = game.packs.get(packId) ?? pack;
+            }
+            if (pack.locked) {
+                ui.notifications.warn(`Could not unlock "${packId}"; skipping.`);
+                continue;
+            }
             for (const doc of await pack.getDocuments()) {
-                if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid))
-                    fixed++;
+                try {
+                    if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid))
+                        fixed++;
+                } catch (e) {
+                    console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
+                }
             }
             if (wasLocked)
-                await pack.configure({ locked: true });
+                await (game.packs.get(packId) ?? pack).configure({ locked: true });
         }
 
         // Fix actor-owned items
@@ -1164,3 +1182,148 @@ export const ItemDisabledAPI = {
     setItemDisabled,
     isDisableable,
 };
+
+function getDesiredWallHeight(actor) {
+    const size = Number(actor.system?.size ?? actor.prototypeToken?.width ?? 1) || 1;
+    let vsEnabled = false;
+    try {
+        vsEnabled = !!game.settings.get('lancer-automations', 'autoTokenHeightVehicleSquad');
+    } catch { /* ignore */ }
+    if (vsEnabled) {
+        const items = Array.from(actor.items ?? []);
+        if (items.some(i => i.system?.lid === 'npcc_squad'))
+            return 0.5;
+        if (items.some(i => /vehicle/i.test(i.system?.lid ?? '')))
+            return Math.min(Math.max(size - 1, 1), 4) + 0.1;
+    }
+    return size + 0.1;
+}
+
+const _HEIGHT_TARGET_TYPES = new Set(['mech', 'npc', 'pilot', 'deployable']);
+
+export async function syncAllTokenHeights() {
+    if (!game.user.isGM) {
+        ui.notifications.error('Only the GM can sync token heights.');
+        return;
+    }
+    if (!game.modules.get('wall-height')?.active) {
+        ui.notifications.warn('Wall Height is not active — values written but unused by the canvas.');
+    }
+    const confirmed = await Dialog.confirm({
+        title: 'Lancer Automations — Sync Token Heights',
+        content: `<p>Set <b>wall-height.tokenHeight</b> on every world actor (prototype) and every placed token across all scenes.</p><p>Continue?</p>`,
+        defaultYes: true
+    });
+    if (!confirmed)
+        return;
+
+    let protoUpdated = 0;
+    let protoSkipped = 0;
+    const protoUpdates = [];
+    for (const actor of game.actors) {
+        if (!_HEIGHT_TARGET_TYPES.has(actor.type)) {
+            protoSkipped++;
+            continue;
+        }
+        const desired = getDesiredWallHeight(actor);
+        if (actor.prototypeToken?.flags?.['wall-height']?.tokenHeight === desired) {
+            protoSkipped++;
+            continue;
+        }
+        protoUpdates.push({
+            _id: actor.id,
+            prototypeToken: { flags: { 'wall-height': { tokenHeight: desired } } }
+        });
+        protoUpdated++;
+    }
+    if (protoUpdates.length) {
+        try {
+            await Actor.updateDocuments(protoUpdates);
+        } catch (e) {
+            console.error('lancer-automations | syncAllTokenHeights (prototype) failed', e);
+            ui.notifications.error('Prototype sync failed; see console.');
+            return;
+        }
+    }
+
+    let sceneUpdated = 0;
+    let sceneSkipped = 0;
+    for (const scene of game.scenes) {
+        /** @type {any[]} */
+        const tokenUpdates = [];
+        for (const tokenDoc of scene.tokens) {
+            const actor = /** @type {any} */ (tokenDoc).actor;
+            if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type)) {
+                sceneSkipped++;
+                continue;
+            }
+            const desired = getDesiredWallHeight(actor);
+            if (/** @type {any} */ (tokenDoc).flags?.['wall-height']?.tokenHeight === desired) {
+                sceneSkipped++;
+                continue;
+            }
+            tokenUpdates.push({
+                _id: tokenDoc.id,
+                flags: { 'wall-height': { tokenHeight: desired } }
+            });
+            sceneUpdated++;
+        }
+        if (tokenUpdates.length) {
+            try {
+                await scene.updateEmbeddedDocuments('Token', tokenUpdates);
+            } catch (e) {
+                console.error(`lancer-automations | syncAllTokenHeights (scene "${scene.name}") failed`, e);
+            }
+        }
+    }
+
+    ui.notifications.info(`Prototypes: ${protoUpdated} updated, ${protoSkipped} skipped. Scene tokens: ${sceneUpdated} updated, ${sceneSkipped} skipped.`);
+}
+
+export async function syncAllActorImgs() {
+    if (!game.user.isGM) {
+        ui.notifications.error('Only the GM can sync actor portraits.');
+        return;
+    }
+
+    const confirmed = await Dialog.confirm({
+        title: 'Lancer Automations — Sync Actors to Prototype Token',
+        content: `<p>For every world actor, set <b>actor.img</b> and <b>actor.name</b> to the prototype token image and name.</p><p>Continue?</p>`,
+        defaultYes: true
+    });
+    if (!confirmed)
+        return;
+
+    let imgUpdated = 0;
+    let nameUpdated = 0;
+    let skipped = 0;
+    const updates = [];
+    for (const actor of game.actors) {
+        const tokenImg = actor.prototypeToken?.texture?.src;
+        const tokenName = actor.prototypeToken?.name;
+        /** @type {any} */
+        const u = { _id: actor.id };
+        if (tokenImg && actor.img !== tokenImg) {
+            u.img = tokenImg;
+            imgUpdated++;
+        }
+        if (tokenName && actor.name !== tokenName) {
+            u.name = tokenName;
+            nameUpdated++;
+        }
+        if (Object.keys(u).length > 1)
+            updates.push(u);
+        else
+            skipped++;
+    }
+    if (updates.length) {
+        try {
+            await Actor.updateDocuments(updates);
+        } catch (e) {
+            console.error('lancer-automations | syncAllActorImgs failed', e);
+            ui.notifications.error('Sync failed; see console.');
+            return;
+        }
+    }
+    ui.notifications.info(`Synced ${imgUpdated} portrait${imgUpdated === 1 ? '' : 's'} and ${nameUpdated} name${nameUpdated === 1 ? '' : 's'}, skipped ${skipped}.`);
+}

@@ -1070,8 +1070,6 @@ export function initCollapseHook() {
     libWrapper.register('lancer-automations', 'Token.prototype._refreshEffects',
         function (wrapped, ...args) {
             // PRE: destroy duplicate sprites before _refreshEffects positions them.
-            // This prevents layout gaps and removes bg boxes for duplicates automatically,
-            // since FoundryVTT only draws bg boxes for sprites it actually sees.
             _collapseRemoveDuplicates(this);
             // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
             wrapped(...args);

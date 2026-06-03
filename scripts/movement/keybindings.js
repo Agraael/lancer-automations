@@ -1,4 +1,4 @@
-/* global game, Hooks, canvas */
+/* global game, Hooks, canvas, foundry */
 
 const MODULE_ID = 'lancer-automations';
 
@@ -10,6 +10,15 @@ export function isForceFreeMovement() {
 }
 export function isForceDebugMovement() {
     return _forceDebug;
+}
+
+export function getCurrentMovementType() {
+    const layer = /** @type {any} */ (canvas.tokens);
+    if (layer?._dragMovementAction) return layer._dragMovementAction;
+    const tok = layer?._draggedToken ?? layer?.controlled?.[0];
+    const docAction = tok?.document?.movementAction;
+    if (docAction) return docAction;
+    return 'walk';
 }
 
 function refreshActiveDragPreviews() {

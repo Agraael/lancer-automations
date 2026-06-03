@@ -20,6 +20,25 @@ import { GlossaryPanel } from './glossary-panel.js';
 import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
 
+// v13 toggleCombatant takes {active, combat}; target game.combat so Remove works mid-encounter.
+async function _toggleTokenInCombat(token) {
+    const tokenDoc = /** @type {any} */ (token?.document);
+    if (!tokenDoc) return;
+    const wantActive = !token.inCombat;
+    const combat = /** @type {any} */ (game).combat ?? /** @type {any} */ (game).combats?.viewed;
+    try {
+        if (typeof tokenDoc.toggleCombatant === 'function') {
+            await tokenDoc.toggleCombatant({ active: wantActive, combat });
+            return;
+        }
+        const TD = /** @type {any} */ (CONFIG).Token?.documentClass;
+        if (wantActive) await TD?.createCombatants?.([tokenDoc], { combat });
+        else            await TD?.deleteCombatants?.([tokenDoc], { combat });
+    } catch (e) {
+        console.warn('lancer-automations | toggleCombatant failed', e);
+    }
+}
+
 // ── Lancer-style-library palette ─────────────────────────────────────────────
 
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
@@ -289,7 +308,13 @@ export class LancerHUD {
         const combatToggle = $(`<span class="la-combat-toggle${inCombat ? ' la-combat-toggle--in' : ''}" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
         combatToggle.on('mouseenter', () => playUiSound('statusHover'));
         combatToggle.on('click', async () => {
-            await /** @type {any} */ (this._token.document).toggleCombatant?.(!this._token.inCombat);
+            const targets = (this._tokens?.length ? this._tokens : [this._token]).filter(Boolean);
+            const wantActive = !this._token.inCombat;
+            for (const t of targets) {
+                if (!!t.inCombat === wantActive)
+                    continue;
+                await _toggleTokenInCombat(t);
+            }
             const nowInCombat = this._token.inCombat;
             combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
             combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
@@ -1238,10 +1263,9 @@ export class LancerHUD {
         const isPilot      = types.every(t => t === 'pilot');
         const isNpc        = types.every(t => t === 'npc');
         return [
-            this._catAttacks(),
+            this._catActions(),
             ...(isDeployable ? [] : [this._catWeapons()]),
             this._catTech(),
-            this._catActions(),
             ...(isDeployable || isPilot ? [] : [this._catDeployables()]),
             ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : isPilot ? [this._catPilotGear()] : []),
             ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : isPilot ? [this._catPilot()] : []),
@@ -1268,14 +1292,18 @@ export class LancerHUD {
             getItems: () => [
                 {
                     label: 'Basic',
-                    childColLabel: 'Quick',
+                    childColLabel: actor.type === 'mech' ? 'Action' : 'Quick',
                     getChildren: () => [
-                        //{ isSectionLabel: true, label: 'Quick' },
+                        ...(actor.type === 'mech' ? [
+                            { label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) },
+                            { isSectionLabel: true, label: 'Quick' },
+                        ] : []),
                         ...(/** @type {any} */ (this._catQuickActions().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
                         { isSectionLabel: true, label: 'Full' },
                         ...(/** @type {any} */ (this._catFullAction().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
                     ],
                 },
+                { label: 'Attacks', childColLabel: 'Attacks', getChildren: () => this._catAttacks().getItems() },
                 { label: 'Quick Actions', childColLabel: 'Quick Actions',    getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
                 { label: 'Full Actions',  childColLabel: 'Full Actions',     getChildren: () => this._getActionsByActivation(actor, 'Full', 'Actions') },
                 { label: 'Reaction',      childColLabel: 'Reaction', getChildren: () => this._catReactions().getItems() },
@@ -1384,6 +1412,7 @@ export class LancerHUD {
                         ...basicFull(),
                     ],
                 },
+                { label: 'Attacks', childColLabel: 'Attacks', getChildren: () => this._catAttacks().getItems() },
                 { label: 'Quick Actions', childColLabel: 'Quick Actions', getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
                 { label: 'Full Actions',  childColLabel: 'Full Actions',  getChildren: () => this._getActionsByActivation(actor, 'Full',  'Actions') },
                 { label: 'Reaction',      childColLabel: 'Reaction',      getChildren: () => this._catReactions().getItems() },
@@ -1609,15 +1638,16 @@ export class LancerHUD {
     _catQuickActions() {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
+        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
         const basicChildren = () => {
             const items = [
                 this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
-                ...(actor.type !== 'npc' ? [this._simpleItem('Aid', 'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid', activation: 'Quick' }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).')] : []),
+                ...(showAHIS && actor.type !== 'npc' ? [this._simpleItem('Aid', 'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid', activation: 'Quick' }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).')] : []),
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
                 this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
                 this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
-                this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.'),
-                this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.'),
+                ...(showAHIS ? [this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.')] : []),
+                ...(showAHIS ? [this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._simpleItem('Eject',     'modules/lancer-automations/icons/parachute.svg',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.')] : []),
                 this._lockable({ label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up'),
@@ -1703,7 +1733,6 @@ export class LancerHUD {
             label: 'Free Actions',
             colLabel: 'Free Actions',
             getItems: () => this._enrichHoverData([
-                ...(actor.type === 'mech' ? [{ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }] : []),
                 ...(actor.type !== 'deployable' ? [this._simpleItem('Squeeze', 'modules/lancer-automations/icons/contract.svg', { name: 'Squeeze', activation: 'Free' }, 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.')] : []),
                 ...this._getActionsByActivation(actor, 'Free', 'Actions'),
             ], { actor, category: 'Actions' }),
@@ -1768,8 +1797,8 @@ export class LancerHUD {
 
         if (isNpc) {
             return {
-                label: 'Attributes',
-                colLabel: 'Attributes',
+                label: 'Skills',
+                colLabel: 'Skills',
                 getItems: () => [
                     ...statsItems,
                 ],
@@ -1780,8 +1809,8 @@ export class LancerHUD {
             label: 'Attributes',
             colLabel: 'Attributes',
             getItems: () => [
-                { label: 'Stats',   childColLabel: 'Stats',   getChildren: () => statsItems },
-                ...(skillItems.length ? [{ label: 'Skills', childColLabel: 'Skills', getChildren: () => skillItems }] : []),
+                { label: 'Skills',   childColLabel: 'Skills',   getChildren: () => statsItems },
+                ...(skillItems.length ? [{ label: 'Triggers', childColLabel: 'Triggers', getChildren: () => skillItems }] : []),
             ],
         };
     }
@@ -1796,7 +1825,15 @@ export class LancerHUD {
             { label: 'Start Turn',    onClick: () => /** @type {any} */ (game.combat)?.activateCombatant(/** @type {any} */ (token.document)?.combatant?.id) },
             { label: 'End Turn',      onClick: () => /** @type {any} */ (game.combat)?.nextTurn() },
             { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', onClick: () => token.document.update({ hidden: !token.document.hidden }) },
-            { label: token.inCombat ? 'Remove From Combat' : 'Add To Combat', onClick: () => /** @type {any} */ (token.document).toggleCombatant?.(!token.inCombat) },
+            { label: token.inCombat ? 'Remove From Combat' : 'Add To Combat', onClick: async () => {
+                const targets = (this._tokens?.length ? this._tokens : [token]).filter(Boolean);
+                const wantActive = !token.inCombat;
+                for (const t of targets) {
+                    if (!!t.inCombat === wantActive)
+                        continue;
+                    await _toggleTokenInCombat(t);
+                }
+            } },
             { label: 'Reinforcement', onClick: () => delayedTokenAppearance() },
         ];
 

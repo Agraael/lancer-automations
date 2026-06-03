@@ -617,20 +617,24 @@ function _syncOverlayTransform(mesh, token, simple) {
         return;
     const w = pmesh.width || token.w;
     const h = pmesh.height || token.h;
+    // mirror: pmesh.width/height are abs(); use the signed scale to mirror the overlay quad
+    const sx = Math.sign(pmesh.scale?.x ?? 1) || 1;
+    const sy = Math.sign(pmesh.scale?.y ?? 1) || 1;
     const ax = pmesh.anchor?.x ?? 0.5;
     const ay = pmesh.anchor?.y ?? 0.5;
     const localX = pmesh.position.x - token.position.x;
     const localY = pmesh.position.y - token.position.y;
-    // Anchor compensation must be rotated: pmesh rotates around its anchor, so its visual center
-    // sits at position + R(rot) * (w*(0.5-ax), h*(0.5-ay)). The overlay centers on its own position.
-    const dx = w * (0.5 - ax);
-    const dy = h * (0.5 - ay);
+    // anchor offset is in mesh-local space, so it flips with the sprite before rotation
+    const dx = sx * w * (0.5 - ax);
+    const dy = sy * h * (0.5 - ay);
     const rot = pmesh.rotation || 0;
     const cos = Math.cos(rot);
     const sin = Math.sin(rot);
     mesh.position.set(localX + cos * dx - sin * dy, localY + sin * dx + cos * dy);
-    mesh.scale.set(w, h);
+    mesh.scale.set(sx * w, sy * h);
     mesh.rotation = rot;
+    if (mesh.skew && pmesh.skew)
+        mesh.skew.set(pmesh.skew.x ?? 0, pmesh.skew.y ?? 0);
     const stageScale = canvas.stage?.scale?.x ?? 1;
     const thicknessFactor = simple ? 0.1 : 0.35;
     const osc = simple ? 1 : 0.75 + 0.5 * (Math.cos(performance.now() / 1500 * Math.PI * 2) * 0.5 + 0.5);

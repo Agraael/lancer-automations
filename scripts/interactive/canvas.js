@@ -1171,10 +1171,9 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
     const api = game.modules.get('lancer-automations').api;
 
     const extraOpts = {
-        lancerFreeMovement: true,
         ignoreMovementCap: true,
         _skipBoostOffer: true,
-        ...(asVoluntary ? {} : { forceUnintentional: true })
+        useRuler: true
     };
 
     const terrainAPI = globalThis.terrainHeightTools;
@@ -1206,6 +1205,8 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         }
 
         const dest = { x: updateData.x, y: updateData.y };
+        if (!asVoluntary)
+            dest.action = 'forced';
         if (setElevation && terrainAPI) {
             let maxH = 0;
             for (const o of getOccupiedOffsets(t, dest)) {

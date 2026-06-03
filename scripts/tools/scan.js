@@ -290,7 +290,11 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         levelOrTier = `Tier ${actor.system.tier ?? '?'}`;
         data.tierIcon = getTierIcon(actor.system.tier);
 
-        data.templates = items.filter((i) => i.is_npc_template()).map((t) => ({ name: t.name }));
+        const classItems = items.filter((i) => i.is_npc_class());
+        const templateItems = items.filter((i) => i.is_npc_template());
+        data.npcClasses = classItems.map((c) => ({ name: c.name, img: c.img }));
+        data.npcTemplates = templateItems.map((t) => ({ name: t.name, img: t.img }));
+        data.templates = data.npcTemplates;
 
         const features = items.filter((i) => i.is_npc_feature());
         const tier = actor.system.tier;
@@ -309,6 +313,18 @@ function _buildScanData(target, customName = '', scanIndex = '') {
                 features: inOrigin.filter((f) => f.system.type !== 'Weapon' && f.system.type !== 'Tech').map((f) => _buildNpcFeature(f, tier)),
             };
         });
+
+        // flat lists grouped by item kind (weapons, systems, traits), each item tagged with origin
+        const _withOrigin = (f, builder) => ({ ...builder(f, tier), origin: f.system.origin?.name ?? '' });
+        data.npcWeaponsFlat = features
+            .filter((f) => f.system.type === 'Weapon')
+            .map((f) => _withOrigin(f, _buildNpcWeapon));
+        data.npcSystemsFlat = features
+            .filter((f) => f.system.type !== 'Weapon' && f.system.type !== 'Trait')
+            .map((f) => _withOrigin(f, _buildNpcFeature));
+        data.npcTraitsFlat = features
+            .filter((f) => f.system.type === 'Trait')
+            .map((f) => _withOrigin(f, _buildNpcFeature));
 
         data.weapons = [];
         data.systems = [];
@@ -391,6 +407,7 @@ export async function performSystemScan(target, createJournal = false, customNam
     flow.state.data.la_ownership = ownership;
     flow.state.data.la_chatCard = true;
     flow.state.data.la_createJournal = !!createJournal;
+    flow.state.data.la_useCustomJournal = !!createJournal && _useLAJournal();
     await flow.begin();
 }
 
@@ -413,8 +430,13 @@ export async function createScanJournalEntry(target, customName = '', ownership 
     flow.state.data.la_ownership = ownership;
     flow.state.data.la_chatCard = false;
     flow.state.data.la_createJournal = true;
+    flow.state.data.la_useCustomJournal = _useLAJournal();
     await flow.begin();
 
+    // LA-mode stashes the index/uuid directly on state from _createLAJournalEntry
+    if (flow.state.data.la_useCustomJournal && flow.state.data.la_journalUuid) {
+        return { scanIndex: flow.state.data.la_scanIndex || '', uuid: flow.state.data.la_journalUuid };
+    }
     const folder = game.folders.getName(FOLDER_NAME);
     if (!folder)
         return null;
@@ -455,6 +477,9 @@ async function laPrintScanCard(state) {
 async function laPostProcessScanJournal(state) {
     const allowJournal = state.data?.la_createJournal ?? null;
     if (allowJournal === false)
+        return true;
+    // LA-mode already wrote the page in _createLAJournalEntry; skip post-process
+    if (state.data?.la_useCustomJournal)
         return true;
     if (allowJournal === null) {
         const scanOutputs = game.settings.get(game.system.id, 'scanOutputs');
@@ -498,6 +523,80 @@ async function laPostProcessScanJournal(state) {
     return true;
 }
 
+async function _createLAJournalEntry(target, customName = '', ownership = null) {
+    if (!JournalEntry.canUserCreate(game.user)) {
+        ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
+        return null;
+    }
+    let folder = game.folders.getName(FOLDER_NAME);
+    if (!folder) {
+        try {
+            folder = await Folder.create({ name: FOLDER_NAME, type: 'JournalEntry' });
+        } catch {
+            ui.notifications.error(`${FOLDER_NAME} does not exist and must be created manually.`);
+            return null;
+        }
+    }
+    const allJournals = _getAllJournalsInFolder(folder);
+    const actor = target.actor;
+    const matching = allJournals.filter((e) => e.name.includes(actor.name));
+
+    let scanIndex;
+    let entry;
+    let entryName;
+    if (matching.length === 1) {
+        entry = matching[0];
+        entryName = entry.name;
+        const m = entryName.match(/SCAN:\s*(\d+)/i);
+        scanIndex = m ? m[1] : _zeroPad(allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1, NUMBER_PADDING);
+    } else {
+        const count = allJournals.filter((e) => e.name.startsWith(NAME_PREFIX)).length + 1;
+        scanIndex = _zeroPad(count, NUMBER_PADDING);
+        const labelName = customName?.trim()?.length ? customName.trim() : actor.name;
+        entryName = `${NAME_PREFIX}${scanIndex} - ${labelName}`;
+    }
+
+    const data = _buildScanData(target, customName, scanIndex);
+    const html = await renderTemplate(TPL.overview, data);
+
+    if (matching.length === 1) {
+        const pages = entry.pages.contents;
+        if (pages.length === 0) {
+            await entry.createEmbeddedDocuments('JournalEntryPage', [{ name: entryName, type: 'text', text: { content: html }, sort: 0 }]);
+        } else {
+            await pages[0].update({ name: entryName, text: { content: html } });
+            if (pages.length > 1)
+                await entry.deleteEmbeddedDocuments('JournalEntryPage', pages.slice(1).map((p) => p.id));
+        }
+    } else {
+        entry = await JournalEntry.create({ folder: folder.id, name: entryName });
+        await entry.createEmbeddedDocuments('JournalEntryPage', [
+            { name: entryName, type: 'text', text: { content: html }, sort: 0 },
+        ]);
+    }
+
+    const finalOwnership = ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
+    await entry.update({
+        ownership: finalOwnership,
+        'flags.lancer-automations.scan': {
+            actorUuid: actor.uuid,
+            actorName: actor.name,
+            actorImg: actor.img,
+            scanIndex,
+            scannedAt: Date.now(),
+        },
+    });
+    return { scanIndex, uuid: entry.uuid };
+}
+
+function _useLAJournal() {
+    try {
+        return game.settings.get('lancer-automations', 'scanJournalSource') === 'lancer-automations';
+    } catch {
+        return false;
+    }
+}
+
 function _wrapCreateScanJournal(flowSteps) {
     const original = flowSteps.get('createScanJournal');
     if (!original || original.__laWrapped)
@@ -505,6 +604,17 @@ function _wrapCreateScanJournal(flowSteps) {
     const wrapped = async function laCreateScanJournalGate(state) {
         if (state.data?.la_createJournal === false)
             return true;
+        if (state.data?.la_useCustomJournal) {
+            const target = state.data?.target;
+            if (target) {
+                const result = await _createLAJournalEntry(target, state.data?.la_customName || '', state.data?.la_ownership ?? null);
+                if (result) {
+                    state.data.la_scanIndex = result.scanIndex;
+                    state.data.la_journalUuid = result.uuid;
+                }
+            }
+            return true;
+        }
         return original(state);
     };
     wrapped.__laWrapped = true;

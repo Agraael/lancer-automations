@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Rest",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/night-sleep.svg",
+    "command_source": "Rest.js"
+}

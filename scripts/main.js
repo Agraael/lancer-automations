@@ -5,7 +5,9 @@ import "./movement/tactical-distance.js";
 import "./movement/iso-elevation-anim.js";
 import "./movement/elevation.js";
 import "./movement/cost-rules.js";
+import "./movement/vision-throttle.js";
 import "./movement/movement-actions.js";
+import "./movement/movement-wheel.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
 import { moveTokenTo } from "./movement/move-api.js";
@@ -93,11 +95,13 @@ import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatB
 import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import './filters/customFilters.js';
+import './setup/scene-dim-from-image.js';
 import { checkCompatibility } from "./setup/checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./bonuses/infection.js";
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initLancerDetectionModes } from "./vision/lancerDetectionModes.js";
+import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
 
 initLancerDetectionModes();
 
@@ -1604,6 +1608,40 @@ function registerSettings() {
         type: String,
         default: '',
     });
+    game.settings.register('lancer-automations', 'guardianBulwarkAuraMode', {
+        name: 'Guardian / Bulwark Aura',
+        hint: '"Only in Combat" requires the GAA Fork.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
+        default: 'always',
+    });
+    game.settings.register('lancer-automations', 'syncActorImgToToken', {
+        name: 'Sync actor portrait to token image',
+        hint: 'When the prototype token image changes, also update the actor portrait (used in the Actors directory).',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register('lancer-automations', 'syncActorNameToToken', {
+        name: 'Sync actor name to token name',
+        hint: 'When the prototype token name changes, also update the actor name (Actors directory).',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register('lancer-automations', 'scanJournalSource', {
+        name: 'Scan journal source',
+        hint: 'System: native Lancer v3 scan journal. LA legacy: the older Lancer Automations custom journal template.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: { system: 'Lancer System (v3)', 'lancer-automations': 'Lancer Automations (legacy)' },
+        default: 'system',
+    });
     game.settings.register('lancer-automations', 'wreckMasterVolume', {
         name: 'Wreck Master Volume',
         hint: 'Volume of wreck explosion sounds (0 = mute, 1 = full).',
@@ -2225,6 +2263,17 @@ function _computeMoveData(options, startPos, endPos, elevationFallback = 0, toke
         return { distanceMoved, movementCost, isFreeMovement };
     }
 
+    const op = options?._movement?.[tokenDoc?.id];
+    if (op?.passed) {
+        const cost = Number(op.passed.cost);
+        const dist = Number(op.passed.distance);
+        if (Number.isFinite(cost)) {
+            const movementCost = Math.round(cost / sceneDist);
+            const distanceMoved = Number.isFinite(dist) ? Math.round(dist / sceneDist) : movementCost;
+            return { distanceMoved, movementCost, isFreeMovement };
+        }
+    }
+
     if (tokenDoc?.measureMovementPath) {
         try {
             const wpStart = {
@@ -2255,6 +2304,16 @@ function _computeMoveData(options, startPos, endPos, elevationFallback = 0, toke
     return { distanceMoved, movementCost: distanceMoved, isFreeMovement };
 }
 
+function _moveHasForcedAction(document, options) {
+    const wps = options?.movement?.[document.id]?.waypoints;
+    if (Array.isArray(wps) && wps.some(w => w?.action === 'forced'))
+        return true;
+    const cwps = options?.changes?.[document.id]?.waypoints ?? options?.waypoints;
+    if (Array.isArray(cwps) && cwps.some(w => w?.action === 'forced'))
+        return true;
+    return false;
+}
+
 async function handleTokenMove(document, change, options, userId) {
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
@@ -2275,7 +2334,8 @@ async function handleTokenMove(document, change, options, userId) {
     const elevationMoved = change.elevation ?? document.elevation;
 
     const v13Method = options.movement?.[document.id]?.method;
-    const isDrag = !options.forceUnintentional && (
+    const isForceMovement = _moveHasForcedAction(document, options) || !!options.forceUnintentional;
+    const isDrag = !isForceMovement && (
         'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
     );
     const isTeleport = !!options.teleport;
@@ -2305,7 +2365,7 @@ async function handleTokenMove(document, change, options, userId) {
 
     // Use movementCost (not raw distance) so terrain penalty counts toward the boost threshold.
     const prevIntentional = existingMoves
-        .filter(m => m.isDrag && !m.isFreeMovement)
+        .filter(m => m.isDrag && !m.isFreeMovement && !m.isForceMovement)
         .reduce((acc, m) => acc + (m.movementCost ?? m.distanceMoved), 0);
 
     if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement) {
@@ -2339,6 +2399,7 @@ async function handleTokenMove(document, change, options, userId) {
             movementCost,
             isDrag,
             isFreeMovement,
+            isForceMovement,
             boostSet: moveInfo.boostSet || [],
             startPos
         }]
@@ -4235,21 +4296,9 @@ Hooks.on('init', () => {
     registerIsoSettings(); // Isometric-perspective compat toggles
     registerFlowStatePersistence();
 
-    // THT v0.7.6 references tokenElevationChange setting but forgot to register it. Shim it.
-    if (game.modules.get('terrain-height-tools')?.active) {
-        try {
-            game.settings.register('terrain-height-tools', 'tokenElevationChange', {
-                name: 'SETTINGS.TokenElevationChange.Name',
-                hint: 'SETTINGS.TokenElevationChange.Hint',
-                scope: 'world',
-                type: Boolean,
-                config: false,
-                default: false,
-            });
-        } catch (e) { /* already registered */ }
-    }
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
+    initVisionDisableOnSelect();
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField(); // Add system.infection field to actor schemas
@@ -4353,6 +4402,32 @@ Hooks.once('ready', async () => {
             }, 'WRAPPER');
         } catch (e) {
             console.warn('lancer-automations | Could not wrap Hooks.callAll for renderCombatDock fix:', e);
+        }
+
+        // Sub-1x1 tokens have bounds < grid size, which crams the HUD button layout. Floor the
+        // HUD container to at least one grid cell and re-center it on the token.
+        try {
+            const hudNs = /** @type {any} */ (foundry.applications).hud;
+            libWrapper.register('lancer-automations', 'foundry.applications.hud.BasePlaceableHUD.prototype._updatePosition', function (wrapped, position) {
+                const result = wrapped(position);
+                if (!(this instanceof hudNs.TokenHUD)) return result;
+                try { if (!game.settings.get('lancer-automations', 'tokenStatBar')) return result; } catch { return result; }
+                const dims = /** @type {any} */ (canvas.dimensions);
+                const s = dims?.uiScale ?? 1;
+                const gridSize = dims?.size ?? 100;
+                const minSize = gridSize / s;
+                if (result.width < minSize) {
+                    result.left -= (minSize - result.width) / 2;
+                    result.width = minSize;
+                }
+                if (result.height < minSize) {
+                    result.top -= (minSize - result.height) / 2;
+                    result.height = minSize;
+                }
+                return result;
+            }, 'WRAPPER');
+        } catch (e) {
+            console.warn('lancer-automations | Could not wrap TokenHUD _updatePosition:', e);
         }
     }
 
@@ -5061,6 +5136,14 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) => {
     });
 });
 
+// Dedupe TMFX editor button; HUD re-render fires multiple times.
+Hooks.on('renderBasePlaceableHUD', (hud, form) => {
+    queueMicrotask(() => {
+        const buttons = form.querySelectorAll('button[data-action="tmfx-editor"]');
+        for (let i = 1; i < buttons.length; i++) buttons[i].remove();
+    });
+});
+
 Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) => {
     // v13 TokenHUD is ApplicationV2 and passes a raw HTMLElement; wrap once so the rest works.
     const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
@@ -5433,6 +5516,25 @@ Hooks.on('preDeleteToken', (tokenDocument, _options, userId) => {
         return;
     // Fire before the token leaves canvas.tokens so self-reactors can still act.
     handleTrigger('onTokenRemoved', { triggeringToken: token });
+});
+
+Hooks.on('preUpdateActor', (actor, change, _options, userId) => {
+    if (userId !== game.userId)
+        return;
+    try {
+        if (game.settings.get('lancer-automations', 'syncActorImgToToken')) {
+            const newTokenImg = foundry.utils.getProperty(change, 'prototypeToken.texture.src');
+            if (newTokenImg && change.img === undefined)
+                foundry.utils.setProperty(change, 'img', newTokenImg);
+        }
+    } catch { /* ignore */ }
+    try {
+        if (game.settings.get('lancer-automations', 'syncActorNameToToken')) {
+            const newTokenName = foundry.utils.getProperty(change, 'prototypeToken.name');
+            if (newTokenName && change.name === undefined)
+                foundry.utils.setProperty(change, 'name', newTokenName);
+        }
+    } catch { /* ignore */ }
 });
 
 Hooks.on('preUpdateActor', (actor, change, options, userId) => {
@@ -5816,7 +5918,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
     // v13: drag-drops go through Token.move({method:'dragging'}); the operation's `movement`
     // bag holds the per-token method. v12 set `rulerSegment`/`isDrag` directly on options.
     const v13Method = options.movement?.[document.id]?.method;
-    const isDrag = !options.forceUnintentional && (
+    const isForceMovement = _moveHasForcedAction(document, options) || !!options.forceUnintentional;
+    const isDrag = !isForceMovement && (
         'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
     );
 

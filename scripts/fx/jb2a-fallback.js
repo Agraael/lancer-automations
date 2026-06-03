@@ -35,6 +35,7 @@ const JB2A_FALLBACKS = {
     'jb2a.impact.boulder.02':            { src: '' },
     'jb2a.impact.earth.01.browngreen.0': { src: 'jb2a.impact_themed.ice_shard.blue', tint: 0x8b5a2b },
     'jb2a.impact.ground_crack.white.01': { src: 'jb2a.impact.ground_crack.orange.01' },
+    'jb2a.shield.03.loop.white': { src: 'jb2a.shield.03.loop.white'},
 
     'jb2a.template_circle.out_pulse.02.burst.greenorange': { src: 'jb2a.template_circle.out_pulse.02.burst.bluewhite', tint: 0xff8800 },
 

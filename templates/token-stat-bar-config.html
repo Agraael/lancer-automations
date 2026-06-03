@@ -32,6 +32,13 @@
         <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Leave blank for auto (scales with grid).</p>
     </div>
 
+    <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="font-weight: bold;">Display Stress on Pilot Tokens</label>
+            <input type="checkbox" name="defaultPilotStress" {{#if defaultPilotStress}}checked{{/if}} />
+        </div>
+    </div>
+
     <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">Visibility Modes</h2>
     <p class="notes" style="margin-bottom: 6px; font-size: 0.85em; opacity: 0.8;"><b>All</b> = hover/control/target. <b>Owners</b> = only owners see bars. <b>None</b> = hidden (controlled still shows).</p>
 

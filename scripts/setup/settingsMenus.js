@@ -2,20 +2,35 @@
 
 import { ReactionReset } from '../activations/reaction-reset.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
-import { repairLCPData } from './lancer-modif.js';
+import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
 import { openNewsHistory } from './news.js';
 
 const MODULE_ID = 'lancer-automations';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
 
 const ACTIVATIONS_FIELDS = [
+    { type: 'section', label: 'Activation Manager' },
     { key: 'reactionNotificationMode', type: 'select', label: 'Activation Notification Mode' },
     { key: 'consumeReaction', type: 'boolean' },
     { key: 'consumeAction', type: 'boolean' },
     { key: 'treatGenericPrintAsActivation', type: 'boolean' },
+
+    { type: 'section', label: 'Scan' },
+    { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System: native Lancer v3 scan journal. LA legacy: the older Lancer Automations custom journal template.' },
+    { type: 'button',
+        key: 'regenerateScans',
+        label: 'Regenerate All Scan Journals',
+        icon: 'fas fa-book',
+        hint: 'Walk every entry in the SCAN Database folder and re-render its page using the current template (LA legacy mode).',
+        onClick: async () => {
+            const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+            await api?.regenerateScans?.();
+        },
+    },
 ];
 
 const COMBAT_MOVEMENT_FIELDS = [
+    { type: 'section', label: 'Combat Flows' },
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
@@ -28,18 +43,22 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
-    { key: 'autoTokenElevation', type: 'boolean', label: 'Auto-elevate Tokens on Terrain', hint: 'When a token is created or moved, set its elevation to the top of the highest solid THT terrain under it.' },
     { type: 'section', label: 'Lancer Automations Ruler', collapsible: true, collapsed: true },
     { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Enable Lancer Automations Ruler', hint: 'Custom token/canvas ruler with Lancer speed tiers, free/debug movement modes, and THT elevation readout. Reload after toggling.' },
     { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' },
+    { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' },
+    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.' },
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Speed Color: Standard' },
     { key: 'speedProvider.colorBoost', type: 'color', label: 'Speed Color: Boost' },
     { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Speed Color: Over-boost' },
     { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Speed Color: Free Movement' },
-    { key: 'enableTacticalDistance', type: 'boolean', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
+    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Speed Color: Force Movement' },
+    { key: 'resetMovementTypeOnDragStart', type: 'boolean', label: 'Reset Movement Type on Drag Start', hint: 'Each drag starts on the token\'s natural action (walk, or fly if the token is flying). Use M to cycle mid-drag.' },
+    { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
 ];
 
 const WRECKS_FIELDS = [
+    { type: 'section', label: 'Wreck Generation' },
     { key: 'enableWrecks', type: 'boolean' },
     { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' },
     { key: 'enableRemoveFromCombat', type: 'boolean' },
@@ -129,11 +148,19 @@ function _statBarVisChoices(key) {
 }
 
 const TOKENS_DISPLAY_FIELDS = [
+    { type: 'section', label: 'Token Display' },
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
     { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
+    { type: 'button',
+        key: 'syncAllTokenHeights',
+        label: 'Apply Token Heights to All Actors',
+        icon: 'fas fa-ruler-vertical',
+        hint: 'Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.',
+        onClick: () => syncAllTokenHeights(),
+    },
 
     { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
@@ -149,6 +176,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
     { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
     { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
+    { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Stress on Pilot Tokens' },
     { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
     { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
     { type: 'button',
@@ -168,11 +196,13 @@ const TOKENS_DISPLAY_FIELDS = [
 ];
 
 const TAH_FIELDS = [
+    { type: 'section', label: 'Token Action HUD' },
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.maxColumnItems', type: 'number' },
     { key: 'tah.rangePreview', type: 'boolean' },
+    { key: 'tah.showAidHandleInteractSqueeze', type: 'boolean' },
     { key: 'tah.auraUseAltKey', type: 'boolean' },
     { key: 'tah.aboveActorSheets', type: 'boolean' },
     { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
@@ -294,7 +324,7 @@ const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
-const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'miss', 'hit', 'crit', 'success', 'fail'];
+const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail'];
 const STATUS_SFX_EVENTS = ['bonus'];
 
 function _toLabel(s) {
@@ -371,12 +401,14 @@ const STATUSES_FIELDS = [
 
     { type: 'section', label: 'Visual effects' },
     { type: 'compactStatusFx', items: STATUS_FX_VISUAL },
+    { key: 'guardianBulwarkAuraMode', type: 'select', label: 'Guardian / Bulwark Aura', hint: '"Only in Combat" requires the GAA Fork.' },
 
     { type: 'section', label: 'Auto-status icons' },
     { type: 'compactStatusFx', items: STATUS_FX_AUTO },
 ];
 
 const DEBUG_FIELDS = [
+    { type: 'section', label: 'Debug Toggles' },
     { key: 'debugBoostDetection', type: 'boolean' },
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
@@ -417,12 +449,27 @@ const VISION_FIELDS = [
     { type: 'section', label: 'Drag Vision' },
     { key: 'dragVisionMode', type: 'select' },
     { key: 'dragVisionMultiplier', type: 'number' },
+
+    { type: 'section', label: 'Performance' },
+    { key: 'visionAnimationThrottleFps', type: 'number' },
+    { key: 'disableVisionAboveControlled', type: 'number' },
 ];
 
 const TOOLS_FIELDS = [
     { type: 'section', label: 'Optional content packs' },
     { key: 'enableLaSossisItems', type: 'boolean' },
     { key: 'enablePersonalStuff', type: 'boolean' },
+
+    { type: 'section', label: 'Actor ↔ Prototype Token sync' },
+    { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait (Actors directory).' },
+    { key: 'syncActorNameToToken', type: 'boolean', label: 'Sync actor name to token name', hint: 'When the prototype token name changes, also update the actor name (Actors directory).' },
+    { type: 'button',
+        key: 'syncAllActorImgs',
+        label: 'Sync All Actors Now',
+        icon: 'fas fa-images',
+        hint: 'Walk every world actor and copy the prototype token image and name onto the actor.',
+        onClick: () => syncAllActorImgs(),
+    },
 
     { type: 'section', label: 'Maintenance' },
     { type: 'button',
@@ -477,6 +524,7 @@ const CONTROL_FIELDS = [
 ];
 
 const ISO_FIELDS = [
+    { type: 'section', label: 'Isometric Integrations' },
     { key: 'iso.statBar', type: 'boolean' },
     { key: 'iso.tacticalDistance', type: 'boolean' },
     { key: 'iso.waypointLabel', type: 'boolean' },
@@ -1258,6 +1306,15 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     async _updateObject(_event, formData) {
+        // non-GM submits skip world-scoped writes so player saves don't clobber GM values
+        const isGM = !!game.user?.isGM;
+        const _canWrite = (moduleId, key) => {
+            const setting = game.settings.settings.get(`${moduleId}.${key}`);
+            if (!setting) return false;
+            if (setting.scope === 'world') return isGM;
+            return true;
+        };
+
         for (const formKey of Object.keys(formData)) {
             if (!formKey.startsWith('__ext.')) {
                 continue;
@@ -1272,6 +1329,8 @@ export class LancerAutomationsConfig extends FormApplication {
             if (!game.modules.get(moduleId)?.active) {
                 continue;
             }
+            if (!_canWrite(moduleId, settingKey))
+                continue;
             try {
                 await game.settings.set(moduleId, settingKey, !!formData[formKey]);
             } catch (e) {
@@ -1291,6 +1350,8 @@ export class LancerAutomationsConfig extends FormApplication {
                 if (formKey in formData) {
                     continue;
                 }
+                if (!_canWrite(f.module, f.key))
+                    continue;
                 try {
                     await game.settings.set(f.module, f.key, false);
                 } catch (e) {
@@ -1314,7 +1375,7 @@ export class LancerAutomationsConfig extends FormApplication {
                 }
             }
         }
-        if (sfxSubs.size > 0) {
+        if (sfxSubs.size > 0 && _canWrite(MODULE_ID, 'statusFXConfig')) {
             try {
                 const existing = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
                 /** @type {any} */
@@ -1361,6 +1422,8 @@ export class LancerAutomationsConfig extends FormApplication {
             }
         }
         for (const f of allFields) {
+            if (!_canWrite(MODULE_ID, f.key))
+                continue;
             if (!(f.key in formData)) {
                 if (f.type === 'boolean') {
                     try {

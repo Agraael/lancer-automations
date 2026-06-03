@@ -11,6 +11,7 @@ const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
 const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
 const SETTING_EFFECT_ICON_SCALE = 'statBarEffectIconScale';
+const SETTING_DEFAULT_PILOT_STRESS = 'statBarDefaultPilotStress';
 
 const VIS_ALL = 'all';
 const VIS_OWNER = 'owner';
@@ -114,6 +115,17 @@ const BAR_DEFS = [
         softMax: 10,
         hideWhenZero: true,
     },
+    {
+        // Pilot-only bond stress; renders as a horizontal bar (no pips) in the heat slot.
+        id: 'pilotStress',
+        label: 'Stress',
+        color: 0xd9b800,
+        getValue: a => ({
+            value: a.system?.bond_state?.stress?.value ?? 0,
+            max: a.system?.bond_state?.stress?.max ?? 8,
+        }),
+        editPath: 'system.bond_state.stress.value',
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -172,6 +184,7 @@ const FLAG_COMBAT_ONLY = 'statBarCombatOnly';
 const FLAG_ROW_HEIGHT = 'statBarRowHeight';
 const FLAG_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const FLAG_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
+const FLAG_PILOT_STRESS = 'statBarPilotStress';
 
 function getWorldSetting(key, fallback) {
     try {
@@ -205,6 +218,14 @@ function statBarRowHeight(tokenDoc) {
     }
     const fallback = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
     return Number.isFinite(fallback) && fallback > 0 ? Number(fallback) : 0;
+}
+
+function showsPilotStress(tokenDoc) {
+    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_PILOT_STRESS);
+    if (flag === true || flag === false) {
+        return flag;
+    }
+    return getWorldSetting(SETTING_DEFAULT_PILOT_STRESS, false) === true;
 }
 
 function isTokenInCombat(token) {
@@ -285,14 +306,23 @@ function shouldShowBars(token) {
     return false;
 }
 
-function getVisibleBars(actor) {
+function getVisibleBars(actor, tokenDoc = null) {
     if (!actor) {
         return [];
     }
     const mechStats = hasMechStats(actor);
+    const isPilot = actor.type === 'pilot';
     return BAR_DEFS.filter(def => {
         // Pilots & deployables don't get structure/stress at all.
         if (!mechStats && (def.id === 'structure' || def.id === 'stress')) {
+            return false;
+        }
+        // Pilots can't take heat or infection mechanically.
+        if (isPilot && (def.id === 'heat' || def.id === 'infection')) {
+            return false;
+        }
+        // pilotStress is pilot-only and gated on per-token / world setting.
+        if (def.id === 'pilotStress' && (!isPilot || !showsPilotStress(tokenDoc))) {
             return false;
         }
         const v = def.getValue(actor);
@@ -347,6 +377,7 @@ function snapshotValues(actor) {
         heat: actor.system?.heat?.value ?? 0,
         structure: actor.system?.structure?.value ?? 0,
         stress: actor.system?.stress?.value ?? 0,
+        pilotStress: actor.system?.bond_state?.stress?.value ?? 0,
         overshield: actor.system?.overshield?.value ?? 0,
         burn: actor.system?.burn ?? 0,
         infection: actor.system?.infection ?? 0,
@@ -459,12 +490,14 @@ function spawnFlash(token, barId, oldVal, newVal) {
     const { layoutOffsetX, pipColW, rowHeight, rowGap, startY, indicatorW, reactionExtension, rightColX, rightColW } = geom;
     const visibleIds = geom.visibleIds;
 
-    if (barId === 'hp' || barId === 'heat') {
+    if (barId === 'hp' || barId === 'heat' || barId === 'pilotStress') {
         if (!visibleIds.has(barId)) {
             return;
         }
         const rowIdx = barId === 'hp' ? 0 : 1;
-        const hostMax = Math.max(getEffectiveMax(token.actor, barId), oldVal, newVal);
+        const hostMax = barId === 'pilotStress'
+            ? Math.max(token.actor?.system?.bond_state?.stress?.max ?? 8, oldVal, newVal)
+            : Math.max(getEffectiveMax(token.actor, barId), oldVal, newVal);
         if (hostMax <= 0) {
             return;
         }
@@ -767,6 +800,8 @@ function drawStatHub() {
     const token = this;
     const actor = token?.actor;
 
+    if (!token?.bars) return;
+
     token.bars.removeChildren();
 
     // Preserve flash children before destroying the old hub.
@@ -796,7 +831,7 @@ function drawStatHub() {
         return;
     }
 
-    const visibleIds = new Set(getVisibleBars(actor).map(d => d.id));
+    const visibleIds = new Set(getVisibleBars(actor, token.document).map(d => d.id));
     const find = id => BAR_DEFS.find(d => d.id === id);
     const mechStats = hasMechStats(actor);
     const reactionEnabled = hasReaction(actor);
@@ -817,7 +852,9 @@ function drawStatHub() {
         if (visibleIds.has('hp')) {
             rows.push([null, find('hp')]);
         }
-        if (visibleIds.has('heat')) {
+        if (visibleIds.has('pilotStress')) {
+            rows.push([null, find('pilotStress')]);
+        } else if (visibleIds.has('heat')) {
             rows.push([null, find('heat')]);
         }
     }
@@ -1168,7 +1205,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         if (!rightDef || !visibleIds.has(rightDef.id)) {
             return;
         }
-        if (rightDef.id !== 'hp' && rightDef.id !== 'heat') {
+        if (rightDef.id !== 'hp' && rightDef.id !== 'heat' && rightDef.id !== 'pilotStress') {
             return;
         }
 
@@ -1194,6 +1231,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         }
 
         const labelX = rightDef.id === 'hp' ? hpLabelX : heatLabelX;
+        // pilotStress shares the heat slot — same label position as heat.
         const labelContainer = new PIXI.Container();
         labelContainer.name = 'la-bar-label';
         labelContainer.scale.set(1 / renderScale);
@@ -1370,24 +1408,28 @@ function injectLancerHud(hud, html, actor) {
     // 100px wide, 2 inputs per row.
     const containerStyle = 'display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; width: 100px; height: fit-content;';
 
-    // Top: Overshield, [Infection], Burn. Infection cell hidden when integration is disabled.
+    const isPilot = actor.type === 'pilot';
+    const pilotStressOn = isPilot && showsPilotStress(hud?.object?.document ?? null);
+
+    // Top: Overshield, [Infection], Burn. Infection cell hidden when integration is disabled or pilot.
     let infectionOn = false;
     try {
         infectionOn = !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration');
     } catch { /* setting not registered */ }
     const topInner =
         cell('system.overshield.value', sys?.overshield?.value ?? 0, COLORS.overshield, 'Overshield') +
-        (infectionOn ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
+        (infectionOn && !isPilot ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
         cell('system.burn',              sys?.burn ?? 0,              COLORS.burn,       'Burn');
     const topAttribute = `<div class="attribute la-hud-top" style="${containerStyle} position: absolute; top: 44px; transform: translateY(-100%); left: 50%; margin-left: -50px;">${topInner}</div>`;
 
-    // Bottom: Structure, HP, Stress, Heat (pilots/deployables skip struct/stress).
+    // Bottom: Structure, HP, Stress, Heat (pilots/deployables skip struct/stress; pilots also skip heat).
     const mechStats = hasMechStats(actor);
     const bottomInner =
         (mechStats ? cell('system.structure.value', sys?.structure?.value ?? 0, COLORS.structure, `Structure (max ${sys?.structure?.max ?? 0})`) : '') +
         cell('system.hp.value',        sys?.hp?.value ?? 0,        COLORS.hp,        `HP (max ${sys?.hp?.max ?? 0})`) +
         (mechStats ? cell('system.stress.value',    sys?.stress?.value ?? 0,    COLORS.stress,    `Stress (max ${sys?.stress?.max ?? 0})`) : '') +
-        cell('system.heat.value',      sys?.heat?.value ?? 0,      COLORS.heat,      `Heat (max ${sys?.heat?.max ?? 0})`);
+        (pilotStressOn ? cell('system.bond_state.stress.value', sys?.bond_state?.stress?.value ?? 0, 0xd9b800, `Stress (max ${sys?.bond_state?.stress?.max ?? 8})`) : '') +
+        (isPilot ? '' : cell('system.heat.value',      sys?.heat?.value ?? 0,      COLORS.heat,      `Heat (max ${sys?.heat?.max ?? 0})`));
     const bottomAttribute = `<div class="attribute la-hud-bottom" style="${containerStyle} position: absolute; top: calc(100% - 44px); left: 50%; margin-left: -50px;">${bottomInner}</div>`;
 
     const middleCol = $html.find('.col.middle');
@@ -1470,6 +1512,9 @@ export function registerTokenStatBarSettings() {
     game.settings.register(MODULE_ID, SETTING_DEFAULT_ROW_HEIGHT, {
         scope: 'world', config: false, type: Number, default: 0,
     });
+    game.settings.register(MODULE_ID, SETTING_DEFAULT_PILOT_STRESS, {
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
     game.settings.register(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, {
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
@@ -1517,6 +1562,7 @@ class TokenStatBarConfig extends FormApplication {
             defaultHidden: getWorldSetting(SETTING_DEFAULT_HIDDEN, false),
             defaultCombatOnly: getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false),
             defaultRowHeight: getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0) || '',
+            defaultPilotStress: getWorldSetting(SETTING_DEFAULT_PILOT_STRESS, false),
             visOutOfCombat: getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL),
             visInCombat: getWorldSetting(SETTING_VIS_IN_COMBAT, VIS_ALL),
             visChoicesOut: visChoices.map(c => ({ ...c, selected: c.value === getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL) })),
@@ -1541,6 +1587,7 @@ class TokenStatBarConfig extends FormApplication {
         await game.settings.set(MODULE_ID, SETTING_DEFAULT_COMBAT_ONLY, !!formData.defaultCombatOnly);
         const rowH = Number(formData.defaultRowHeight);
         await game.settings.set(MODULE_ID, SETTING_DEFAULT_ROW_HEIGHT, Number.isFinite(rowH) && rowH > 0 ? rowH : 0);
+        await game.settings.set(MODULE_ID, SETTING_DEFAULT_PILOT_STRESS, !!formData.defaultPilotStress);
         await game.settings.set(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, formData.visOutOfCombat || VIS_ALL);
         await game.settings.set(MODULE_ID, SETTING_VIS_IN_COMBAT, formData.visInCombat || VIS_ALL);
 
@@ -1652,7 +1699,7 @@ export function initTokenStatBar() {
         if (!isEnabled() || !isLancerCombatant(actor)) {
             return;
         }
-        const watched = ['hp', 'structure', 'heat', 'stress', 'overshield', 'burn', 'infection', 'action_tracker'];
+        const watched = ['hp', 'structure', 'heat', 'stress', 'bond_state', 'overshield', 'burn', 'infection', 'action_tracker'];
         const sysChange = change?.system;
         if (!sysChange) {
             return;
@@ -1673,11 +1720,29 @@ export function initTokenStatBar() {
             }
 
             let flashed = false;
-            const FLASH_BARS = ['hp', 'heat', 'structure', 'stress', 'overshield', 'burn', 'infection'];
+            const FLASH_BARS = ['hp', 'heat', 'structure', 'stress', 'pilotStress', 'overshield', 'burn', 'infection'];
             for (const id of FLASH_BARS) {
                 if (prev[id] !== undefined && prev[id] !== next[id]) {
                     spawnFlash(tok, id, prev[id], next[id]);
                     flashed = true;
+                }
+            }
+            // Pilot stress delta floats over the token like other damages.
+            if (prev.pilotStress !== undefined && prev.pilotStress !== next.pilotStress
+                && actor.type === 'pilot' && canvas?.interface?.createScrollingText) {
+                let showScroll = true;
+                try { showScroll = !!game.settings.get('lancer', 'floatingNumbers'); } catch { /* ignore */ }
+                if (showScroll) {
+                    const delta = next.pilotStress - prev.pilotStress;
+                    canvas.interface.createScrollingText(tok.center, `${delta > 0 ? '+' : ''}${delta} Stress`, {
+                        anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                        direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
+                        fontSize: 28,
+                        fill: '0xd9b800',
+                        stroke: 0,
+                        strokeThickness: 4,
+                        jitter: 0.25,
+                    });
                 }
             }
             // Reaction: only flash on spent, not turn reset.
@@ -1736,17 +1801,20 @@ export function initTokenStatBar() {
         const entry = _overlayHubs.get(token.id);
         const nameplate = token.nameplate;
         if (nameplate) {
-            if (token._laBaseNameplateY === undefined) {
-                token._laBaseNameplateY = nameplate.position.y;
-            }
-            if (token._laBaseNameplateX === undefined) {
-                token._laBaseNameplateX = nameplate.position.x;
-            }
-            if (nameplate.anchor && token._laBaseNameplateAnchorX === undefined) {
-                token._laBaseNameplateAnchorX = nameplate.anchor.x;
-                token._laBaseNameplateAnchorY = nameplate.anchor.y;
-            }
             const iso = _getIsoState(token);
+            // Only cache base when iso is off; otherwise we'd trap an iso-shifted position.
+            if (!iso) {
+                if (token._laBaseNameplateY === undefined) {
+                    token._laBaseNameplateY = nameplate.position.y;
+                }
+                if (token._laBaseNameplateX === undefined) {
+                    token._laBaseNameplateX = nameplate.position.x;
+                }
+                if (nameplate.anchor && token._laBaseNameplateAnchorX === undefined) {
+                    token._laBaseNameplateAnchorX = nameplate.anchor.x;
+                    token._laBaseNameplateAnchorY = nameplate.anchor.y;
+                }
+            }
             if (iso && token.mesh && entry?.wrapper && entry?.hub) {
                 nameplate.anchor?.set(0.5, 0.5);
                 nameplate.rotation = iso.reverseRotation;
@@ -1767,10 +1835,13 @@ export function initTokenStatBar() {
                 nameplate.skew.set(0, 0);
                 nameplate.scale.set(1, 1);
                 if (nameplate.visible && entry) {
-                    nameplate.position.x = token._laBaseNameplateX;
+                    // Foundry's canonical nameplate default is (w/2, h + 2); push down for the bars.
+                    const baseX = token.w / 2;
+                    const baseY = token.h + 2;
+                    nameplate.position.x = baseX;
                     nameplate.position.y = show
-                        ? token._laBaseNameplateY + (token.bars?.height ?? 0) + 8
-                        : token._laBaseNameplateY;
+                        ? baseY + (token.bars?.height ?? 0) + 8
+                        : baseY;
                 }
             }
         }
@@ -2017,6 +2088,9 @@ export function initTokenStatBar() {
         const rowHeight = statBarRowHeight(tokenDoc);
         const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
         const visIn = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_IN_COMBAT) ?? '';
+        const disableAutoTerrain = !!tokenDoc.getFlag(MODULE_ID, 'disableAutoTerrainElevation');
+        const isPilotActor = tokenDoc?.actor?.type === 'pilot';
+        const pilotStress = showsPilotStress(tokenDoc);
         const visOption = (val, label, current) =>
             `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`;
         const visSelect = (name, current) => `
@@ -2058,6 +2132,18 @@ export function initTokenStatBar() {
                 <label>Visibility — In Combat</label>
                 ${visSelect(`flags.${MODULE_ID}.${FLAG_VIS_IN_COMBAT}`, visIn)}
                 <p class="notes">Per-token override of who sees the bars while this token is in an active combat.</p>
+            </div>
+            ${isPilotActor ? `
+            <div class="form-group">
+                <label>Display Stress</label>
+                <input type="checkbox" name="flags.${MODULE_ID}.${FLAG_PILOT_STRESS}" ${pilotStress ? 'checked' : ''}/>
+                <p class="notes">Show the bond stress bar (and input) on this pilot's token.</p>
+            </div>
+            ` : ''}
+            <div class="form-group">
+                <label>Disable Auto-elevation from Terrain</label>
+                <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
+                <p class="notes">Per-token override: skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
             </div>
         `;
         if (typeof app.setPosition === 'function') {

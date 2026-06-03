@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
-    "title": "Lancer Automations (Lasossis Fork)",
-    "version": "3.0.0",
+    "title": "Lancer Automations",
+    "version": "3.1.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
