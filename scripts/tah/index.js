@@ -236,7 +236,7 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.showDisposition', {
         name: 'Show Team / Disposition Indicator',
         hint: 'Colored stripe on the title bar. Shows team name if Token Factions advanced teams is active, otherwise shows disposition.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false,
@@ -295,7 +295,7 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraDefaultThreat', {
         name: 'Threat Aura Default',
         hint: 'When to auto-enable the Threat aura.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: String,
         default: 'none',
@@ -304,7 +304,7 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraDefaultSensor', {
         name: 'Sensor Aura Default',
         hint: 'When to auto-enable the Sensor aura.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: String,
         default: 'none',
@@ -313,7 +313,7 @@ Hooks.on('init', () => {
     game.settings.register(MODULE, 'tah.auraDefaultRange', {
         name: 'Weapon Range Aura Default',
         hint: 'When to auto-enable the Weapon Range aura.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: String,
         default: 'none',

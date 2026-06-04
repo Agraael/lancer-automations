@@ -17,6 +17,7 @@ const ACTIVATIONS_FIELDS = [
 
     { type: 'section', label: 'Scan' },
     { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System: native Lancer v3 scan journal. LA legacy: the older Lancer Automations custom journal template.' },
+    { key: 'scanPlayerOwnershipMode', type: 'select', label: 'Player Ownership', hint: 'Who gets ownership on a scan journal when a player runs the scan. GM scans always grant to all players.' },
     { type: 'button',
         key: 'regenerateScans',
         label: 'Regenerate All Scan Journals',

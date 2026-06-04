@@ -96,6 +96,7 @@ import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import './filters/customFilters.js';
 import './setup/scene-dim-from-image.js';
+import './setup/migrations.js';
 import { checkCompatibility } from "./setup/checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./bonuses/infection.js";
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
@@ -1641,6 +1642,19 @@ function registerSettings() {
         type: String,
         choices: { system: 'Lancer System (v3)', 'lancer-automations': 'Lancer Automations (legacy)' },
         default: 'system',
+    });
+    game.settings.register('lancer-automations', 'scanPlayerOwnershipMode', {
+        name: 'Scan ownership when a player scans',
+        hint: 'Who gets owner permission on the journal entry when a non-GM scans. GM scans always grant ownership to all players.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: {
+            self: 'Scanning player only',
+            all: 'All players',
+            group: 'Player\'s groups (Player Groups required)',
+        },
+        default: 'all',
     });
     game.settings.register('lancer-automations', 'wreckMasterVolume', {
         name: 'Wreck Master Volume',

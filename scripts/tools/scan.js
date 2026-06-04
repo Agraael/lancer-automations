@@ -170,6 +170,90 @@ function _zeroPad(n, places) {
     return String(n).padStart(places, '0');
 }
 
+function _scanningUserFromToken(token) {
+    const actor = token?.actor;
+    if (!actor) return null;
+    const OWNER = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+    const ownership = actor.ownership ?? {};
+    const candidates = Object.entries(ownership)
+        .filter(([uid, lvl]) => uid !== 'default' && Number(lvl) >= OWNER)
+        .map(([uid]) => game.users.get(uid))
+        .filter((u) => u && !u.isGM);
+    if (!candidates.length) return null;
+    return candidates.find((u) => u.active) ?? candidates[0];
+}
+
+function _defaultOwnershipForScan(user = game.user, scanningToken = null) {
+    const OWNER = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+    const NONE = CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE;
+    // GM with a player-owned token controlled: treat that player as the scanner
+    if (user?.isGM && scanningToken) {
+        const tokenOwner = _scanningUserFromToken(scanningToken);
+        if (tokenOwner) {
+            user = tokenOwner;
+        }
+    }
+    if (user?.isGM) {
+        return { default: OWNER };
+    }
+    let mode;
+    try {
+        mode = game.settings.get('lancer-automations', 'scanPlayerOwnershipMode') || 'all';
+    } catch {
+        mode = 'all';
+    }
+    if (mode === 'all') {
+        return { default: OWNER };
+    }
+    if (mode === 'group' && game.modules.get('player-groups')?.active) {
+        const ownership = { default: NONE };
+        const groups = game.settings.get('player-groups', 'groups') ?? {};
+        for (const g of Object.values(groups)) {
+            if (!Array.isArray(g?.members) || !g.members.includes(user?.id)) {
+                continue;
+            }
+            for (const uid of g.members) {
+                ownership[uid] = OWNER;
+            }
+        }
+        if (user?.id) {
+            ownership[user.id] = OWNER;
+        }
+        return ownership;
+    }
+    const ownership = { default: NONE };
+    if (user?.id) {
+        ownership[user.id] = OWNER;
+    }
+    return ownership;
+}
+
+function _ownershipSummary(ownership) {
+    const OWNER = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+    if (!ownership) {
+        return 'No ownership set.';
+    }
+    if (ownership.default === OWNER) {
+        return 'Owner: all players';
+    }
+    const ownerIds = Object.entries(ownership)
+        .filter(([k, v]) => k !== 'default' && v === OWNER)
+        .map(([k]) => k);
+    if (!ownerIds.length) {
+        return 'Owner: nobody (GM only)';
+    }
+    const names = ownerIds
+        .map((id) => game.users.get(id)?.name)
+        .filter(Boolean);
+    if (!names.length) {
+        return 'Owner: (unknown)';
+    }
+    if (names.length === 1) {
+        return `Owner: ${names[0]}`;
+    }
+    return `Owner: ${names.length} players (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''})`;
+}
+
 function _getOwnerRows() {
     const rows = [
         { kind: 'all', id: 'default', key: 'default', name: 'All Players', isAll: true },
@@ -509,7 +593,7 @@ async function laPostProcessScanJournal(state) {
     const page = entry.pages.contents[0];
     if (page)
         await page.update({ text: { content: html } });
-    const finalOwnership = state.data.la_ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
+    const finalOwnership = state.data.la_ownership ?? _defaultOwnershipForScan(game.user);
     await entry.update({
         ownership: finalOwnership,
         'flags.lancer-automations.scan': {
@@ -575,7 +659,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null) 
         ]);
     }
 
-    const finalOwnership = ownership ?? { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
+    const finalOwnership = ownership ?? _defaultOwnershipForScan(game.user);
     await entry.update({
         ownership: finalOwnership,
         'flags.lancer-automations.scan': {
@@ -597,6 +681,23 @@ function _useLAJournal() {
     }
 }
 
+function _wrapPrintScanCard(flowSteps) {
+    const original = flowSteps.get('printScanCard');
+    if (!original || original.__laWrapped)
+        return;
+    const wrapped = async function laPrintScanCardGate(state) {
+        if (state.data?.la_chatCard === false)
+            return true;
+        const useLA = state.data?.la_useCustomJournal ?? _useLAJournal();
+        if (useLA) {
+            return laPrintScanCard(state);
+        }
+        return original(state);
+    };
+    wrapped.__laWrapped = true;
+    flowSteps.set('printScanCard', wrapped);
+}
+
 function _wrapCreateScanJournal(flowSteps) {
     const original = flowSteps.get('createScanJournal');
     if (!original || original.__laWrapped)
@@ -604,11 +705,14 @@ function _wrapCreateScanJournal(flowSteps) {
     const wrapped = async function laCreateScanJournalGate(state) {
         if (state.data?.la_createJournal === false)
             return true;
-        if (state.data?.la_useCustomJournal) {
+        // system-triggered scans don't set la_useCustomJournal, so fall back to the setting
+        const useCustom = state.data?.la_useCustomJournal ?? _useLAJournal();
+        if (useCustom) {
             const target = state.data?.target;
             if (target) {
                 const result = await _createLAJournalEntry(target, state.data?.la_customName || '', state.data?.la_ownership ?? null);
                 if (result) {
+                    state.data.la_useCustomJournal = true;
                     state.data.la_scanIndex = result.scanIndex;
                     state.data.la_journalUuid = result.uuid;
                 }
@@ -622,7 +726,7 @@ function _wrapCreateScanJournal(flowSteps) {
 }
 
 export function registerScanFlowSteps(flowSteps, flows) {
-    flowSteps.set('printScanCard', laPrintScanCard);
+    _wrapPrintScanCard(flowSteps);
     _wrapCreateScanJournal(flowSteps);
     flowSteps.set('lancer-automations:postProcessScanJournal', laPostProcessScanJournal);
     flows.get('ScanFlow')?.insertStepAfter('createScanJournal', 'lancer-automations:postProcessScanJournal');
@@ -674,11 +778,14 @@ async function showSystemScanDialog(targets) {
     const targetArray = Array.isArray(targets) ? targets : [targets];
     const targetNames = targetArray.map((t) => t.name).join(', ');
 
+    const defaultOwnership = _defaultOwnershipForScan(game.user, canvas.tokens?.controlled?.[0]);
+
     const content = await renderTemplate(TPL.sysOpts, {
         targetNames,
         targetCount: targetArray.length,
         isMulti: targetArray.length > 1,
         ownerRows: _getOwnerRows(),
+        defaultOwnershipSummary: _ownershipSummary(defaultOwnership),
     });
 
     const dlg = new Dialog({
@@ -692,7 +799,8 @@ async function showSystemScanDialog(targets) {
                     const $card = html.find('.lancer-toggle-card');
                     const createJournal = $card.data('create-journal') === true;
                     const customName = String(html.find('[name="custom-journal-name"]').val()).trim();
-                    const ownership = _buildOwnershipFromForm(html);
+                    const useCustom = html.find('.la-scan-owner-grid-wrap').is(':visible');
+                    const ownership = useCustom ? _buildOwnershipFromForm(html) : defaultOwnership;
 
                     if (createJournal && !game.user.isGM) {
                         for (const target of targetArray) {
@@ -728,6 +836,14 @@ async function showSystemScanDialog(targets) {
                     .toggleClass('far fa-square', !next)
                     .toggleClass('fas fa-check-square', next);
                 html.find('.la-scan-custom-name').toggle(next);
+                dlg.setPosition({ height: 'auto' });
+            });
+
+            html.find('.la-scan-owner-toggle').on('click', function () {
+                const $wrap = html.find('.la-scan-owner-grid-wrap');
+                const willOpen = !$wrap.is(':visible');
+                $wrap.toggle(willOpen);
+                $(this).text(willOpen ? 'Use Default' : 'Custom Ownership');
                 dlg.setPosition({ height: 'auto' });
             });
 
@@ -927,10 +1043,12 @@ export async function executeGenerateScan(targetsArg) {
         return;
     }
     const targetNames = targetArray.map((t) => t.name).join(', ');
+    const defaultOwnership = _defaultOwnershipForScan(game.user, canvas.tokens?.controlled?.[0]);
     const content = await renderTemplate(TPL.generate, {
         targetNames,
         isMulti: targetArray.length > 1,
         ownerRows: _getOwnerRows(),
+        defaultOwnershipSummary: _ownershipSummary(defaultOwnership),
     });
 
     const dlg = new Dialog({
@@ -944,7 +1062,8 @@ export async function executeGenerateScan(targetsArg) {
                     const $sel = html.find('.lancer-scaling-card.selected');
                     const mode = String($sel.data('mode') ?? 'chat');
                     const customName = String(html.find('[name="custom-journal-name"]').val() ?? '').trim();
-                    const ownership = _buildOwnershipFromForm(html);
+                    const useCustom = html.find('.la-scan-owner-grid-wrap').is(':visible');
+                    const ownership = useCustom ? _buildOwnershipFromForm(html) : defaultOwnership;
                     for (const target of targetArray) {
                         if (mode === 'chat')
                             await performSystemScan(target, false, customName);
@@ -965,6 +1084,13 @@ export async function executeGenerateScan(targetsArg) {
                 $(this).addClass('selected');
                 const mode = $(this).data('mode');
                 html.find('.la-scan-journal-options').toggle(mode === 'both' || mode === 'journal');
+                dlg.setPosition({ height: 'auto' });
+            });
+            html.find('.la-scan-owner-toggle').on('click', function () {
+                const $wrap = html.find('.la-scan-owner-grid-wrap');
+                const willOpen = !$wrap.is(':visible');
+                $wrap.toggle(willOpen);
+                $(this).text(willOpen ? 'Use Default' : 'Custom Ownership');
                 dlg.setPosition({ height: 'auto' });
             });
             _bindOwnerGroupSync(html);

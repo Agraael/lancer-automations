@@ -9,33 +9,39 @@
         <span>The chat card always posts. Toggle below to also create / update a journal entry in the SCAN Database folder.</span>
     </div>
 
-    <div class="lancer-toggle-card" data-create-journal="false" style="margin-top:12px;">
-        <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
+    <div class="lancer-toggle-card active" data-create-journal="true" style="margin-top:12px;">
+        <div class="lancer-toggle-card-icon"><i class="fas fa-check-square"></i></div>
         <div class="lancer-toggle-card-text">
             Create journal entry
             <div style="font-size:0.8em;font-weight:normal;opacity:0.7;margin-top:2px;">Updates the existing entry if one already exists for this target.</div>
         </div>
     </div>
 
-    <div class="la-scan-custom-name" style="display:none;margin-top:8px;">
+    <div class="la-scan-custom-name" style="margin-top:8px;">
         <label for="la-scan-custom-name" style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Custom journal name (optional)</label>
         <input id="la-scan-custom-name" type="text" name="custom-journal-name" placeholder="Leave blank to use target name" style="width:100%;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#fff;">
 
-        <div class="la-scan-owner-section">
-            <div class="la-scan-owner-header">Ownership</div>
-            <div class="la-scan-owner-grid">
-                {{#each ownerRows}}
-                <div class="la-scan-owner-row{{#if isAll}} la-scan-owner-all{{/if}}{{#if isGroup}} la-scan-owner-group{{/if}}">
-                    <label for="la-scan-own-{{key}}" class="la-scan-owner-name">{{name}}</label>
-                    <select id="la-scan-own-{{key}}" class="la-scan-owner-select" data-kind="{{kind}}" data-id="{{id}}">
-                        <option value="" {{#unless isAll}}selected{{/unless}}>No Change</option>
-                        <option value="0">None</option>
-                        <option value="1">Limited</option>
-                        <option value="2">Observer</option>
-                        <option value="3" {{#if isAll}}selected{{/if}}>Owner</option>
-                    </select>
+        <div class="la-scan-owner-section" style="margin-top:10px;">
+            <div class="la-scan-owner-summary" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#f7f7f7;">
+                <span class="la-scan-owner-summary-text" style="font-size:0.9em;">{{defaultOwnershipSummary}}</span>
+                <button type="button" class="la-scan-owner-toggle" style="padding:3px 10px;font-size:0.85em;">Custom Ownership</button>
+            </div>
+            <div class="la-scan-owner-grid-wrap" style="display:none;margin-top:8px;">
+                <div class="la-scan-owner-header">Ownership</div>
+                <div class="la-scan-owner-grid">
+                    {{#each ownerRows}}
+                    <div class="la-scan-owner-row{{#if isAll}} la-scan-owner-all{{/if}}{{#if isGroup}} la-scan-owner-group{{/if}}">
+                        <label for="la-scan-own-{{key}}" class="la-scan-owner-name">{{name}}</label>
+                        <select id="la-scan-own-{{key}}" class="la-scan-owner-select" data-kind="{{kind}}" data-id="{{id}}">
+                            <option value="" selected>No Change</option>
+                            <option value="0">None</option>
+                            <option value="1">Limited</option>
+                            <option value="2">Observer</option>
+                            <option value="3">Owner</option>
+                        </select>
+                    </div>
+                    {{/each}}
                 </div>
-                {{/each}}
             </div>
         </div>
     </div>
