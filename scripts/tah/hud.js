@@ -7,6 +7,7 @@ import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeploya
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
+import { isActionDisabledByStatus, isStaleStatusSource } from '../combat/action-limits.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
 import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview } from './hover.js';
 import { resurrect } from '../tools/wreck.js';
@@ -847,13 +848,19 @@ export class LancerHUD {
         }, action.name);
     }
 
-    // Wraps any TAH item with lock-action awareness: greyed when locked, click blocked.
     _lockable(item, actionName) {
         const origClick = item.onClick;
         const origBroadcast = item.broadcastFn;
-        item.softDisabled = isActionLocked(this._actor, actionName);
+        const sources = /** @type {Record<string,string[]>} */(this._actor?.getFlag('lancer-automations', 'lockedActions'))?.[actionName] ?? [];
+        const byOther = sources.some(s => !isStaleStatusSource(s));
+        const byStatus = isActionDisabledByStatus(this._actor, actionName);
+        if (byStatus) item.statusKind = 'unavailable';
+        else if (byOther) item.softDisabled = true;
+        const blocked = (a) => isActionDisabledByStatus(a, actionName)
+            || ((/** @type {Record<string,string[]>} */(a?.getFlag('lancer-automations', 'lockedActions'))?.[actionName] ?? [])
+                .some(s => !isStaleStatusSource(s)));
         item.onClick = () => {
-            if (isActionLocked(this._actor, actionName)) {
+            if (blocked(this._actor)) {
                 ui.notifications.warn(`${actionName} is locked on ${this._actor.name}.`);
                 return;
             }
@@ -861,8 +868,7 @@ export class LancerHUD {
         };
         if (origBroadcast) {
             item.broadcastFn = (t, a) => {
-                if (isActionLocked(a, actionName))
-                    return;
+                if (blocked(a)) return;
                 return origBroadcast(t, a);
             };
         }
@@ -1295,7 +1301,7 @@ export class LancerHUD {
                     childColLabel: actor.type === 'mech' ? 'Action' : 'Quick',
                     getChildren: () => [
                         ...(actor.type === 'mech' ? [
-                            { label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) },
+                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }, 'Overcharge'),
                             { isSectionLabel: true, label: 'Quick' },
                         ] : []),
                         ...(/** @type {any} */ (this._catQuickActions().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),

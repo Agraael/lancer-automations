@@ -514,7 +514,7 @@ async function wreckIt(token) {
                                 y: token.document.y,
                                 width: token.document.width,
                                 height: token.document.height,
-                                hexagonalShape: token.document.hexagonalShape,
+                                shape: token.document.shape,
                                 lockRotation: token.document.lockRotation,
                                 rotation: token.document.rotation,
                                 disposition: token.document.disposition,

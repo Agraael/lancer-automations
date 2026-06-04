@@ -383,15 +383,6 @@ export function getDefaultGeneralReactionRegistry() {
                         });
                     } else if (triggerType === 'onStatusRemoved') {
                         await api.removeConstantBonus(reactorToken.actor, BRACE_BONUS_ID);
-
-                        const dazedStatus = CONFIG.statusEffects.find(s => s.id === 'dazed');
-                        if (dazedStatus) {
-                            await api.applyEffectsToTokens({
-                                tokens: [reactorToken],
-                                effectNames: dazedStatus.id,
-                                duration: { label: 'start', turns: 1, rounds: 0 }
-                            });
-                        }
                     }
                 }
             }],

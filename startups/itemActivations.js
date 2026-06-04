@@ -926,7 +926,7 @@ const sniperMarkReaction = {
             triggerSelf: true,
             triggerOther: false,
             autoActivate: true,
-            outOfCombat: false,
+            outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
@@ -1347,7 +1347,7 @@ api.registerDefaultItemReactions({
             triggers: ["onActivation"],
             triggerSelf: true,
             triggerOther: false,
-            outOfCombat: false,
+            outOfCombat: true,
             actionType: "Free Action",
             frequency: "Unlimited",
             autoActivate: true,

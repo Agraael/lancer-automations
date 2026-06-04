@@ -64,7 +64,8 @@ export function stringToAsyncFunction(str, args = [], name = "lancer-automations
 
     let fn;
     if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('(')) {
-        fn = eval(`(${codeWithSourceURL})`);
+        // Closing `)` MUST be on its own line, otherwise the trailing //# sourceURL comment eats it.
+        fn = eval(`(${codeWithSourceURL}\n)`);
     } else {
         const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
         fn = new AsyncFunction(...args, codeWithSourceURL);

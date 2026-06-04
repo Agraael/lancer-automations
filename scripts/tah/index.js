@@ -473,10 +473,14 @@ Hooks.on('controlToken', (_token, controlled) => {
 // ── Actor data changed (HP, heat, structure, action tracker…) ────────────────
 // Update only the stats bar — sub-columns stay open.
 
-Hooks.on('updateActor', (actor) => {
+Hooks.on('updateActor', (actor, change) => {
     if (!enabled())
         return;
-    if (isRelevantActor(actor.id))
+    if (!isRelevantActor(actor.id))
+        return;
+    if (change?.flags?.['lancer-automations']?.lockedActions !== undefined)
+        hud.scheduleRefresh();
+    else
         hud.updateStatsInPlace();
 });
 

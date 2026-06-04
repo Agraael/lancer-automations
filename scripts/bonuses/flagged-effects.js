@@ -449,10 +449,9 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         return;
 
     let effectsStr = typeof effectName === 'object' ? effectName.name : effectName;
-    // Normalize logic similar to check
-    const effectNameLower = effectsStr.toLowerCase().split('.').pop();
+    const effectNameTail = effectsStr.split('.').pop();
+    const effectNameLower = effectNameTail.toLowerCase();
 
-    // Find effects matching the criteria
     const effectsToDelete = target.actor.effects.filter(/** @param {any} e */ e => {
         // When a source is specified, skip effects from any other source.
         if (originID) {
@@ -477,7 +476,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         if (game.modules.get('csm-lancer-qol')?.active && e.getFlag('csm-lancer-qol', 'effect') === effectsStr)
             return true;
         if (e.name?.toLowerCase().includes(effectNameLower) ||
-            e.statuses?.has(effectNameLower))
+            e.statuses?.has(effectNameTail))
             return true;
 
         return false;
@@ -590,12 +589,13 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
             } else {
                 // Check if effect exists to stack it
                 const effectNameToCheck = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
-                const effectNameLower = /** @type {string} */ (effectNameToCheck.toLowerCase().split('.').pop());
+                const effectNameTail = /** @type {string} */ (effectNameToCheck.split('.').pop());
+                const effectNameLower = effectNameTail.toLowerCase();
 
                 // Find a matching effect: same name AND same identity flags (different source = different effect).
                 existingEffect = token.actor?.effects.find(e => {
                     const nameMatch = (e.name)?.toLowerCase().includes(effectNameLower) ||
-                        e.statuses?.has(effectNameLower) ||
+                        e.statuses?.has(effectNameTail) ||
                         e.flags?.['lancer-automations']?.effect === effectNameToCheck ||
                         e.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
                     if (!nameMatch)
@@ -767,8 +767,8 @@ export function findEffectOnToken(token, identifier) {
     }
 
     if (typeof identifier === 'string') {
-        const identifierLower = identifier.toLowerCase();
-        const identifierPathTail = identifierLower.split('.').pop();
+        const identifierPathTail = identifier.split('.').pop();
+        const identifierPathTailLower = identifierPathTail.toLowerCase();
 
         return actor.effects.find(/** @param {any} e */ e => {
             const flags = e.flags;
@@ -781,7 +781,7 @@ export function findEffectOnToken(token, identifier) {
                 e.name === identifier ||
                 laFlags?.effect === identifier ||
                 qolFlags?.effect === identifier ||
-                (e.name?.toLowerCase().includes(identifierPathTail)) ||
+                (e.name?.toLowerCase().includes(identifierPathTailLower)) ||
                 (e.statuses?.has(identifierPathTail))
             );
         });
@@ -1009,10 +1009,11 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
         const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'effect') : null;
 
         return targets.some(name => {
-            const lowerName = name.toLowerCase().split('.').pop();
+            const nameTail = name.split('.').pop();
+            const lowerName = nameTail.toLowerCase();
             return (
                 e.name?.toLowerCase().includes(lowerName) ||
-                e.statuses?.has(lowerName) ||
+                e.statuses?.has(nameTail) ||
                 (flagName?.toLowerCase().includes(lowerName)) ||
                 (legacyFlagName?.toLowerCase().includes(lowerName))
             );

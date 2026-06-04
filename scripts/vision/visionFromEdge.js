@@ -287,7 +287,7 @@ function _isVisionRelevantChange(change) {
     if (!change) {
         return false;
     }
-    if (['x', 'y', 'width', 'height', 'hexagonalShape', 'rotation', 'elevation', 'sight'].some(k => k in change)) {
+    if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(k => k in change)) {
         return true;
     }
     if (change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined) {

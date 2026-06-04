@@ -13,6 +13,7 @@ import "./movement/keybindings.js";
 import { moveTokenTo } from "./movement/move-api.js";
 import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybindings.js";
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
+import { refreshActionLimits, registerActionLimitsHooks } from "./combat/action-limits.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
 import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
@@ -637,6 +638,28 @@ const CANCELLABLE_TRIGGERS = new Set([
     'onPreHpChange', 'onPreHeatChange',
 ]);
 
+function debugAutomationOn() {
+    try {
+        return !!game.settings.get('lancer-automations', 'debugAutomation');
+    } catch {
+        return false;
+    }
+}
+
+function dbgAuto(...args) {
+    if (debugAutomationOn())
+        console.log('[LA debug]', ...args);
+}
+
+const _laConfigWarnedSet = new Set();
+function _warnReactionConfigOnce(key, message) {
+    if (_laConfigWarnedSet.has(key))
+        return;
+    _laConfigWarnedSet.add(key);
+    ui.notifications.warn(`lancer-automations | ${message}`);
+    console.warn(`lancer-automations | ${message}`);
+}
+
 async function checkReactions(triggerType, data) {
     const allTokens = getAllSceneTokens();
     const reactionsPromises = [];
@@ -736,54 +759,88 @@ async function checkReactions(triggerType, data) {
             for (const reaction of registryEntry.reactions) {
                 if (!reaction.triggers?.includes(triggerType))
                     continue;
-                if (reaction.enabled === false)
+                if (reaction.enabled === false) {
+                    dbgAuto('skip:', token.name, item.name, lid, 'reaction disabled');
                     continue;
+                }
+
+                dbgAuto('match:', token.name, item.name, lid, { triggers: reaction.triggers });
 
                 if (reaction.onlyOnSourceMatch) {
                     const triggeringItem = data.weapon || data.techItem || data.item;
                     const triggeringItemLid = triggeringItem?.system?.lid ?? null;
                     const triggeringDepLid = data.deployable?.lid ?? null;
                     const triggeringActorUuid = data.triggeringToken?.actor?.uuid ?? null;
-                    if (triggeringItemLid !== lid && triggeringDepLid !== lid && triggeringActorUuid !== lid)
+                    if (triggeringItemLid !== lid && triggeringDepLid !== lid && triggeringActorUuid !== lid) {
+                        dbgAuto('skip:', token.name, item.name, 'onlyOnSourceMatch failed', { triggeringItemLid, triggeringDepLid, triggeringActorUuid, lid });
                         continue;
+                    }
                 }
 
                 if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType)) {
                     if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
+                    if (triggerType === 'onActivation' && (token.isOwner || game.user.isGM))
+                        _warnReactionConfigOnce(`ooc|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" only triggers in combat. Enable "Out of Combat" to allow it outside.`);
+                    dbgAuto('skip:', token.name, item.name, 'out of combat');
                     continue;
                 }
 
                 if (isSelf) {
-                    if (!reaction.triggerSelf)
+                    if (!reaction.triggerSelf) {
+                        dbgAuto('skip:', token.name, item.name, 'isSelf and !triggerSelf');
                         continue;
+                    }
                 } else {
-                    if (reaction.triggerOther === false)
+                    if (reaction.triggerOther === false) {
+                        dbgAuto('skip:', token.name, item.name, '!isSelf and triggerOther=false');
                         continue;
+                    }
                 }
 
-                if (reaction.checkReaction && !hasReactionAvailable(token))
+                if (reaction.checkReaction && !hasReactionAvailable(token)) {
+                    dbgAuto('skip:', token.name, item.name, 'no reaction available');
                     continue;
+                }
 
-                if (reaction.requireCanProvoke && !canTriggerReaction)
+                if (reaction.requireCanProvoke && !canTriggerReaction) {
+                    dbgAuto('skip:', token.name, item.name, 'cannot provoke');
                     continue;
+                }
 
                 const reactionPath = reaction.reactionPath || "";
-                if (!isItemAvailable(item, reactionPath))
+                if (!isItemAvailable(item, reactionPath)) {
+                    dbgAuto('skip:', token.name, item.name, 'item not available (destroyed/disabled/rank)');
                     continue;
+                }
 
                 if (reaction.checkUsage) {
                     const sys = item.system;
-                    if (sys?.loaded === false)
+                    const tags = sys?.tags ?? [];
+                    const hasTag = lid => tags.some(t => t?.lid === lid);
+                    const hasLoading = hasTag('tg_loading');
+                    const hasRecharge = hasTag('tg_recharge');
+                    const hasUses = sys?.uses?.max > 0;
+                    if (!hasLoading && !hasRecharge && !hasUses && (token.isOwner || game.user.isGM))
+                        _warnReactionConfigOnce(`usage|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" has Check Usage enabled but no loading, recharge, or limited uses. The check has no effect.`);
+                    if (hasLoading && sys?.loaded === false) {
+                        dbgAuto('skip:', token.name, item.name, 'not loaded');
                         continue;
-                    if (sys?.uses?.max > 0 && sys.uses.value <= 0)
+                    }
+                    if (hasUses && sys.uses.value <= 0) {
+                        dbgAuto('skip:', token.name, item.name, 'no uses left');
                         continue;
-                    if (sys?.charged !== undefined && sys.charged === false)
+                    }
+                    if (hasRecharge && sys?.charged === false) {
+                        dbgAuto('skip:', token.name, item.name, 'not charged');
                         continue;
+                    }
                 }
 
-                if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
+                if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter)) {
+                    dbgAuto('skip:', token.name, item.name, 'disposition filter failed');
                     continue;
+                }
 
                 try {
                     let activationName = item.name;
@@ -849,6 +906,7 @@ async function checkReactions(triggerType, data) {
                         } else {
                             shouldTrigger = result;
                         }
+                        dbgAuto('evaluate(fn):', token.name, item.name, '→', shouldTrigger);
                     } else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '') {
                         try {
                             const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
@@ -864,9 +922,11 @@ async function checkReactions(triggerType, data) {
                         }
                     } else {
                         shouldTrigger = true;
+                        dbgAuto('evaluate(none):', token.name, item.name, '→ default true');
                     }
 
                     if (shouldTrigger) {
+                        dbgAuto('fire:', token.name, item.name, 'autoActivate:', !!reaction.autoActivate);
                         const reactionTriggerData = { ...enrichedData,
                             startRelatedFlow: _buildStartRelatedFlow(token, item, reaction, activationName),
                             startRelatedFlowToReactor: _buildStartRelatedFlowToReactor(token, item, reaction, activationName),
@@ -1264,6 +1324,13 @@ async function processEffectConsumption(triggerType, data) {
 }
 
 async function handleTrigger(triggerType, data) {
+    dbgAuto('handleTrigger', triggerType, {
+        triggeringToken: data?.triggeringToken?.name,
+        statusId: data?.statusId,
+        effectName: data?.effect?.name,
+        actionName: data?.actionName,
+        itemName: (data?.item ?? data?.weapon ?? data?.techItem)?.name,
+    });
     // onInit* triggers fire from system events (token creation, etc.) and shouldn't leak hidden state in chat.
     if (triggerType?.startsWith('onInit'))
         return runInOnInitTriggerContext(() => _handleTriggerBody(triggerType, data));
@@ -1728,6 +1795,15 @@ function registerSettings() {
     game.settings.register('lancer-automations', 'debugOutOfCombat', {
         name: 'Debug: Out of Combat Warnings',
         hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'debugAutomation', {
+        name: 'Debug: Automation System',
+        hint: 'Console logs from the reaction / trigger pipeline: which trigger fires, which reactions match, why each one is skipped or evaluated, and which activation fires.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -4312,6 +4388,7 @@ Hooks.on('init', () => {
 
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
+    registerActionLimitsHooks();
     initVisionDisableOnSelect();
     injectDisabledSchemaField(); // Add system.disabled field to item schemas
     injectDisabledCSS(); // Item Disabled system
@@ -4814,6 +4891,7 @@ Hooks.on('lancer.statusesReady', () => {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
+        description: "You gain resistance to all damage, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
         changes: /** @type {any[]} */ ([
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
@@ -5253,6 +5331,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
             processDurationEffects('start', startingToken.id);
             if (startingToken.actor)
                 await rechargeExtraActionsForActor(startingToken.actor);
+            await refreshActionLimits(startingToken, { turnStart: true });
         }
     }
 

@@ -414,6 +414,7 @@ const DEBUG_FIELDS = [
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
     { key: 'debugForceJb2aFree', type: 'boolean' },
+    { key: 'debugAutomation', type: 'boolean' },
 ];
 
 const VISION_FIELDS = [
