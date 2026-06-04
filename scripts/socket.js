@@ -9,7 +9,7 @@ import {
     showVoteCardOnVoter, receiveVoteSubmission,
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
 } from './interactive/index.js';
-import { setEffect, removeEffectsByName } from './bonuses/flagged-effects.js';
+import { setEffect, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
 import { executeStatRoll, getItemLID } from './tools/misc-tools.js';
@@ -249,6 +249,20 @@ const HANDLERS = {
         emitAck('removeEffectByIdAck', payload.requestId);
     },
     removeEffectByIdAck: ({ requestId }) => resolveAck(requestId),
+
+    consumeEffectCharge: async (payload) => {
+        if (!game.user.isGM)
+            return;
+        try {
+            const effect = await fromUuid(payload.effectUuid);
+            if (effect)
+                await consumeEffectCharge(effect);
+        } catch (e) {
+            console.warn('lancer-automations | consumeEffectCharge GM-side failed:', e);
+        }
+        emitAck('consumeEffectChargeAck', payload.requestId);
+    },
+    consumeEffectChargeAck: ({ requestId }) => resolveAck(requestId),
 
     preLoadImageForAll: async (payload) => {
         if (payload)

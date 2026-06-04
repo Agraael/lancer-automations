@@ -805,6 +805,11 @@ export async function consumeEffectCharge(effect) {
     if (!actor)
         return false;
 
+    if (!game.user.isGM && !actor.isOwner) {
+        await socketRequestWithAck('consumeEffectCharge', { effectUuid: effect.uuid });
+        return true;
+    }
+
     const consumption = effect.getFlag('lancer-automations', 'consumption');
     if (!consumption?.trigger)
         return false;
