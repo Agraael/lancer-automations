@@ -29,7 +29,7 @@ A Lancer system extension for Foundry v13: QoL and UI fixes, custom token stat b
 
 > **Before you install, please read.**
 >
-> This is a very dense and heavy module with hundreds of features, still very much a work in progress. Some features may overlap or not fully integrate with each other. If you're new to Foundry VTT, I'd hold off on this one for now and get familiar with the platform first, otherwise you risk losing a lot of time.
+> This is a very dense and heavy module with hundreds of features. A few features overlap with the Lancer QOL module. If you're new to Foundry VTT, I'd hold off on this one for now and get familiar with the platform first, otherwise you risk losing a lot of time.
 >
 > **The README below is a bit old and doesn't cover everything.** Writing docs takes time and energy. The best way to keep up with new additions is the blog posts on my [Patreon](https://www.patreon.com/cw/LaSossis), where I explain new features with illustrations (e.g. isometric handling, and other recent additions).
 >
