@@ -154,11 +154,13 @@ Hooks.on('refreshToken', (token) => {
 });
 
 // iso resets mesh.anchor to (0.5, 0.5) on non-iso scenes, so put the doc's own anchor back.
+// updateToken with no movement-fields (eg movementAction-only) sets no renderFlags -> refreshToken
+// never fires, so the standalone refresh hook isn't enough.
 Hooks.once('ready', () => {
     const mod = game.modules.get(ISO_MODULE_ID);
     if (!mod?.active)
         return;
-    Hooks.on('refreshToken', (token) => {
+    const restore = (token) => {
         if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.restoreAnchor))
             return;
         if (!token?.mesh)
@@ -169,8 +171,9 @@ Hooks.once('ready', () => {
             return;
         const ax = token.document?.texture?.anchorX ?? 0.5;
         const ay = token.document?.texture?.anchorY ?? 0.5;
-        if (token.mesh.anchor.x !== ax || token.mesh.anchor.y !== ay) {
+        if (token.mesh.anchor.x !== ax || token.mesh.anchor.y !== ay)
             token.mesh.anchor.set(ax, ay);
-        }
-    });
+    };
+    Hooks.on('refreshToken', restore);
+    Hooks.on('updateToken', (doc) => restore(doc.object));
 });

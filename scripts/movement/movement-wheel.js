@@ -17,7 +17,9 @@ let _token = null;
 function closeWheel({ silent = false } = {}) {
     if (!_wheelEl) return;
     if (!silent) playUiSound('details');
-    _wheelEl.remove();
+    const el = _wheelEl;
+    el.classList.add('closing');
+    setTimeout(() => el.remove(), 120);
     _wheelEl = null;
     if (_onKey) document.removeEventListener('keydown', _onKey, true);
     if (_onClickOutside) {
@@ -147,8 +149,12 @@ function openWheel(token, heldOpen) {
             ev.preventDefault();
             ev.stopPropagation();
             playUiSound('toggle');
-            commitSelection(key, _token);
-            closeWheel({ silent: true });
+            btn.classList.add('validated');
+            const token = _token;
+            setTimeout(() => {
+                commitSelection(key, token);
+                closeWheel({ silent: true });
+            }, 180);
         });
         btn.addEventListener('mouseenter', () => setHover(i));
         root.appendChild(btn);
@@ -174,10 +180,16 @@ function openWheel(token, heldOpen) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            if (_hoverIndex >= 0 && _items[_hoverIndex]) {
+            if (e.button === 0 && _hoverIndex >= 0 && _items[_hoverIndex]) {
                 playUiSound('toggle');
-                commitSelection(_items[_hoverIndex].key, _token);
-                closeWheel({ silent: true });
+                const hoveredBtn = /** @type {HTMLElement | undefined} */ (_wheelEl?.children[_hoverIndex]);
+                if (hoveredBtn) hoveredBtn.classList.add('validated');
+                const key = _items[_hoverIndex].key;
+                const token = _token;
+                setTimeout(() => {
+                    commitSelection(key, token);
+                    closeWheel({ silent: true });
+                }, 180);
                 return;
             }
             closeWheel();

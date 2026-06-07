@@ -2404,6 +2404,18 @@ function _moveHasForcedAction(document, options) {
     return false;
 }
 
+function _moveHasTeleportAction(document, options) {
+    const cfg = CONFIG.Token?.movement?.actions;
+    const isTele = (a) => !!cfg?.[a]?.teleport;
+    const wps = options?.movement?.[document.id]?.waypoints;
+    if (Array.isArray(wps) && wps.some(w => isTele(w?.action)))
+        return true;
+    const cwps = options?.changes?.[document.id]?.waypoints ?? options?.waypoints;
+    if (Array.isArray(cwps) && cwps.some(w => isTele(w?.action)))
+        return true;
+    return false;
+}
+
 async function handleTokenMove(document, change, options, userId) {
     const threshold = canvas.grid.size / 2;
     const hasElevationChange = change.elevation !== undefined && change.elevation !== document.elevation;
@@ -2428,7 +2440,19 @@ async function handleTokenMove(document, change, options, userId) {
     const isDrag = !isForceMovement && (
         'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
     );
-    const isTeleport = !!options.teleport;
+    const isTeleport = !!options.teleport || _moveHasTeleportAction(document, options);
+
+    if (isTeleport && isDrag && !options._laTeleFxPlayed && typeof Sequencer !== 'undefined') {
+        options._laTeleFxPlayed = true;
+        const startCenter = token.getCenterPoint(startPos);
+        const endCenter = token.getCenterPoint(endPos);
+        const tokenSize = Math.max(1, token.document.width ?? 1, token.document.height ?? 1) * canvas.grid.size;
+        new Sequence()
+            .effect().file('jb2a.impact.003.yellow').atLocation(startCenter).size(tokenSize * 3).mirrorX().playbackRate(2)
+            .effect().file('jb2a.impact.003.yellow').atLocation(endCenter).size(tokenSize * 3)
+            .play();
+        actionFX.playTeleportSoundFX();
+    }
 
     const { distanceMoved, movementCost, isFreeMovement } = _computeMoveData(options, startPos, endPos, elevationMoved, document);
 
@@ -6044,7 +6068,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 
         const { distanceMoved: distanceToMove, movementCost: moveToMovementCost, isFreeMovement: moveIsFreeMovement } = _computeMoveData(options, startPos, endPos, 0, document);
 
-        const isTeleport = !!options.teleport;
+        const isTeleport = !!options.teleport || _moveHasTeleportAction(document, options);
         const shouldCalculatePath = game.settings.get('lancer-automations', 'enablePathHexCalculation');
         const moveInfo = {
             isInvoluntary: !isDrag,

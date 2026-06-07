@@ -1,4 +1,4 @@
-/* global canvas, game, ui, FilePicker */
+/* global canvas, game, ui, FilePicker, Dialog, CodeMirror */
 
 import {
     applyEffectsToTokens
@@ -9,6 +9,282 @@ import {
     removeConstantBonus
 } from "./genericBonuses.js";
 import { openItemBrowserDialog } from "../tools/misc-tools.js";
+import { installLancerHints } from "../setup/codemirror-hints.js";
+
+/**
+ * Renders an inline "code field" row: a read-only preview + Edit/Clear icon buttons.
+ * The actual code lives in a hidden input read on submit.
+ */
+function codeFieldRow(id, label, placeholder) {
+    return `
+        <div class="form-group">
+            <label>${label}:</label>
+            <div style="flex:1; display:flex; gap:6px; align-items:center; min-width:0;">
+                <button type="button" id="${id}-badge" class="code-field-badge" data-target="${id}" title="${placeholder}">
+                    <span class="code-field-dot"></span>
+                    <span class="code-field-state">Empty</span>
+                </button>
+                <input type="hidden" id="${id}-value">
+                <button type="button" class="code-clear-btn" data-target="${id}" title="Clear" style="flex:0 0 24px; width:24px; height:24px; padding:0; line-height:1;"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+    `;
+}
+
+function updateCodeFieldBadge(html, fieldId) {
+    const value = String(html.find(`#${fieldId}-value`).val() || '').trim();
+    const $badge = html.find(`#${fieldId}-badge`);
+    if (!$badge.length)
+        return;
+    if (value) {
+        $badge.addClass('has-value');
+        $badge.find('.code-field-state').text('Set');
+        const preview = value.replace(/\s+/g, ' ').trim().slice(0, 300);
+        $badge.attr('title', preview);
+    } else {
+        $badge.removeClass('has-value');
+        $badge.find('.code-field-state').text('Empty');
+        $badge.attr('title', 'Click to set');
+    }
+}
+
+function presetBarHtml(prefix, presets) {
+    return `
+        <div class="preset-bar" data-prefix="${prefix}">
+            <label>Preset:</label>
+            <select id="${prefix}-preset-load" style="flex:1;">
+                <option value="">— Load —</option>
+                ${presets.map(p => `<option value="${p.name}">${p.name}</option>`).join('')}
+            </select>
+            <button type="button" class="te-btn-icon ${prefix}-preset-delete" title="Delete selected preset" style="flex:0 0 28px; width:28px; height:26px; padding:0;"><i class="fas fa-trash"></i></button>
+        </div>
+    `;
+}
+
+// Token-related field IDs that should NOT be saved/restored in a preset.
+const PRESET_SKIP_IDS = {
+    std: ['std-target', 'std-origin', 'std-trigger-origin'],
+    cust: ['cust-target', 'cust-saved', 'cust-origin', 'cust-trigger-origin'],
+    bonus: ['bonus-target', 'bonus-durOrigin', 'bonus-trigger-origin', 'bonus-applyTo']
+};
+
+function presetCategoryFor(prefix) {
+    return prefix === 'std' ? 'standard' : prefix === 'cust' ? 'custom' : 'bonus';
+}
+
+function getStoredPresets() {
+    const raw = game.user.getFlag('lancer-automations', 'effectManagerPresets') || {};
+    return { standard: raw.standard || [], custom: raw.custom || [], bonus: raw.bonus || [] };
+}
+
+async function setStoredPresets(presets) {
+    await game.user.setFlag('lancer-automations', 'effectManagerPresets', presets);
+}
+
+function gatherPresetData(html, prefix) {
+    const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
+    const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
+    const data = {};
+    // Standard inputs/selects/textareas inside the tab.
+    $tab.find('input, select, textarea').each(function () {
+        const id = this.id;
+        if (!id || skip.has(id))
+            return;
+        const $el = $(this);
+        const type = ($el.attr('type') || '').toLowerCase();
+        if (type === 'checkbox' || type === 'radio')
+            data[id] = $el.is(':checked');
+        else
+            data[id] = $el.val();
+    });
+    // Multi-select checkboxes (la-multi-select-panel): they may have been moved to body.
+    $tab.find('.la-multi-select-panel').each(function () {
+        const panelId = this.id;
+        if (!panelId)
+            return;
+        const checked = $(`#${panelId} input[type=checkbox]:checked`).map((_, el) => el.value).get();
+        data[`__panel__${panelId}`] = checked;
+    });
+    // Dynamic damage entries (bonus tab only).
+    if (prefix === 'bonus') {
+        const dmg = [];
+        $tab.find('#bonus-damage-list .bonus-damage-entry').each(function () {
+            const $entry = $(this);
+            const idx = $entry.data('index');
+            dmg.push({
+                val: $entry.find(`#bonus-dmgVal-${idx}`).val(),
+                type: $entry.find(`#bonus-dmgType-${idx}`).val()
+            });
+        });
+        data.__damageEntries = dmg;
+        // Selected immunity options.
+        data.__immunityEffects = $tab.find('.bonus-immunity-effect-option.selected').map((_, el) => $(el).data('effect')).get();
+        data.__immunityDamage = $tab.find('.bonus-immunity-damage-option.selected').map((_, el) => $(el).data('type')).get();
+    }
+    return data;
+}
+
+function applyPresetData(html, prefix, data) {
+    const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
+    const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
+    for (const [id, value] of Object.entries(data)) {
+        if (id.startsWith('__'))
+            continue;
+        if (skip.has(id))
+            continue;
+        const $el = $tab.find(`#${id}`);
+        if (!$el.length)
+            continue;
+        const type = ($el.attr('type') || '').toLowerCase();
+        if (type === 'checkbox' || type === 'radio')
+            $el.prop('checked', !!value);
+        else
+            $el.val(value);
+    }
+    // Restore multi-select panel checkboxes (find by panel id, even if moved to body).
+    for (const [key, val] of Object.entries(data)) {
+        if (!key.startsWith('__panel__'))
+            continue;
+        const panelId = key.slice('__panel__'.length);
+        $(`#${panelId} input[type=checkbox]`).each(function () {
+            $(this).prop('checked', val.includes(this.value));
+        });
+        // Trigger change so any dependent UI updates.
+        $(`#${panelId} input[type=checkbox]`).first().trigger('change');
+    }
+    // Damage entries — drop the dynamic list and rebuild (bonus tab).
+    if (prefix === 'bonus' && Array.isArray(data.__damageEntries)) {
+        const $list = $tab.find('#bonus-damage-list');
+        $list.empty();
+        data.__damageEntries.forEach((entry, idx) => {
+            $list.append(`
+                <div class="bonus-damage-entry form-group" data-index="${idx}">
+                    <input type="text" id="bonus-dmgVal-${idx}" value="${entry.val ?? '1d6'}" placeholder="1d6" style="flex:1;">
+                    <select id="bonus-dmgType-${idx}" style="flex:1;"></select>
+                    <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="${idx}" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
+                </div>
+            `);
+            // Refill the damage-type select options from the existing first entry, then set value.
+            // The dmgTypeOptionsHtml was rendered at initial render; copy from existing one if available.
+            const $firstTypeSelect = $tab.find('select[id^="bonus-dmgType-"]').first();
+            const optionsHtml = $firstTypeSelect.html();
+            if (optionsHtml)
+                $tab.find(`#bonus-dmgType-${idx}`).html(optionsHtml).val(entry.type);
+        });
+    }
+    // Immunity selections.
+    if (prefix === 'bonus' && Array.isArray(data.__immunityEffects)) {
+        $tab.find('.bonus-immunity-effect-option').each(function () {
+            $(this).toggleClass('selected', data.__immunityEffects.includes($(this).data('effect')));
+        });
+    }
+    if (prefix === 'bonus' && Array.isArray(data.__immunityDamage)) {
+        $tab.find('.bonus-immunity-damage-option').each(function () {
+            $(this).toggleClass('selected', data.__immunityDamage.includes($(this).data('type')));
+        });
+    }
+    // Bonus-type-specific section visibility.
+    $tab.find('#bonus-type').trigger('change');
+    // Sync icon previews if present.
+    const $icon = $tab.find('#cust-icon, #bonus-icon');
+    if ($icon.length) {
+        $icon.each(function () {
+            const path = String($(this).val() || '');
+            const $img = $tab.find(`#${this.id}-preview`);
+            if ($img.length) {
+                $img.attr('src', path);
+                $img[0].style.opacity = '1';
+            }
+        });
+    }
+    // Code-field badges.
+    $tab.find('.code-field-badge').each(function () {
+        updateCodeFieldBadge(html, $(this).data('target'));
+    });
+    // Update multi-select trigger button labels.
+    $tab.find('.la-multi-select').each(function () {
+        const trigger = $(this).find('.la-multi-select-trigger');
+        const panelId = $(this).find('.la-multi-select-panel').attr('id');
+        if (!panelId)
+            return;
+        const checked = $(`#${panelId} input:checked`);
+        if (checked.length === 0)
+            trigger.text('— Select —');
+        else
+            trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
+    });
+}
+
+/**
+ * Opens a CodeMirror editor dialog bound to a hidden input + preview pair.
+ * Mirrors reaction-manager's expanded editor (Alt-Enter completion via installLancerHints).
+ */
+function openCodeFieldDialog(html, fieldId, title, defaultCode = '') {
+    const $value = html.find(`#${fieldId}-value`);
+    const stored = String($value.val() || '');
+    const initial = stored || defaultCode;
+    let editor;
+    let resizeObserver;
+
+    new Dialog({
+        title: `Edit ${title}`,
+        content: `<div class="lcm-host"></div>
+            <style>
+                .lcm-dialog .window-content { padding:0 !important; overflow:hidden !important; background:#272822; }
+                .lcm-dialog .dialog-buttons { height:40px !important; min-height:40px !important; max-height:40px !important; background:#333 !important; border-top:1px solid #111 !important; padding:0 !important; margin:0 !important; display:flex !important; }
+                .lcm-dialog button.dialog-button { background:#444 !important; color:#fff !important; border:none !important; border-right:1px solid #222 !important; width:100% !important; height:100% !important; margin:0 !important; display:flex !important; align-items:center !important; justify-content:center !important; font-size:1em !important; border-radius:0 !important; box-shadow:none !important; }
+                .lcm-dialog button.dialog-button:last-child { border-right:none !important; }
+                .lcm-dialog button.dialog-button:hover { background:#555 !important; }
+            </style>`,
+        buttons: {
+            save: {
+                label: "Save",
+                icon: '<i class="fas fa-save" style="margin-right:8px;"></i>',
+                callback: () => {
+                    const v = editor.getValue();
+                    $value.val(v);
+                    updateCodeFieldBadge(html, fieldId);
+                }
+            },
+            cancel: {
+                label: "Cancel",
+                icon: '<i class="fas fa-times" style="margin-right:8px;"></i>'
+            }
+        },
+        default: "save",
+        render: (dlgHtml) => {
+            const host = dlgHtml.find('.lcm-host')[0];
+            editor = CodeMirror(host, {
+                value: initial,
+                mode: 'javascript',
+                theme: 'monokai',
+                lineNumbers: true,
+                matchBrackets: true,
+                indentUnit: 4,
+                smartIndent: true,
+                lineWrapping: false,
+                scrollbarStyle: "native"
+            });
+            installLancerHints(editor, 'evaluate');
+            const windowEl = dlgHtml.closest('.window-app')[0];
+            const updateSize = () => {
+                if (!windowEl) return;
+                const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
+                editor.setSize(null, windowEl.offsetHeight - headerH - 40);
+                editor.refresh();
+            };
+            setTimeout(updateSize, 50);
+            resizeObserver = new ResizeObserver(updateSize);
+            resizeObserver.observe(windowEl);
+        },
+        close: () => { resizeObserver?.disconnect(); }
+    }, {
+        width: 700,
+        height: 500,
+        resizable: true,
+        classes: ["dialog", "lcm-dialog", "lancer-dialog-base", "lancer-no-title"]
+    }).render(true);
+}
 
 /**
  * Open item browser and populate targetInput with the selected LID.
@@ -209,7 +485,7 @@ function triggerFieldsHtml(prefix, tokensHtml) {
             <label>Consume on:</label>
             <div class="la-multi-select" id="${prefix}-trigger">
                 <button type="button" class="la-multi-select-trigger">— Select —</button>
-                <div class="la-multi-select-panel">
+                <div class="la-multi-select-panel" id="${prefix}-trigger-panel">
                     ${consumptionTriggerCheckboxesHtml()}
                 </div>
             </div>
@@ -257,6 +533,7 @@ function triggerFieldsHtml(prefix, tokensHtml) {
                     <button type="button" class="status-picker-btn" data-target="${prefix}-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
                 </div>
             </div>
+            ${codeFieldRow(`${prefix}-evaluate`, 'Evaluate', '(triggerType, triggerData, effectBearerToken, effect) => true')}
         </div>
     `;
 }
@@ -268,14 +545,12 @@ function setupTriggerUI(html, prefix) {
     initLaMultiSelect(html, `${prefix}-trigger`);
 
     const updateTriggerFilterFields = () => {
-        const triggers = html.find(`#${prefix}-trigger input:checked`)
+        const triggers = $(`#${prefix}-trigger-panel input:checked`)
             .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
         const $fields = html.find(`#${prefix}-trigger-fields`);
-        $fields.find('.form-group').hide();
+        $fields.find('.form-group[class*="cfilter-"]').hide();
         if (triggers.length > 0) {
             $fields.show();
-            // Always show origin when at least one trigger is selected
-            $fields.find('.form-group').first().show();
             const classes = new Set(triggers.flatMap(t => CONSUMPTION_FILTER_MAP[t] ?? []));
             classes.forEach(cls => $fields.find(`.${cls}`).show());
         } else {
@@ -283,7 +558,7 @@ function setupTriggerUI(html, prefix) {
         }
         html.closest('.dialog').css('height', 'auto');
     };
-    html.find(`#${prefix}-trigger input[type=checkbox]`).on('change', updateTriggerFilterFields);
+    $(document).on('change', `#${prefix}-trigger-panel input[type=checkbox]`, updateTriggerFilterFields);
 
     html.find(`#${prefix}-trigger-fields .find-lid-btn`).on('click', function (e) {
         e.preventDefault();
@@ -400,6 +675,9 @@ function getTriggerConfig(html, prefix) {
     const statusId = html.find(`#${prefix}-filter-statusId`).val()?.trim();
     if (statusId)
         consumption.statusId = statusId;
+    const evaluateSrc = String(html.find(`#${prefix}-evaluate-value`).val() || '').trim();
+    if (evaluateSrc)
+        consumption.evaluate = evaluateSrc;
     return consumption;
 }
 
@@ -543,6 +821,7 @@ export async function executeEffectManager(options = {}) {
     const customStatusModule = game.modules.get("temporary-custom-statuses");
     const hasCustomStatus = customStatusModule?.active;
     const savedStatuses = hasCustomStatus ? (game.settings.get("temporary-custom-statuses", "savedStatuses") || []) : [];
+    const allPresets = getStoredPresets();
 
     const defaultDuration = game.combat ? 'end' : 'indefinite';
     const durationOptionsHtml = durations.map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
@@ -630,6 +909,28 @@ export async function executeEffectManager(options = {}) {
         .te-stack-ctrl i:hover { background: #ffe0e0; }
         .te-divider { border: none; border-top: 2px solid var(--primary-color); margin: 10px 0; }
         .te-section-title { font-weight: 600; color: var(--primary-color); font-size: 13px; margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .te-section { font-weight: 700; color: var(--primary-color); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.6px; margin: 10px 0 4px; padding: 0 0 3px 2px; border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent); }
+        .te-section:first-child { margin-top: 0; }
+        .te-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .te-row-2col > .form-group { margin-bottom: 0; }
+        .te-advanced { margin-top: 8px; }
+        .te-advanced > summary { cursor: pointer; font-weight: 700; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.6px; color: #555; padding: 5px 2px; border-top: 1px dashed #bbb; user-select: none; list-style: none; }
+        .te-advanced > summary::before { content: "\\25B6"; display: inline-block; margin-right: 6px; transition: transform 0.15s ease; font-size: 0.7em; color: var(--primary-color); }
+        .te-advanced[open] > summary::before { transform: rotate(90deg); }
+        .te-advanced[open] > summary { color: var(--primary-color); border-top-color: var(--primary-color); }
+        .te-advanced > summary::-webkit-details-marker { display: none; }
+        .code-field-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; height: 26px; background: #f5f5f5; border: 1.5px solid #999; border-radius: 13px; font-size: 0.82em; cursor: pointer; flex: 0 0 auto; transition: all 0.15s ease; color: #555; }
+        .code-field-badge:hover { border-color: var(--primary-color); background: #fff; }
+        .code-field-badge .code-field-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; flex: 0 0 8px; }
+        .code-field-badge.has-value { border-color: #4a8a3a; background: #e6f3e0; color: #2d5a1f; font-weight: 600; }
+        .code-field-badge.has-value .code-field-dot { background: #4a8a3a; box-shadow: 0 0 4px rgba(74,138,58,0.5); }
+        .bonus-summary-pill { flex: 0 0 auto; padding: 2px 8px; background: #eee; border-radius: 10px; font-size: 0.72em; color: #888; font-weight: 600; text-align: center; min-width: 36px; }
+        .bonus-summary-pill.has-bonuses { background: #d6e8d2; color: #2d5a1f; }
+        .preset-bar { display: flex; gap: 6px; align-items: center; padding: 4px 6px; margin-bottom: 6px; background: rgba(0,0,0,0.04); border-radius: 4px; border: 1px dashed #bbb; }
+        .preset-bar label { flex: 0 0 50px; font-size: 0.8em; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
+        .preset-bar select { flex: 1; height: 24px; font-size: 0.85em; }
+        .te-btn-icon { background: #f5f5f5; border: 1.5px solid #999; border-radius: 4px; cursor: pointer; color: var(--primary-color); }
+        .te-btn-icon:hover { background: #ffe0e0; border-color: var(--primary-color); }
         .te-bonus-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: #f5f5f5; border: 2px solid #999; border-radius: 4px; margin-bottom: 4px; font-size: 0.9em; transition: all 0.2s ease; }
         .te-bonus-item:hover { border-color: var(--primary-color); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
     </style>
@@ -646,6 +947,8 @@ export async function executeEffectManager(options = {}) {
 
         <!-- STANDARD TAB -->
         <div class="te-content active" id="tab-standard">
+            ${presetBarHtml('std', allPresets.standard)}
+            <div class="te-section">Effect</div>
             <div class="form-group">
                 <label>Target:</label>
                 <div style="flex:1; display:flex; gap:3px;">
@@ -675,6 +978,7 @@ export async function executeEffectManager(options = {}) {
     }).join('')}
                 </div>
             </div>
+            <div class="te-section">Duration</div>
             <div class="form-group">
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
@@ -692,8 +996,10 @@ export async function executeEffectManager(options = {}) {
                 <label>Note:</label>
                 <input type="text" id="std-note" placeholder="Optional note">
             </div>
+            <div class="te-section">Consumption</div>
             ${triggerFieldsHtml('std', tokensHtml)}
             <div class="te-btn-group">
+                <button type="button" class="te-btn save-preset-btn" data-prefix="std"><i class="fas fa-bookmark"></i> Save Preset</button>
                 <button type="button" class="te-btn apply-btn" data-tab="standard"><i class="fas fa-check"></i> Apply</button>
             </div>
         </div>
@@ -701,6 +1007,8 @@ export async function executeEffectManager(options = {}) {
         <!-- CUSTOM TAB -->
         ${hasCustomStatus ? `
         <div class="te-content" id="tab-custom">
+            ${presetBarHtml('cust', allPresets.custom)}
+            <div class="te-section">Effect</div>
             <div class="form-group two-col">
                 <label>Target:</label>
                 <div style="flex:1; display:flex; gap:3px;">
@@ -718,7 +1026,10 @@ export async function executeEffectManager(options = {}) {
             </div>
             <div class="form-group two-col" style="grid-template-columns: 80px 1fr 60px 60px;">
                 <label>Name:</label>
-                <input type="text" id="cust-name" placeholder="Status Name">
+                <div style="display:flex; gap:4px; align-items:center; min-width:0; width:100%;">
+                    <input type="text" id="cust-name" placeholder="Status Name" style="flex:1; min-width:0;">
+                    <button type="button" class="save-status-btn" title="Save Status (add Name + Icon to the Saved list)" style="flex:0 0 28px; width:28px; height:28px; padding:0; line-height:1;"><i class="fas fa-save"></i></button>
+                </div>
                 <label style="text-align:right; padding-right:5px;">Stack:</label>
                 <input type="number" id="cust-stack" value="1" min="1">
             </div>
@@ -730,6 +1041,7 @@ export async function executeEffectManager(options = {}) {
                     <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
             </div>
+            <div class="te-section">Duration</div>
             <div class="form-group">
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
@@ -747,8 +1059,14 @@ export async function executeEffectManager(options = {}) {
                 <label>Note:</label>
                 <input type="text" id="cust-note" placeholder="Optional note">
             </div>
+            <div class="te-section">Consumption</div>
             ${triggerFieldsHtml('cust', tokensHtml)}
+            <details class="te-advanced">
+                <summary>Advanced</summary>
+                ${codeFieldRow('cust-changes', 'Active Effect Changes', '[{"key":"system.armor","mode":2,"value":"1"}]')}
+            </details>
             <div class="te-btn-group">
+                <button type="button" class="te-btn save-preset-btn" data-prefix="cust"><i class="fas fa-bookmark"></i> Save Preset</button>
                 <button type="button" class="te-btn apply-btn" data-tab="custom"><i class="fas fa-check"></i> Apply</button>
             </div>
         </div>
@@ -774,20 +1092,29 @@ export async function executeEffectManager(options = {}) {
 
         <!-- BONUS TAB -->
         <div class="te-content" id="tab-bonus">
+            ${presetBarHtml('bonus', allPresets.bonus)}
             <div class="form-group">
                 <label>Token:</label>
                 <div style="flex:1; display:flex; gap:3px;">
                     <select id="bonus-target" style="flex:1;">${tokensHtml}</select>
                     <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                 </div>
+                <span id="bonus-summary" class="bonus-summary-pill">—</span>
             </div>
-            <div id="bonus-summary" style="padding:4px 0 8px; font-size:0.85em; color:#aaa; font-style:italic;">No active bonuses.</div>
-            <hr class="te-divider">
-            <div class="te-section-title">Add New Bonus</div>
+            <div class="te-section">Add New Bonus</div>
             <div class="form-group">
                 <label>Name:</label>
                 <input type="text" id="bonus-name" value="Test Bonus">
             </div>
+            <div class="form-group">
+                <label>Icon:</label>
+                <div style="flex:1; display:flex; gap:5px; align-items:center;">
+                    <img id="bonus-icon-preview" src="" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid #999; border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
+                    <input type="text" id="bonus-icon" placeholder="Auto (based on bonus type)" style="flex:1; min-width:0;">
+                    <button type="button" class="file-picker" data-type="image" data-target="bonus-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
+                </div>
+            </div>
+            <div class="te-section">Duration</div>
             <div class="form-group">
                 <label>Duration:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
@@ -801,20 +1128,36 @@ export async function executeEffectManager(options = {}) {
                     <input type="number" id="bonus-durTurns" value="1" min="1" class="bonus-dur-opts" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
-            <div class="form-group">
-                <label>Uses:</label>
-                <div style="flex:1; display:flex; gap:4px; align-items:center;">
-                    <button type="button" class="bonus-uses-step" data-step="-1" title="Decrement" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+            <div class="form-group" style="justify-content:flex-start;">
+                <label style="flex:0 0 70px;">Uses:</label>
+                <div style="display:flex; gap:4px; align-items:center;">
+                    <button type="button" class="bonus-uses-step" data-step="-1" title="Decrement" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
                     <input type="number" id="bonus-uses" placeholder="Infinite" min="1" style="flex:0 0 70px; min-width:70px; max-width:70px; text-align:center;">
-                    <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                    <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                 </div>
             </div>
-            <div class="form-group">
-                <label>Consume on:</label>
-                <div class="la-multi-select" id="bonus-trigger">
-                    <button type="button" class="la-multi-select-trigger">— Select —</button>
-                    <div class="la-multi-select-panel">
-                        ${consumptionTriggerCheckboxesHtml()}
+            <div class="te-section">Type</div>
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+                <div class="form-group" style="flex:1; margin:0;">
+                    <label>Bonus Type:</label>
+                    <select id="bonus-type">
+                        <option value="stat">Stat</option>
+                        <option value="roll">Roll (Acc/Diff)</option>
+                        <option value="damage">Damage</option>
+                        <option value="tag">Tag</option>
+                        <option value="range">Range</option>
+                        <option value="immunity">Immunity</option>
+                        <option value="target_modifier">Target Modifier</option>
+                        <option value="reroll">Reroll</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1; margin:0;">
+                    <label>Consume on:</label>
+                    <div class="la-multi-select" id="bonus-trigger">
+                        <button type="button" class="la-multi-select-trigger">— Select —</button>
+                        <div class="la-multi-select-panel">
+                            ${consumptionTriggerCheckboxesHtml()}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -872,72 +1215,59 @@ export async function executeEffectManager(options = {}) {
                     <input type="number" id="bonus-filter-checkBelow" placeholder="any" style="width:40%;">
                 </div>
             </div>
-            <div class="form-group" style="margin-top:10px;">
-                <label>Bonus Type:</label>
-                <select id="bonus-type">
-                    <option value="stat">Stat</option>
-                    <option value="roll">Roll (Acc/Diff)</option>
-                    <option value="damage">Damage</option>
-                    <option value="tag">Tag</option>
-                    <option value="range">Range</option>
-                    <option value="immunity">Immunity</option>
-                    <option value="target_modifier">Target Modifier</option>
-                    <option value="reroll">Reroll</option>
-                </select>
-            </div>
             <div id="bonus-type-stat">
-                <div class="form-group">
-                    <label>Stat:</label>
-                    <select id="bonus-stat">
-                        <optgroup label="Resources (Max)">
-                            <option value="system.hp.max">HP (Max)</option>
-                            <option value="system.heat.max">Heat Cap (Max)</option>
-                            <option value="system.repairs.max">Repair Cap (Max)</option>
-                            <option value="system.structure.max">Structure (Max)</option>
-                            <option value="system.stress.max">Stress (Max)</option>
-                        </optgroup>
-                        <optgroup label="Resources (Current)">
-                            <option value="system.hp.value">HP (Current)</option>
-                            <option value="system.heat.value">Heat (Current)</option>
-                            <option value="system.overshield.value">Overshield</option>
-                            <option value="system.burn">Burn</option>
-                            <option value="system.repairs.value">Repairs (Current)</option>
-                        </optgroup>
-                        <optgroup label="Stats">
-                            <option value="system.speed">Speed</option>
-                            <option value="system.evasion">Evasion</option>
-                            <option value="system.edef">E-Defense</option>
-                            <option value="system.save">Save Target</option>
-                            <option value="system.sensor_range">Sensor Range</option>
-                            <option value="system.tech_attack">Tech Attack</option>
-                            <option value="system.armor">Armor</option>
-                            <option value="system.size">Size</option>
-                        </optgroup>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Value:</label>
-                    <div style="flex:1; display:flex; gap:4px; align-items:center;">
-                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="-1" title="Decrement" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                        <input type="number" id="bonus-statVal" value="1" style="flex:0 0 60px; min-width:60px; max-width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
-                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="1" title="Increment" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <div class="form-group" style="flex:1; min-width:0; margin:0;">
+                        <label>Stat:</label>
+                        <select id="bonus-stat" style="min-width:0;">
+                            <optgroup label="Resources (Max)">
+                                <option value="system.hp.max">HP (Max)</option>
+                                <option value="system.heat.max">Heat Cap (Max)</option>
+                                <option value="system.repairs.max">Repair Cap (Max)</option>
+                                <option value="system.structure.max">Structure (Max)</option>
+                                <option value="system.stress.max">Stress (Max)</option>
+                            </optgroup>
+                            <optgroup label="Resources (Current)">
+                                <option value="system.hp.value">HP (Current)</option>
+                                <option value="system.heat.value">Heat (Current)</option>
+                                <option value="system.overshield.value">Overshield</option>
+                                <option value="system.burn">Burn</option>
+                                <option value="system.repairs.value">Repairs (Current)</option>
+                            </optgroup>
+                            <optgroup label="Stats">
+                                <option value="system.speed">Speed</option>
+                                <option value="system.evasion">Evasion</option>
+                                <option value="system.edef">E-Defense</option>
+                                <option value="system.save">Save Target</option>
+                                <option value="system.sensor_range">Sensor Range</option>
+                                <option value="system.tech_attack">Tech Attack</option>
+                                <option value="system.armor">Armor</option>
+                                <option value="system.size">Size</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1; margin:0; display:flex; gap:6px; align-items:center; justify-content:flex-start;">
+                        <label style="flex:0 0 auto;">Value:</label>
+                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="-1" title="Decrement" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                        <input type="number" id="bonus-statVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </div>
             <div id="bonus-type-roll" style="display:none;">
-                <div class="form-group">
-                    <label>Bonus Roll Type:</label>
-                    <select id="bonus-rollType">
-                        <option value="accuracy">Accuracy</option>
-                        <option value="difficulty">Difficulty</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Value:</label>
-                    <div style="flex:1; display:flex; gap:4px; align-items:center;">
-                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="-1" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                        <input type="number" id="bonus-accDiffVal" value="1" min="1" style="flex:0 0 60px; min-width:60px; max-width:60px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
-                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="1" style="flex:0 0 28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <div class="form-group" style="flex:1; min-width:0; margin:0;">
+                        <label>Bonus Roll Type:</label>
+                        <select id="bonus-rollType" style="min-width:0;">
+                            <option value="accuracy">Accuracy</option>
+                            <option value="difficulty">Difficulty</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1; margin:0; display:flex; gap:6px; align-items:center; justify-content:flex-start;">
+                        <label style="flex:0 0 auto;">Value:</label>
+                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="-1" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
+                        <input type="number" id="bonus-accDiffVal" value="1" min="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; font-size:0.9em; border:2px solid #999; border-radius:4px;">
+                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="1" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </div>
@@ -1111,34 +1441,47 @@ export async function executeEffectManager(options = {}) {
                         </div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label data-tooltip="Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.">Apply to items:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="bonus-itemLids" placeholder="e.g. mb_knife, cqb_shotgun" style="flex:1;">
-                        <button type="button" class="find-lid-btn" data-target="bonus-itemLids" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
+                <details class="te-advanced">
+                    <summary>Filters</summary>
+                    <div class="te-row-2col">
+                        <div class="form-group">
+                            <label data-tooltip="Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.">Items (LID):</label>
+                            <div style="flex:1; display:flex; gap:3px;">
+                                <input type="text" id="bonus-itemLids" placeholder="e.g. mb_knife, cqb_shotgun" style="flex:1;">
+                                <button type="button" class="find-lid-btn" data-target="bonus-itemLids" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label data-tooltip="Apply this bonus selectively to a specific item ID on an actor.">Item ID:</label>
+                            <div style="flex:1; display:flex; gap:3px;">
+                                <input type="text" id="bonus-itemId" placeholder="Item ID" style="flex:1;">
+                                <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label data-tooltip="Apply this bonus to specific token IDs. Use the selector to pick tokens from the map.">Apply to tokens:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="bonus-applyTo" placeholder="Token IDs (comma-separated)" style="flex:1;">
-                        <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
+                    <div class="te-row-2col">
+                        <div class="form-group">
+                            <label data-tooltip="Apply this bonus to specific token IDs. Use the selector to pick tokens from the map.">Tokens:</label>
+                            <div style="flex:1; display:flex; gap:3px;">
+                                <input type="text" id="bonus-applyTo" placeholder="Token IDs" style="flex:1;">
+                                <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
+                            </div>
+                        </div>
+                        <div class="form-group" style="justify-content:flex-start;">
+                            <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers." style="flex:0 0 auto; margin-right:6px;">Targetter:</label>
+                            <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content; flex:0 0 auto;">
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label data-tooltip="Apply this bonus selectively to a specific item ID on an actor.">Apply to specific Item ID:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="bonus-itemId" placeholder="Item ID" style="flex:1;">
-                        <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                    </div>
-                </div>
-                <div class="form-group" style="justify-content:flex-start;">
-                    <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers." style="flex:0 0 auto; margin-right:6px;">Apply to Targetter:</label>
-                    <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content; flex:0 0 auto;">
-                </div>
+                </details>
+                <details class="te-advanced">
+                    <summary>Advanced</summary>
+                    ${codeFieldRow('bonus-condition', 'Condition', '(state, actor, data, context) => true')}
+                    ${codeFieldRow('bonus-applyToCondition', 'Apply-to Condition', '(target, state, reactorToken) => true')}
+                </details>
             </div>
-            <div style="margin-top:8px;">
-                <button type="button" class="te-btn" id="bonus-add" style="width:100%;"><i class="fas fa-plus-circle"></i> Add Bonus</button>
+            <div class="te-btn-group">
+                <button type="button" class="te-btn save-preset-btn" data-prefix="bonus"><i class="fas fa-bookmark"></i> Save Preset</button>
+                <button type="button" class="te-btn" id="bonus-add"><i class="fas fa-plus-circle"></i> Add Bonus</button>
             </div>
             <hr class="te-divider">
             <button type="button" class="te-btn" id="bonus-clear-all" style="width:100%; border-color:var(--primary-color);"><i class="fas fa-trash"></i> Clear All Bonuses</button>
@@ -1252,28 +1595,31 @@ export async function executeEffectManager(options = {}) {
             // Close button
             html.find('.manage-close').click(() => dialog.close());
 
-            const _syncCustIconPreview = () => {
-                const path = String(html.find('#cust-icon').val() ?? '');
-                const $img = html.find('#cust-icon-preview');
+            const _syncIconPreview = (inputId) => {
+                const path = String(html.find(`#${inputId}`).val() ?? '');
+                const $img = html.find(`#${inputId}-preview`);
                 if ($img.length) {
                     $img.attr('src', path);
                     $img[0].style.opacity = '1';
                 }
             };
+            const _syncCustIconPreview = () => _syncIconPreview('cust-icon');
 
-            // File Picker
-            html.find('.file-picker').click(ev => {
-                const input = html.find('#cust-icon');
+            // File Picker — honors the button's data-target so each input has its own.
+            html.find('.file-picker').click(function () {
+                const targetId = $(this).data('target') || 'cust-icon';
+                const input = html.find(`#${targetId}`);
                 new FilePicker({
                     type: "image",
                     callback: (path) => {
                         input.val(path);
-                        _syncCustIconPreview();
+                        _syncIconPreview(targetId);
                     }
                 }).browse(String(input.val()));
             });
 
             html.find('#cust-icon').on('input change', _syncCustIconPreview);
+            html.find('#bonus-icon').on('input change', () => _syncIconPreview('bonus-icon'));
 
             const _findStatusDesc = (id) => {
                 const s = (CONFIG.statusEffects ?? []).find(x => x.id === id || x.name === id);
@@ -1417,6 +1763,127 @@ export async function executeEffectManager(options = {}) {
             });
 
             // Apply Button
+            html.find('.save-status-btn').click(async () => {
+                const name = String(html.find('#cust-name').val() || '').trim();
+                const icon = String(html.find('#cust-icon').val() || '').trim();
+                if (!name)
+                    return ui.notifications.warn('Name is required to save a status.');
+                if (!icon)
+                    return ui.notifications.warn('Icon is required to save a status.');
+                const list = game.settings.get('temporary-custom-statuses', 'savedStatuses') || [];
+                const existing = list.find(s => s.name === name);
+                if (existing)
+                    existing.icon = icon;
+                else
+                    list.push({ name, icon });
+                await game.settings.set('temporary-custom-statuses', 'savedStatuses', list);
+                // Refresh the Saved dropdown so the new entry is selectable immediately.
+                const $sel = html.find('#cust-saved');
+                const prev = String($sel.val() || '');
+                $sel.find('option:not(:first)').remove();
+                for (const s of list)
+                    $sel.append(`<option value="${s.name}" data-icon="${s.icon}">${s.name}</option>`);
+                $sel.val(prev || name);
+                ui.notifications.info(`Saved "${name}" to custom statuses.`);
+            });
+
+            const _codeFieldMeta = {
+                'bonus-condition':        { title: 'Condition',            def: '(state, actor, data, context) => { return true; }' },
+                'bonus-applyToCondition': { title: 'Apply-to Condition',   def: '(target, state, reactorToken) => { return true; }' },
+                'std-evaluate':           { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
+                'cust-evaluate':          { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
+                'cust-changes':           { title: 'Active Effect Changes', def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": "1" }\n]' },
+            };
+            const _rebuildPresetSelect = (prefix) => {
+                const cat = presetCategoryFor(prefix);
+                const presets = getStoredPresets()[cat] || [];
+                const $sel = html.find(`#${prefix}-preset-load`);
+                const prev = String($sel.val() || '');
+                $sel.empty();
+                $sel.append('<option value="">— Load —</option>');
+                for (const p of presets)
+                    $sel.append(`<option value="${p.name}">${p.name}</option>`);
+                $sel.val(prev);
+            };
+            html.find('.save-preset-btn').click(async function () {
+                const prefix = $(this).data('prefix');
+                const cat = presetCategoryFor(prefix);
+                const name = await new Promise((resolve) => {
+                    new Dialog({
+                        title: 'Save Preset',
+                        content: '<p style="padding:6px 8px;">Preset name:</p><input type="text" id="preset-name-input" style="width:100%; padding:4px;">',
+                        buttons: {
+                            save: { icon: '<i class="fas fa-save"></i>', label: 'Save', callback: (h) => resolve(String(h.find('#preset-name-input').val() || '').trim()) },
+                            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel', callback: () => resolve('') }
+                        },
+                        default: 'save',
+                        close: () => resolve(''),
+                        render: (h) => setTimeout(() => h.find('#preset-name-input').focus(), 50)
+                    }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+                });
+                if (!name) return;
+                const all = getStoredPresets();
+                const data = gatherPresetData(html, prefix);
+                const existing = all[cat].find(p => p.name === name);
+                if (existing) {
+                    const overwrite = await new Promise((resolve) => {
+                        new Dialog({
+                            title: 'Preset Exists',
+                            content: `<p style="padding:6px 8px;">A preset named "${name}" already exists. Overwrite?</p>`,
+                            buttons: {
+                                yes: { icon: '<i class="fas fa-check"></i>', label: 'Overwrite', callback: () => resolve(true) },
+                                no:  { icon: '<i class="fas fa-times"></i>', label: 'Cancel', callback: () => resolve(false) }
+                            },
+                            default: 'yes',
+                            close: () => resolve(false)
+                        }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+                    });
+                    if (!overwrite) return;
+                    existing.data = data;
+                } else {
+                    all[cat].push({ name, data });
+                }
+                await setStoredPresets(all);
+                _rebuildPresetSelect(prefix);
+                html.find(`#${prefix}-preset-load`).val(name);
+                ui.notifications.info(`Saved preset "${name}".`);
+            });
+            html.find('#std-preset-load, #cust-preset-load, #bonus-preset-load').change(function () {
+                const name = String($(this).val() || '');
+                if (!name) return;
+                const id = this.id;
+                const prefix = id.startsWith('std') ? 'std' : id.startsWith('cust') ? 'cust' : 'bonus';
+                const cat = presetCategoryFor(prefix);
+                const preset = getStoredPresets()[cat].find(p => p.name === name);
+                if (!preset) return;
+                applyPresetData(html, prefix, preset.data);
+                ui.notifications.info(`Loaded preset "${name}".`);
+            });
+            html.find('.std-preset-delete, .cust-preset-delete, .bonus-preset-delete').click(async function () {
+                const prefix = $(this).closest('.preset-bar').data('prefix');
+                const $sel = html.find(`#${prefix}-preset-load`);
+                const name = String($sel.val() || '');
+                if (!name) return ui.notifications.warn('Select a preset to delete first.');
+                const all = getStoredPresets();
+                const cat = presetCategoryFor(prefix);
+                all[cat] = (all[cat] || []).filter(p => p.name !== name);
+                await setStoredPresets(all);
+                _rebuildPresetSelect(prefix);
+                $sel.val('');
+                ui.notifications.info(`Deleted preset "${name}".`);
+            });
+
+            html.find('.code-field-badge').click(function () {
+                const id = $(this).data('target');
+                const meta = _codeFieldMeta[id] ?? { title: 'Code', def: '' };
+                openCodeFieldDialog(html, id, meta.title, meta.def);
+            });
+            html.find('.code-clear-btn').click(function () {
+                const id = $(this).data('target');
+                html.find(`#${id}-value`).val('');
+                updateCodeFieldBadge(html, id);
+            });
+
             html.find('.apply-btn').click(async (e) => {
                 e.preventDefault();
                 const tab = $(e.currentTarget).data('tab');
@@ -1509,6 +1976,17 @@ export async function executeEffectManager(options = {}) {
                             consumption.originId = targetID;
                         extraOptions.consumption = consumption;
                         extraOptions.stack = stack;
+                    }
+                    const changesSrc = String(html.find('#cust-changes-value').val() || '').trim();
+                    if (changesSrc) {
+                        try {
+                            const parsed = (new Function(`return (${changesSrc});`))();
+                            if (!Array.isArray(parsed))
+                                return ui.notifications.error('Active Effect Changes must be an array.');
+                            extraOptions.changes = parsed;
+                        } catch (err) {
+                            return ui.notifications.error(`Active Effect Changes parse error: ${err.message}`);
+                        }
                     }
 
                     const token = canvas.tokens.get(targetID);
@@ -1751,14 +2229,17 @@ export async function executeEffectManager(options = {}) {
                 const summary = html.find('#bonus-summary');
 
                 if (!target?.actor) {
-                    summary.text('No active bonuses.');
+                    summary.text('—').removeClass('has-bonuses').attr('title', 'No token selected');
                     return;
                 }
                 const actor = target.actor;
                 const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
                 const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
                 const total = bonuses.length + constantBonuses.length;
-                summary.text(total > 0 ? `${total} active bonus${total > 1 ? 'es' : ''} — see Manage tab.` : 'No active bonuses.');
+                if (total > 0)
+                    summary.text(`${total} active`).addClass('has-bonuses').attr('title', `${total} active bonus${total > 1 ? 'es' : ''} — see Manage tab.`);
+                else
+                    summary.text('—').removeClass('has-bonuses').attr('title', 'No active bonuses');
 
                 if (dialog.position) {
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
@@ -1980,6 +2461,12 @@ export async function executeEffectManager(options = {}) {
                     applyTo,
                     applyToTargetter
                 };
+                const conditionSrc = String(html.find('#bonus-condition-value').val() || '').trim();
+                if (conditionSrc)
+                    bonusData.condition = '@@fn:' + conditionSrc;
+                const applyToConditionSrc = String(html.find('#bonus-applyToCondition-value').val() || '').trim();
+                if (applyToConditionSrc)
+                    bonusData.applyToCondition = '@@fn:' + applyToConditionSrc;
 
                 if (type === 'stat') {
                     bonusData.stat = html.find('#bonus-stat').val();
@@ -2040,6 +2527,9 @@ export async function executeEffectManager(options = {}) {
                     durationTurns: durTurns,
                     origin: durOrigin
                 };
+                const customIcon = String(html.find('#bonus-icon').val() || '').trim();
+                if (customIcon)
+                    addOptions.icon = customIcon;
 
                 // Build consumption config
                 const consumptionTriggers = html.find('#bonus-trigger input:checked')

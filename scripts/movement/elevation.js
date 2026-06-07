@@ -1,6 +1,7 @@
 /* global game, canvas, Hooks, libWrapper, foundry, CONST */
 
 import { getCurrentMovementType } from './keybindings.js';
+import { playUiSound } from '../tah/sound.js';
 
 const MODULE_ID = 'lancer-automations';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
@@ -11,7 +12,7 @@ const THT_IGNORE_FLAG = 'ignoreAutoElevation';
 const LA_IGNORE_RULER_FLAG = 'ignoreRulerAutoElevation';
 const LA_DISABLE_AUTO_TERRAIN_FLAG = 'disableAutoTerrainElevation';
 
-const AUTO_MOVEMENT_TYPES = new Set(['walk', 'crawl', 'climb', 'jump', 'teleport', 'blink', 'fly']);
+const AUTO_MOVEMENT_TYPES = new Set(['walk', 'crawl', 'climb', 'jump', 'fly']);
 
 Hooks.once('init', () => {
     game.settings.register(MODULE_ID, CLIMB_WAYPOINTS_ENABLED, {
@@ -376,6 +377,7 @@ Hooks.once('ready', () => {
     // Native Q/E during drag also adds to pathfinder cost. Route to our offset mechanism.
     libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype._changeDragElevation', function(delta) {
         bumpDragElevation(Math.sign(delta));
+        playUiSound('tokenDrag');
     }, 'OVERRIDE');
 
     libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype._onDragLeftStart', function(wrapped, event) {

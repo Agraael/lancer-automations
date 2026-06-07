@@ -20,9 +20,10 @@ function _canPlay() {
     return isActionFXEnabled() && typeof Sequencer !== 'undefined';
 }
 
-// weapon-fx volume × master, 0 if the per-action toggle is off.
-/** @param {any} fx @param {string} action @param {number} scale */
-function _vol(fx, action, scale) {
+// weapon-fx volume × master, 0 if the per-action toggle is off. scale read from ACTION_FX_PREVIEW.
+/** @param {any} fx @param {string} action */
+function _vol(fx, action) {
+    const scale = ACTION_FX_PREVIEW[action]?.scale ?? 0.5;
     try {
         if (game.settings.get('lancer-automations', `tah.actionFxSound.${action}`) === false)
             return 0;
@@ -63,7 +64,7 @@ const ACTION_FX_PREVIEW = {
     ram:          { src: 'modules/lancer-automations/FX/audio/ram.wav', scale: 0.5 },
     boost:        { src: 'modules/lancer-automations/FX/audio/boost.wav', scale: 0.3 },
     overchargeNpc:{ src: 'modules/lancer-weapon-fx/soundfx/Overcharge.ogg', scale: 0.5 },
-    shutDown:     { src: 'modules/lancer-automations/FX/audio/shutdown.wav', scale: 0.4 },
+    shutDown:     { src: 'modules/lancer-automations/FX/audio/shutdown.wav', scale: 0.7 },
     fall:         { src: 'modules/lancer-automations/FX/audio/fall.mp3', scale: 0.7 },
     fallImpact:   { src: 'modules/lancer-automations/FX/audio/IMPACT.mp3', scale: 0.5 },
     search:       { src: 'modules/lancer-automations/FX/audio/radar-4.wav', scale: 0.5 },
@@ -72,7 +73,7 @@ const ACTION_FX_PREVIEW = {
     targetFail:   { src: 'modules/lancer-automations/FX/audio/denyerror-sound.wav', scale: 0.5 },
     hide:         { src: 'modules/lancer-automations/FX/audio/PuffSmoke.wav', scale: 0.7 },
     defaultThrow: { src: 'modules/lancer-weapon-fx/soundfx/bladeswing.ogg', scale: 0.2 },
-    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.5 },
+    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.2 },
 };
 
 /** @param {string} action */
@@ -125,7 +126,7 @@ export async function playSkirmishFX(token) {
     await new Sequence()
         .sound()
         .file(soundFile)
-        .volume(_vol(fx, 'skirmish', 0.35))
+        .volume(_vol(fx, 'skirmish'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -183,7 +184,7 @@ export async function playFightFX(token) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/fight.wav')
-        .volume(_vol(fx, 'fight', 0.35))
+        .volume(_vol(fx, 'fight'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -236,7 +237,7 @@ export async function playEjectFX(source, dest) {
     const sourceSeq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/jetpack_unpack_1.wav')
-        .volume(_vol(fx, 'eject', 0.5))
+        .volume(_vol(fx, 'eject'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -273,7 +274,7 @@ export async function playEjectFX(source, dest) {
             .scaleToObject(5)
             .sound()
             .file('modules/lancer-automations/FX/audio/smokeimpact.wav')
-            .volume(_vol(fx, 'eject', 0.5))
+            .volume(_vol(fx, 'eject'))
             .play();
     }
 }
@@ -299,10 +300,10 @@ export async function playSelfDestructFX(token) {
     await new Sequence()
         .sound()
         .file('modules/lancer-weapon-fx/soundfx/dramaticSparkles.ogg')
-        .volume(_vol(fx, 'selfDestruct', 0.2))
+        .volume(_vol(fx, 'selfDestruct'))
         .sound()
         .file('modules/lancer-weapon-fx/soundfx/ReactorWarning.ogg')
-        .volume(_vol(fx, 'selfDestruct', 0.5))
+        .volume(_vol(fx, 'selfDestruct'))
         .repeats(3, 1000)
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -356,7 +357,7 @@ export async function playSelfDestructFX(token) {
         .belowTokens()
         .sound()
         .file('modules/lancer-weapon-fx/soundfx/Annihilator.ogg')
-        .volume(_vol(fx, 'selfDestruct', 0.5))
+        .volume(_vol(fx, 'selfDestruct'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -374,7 +375,7 @@ export async function playSelfDestructFX(token) {
         .waitUntilFinished(-2000)
         .sound()
         .file('modules/lancer-weapon-fx/soundfx/Annihilator.ogg')
-        .volume(_vol(fx, 'selfDestruct', 0.5))
+        .volume(_vol(fx, 'selfDestruct'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -395,16 +396,24 @@ export async function playSelfDestructFX(token) {
 export async function playTeleportFX(caster) {
     if (!_canPlay())
         return;
-    const fx = _weaponFx();
     await Sequencer.Preloader.preloadForClients([
         'modules/lancer-automations/FX/svg/Teleport.svg',
+    ]);
+    await _appendActionBadge(new Sequence(), caster, 'modules/lancer-automations/FX/svg/Teleport.svg').play();
+}
+
+export async function playTeleportSoundFX() {
+    if (!_canPlay())
+        return;
+    const fx = _weaponFx();
+    await Sequencer.Preloader.preloadForClients([
         'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav',
     ]);
-    const seq = new Sequence()
+    await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav')
-        .volume(fx ? _vol(fx, 'teleport', 0.7) : 0.7);
-    await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Teleport.svg').play();
+        .volume(fx ? _vol(fx, 'teleport') : (ACTION_FX_PREVIEW.teleport?.scale ?? 0.7))
+        .play();
 }
 
 export async function playBootUpFX(caster) {
@@ -421,7 +430,7 @@ export async function playBootUpFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/bootup.wav')
-        .volume(_vol(fx, 'bootUp', 0.5))
+        .volume(_vol(fx, 'bootUp'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -487,7 +496,7 @@ export async function playDismountFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/liftoff.wav')
-        .volume(_vol(fx, 'dismount', 0.5))
+        .volume(_vol(fx, 'dismount'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -523,7 +532,7 @@ export async function playMountFX(source, dest) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/mount.ogg')
-        .volume(_vol(fx, 'mount', 0.5))
+        .volume(_vol(fx, 'mount'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -570,7 +579,7 @@ export async function playReloadFX(token) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/reload.wav')
-        .volume(_vol(fx, 'reload', 0.5))
+        .volume(_vol(fx, 'reload'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -622,7 +631,7 @@ export async function playDisengageFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav')
-        .volume(_vol(fx, 'disengage', 0.5))
+        .volume(_vol(fx, 'disengage'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -645,7 +654,7 @@ export async function playDeployableFX(deployedToken) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/deploy.wav')
-        .volume(_vol(fx, 'deployable', 0.35))
+        .volume(_vol(fx, 'deployable'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -701,7 +710,7 @@ export async function playFreeActionFX(caster, svg = 'modules/lancer-automations
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/free.wav')
-        .volume(_vol(fx, 'freeAction', 0.35))
+        .volume(_vol(fx, 'freeAction'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -761,7 +770,7 @@ export async function playCorePowerFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/corepower.wav')
-        .volume(_vol(fx, 'corePower', 0.5))
+        .volume(_vol(fx, 'corePower'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -833,7 +842,7 @@ export async function playProtocolFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/protocol.wav')
-        .volume(_vol(fx, 'protocol', 0.35))
+        .volume(_vol(fx, 'protocol'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -891,7 +900,7 @@ export async function playReactionFX(caster, svg = 'modules/lancer-automations/F
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/reaction.wav')
-        .volume(_vol(fx, 'reaction', 0.35))
+        .volume(_vol(fx, 'reaction'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -947,7 +956,7 @@ export async function playFullActionFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/fullaction.wav')
-        .volume(_vol(fx, 'fullAction', 0.6))
+        .volume(_vol(fx, 'fullAction'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1003,7 +1012,7 @@ export async function playQuickActionFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/quickaction.wav')
-        .volume(_vol(fx, 'quickAction', 0.6))
+        .volume(_vol(fx, 'quickAction'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1058,7 +1067,7 @@ export async function playStandingUpFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/standingup.mp3')
-        .volume(_vol(fx, 'standingUp', 0.5))
+        .volume(_vol(fx, 'standingUp'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1080,7 +1089,7 @@ export async function playPrepareFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/prepare.wav')
-        .volume(_vol(fx, 'prepare', 0.5))
+        .volume(_vol(fx, 'prepare'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1102,7 +1111,7 @@ export async function playInteractFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/interact.wav')
-        .volume(_vol(fx, 'interact', 0.5))
+        .volume(_vol(fx, 'interact'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1124,7 +1133,7 @@ export async function playHandleFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/handle.wav')
-        .volume(_vol(fx, 'handle', 0.5))
+        .volume(_vol(fx, 'handle'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1148,7 +1157,7 @@ export async function playFullTechFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/fulltech.wav')
-        .volume(_vol(fx, 'fullTech', 0.3))
+        .volume(_vol(fx, 'fullTech'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1214,7 +1223,7 @@ export async function playQuickTechFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/quicktech.wav')
-        .volume(_vol(fx, 'quickTech', 0.3))
+        .volume(_vol(fx, 'quickTech'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1280,7 +1289,7 @@ export async function playInvadeFX(caster) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/invade.wav')
-        .volume(_vol(fx, 'invade', 0.3))
+        .volume(_vol(fx, 'invade'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1344,7 +1353,7 @@ export async function playGrappleFX(caster) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav')
-        .volume(_vol(fx, 'grapple', 0.5))
+        .volume(_vol(fx, 'grapple'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1366,7 +1375,7 @@ export async function playRamFX(caster, target) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/ram.wav')
-        .volume(_vol(fx, 'ram', 0.5));
+        .volume(_vol(fx, 'ram'));
     if (target) {
         seq.effect()
             .xray(fx.isEffectIgnoreFogOfWar())
@@ -1393,7 +1402,7 @@ export async function playJockeyFX(caster, target) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/jockey.wav')
-        .volume(_vol(fx, 'jockey', 0.5))
+        .volume(_vol(fx, 'jockey'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1426,7 +1435,7 @@ export async function playBarrageFX(token) {
     await new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/barrage.wav')
-        .volume(_vol(fx, 'barrage', 0.35))
+        .volume(_vol(fx, 'barrage'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1483,7 +1492,7 @@ export async function playBoostFX(token) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/boost.wav')
-        .volume(_vol(fx, 'boost', 0.3))
+        .volume(_vol(fx, 'boost'))
         .effect()
         .file('jb2a.zoning.directional.once.redyellow.line200.01')
         .scaleToObject(1.5)
@@ -1523,7 +1532,7 @@ export async function playOverchargeNpcFX(token) {
         .fadeOut(800)
         .sound()
         .file('modules/lancer-weapon-fx/soundfx/Overcharge.ogg')
-        .volume(_vol(fx, 'overchargeNpc', 0.5))
+        .volume(_vol(fx, 'overchargeNpc'))
         .waitUntilFinished(-2700)
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -1577,7 +1586,7 @@ export async function playHideFX(token) {
         .scale(1.1)
         .sound()
         .file('modules/lancer-automations/FX/audio/PuffSmoke.wav')
-        .volume(fx ? _vol(fx, 'hide', 0.7) : 0.7);
+        .volume(fx ? _vol(fx, 'hide') : 0.7);
     await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Hide.svg').play();
 }
 
@@ -1594,7 +1603,7 @@ export async function playShutDownFX(token) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/shutdown.wav')
-        .volume(_vol(fx, 'shutDown', 0.7))
+        .volume(_vol(fx, 'shutDown'))
         .atLocation(token)
         .effect()
         .file('jb2a.extras.tmfx.inpulse.circle.02.normal')
@@ -1621,7 +1630,7 @@ export async function playFallFX(token) {
     const seq = new Sequence()
         .sound()
         .file('modules/lancer-automations/FX/audio/fall.mp3')
-        .volume(_vol(fx, 'fall', 0.7))
+        .volume(_vol(fx, 'fall'))
         .atLocation(token);
     await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Falling.svg').play();
 }

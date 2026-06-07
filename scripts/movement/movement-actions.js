@@ -63,6 +63,7 @@ Hooks.once('init', () => {
     }
     if (actions.blink) {
         actions.blink.label = 'Teleport';
+        actions.blink.teleport = true;
     }
     if (actions.ignore) {
         actions.ignore.label = 'Ignore Elevation';

@@ -859,6 +859,37 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             for (const c of stepCentroids) c.cost = 0;
         }
 
+        if (segAction === 'blink') {
+            verticalCost = Math.abs((toWp.elevation ?? 0) - (fromWp.elevation ?? 0));
+            const baseCost = Math.max(horizontalCost, verticalCost);
+            let destPenalty = 0;
+            if (!terrainImmune) {
+                try {
+                    const gridSize = canvas.grid.size;
+                    const sizeTo = tokenDoc.getSize?.(toWp) ?? { width: (toWp.width ?? tokenDoc.width) * gridSize, height: (toWp.height ?? tokenDoc.height) * gridSize };
+                    const toCenter = { x: toWp.x + sizeTo.width / 2, y: toWp.y + sizeTo.height / 2 };
+                    const toCell = canvas.grid.getOffset(toCenter);
+                    const { footprint: destFootprint } = footprintShapesAt(tokenDoc, toCell, typeById);
+                    const destShapes = collectShapes(destFootprint, typeById);
+                    const destElev = toWp.elevation ?? 0;
+                    const thtPen = penaltyFromShapes(destShapes, typeById, destElev);
+                    const gaaPen = gaaPenaltyAtCells(tokenDoc, destFootprint);
+                    let tmacPen = 0;
+                    try { tmacPen = templatePenaltyAtCells(destFootprint, destElev); } catch { tmacPen = 0; }
+                    const regionPen = regionPenaltyAtCells(tokenDoc, destFootprint, destElev * sceneDistance);
+                    destPenalty = Math.max(thtPen, gaaPen, tmacPen, regionPen);
+                } catch {
+                    destPenalty = 0;
+                }
+            }
+            segCost = baseCost * (1 + destPenalty);
+            terrainCost = baseCost * destPenalty;
+            malus = 0;
+            climbCells.length = 0;
+            terrainCells.length = 0;
+            for (const c of stepCentroids) c.cost = segCost;
+        }
+
         seg.lancerVerticalCost = verticalCost;
         seg.lancerTerrainPenalty = terrainCost;
         seg.lancerClimbMalus = malus;

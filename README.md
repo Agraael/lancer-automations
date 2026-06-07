@@ -27,13 +27,17 @@ Started by tweaking existing modules for the [Lancer system](https://foundryvtt.
 
 A Lancer system extension for Foundry v13: QoL and UI fixes, custom token stat bars, HUD, ruler, isometric handling, interactive tools, and an event-driven automation engine to wire anything together.
 
-> Some features may overlap or not fully integrate with each other. Work in progress.
+> **Before you install, please read.**
+>
+> This is a very dense and heavy module with hundreds of features, still very much a work in progress. Some features may overlap or not fully integrate with each other. If you're new to Foundry VTT, I'd hold off on this one for now and get familiar with the platform first, otherwise you risk losing a lot of time.
+>
+> **The README below is a bit old and doesn't cover everything.** Writing docs takes time and energy. The best way to keep up with new additions is the blog posts on my [Patreon](https://www.patreon.com/cw/LaSossis), where I explain new features with illustrations (e.g. isometric handling, and other recent additions).
+>
+> **Before asking questions** about Lancer Automations or any of my other modules, please inform yourself, explore, try stuff. It's a lot easier on me if I don't have to answer the same obvious questions all the time. That can also mean I haven't properly informed you yet, so be curious and explore before asking. Thanks.
 
 ## 📘 [Read the full API reference →](doc/API_REFERENCE.md)
 
 Trigger schemas, function signatures, every option. Split across `doc/API_*.md` (Combat, Effects, Interactive, HowTo). Start there if you're writing activation code, macros, or hooking the engine from another module.
-
-The README hits highlights; the docs and the in-app tours are the source of truth, and there's much more in the release than what's listed below.
 
 ---
 

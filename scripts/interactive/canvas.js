@@ -1536,25 +1536,8 @@ export async function moveToken(token, options = {}) {
     }
 
     // Execute move
-    const startCenter = token.getCenterPoint({ x: token.document.x, y: token.document.y });
     const endCenter = token.getCenterPoint(destTopLeft);
     const moveCost = options.cost ?? getDistanceTokenToPoint(endCenter, token);
-    const tokenSize = Math.max(1, token.document.width, token.document.height) * canvas.grid.size;
-    // Teleport-only impact visuals at origin and destination. Audio is owned
-    // by playTeleportFX (single source, mute-toggle aware).
-    if (options.teleport && typeof Sequencer !== 'undefined') {
-        // @ts-ignore
-        new Sequence()
-            .effect("jb2a.impact.003.yellow")
-            .atLocation(startCenter)
-            .size(tokenSize * 3)
-            .mirrorX()
-            .playbackRate(2)
-            .effect("jb2a.impact.003.yellow")
-            .atLocation(endCenter)
-            .size(tokenSize * 3)
-            .play();
-    }
 
     // Calculate ground elevation at destination (max solid terrain under footprint)
     const updateData = { ...destTopLeft };
@@ -1578,8 +1561,12 @@ export async function moveToken(token, options = {}) {
         lancerSegmentDistance: moveCost,
         lancerTerrainPenalty: 0
     };
-    if (options.teleport)
+    if (options.teleport) {
         moveFlags.teleport = true;
+        const waypoint = { ...updateData, action: 'blink' };
+        await token.document.move(waypoint, moveFlags);
+        return token.document;
+    }
     const doc = await token.document.update(updateData, moveFlags);
     return doc;
 }
