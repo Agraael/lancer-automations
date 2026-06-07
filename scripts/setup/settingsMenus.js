@@ -153,6 +153,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
+    { key: 'overlapTokenPicker', type: 'boolean' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
     { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
     { type: 'button',

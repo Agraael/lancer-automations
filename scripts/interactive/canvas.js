@@ -253,6 +253,70 @@ export function getGridDistance(pos1, pos2) {
  * @param {string} [options.headerClass=""] - Card header CSS class
  * @returns {Promise<Token[]|null>} Array of selected tokens or null if cancelled
  */
+/**
+ * Small popup at a screen point listing tokens to disambiguate a click on overlapping tokens.
+ * Same UX used inside chooseToken; reused by the click-time overlap picker.
+ * @param {Token[]} tokens
+ * @param {number} screenX
+ * @param {number} screenY
+ * @param {{isSelected?: (t: Token) => boolean, onPick?: (t: Token) => void}} [options]
+ * @returns {() => void} close handle
+ */
+export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = () => false, onPick = () => {} } = {}) {
+    let popupEl = null;
+    let outsideHandler = null;
+    let escHandler = null;
+    const close = () => {
+        if (popupEl) { popupEl.remove(); popupEl = null; }
+        if (outsideHandler) {
+            document.removeEventListener('pointerdown', outsideHandler, true);
+            outsideHandler = null;
+        }
+        if (escHandler) {
+            document.removeEventListener('keydown', escHandler, true);
+            escHandler = null;
+        }
+    };
+    const el = document.createElement('div');
+    el.className = 'la-stack-picker';
+    el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
+    for (const token of tokens) {
+        const sel = !!isSelected(token);
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${sel ? 'background:rgba(255,100,0,0.25);' : ''}`;
+        row.innerHTML = `
+            <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
+            <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
+            ${sel ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
+        row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,100,0,0.4)'; });
+        row.addEventListener('mouseleave', () => { row.style.background = sel ? 'rgba(255,100,0,0.25)' : 'transparent'; });
+        row.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onPick(token);
+            close();
+        });
+        el.appendChild(row);
+    }
+    document.body.appendChild(el);
+    popupEl = el;
+    const r = el.getBoundingClientRect();
+    if (r.right > window.innerWidth)
+        el.style.left = `${Math.max(0, window.innerWidth - r.width - 4)}px`;
+    if (r.bottom > window.innerHeight)
+        el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
+    outsideHandler = (e) => {
+        if (popupEl && !popupEl.contains(/** @type {Node} */ (e.target))) close();
+    };
+    escHandler = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+    };
+    setTimeout(() => {
+        document.addEventListener('pointerdown', outsideHandler, true);
+        document.addEventListener('keydown', escHandler, true);
+    }, 0);
+    return close;
+}
+
 export function chooseToken(casterToken, options = {}) {
     const _title = options.title || 'SELECT TARGETS';
     return _queueCard(() => new Promise((resolve) => {

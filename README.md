@@ -35,6 +35,10 @@ A Lancer system extension for Foundry v13: QoL and UI fixes, custom token stat b
 >
 > **Before asking questions** about Lancer Automations or any of my other modules, please inform yourself, explore, try stuff. It's a lot easier on me if I don't have to answer the same obvious questions all the time. That can also mean I haven't properly informed you yet, so be curious and explore before asking. Thanks.
 
+## Where to reach me
+
+The most common spot is [my channel on the Lancer Discord](https://discord.com/channels/426286410496999425/1436087781666455642).
+
 ## 📘 [Read the full API reference →](doc/API_REFERENCE.md)
 
 Trigger schemas, function signatures, every option. Split across `doc/API_*.md` (Combat, Effects, Interactive, HowTo). Start there if you're writing activation code, macros, or hooking the engine from another module.

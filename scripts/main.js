@@ -8,6 +8,7 @@ import "./movement/cost-rules.js";
 import "./movement/vision-throttle.js";
 import "./movement/movement-actions.js";
 import "./movement/movement-wheel.js";
+import "./interactive/overlap-picker.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
 import { moveTokenTo } from "./movement/move-api.js";
@@ -1411,6 +1412,15 @@ function registerSettings() {
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register('lancer-automations', 'overlapTokenPicker', {
+        name: 'Overlapping Token Picker',
+        hint: 'When clicking a token at the same spot and size as others, open a picker to choose among them.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
     });
 
     game.settings.register('lancer-automations', 'showBonusHudButton', {

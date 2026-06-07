@@ -1699,7 +1699,7 @@ export class LancerHUD {
                 const reactionAvail = hasReactionAvailable(actor);
                 const unavailBg = '#ffe5b4';
                 const unavailBorder = '#cc7700';
-                const noBrace     = actor.type === 'deployable' || actor.type === 'pilot';
+                const noBrace     = actor.type === 'deployable' || actor.type === 'pilot' || actor.type === 'npc';
                 const noOverwatch = actor.type === 'deployable';
                 const items = [
                     ...(noBrace ? [] : [
