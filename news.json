@@ -2,6 +2,15 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-06-08-patreon-feature-vote-1",
+            "date": "2026-06-08",
+            "title": "Patreon Feature Vote #1",
+            "body": [
+                "<p>First feature vote is up. Three options on the table: a Battle Log, an in-engine Automation Tutorial series, or 3D Terrain. Full breakdown of each on the <a href=\"https://www.patreon.com/posts/160497215\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>",
+                "<p>Voting open until June 15. Tier 1 to 3 patrons can vote.</p>"
+            ]
+        },
+        {
             "id": "2026-05-30-v13-released",
             "date": "2026-05-30",
             "title": "LaSossis Module V13 Migration",
