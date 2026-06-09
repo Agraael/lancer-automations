@@ -620,13 +620,21 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     debugReset();
 
     // Climb cost is driven by terrain-top changes, not absolute token elev (v12 ER model).
-    const storedElevGrid = (tokenDoc.elevation ?? 0) / sceneDistance;
+    // Use the PATH'S first waypoint (origin of history), not tokenDoc.x/y (which is the
+    // current position - post-move that's the destination and would skew the climb start).
+    const startWp = inputWaypoints[0];
+    const startElev = startWp?.elevation ?? tokenDoc.elevation ?? 0;
+    const startX = startWp?.x ?? tokenDoc.x ?? 0;
+    const startY = startWp?.y ?? tokenDoc.y ?? 0;
+    const startWidth = startWp?.width ?? tokenDoc.width ?? 1;
+    const startHeight = startWp?.height ?? tokenDoc.height ?? 1;
+    const storedElevGrid = startElev / sceneDistance;
     let groundElevGrid = 0;
     try {
         const gridSize0 = canvas.grid.size;
         const tCenter = {
-            x: (tokenDoc.x ?? 0) + (tokenDoc.width ?? 1) * gridSize0 / 2,
-            y: (tokenDoc.y ?? 0) + (tokenDoc.height ?? 1) * gridSize0 / 2
+            x: startX + startWidth * gridSize0 / 2,
+            y: startY + startHeight * gridSize0 / 2
         };
         const startOff = canvas.grid.getOffset(tCenter);
         groundElevGrid = footprintShapesAt(tokenDoc, startOff, typeById).top;

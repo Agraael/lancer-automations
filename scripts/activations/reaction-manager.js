@@ -1660,6 +1660,7 @@ export class StartupScriptEditor extends FormApplication {
                 theme: 'monokai',
                 lineNumbers: true,
                 matchBrackets: true,
+                styleActiveLine: true,
                 indentUnit: 4,
                 lineWrapping: false,
                 scrollbarStyle: 'native',
@@ -2058,7 +2059,6 @@ export class ReactionEditor extends FormApplication {
         const previewContainer = html.find('.item-preview-container');
         const showItemBtn = html.find('.show-item-btn');
         const previewItemName = html.find('#preview-item-name');
-        const previewActionName = html.find('#preview-action-name');
 
         const actionTypeSelect = html.find('#actionType');
         const frequencySelect = html.find('#frequency');
@@ -2186,14 +2186,15 @@ export class ReactionEditor extends FormApplication {
                 showItemBtn.hide();
             }
 
+            const $existingAction = html.find('#preview-action-name');
             if (foundActionName && foundActionName !== foundItemName) {
-                if (previewActionName.length) {
-                    previewActionName.html(`<strong>Action:</strong> ${foundActionName}`).show();
+                if ($existingAction.length) {
+                    $existingAction.html(`<strong>Action:</strong> ${foundActionName}`).show();
                 } else {
                     previewItemName.after(`<span id="preview-action-name" style="margin-left: 10px;"><strong>Action:</strong> ${foundActionName}</span>`);
                 }
             } else {
-                previewActionName.hide();
+                $existingAction.hide();
             }
 
             if (detectedActionType) {
@@ -2259,6 +2260,7 @@ export class ReactionEditor extends FormApplication {
                     theme: 'monokai',
                     lineNumbers: true,
                     matchBrackets: true,
+                    styleActiveLine: true,
                     indentUnit: 4,
                     smartIndent: true,
                     lineWrapping: false,
@@ -2275,6 +2277,7 @@ export class ReactionEditor extends FormApplication {
                     theme: 'monokai',
                     lineNumbers: true,
                     matchBrackets: true,
+                    styleActiveLine: true,
                     indentUnit: 4,
                     smartIndent: true,
                     lineWrapping: false,
@@ -2291,6 +2294,7 @@ export class ReactionEditor extends FormApplication {
                     theme: 'monokai',
                     lineNumbers: true,
                     matchBrackets: true,
+                    styleActiveLine: true,
                     indentUnit: 4,
                     smartIndent: true,
                     lineWrapping: false,
@@ -2307,6 +2311,7 @@ export class ReactionEditor extends FormApplication {
                     theme: 'monokai',
                     lineNumbers: true,
                     matchBrackets: true,
+                    styleActiveLine: true,
                     indentUnit: 4,
                     smartIndent: true,
                     lineWrapping: false,
@@ -2574,6 +2579,7 @@ export class ReactionEditor extends FormApplication {
                     theme: 'monokai',
                     lineNumbers: true,
                     matchBrackets: true,
+                    styleActiveLine: true,
                     indentUnit: 4,
                     smartIndent: true,
                     lineWrapping: false,
@@ -2618,14 +2624,9 @@ export class ReactionEditor extends FormApplication {
 
         const actions = this._getItemActions(item);
 
-        let selectedPath = "";
-        if (actions.length === 1) {
-            selectedPath = actions[0].path;
-        } else {
-            selectedPath = await this._showActionSelectionDialog(item.name, actions);
-            if (selectedPath === null)
-                return;
-        }
+        const selectedPath = await this._showActionSelectionDialog(item.name, actions);
+        if (selectedPath === null)
+            return;
 
         lidInput.val(selectedItem.lid);
         pathInput.val(selectedPath);
@@ -2671,13 +2672,6 @@ export class ReactionEditor extends FormApplication {
         }
 
         const actions = this._getItemActions(item);
-
-        if (actions.length <= 1) {
-            ui.notifications.info(`${item.name} has only one possible action.`);
-            pathInput.val("");
-            await updatePreview();
-            return;
-        }
 
         const selectedPath = await this._showActionSelectionDialog(item.name, actions);
         if (selectedPath !== null) {
@@ -2737,6 +2731,34 @@ export class ReactionEditor extends FormApplication {
             if (item.system?.actions) {
                 item.system.actions.forEach((action, idx) => {
                     actions.push({ name: action.name || `Action ${idx + 1}`, path: `actions[${idx}]` });
+                });
+            }
+            // Frame: core power + frame trait actions.
+            if (item.type === "frame") {
+                const cs = item.system?.core_system;
+                if (cs) {
+                    if (cs.active_name)
+                        actions.push({ name: `${cs.active_name} (Core Power)`, path: `core_system` });
+                    (cs.active_actions ?? []).forEach((action, idx) => {
+                        actions.push({
+                            name: `${action.name || `Active Action ${idx + 1}`} (Core)`,
+                            path: `core_system.active_actions[${idx}]`
+                        });
+                    });
+                    (cs.passive_actions ?? []).forEach((action, idx) => {
+                        actions.push({
+                            name: `${action.name || `Passive Action ${idx + 1}`} (Core Passive)`,
+                            path: `core_system.passive_actions[${idx}]`
+                        });
+                    });
+                }
+                (item.system?.traits ?? []).forEach((trait, tIdx) => {
+                    (trait.actions ?? []).forEach((action, aIdx) => {
+                        actions.push({
+                            name: `${action.name || 'Action'} (Trait: ${trait.name || tIdx + 1})`,
+                            path: `traits[${tIdx}].actions[${aIdx}]`
+                        });
+                    });
                 });
             }
         }
@@ -3071,12 +3093,9 @@ export class ReactionEditor extends FormApplication {
                         if (!actor)
                             return;
                         const actions = this._getItemActions(actor);
-                        let selectedPath = "";
-                        if (actions.length > 1) {
-                            selectedPath = await this._showActionSelectionDialog(actor.name, actions);
-                            if (selectedPath === null)
-                                return;
-                        }
+                        const selectedPath = await this._showActionSelectionDialog(actor.name, actions);
+                        if (selectedPath === null)
+                            return;
                         lidInput.val(lid);
                         if (pathInput)
                             pathInput.val(selectedPath);

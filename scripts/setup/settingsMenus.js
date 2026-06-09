@@ -419,16 +419,18 @@ const DEBUG_FIELDS = [
 ];
 
 const VISION_FIELDS = [
-    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]' },
+    { type: 'section', label: 'About this tab', hint: 'Best with <b>fog of war</b> + token vision on. Lancer LOS samples from the token edge, not the center.' },
+
+    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]', hint: 'Samples LOS from points on the token edge so you can see/shoot from behind cover, per Lancer rules.' },
     { key: 'visionFromEdgeEnabled', type: 'boolean' },
     { key: 'visionFromEdgeSampleMode', type: 'select' },
     { key: 'visionFromEdgeSampleOffset', type: 'number' },
     { key: 'visionFromEdgeDebug', type: 'boolean' },
 
-    { type: 'section', label: 'Token Blocks Line of Sight' },
+    { type: 'section', label: 'Token Blocks Line of Sight', hint: 'Bulwarked tokens drop LOS-blocking edges around their footprint.' },
     { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
 
-    { type: 'section', label: 'Lancer Vision Modes' },
+    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Sensors</b> (blue scanlines) = actor <code>sensor_range</code>, precise. <b>Awareness</b> (yellow silhouette) = infinite, fuzzy. <b>Sensor wins</b> when both detect.<br><b>Combat Only:</b> highlight only renders during a started combat.<br><b>Use Mode Range:</b> read range from the per-token detection-mode entry instead of <code>actor.system.sensor_range</code> / infinite.' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { type: 'compactBooleans',
         items: [
@@ -442,7 +444,7 @@ const VISION_FIELDS = [
         key: 'refreshLancerVisionTokens',
         label: 'Refresh Tokens (All Scenes + Actors)',
         icon: 'fas fa-sync',
-        hint: 'Adds missing Lancer detection modes and reorders them so Sensors take priority over Awareness. Touches every actor prototype and every placed token in every scene.',
+        hint: 'Run if tokens are missing Sensor/Awareness highlights or after enabling Auto-add. Reorders modes so Sensor wins resolves correctly.',
         onClick: () => globalThis.lancerAutoVisionSetup?.(false),
     },
 
@@ -661,7 +663,7 @@ function _buildItem(f) {
             if (!m?.active || m.title !== f.requireForkTitle.title)
                 return null;
         }
-        return { type: 'section', label: f.label, isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed };
+        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed };
     }
     if (f.type === 'button')
         return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '', isLocked: !game.user.isGM && !f.clientAllowed };
@@ -722,7 +724,11 @@ function _buildItem(f) {
                 try {
                     value = !!game.settings.get(MODULE_ID, it.key);
                 } catch { /* not ready */ }
-                return { key: it.key, label: it.label, value, preview: !!it.preview, isLocked: _isLockedForUser(it.key) };
+                let hint = it.hint;
+                if (!hint) {
+                    try { hint = game.settings.settings.get(`${MODULE_ID}.${it.key}`)?.hint || ''; } catch { hint = ''; }
+                }
+                return { key: it.key, label: it.label, hint, value, preview: !!it.preview, isLocked: _isLockedForUser(it.key) };
             }),
         };
     }

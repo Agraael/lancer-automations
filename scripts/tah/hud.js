@@ -13,6 +13,7 @@ import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersist
 import { resurrect } from '../tools/wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { buildCombatBar } from './combat-bar.js';
+import { activateCombatantSocket } from '../socket.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
@@ -1829,7 +1830,11 @@ export class LancerHUD {
         const isMechOrNpc = actor?.type === 'mech' || actor?.type === 'npc';
 
         const combatItems = [
-            { label: 'Start Turn',    onClick: () => /** @type {any} */ (game.combat)?.activateCombatant(/** @type {any} */ (token.document)?.combatant?.id) },
+            { label: 'Start Turn',    onClick: () => {
+                const c = /** @type {any} */ (token.document)?.combatant;
+                if (game.combat && c)
+                    activateCombatantSocket(game.combat, c);
+            } },
             { label: 'End Turn',      onClick: () => /** @type {any} */ (game.combat)?.nextTurn() },
             { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', onClick: () => token.document.update({ hidden: !token.document.hidden }) },
             { label: token.inCombat ? 'Remove From Combat' : 'Add To Combat', onClick: async () => {
@@ -2852,7 +2857,7 @@ export class LancerHUD {
                 });
             }
             for (const action of passiveActions) {
-                rows.push({ label: action.name, icon: getActivationIcon(action), onRightClick: this._actionPopup(action, null, 'frame') });
+                rows.push({ label: action.name, icon: getActivationIcon(action), onRightClick: this._actionPopup(action, frame, 'frame') });
             }
         }
 
@@ -2868,7 +2873,7 @@ export class LancerHUD {
     }
 
     _frameTraitItems(/** @type {any} */ frame, /** @type {any} */ actor) {
-        const ap = a => this._actionPopup(a);
+        const ap = a => this._actionPopup(a, frame, 'frame');
         const traits = frame.system?.traits ?? [];
         if (!traits.length)
             return [];

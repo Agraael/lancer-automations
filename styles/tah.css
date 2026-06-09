@@ -823,3 +823,5 @@ input.la-status-search {
 .la-waypoint-label .la-elev { color: #9ecbff; }
 .la-waypoint-label .la-penalty,
 .la-waypoint-label .la-penalty-value { color: #ff7043; }
+.la-waypoint-label.force .la-total,
+.la-waypoint-label.force .la-delta { color: #b78cff; }

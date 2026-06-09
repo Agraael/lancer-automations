@@ -147,3 +147,33 @@ Deletes auras from the specified owner. Safely cleans up any associated lambda c
 | <kbd>options</kbd> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
 
 </details>
+
+---
+
+<details>
+<summary><b><code>toggleAura</code></b> <sup>async</sup> → <code>boolean | null</code></summary>
+
+<br>
+
+```js
+await api.toggleAura(actorOrToken, auraName, on?)
+```
+
+Toggles the `enabled` flag of an existing Grid-Aware Aura by name. Does not create or delete the aura, just flips/sets its active state in the actor's `grid-aware-auras.auras` flag.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | Owner of the aura |
+| <kbd>auraName</kbd> | `string` | *required* | Name of the aura to toggle |
+| <kbd>on</kbd> | `boolean` | `undefined` | `true` forces enable, `false` forces disable. Omit to flip the current state. |
+
+Returns the new `enabled` state (`true`/`false`), or `null` if no aura with that name exists on the actor.
+
+**Examples:**
+```js
+await api.toggleAura(token, "Bulwark");          // flip
+await api.toggleAura(token, "Bulwark", true);    // ensure on
+await api.toggleAura(token, "Bulwark", false);   // ensure off
+```
+
+</details>

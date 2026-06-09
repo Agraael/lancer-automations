@@ -825,9 +825,78 @@ function _hint(cm, kind) {
  * @param {any} cm
  * @param {'evaluate'|'activationCode'|'onInit'|'onMessage'|'startup'} [kind]
  */
+// Lazy-load optional CodeMirror addons (autoCloseBrackets, match-highlighter).
+// Loading from module.json fails if _CodeMirror isn't loaded yet, so do it on demand.
+let _extraAddonsPromise = null;
+function _ensureExtraAddons() {
+    if (_extraAddonsPromise)
+        return _extraAddonsPromise;
+    if (typeof CodeMirror === 'undefined')
+        return Promise.resolve(false);
+    const cmModule = game.modules.get('_CodeMirror');
+    if (!cmModule?.active)
+        return Promise.resolve(false);
+    const load = (src) => new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = false;
+        s.onload = () => resolve(true);
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+    });
+    const loadCss = (href) => {
+        if (document.querySelector(`link[href="${href}"]`))
+            return;
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href;
+        document.head.appendChild(l);
+    };
+    loadCss('/modules/_CodeMirror/addon/dialog/dialog.css');
+    loadCss('/modules/_CodeMirror/addon/fold/foldgutter.css');
+    _extraAddonsPromise = (async () => {
+        const closeOk = await load('/modules/_CodeMirror/addon/edit/closebrackets.js');
+        const cursorOk = await load('/modules/_CodeMirror/addon/search/searchcursor.js');
+        const matchOk = cursorOk && await load('/modules/_CodeMirror/addon/search/match-highlighter.js');
+        const dialogOk = await load('/modules/_CodeMirror/addon/dialog/dialog.js');
+        const searchOk = cursorOk && dialogOk && await load('/modules/_CodeMirror/addon/search/search.js');
+        const commentOk = await load('/modules/_CodeMirror/addon/comment/comment.js');
+        const foldCodeOk = await load('/modules/_CodeMirror/addon/fold/foldcode.js');
+        const foldGutterOk = foldCodeOk && await load('/modules/_CodeMirror/addon/fold/foldgutter.js');
+        const braceFoldOk = foldCodeOk && await load('/modules/_CodeMirror/addon/fold/brace-fold.js');
+        const jsHintOk = await load('/modules/_CodeMirror/addon/hint/javascript-hint.js');
+        return { closeOk, matchOk, searchOk, commentOk, foldOk: foldCodeOk && foldGutterOk && braceFoldOk, jsHintOk };
+    })();
+    return _extraAddonsPromise;
+}
+
 export function installLancerHints(cm, kind = 'activationCode') {
     if (!cm || typeof CodeMirror === 'undefined' || !CodeMirror.showHint)
         return;
+    _ensureExtraAddons().then((flags) => {
+        if (flags.closeOk) {
+            try { cm.setOption('autoCloseBrackets', true); } catch { /* addon missing */ }
+        }
+        if (flags.matchOk) {
+            try { cm.setOption('highlightSelectionMatches', { showToken: /\w/ }); } catch { /* addon missing */ }
+        }
+        if (flags.foldOk) {
+            try {
+                cm.setOption('foldGutter', true);
+                cm.setOption('gutters', ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']);
+            } catch { /* addon missing */ }
+        }
+        // Bind Ctrl-/ (toggle line comment), Ctrl-F (search) — keymaps are no-ops if the addon isn't loaded.
+        const extra = { ...(cm.getOption('extraKeys') || {}) };
+        if (flags.commentOk)
+            extra['Ctrl-/'] = (c) => c.toggleComment();
+        if (flags.searchOk) {
+            extra['Ctrl-F'] = 'findPersistent';
+            extra['Ctrl-G'] = 'findNext';
+            extra['Shift-Ctrl-G'] = 'findPrev';
+        }
+        cm.setOption('extraKeys', extra);
+    });
     const trigger = () => CodeMirror.showHint(cm, (cmInst) => _hint(cmInst, kind), {
         completeSingle: false,
         closeOnUnfocus: true,
@@ -844,6 +913,72 @@ export function installLancerHints(cm, kind = 'activationCode') {
         if (/[\w.]/.test(ch))
             setTimeout(trigger, 0);
     });
+    _installLancerArgOverlay(cm, kind);
+    _installLancerSignatureTooltip(cm);
+}
+
+function _installLancerSignatureTooltip(cm) {
+    let tip = null;
+    const hide = () => {
+        if (tip) { tip.remove(); tip = null; }
+    };
+    const show = (text, x, y) => {
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.className = 'la-cm-sigtip';
+            tip.style.cssText = 'position:fixed;z-index:99999;background:#1a1a1a;border:1px solid #555;color:#e8a020;font-family:monospace;font-size:0.78em;padding:3px 6px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap;';
+            document.body.appendChild(tip);
+        }
+        tip.textContent = text;
+        const rect = tip.getBoundingClientRect();
+        const left = Math.max(4, Math.min(window.innerWidth - rect.width - 4, x));
+        const top = Math.max(4, y - rect.height - 4);
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+    };
+    cm.on('cursorActivity', () => {
+        const cur = cm.getCursor();
+        const line = cm.getLine(cur.line) || '';
+        const upto = line.slice(0, cur.ch);
+        // Match: api.fnName( ... cursor here, no close paren yet on this line segment
+        const m = upto.match(/api\.(\w+)\([^)]*$/);
+        if (!m) { hide(); return; }
+        const name = m[1];
+        const sig = SIG_BY_NAME.get(name);
+        const ret = RETURNS_BY_NAME.get(name);
+        if (!sig) { hide(); return; }
+        const text = `${name}${sig}${ret ? ` → ${ret}` : ''}`;
+        const coord = cm.cursorCoords(true, 'window');
+        show(text, coord.left, coord.top);
+    });
+    cm.on('blur', hide);
+    cm.on('focus', () => { /* keep hidden until cursor moves */ });
+}
+
+function _installLancerArgOverlay(cm, kind) {
+    const params = PARAMS_BY_KIND[kind] ?? [];
+    if (!params.length)
+        return;
+    _ensureLancerArgStyle();
+    const re = new RegExp(`\\b(${params.join('|')})\\b`);
+    cm.addOverlay({
+        token: (stream) => {
+            if (stream.match(re))
+                return 'la-arg';
+            while (stream.next() != null && !re.test(stream.peek() ?? '')) { /* advance */ }
+            return null;
+        }
+    });
+}
+
+let _argStyleInjected = false;
+function _ensureLancerArgStyle() {
+    if (_argStyleInjected)
+        return;
+    _argStyleInjected = true;
+    const style = document.createElement('style');
+    style.textContent = '.CodeMirror .cm-la-arg { color: #e8a020; font-weight: 600; }';
+    document.head.appendChild(style);
 }
 
 export function refreshLancerHintCache() {

@@ -113,25 +113,26 @@
             deployable LID, or actor UUID.</p>
     </div>
 
-    <!-- Custom Trigger Description -->
-    <div class="form-group">
-        <label>Trigger Description</label>
-        <div class="form-fields">
-            <textarea name="triggerDescription" rows="2"
-                placeholder="When this reaction triggers...">{{triggerDescription}}</textarea>
+    <!-- Custom Trigger & Effect Descriptions -->
+    <details class="code-section">
+        <summary class="code-section-header">Descriptions</summary>
+        <div class="form-group">
+            <label>Trigger Description</label>
+            <div class="form-fields">
+                <textarea name="triggerDescription" rows="2"
+                    placeholder="When this reaction triggers...">{{triggerDescription}}</textarea>
+            </div>
+            <p class="notes">Overrides trigger text from Action Path. Required for general reactions.</p>
         </div>
-        <p class="notes">Overrides trigger text from Action Path. Required for general reactions.</p>
-    </div>
-
-    <!-- Custom Effect Description -->
-    <div class="form-group">
-        <label>Effect Description</label>
-        <div class="form-fields">
-            <textarea name="effectDescription" rows="2"
-                placeholder="What this reaction does...">{{effectDescription}}</textarea>
+        <div class="form-group">
+            <label>Effect Description</label>
+            <div class="form-fields">
+                <textarea name="effectDescription" rows="2"
+                    placeholder="What this reaction does...">{{effectDescription}}</textarea>
+            </div>
+            <p class="notes">Overrides effect text from Action Path. Required for general reactions.</p>
         </div>
-        <p class="notes">Overrides effect text from Action Path. Required for general reactions.</p>
-    </div>
+    </details>
 
     <!-- Is Reaction Toggle -->
     <!-- Action Type & Consumption -->
@@ -431,7 +432,7 @@
 
     .code-section-header::before {
         content: '\f0da';
-        font-family: 'Font Awesome 5 Free';
+        font-family: "Font Awesome 6 Pro", "Font Awesome 6 Free", "Font Awesome 5 Free", "FontAwesome";
         font-weight: 900;
         font-size: 0.8em;
         color: var(--primary-color);

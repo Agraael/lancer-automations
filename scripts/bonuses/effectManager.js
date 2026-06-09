@@ -260,6 +260,7 @@ function openCodeFieldDialog(html, fieldId, title, defaultCode = '') {
                 theme: 'monokai',
                 lineNumbers: true,
                 matchBrackets: true,
+                styleActiveLine: true,
                 indentUnit: 4,
                 smartIndent: true,
                 lineWrapping: false,

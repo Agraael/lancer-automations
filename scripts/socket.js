@@ -111,6 +111,39 @@ export async function unsetItemFlag(item, ns, key) {
     return setItemFlag(item, ns, key, undefined);
 }
 
+// GM-only Combat operations routed through the GM socket so owners of the
+// combatant's actor can use them too (default Foundry permission is GM-only).
+export async function activateCombatantSocket(combat, combatant) {
+    if (game.user.isGM)
+        return combat.activateCombatant(combatant.id);
+    return socketRequestWithAck('combatAction', {
+        method: 'activateCombatant',
+        combatId: combat.id,
+        combatantId: combatant.id,
+    });
+}
+
+export async function deactivateCombatantSocket(combat, combatant) {
+    if (game.user.isGM)
+        return combat.deactivateCombatant(combatant.id);
+    return socketRequestWithAck('combatAction', {
+        method: 'deactivateCombatant',
+        combatId: combat.id,
+        combatantId: combatant.id,
+    });
+}
+
+export async function modifyCombatantActivationsSocket(combat, combatant, delta) {
+    if (game.user.isGM)
+        return /** @type {any} */ (combatant).modifyCurrentActivations(delta);
+    return socketRequestWithAck('combatAction', {
+        method: 'modifyCurrentActivations',
+        combatId: combat.id,
+        combatantId: combatant.id,
+        delta,
+    });
+}
+
 /** Returns a Promise that resolves when an ack arrives for the given requestId. */
 export function awaitPendingAck(requestId) {
     return new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
@@ -424,6 +457,29 @@ const HANDLERS = {
         emitAck('updateActorSystemAck', payload.requestId);
     },
     updateActorSystemAck: ({ requestId }) => resolveAck(requestId),
+
+    combatAction: async (payload) => {
+        if (!game.user.isGM)
+            return;
+        try {
+            const combat = game.combats.get(payload.combatId);
+            if (combat) {
+                if (payload.method === 'activateCombatant') {
+                    await combat.activateCombatant(payload.combatantId);
+                } else if (payload.method === 'deactivateCombatant') {
+                    await /** @type {any} */ (combat).deactivateCombatant(payload.combatantId);
+                } else if (payload.method === 'modifyCurrentActivations') {
+                    const combatant = combat.combatants.get(payload.combatantId);
+                    if (combatant)
+                        await /** @type {any} */ (combatant).modifyCurrentActivations(payload.delta);
+                }
+            }
+        } catch (e) {
+            console.warn('lancer-automations | combatAction GM-side failed:', e);
+        }
+        emitAck('combatActionAck', payload.requestId);
+    },
+    combatActionAck: ({ requestId }) => resolveAck(requestId),
 
     voteCardRequest: (payload) => {
         if (!payload.allVoterUserIds?.includes(game.user.id))

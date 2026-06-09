@@ -873,6 +873,9 @@ async function checkReactions(triggerType, data) {
                                     break;
                                 }
                             }
+                            // Frame core power: the object uses `active_name`, not `name`.
+                            if (actionData && reactionPath === 'core_system' && !actionData.name && actionData.active_name)
+                                actionData = { ...actionData, name: actionData.active_name };
                         }
 
                         if (actionData?.name) {
@@ -2205,7 +2208,8 @@ function _handleMovementCapExceeded(token, ctx) {
     const finalX = change.x ?? endPos.x;
     const finalY = change.y ?? endPos.y;
     const finalElev = change.elevation;
-    const finalDest = { x: finalX, y: finalY, elevation: finalElev };
+    const capOriginalAction = options.movement?.[token.id]?.waypoints?.find(w => w?.action)?.action;
+    const finalDest = { x: finalX, y: finalY, elevation: finalElev, action: capOriginalAction };
 
     const fireBoost = () => executeSimpleActivation(token.actor, {
         title: 'Boost',
@@ -2231,10 +2235,13 @@ function _handleMovementCapExceeded(token, ctx) {
     };
     const computeMid = (/** @type {number} */ cost) => {
         const ratio = moveToMovementCost > 0 ? Math.max(0, cost / moveToMovementCost) : 0;
-        return token.getSnappedPosition({
+        const snapped = token.getSnappedPosition({
             x: startPos.x + (endPos.x - startPos.x) * ratio,
             y: startPos.y + (endPos.y - startPos.y) * ratio,
         });
+        if (capOriginalAction)
+            snapped.action = capOriginalAction;
+        return snapped;
     };
 
     if (canBoost && boostOffer && !options._skipBoostOffer) {
@@ -6102,18 +6109,20 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
             }
         };
 
+        const originalAction = options.movement?.[document.id]?.waypoints?.find(w => w?.action)?.action;
+        const originalIsTeleport = !!CONFIG.Token?.movement?.actions?.[originalAction]?.teleport;
         const continueCallback = async () => {
-            // Re-submit the original movement, carrying _cancelledBy so only the
-            // reactions that already cancelled are skipped on this pass
             const dest = { x: change.x ?? token.x, y: change.y ?? token.y };
             if (change.elevation !== undefined) {
                 dest.elevation = change.elevation;
             }
+            if (originalAction)
+                dest.action = originalAction;
             // continueCallback re-fires the user's original drag; preserve cap-consuming semantics.
             // STRIP v13-internal options that get frozen with non-configurable defineProperty
             // when the first call was cancelled. Spreading them would crash v13's #preUpdateMovement.
-            const { _movement, _movementArguments, movement, ...cleanOptions } = options;
-            await _rulerMove(token, dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true });
+            const { _movement, _movementArguments, movement, _laTeleFxPlayed, ...cleanOptions } = options;
+            await _rulerMove(token, dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
         };
         triggerData._cancelledBy = options._cancelledBy || [];
         const _cancelMoveCard = _buildCancelFn({
@@ -6160,8 +6169,10 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
                     if (extraData.elevation !== undefined) {
                         dest.elevation = extraData.elevation;
                     }
+                    if (originalAction)
+                        dest.action = originalAction;
                     // Rerouted user drag - still consumes cap.
-                    await _rulerMove(token, dest, { isUndo: false, isModified: true, isDrag: true, useRuler: true, ...extraData });
+                    await _rulerMove(token, dest, { isUndo: false, isModified: true, isDrag: true, useRuler: true, teleport: originalIsTeleport, ...extraData });
                 }, 50);
             };
             const executeOriginal = async () => {

@@ -2,6 +2,7 @@
 
 import { revertMovement, clearMovementHistory } from '../interactive/combat.js';
 import { modifyAction } from '../tools/misc-tools.js';
+import { activateCombatantSocket, deactivateCombatantSocket, modifyCombatantActivationsSocket } from '../socket.js';
 import { playUiSound } from './sound.js';
 
 const ACTION_DEFS = [
@@ -12,10 +13,11 @@ const ACTION_DEFS = [
     { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'Reaction' },
 ];
 
-function _canMod() {
-    if (game.user.isGM) {
+function _canMod(actor) {
+    if (game.user.isGM)
         return true;
-    }
+    if (actor?.isOwner)
+        return true;
     try {
         return game.settings.get(game.system.id, 'actionTracker')?.allowPlayers ?? false;
     } catch {
@@ -45,7 +47,7 @@ export function buildCombatBar(actor, token) {
 
     const activations = /** @type {any} */ (combatant).activations ?? { max: 1, value: 0 };
     const isMyTurn = game.combat.combatant?.id === combatant.id;
-    const canClick = _canMod();
+    const canClick = _canMod(actor);
 
     if (!document.getElementById('la-combat-bar-styles')) {
         const style = document.createElement('style');
@@ -79,11 +81,12 @@ export function buildCombatBar(actor, token) {
             });
             endBtn.on('mouseleave', () => endBtn.css('filter', ''));
             endBtn.on('click', async () => {
-                await game.combat.deactivateCombatant(combatant.id);
+                await deactivateCombatantSocket(game.combat, combatant);
             });
             endBtn.on('contextmenu', async (ev) => {
                 ev.preventDefault();
-                await /** @type {any} */ (combatant).modifyCurrentActivations(1);
+                await deactivateCombatantSocket(game.combat, combatant);
+                await modifyCombatantActivationsSocket(game.combat, combatant, 1);
             });
             bar.append(endBtn);
             continue;
@@ -97,16 +100,12 @@ export function buildCombatBar(actor, token) {
         if (canClick) {
             if (filled) {
                 diamond.on('click', async () => {
-                    await game.combat.activateCombatant(combatant.id);
+                    await activateCombatantSocket(game.combat, combatant);
                 });
             }
             diamond.on('contextmenu', async (ev) => {
                 ev.preventDefault();
-                if (filled) {
-                    await /** @type {any} */ (combatant).modifyCurrentActivations(-1);
-                } else {
-                    await /** @type {any} */ (combatant).modifyCurrentActivations(1);
-                }
+                await modifyCombatantActivationsSocket(game.combat, combatant, filled ? -1 : 1);
             });
         }
         bar.append(diamond);

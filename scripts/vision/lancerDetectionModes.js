@@ -315,7 +315,7 @@ function _registerVisionSettings() {
     });
     game.settings.register(MODULE_ID, SETTING_SENSOR_COMBAT_ONLY, {
         name: 'Lancer Sensors: combat only',
-        hint: 'Lancer Sensors detect tokens only when combat is active.',
+        hint: 'Off: sensors always active. On: only render during a started combat.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -324,7 +324,7 @@ function _registerVisionSettings() {
     });
     game.settings.register(MODULE_ID, SETTING_AWARENESS_COMBAT_ONLY, {
         name: 'Battlefield Awareness: combat only',
-        hint: 'Battlefield Awareness detects tokens only when combat is active.',
+        hint: 'Off: awareness always active. On: only render during a started combat.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -333,7 +333,7 @@ function _registerVisionSettings() {
     });
     game.settings.register(MODULE_ID, SETTING_SENSOR_USE_MODE_RANGE, {
         name: 'Lancer Sensors: use detection-mode range',
-        hint: 'When on, Sensors uses the per-token mode range (Foundry default). When off, it auto-pulls actor.system.sensor_range.',
+        hint: 'Off: sensor range = actor.system.sensor_range. On: sensor range = the per-token detection-mode entry.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -342,7 +342,7 @@ function _registerVisionSettings() {
     });
     game.settings.register(MODULE_ID, SETTING_AWARENESS_USE_MODE_RANGE, {
         name: 'Battlefield Awareness: use detection-mode range',
-        hint: 'When on, Awareness uses the per-token mode range (finite). When off, range is infinite.',
+        hint: 'Off: awareness range is infinite. On: range = the per-token detection-mode entry.',
         scope: 'world',
         config: false,
         type: Boolean,

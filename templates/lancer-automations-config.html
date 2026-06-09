@@ -33,10 +33,11 @@
             {{else}}
             <h2 class="la-section" data-collapsed="false" style="border-bottom: 1px solid #782e22; margin: 12px 0 6px; font-size: 1em;">{{this.label}}</h2>
             {{/if}}
+            {{#if this.hint}}<p class="notes la-section-hint" style="margin: -2px 0 6px; font-size: 0.82em; opacity: 0.8; line-height: 1.4;">{{{this.hint}}}</p>{{/if}}
             {{else if this.isCompactBooleans}}
             <div class="la-compact-bools la-section-body" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 6px;">
                 {{#each this.items}}
-                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
+                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{else if this.hint}}title="{{this.hint}}"{{/if}}>
                     <label style="display: flex; align-items: center; gap: 6px; flex: 1; {{#unless this.isLocked}}cursor: pointer;{{/unless}} min-width: 0;">
                         <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} style="margin: 0; flex-shrink: 0;" />
                         <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{this.label}}{{#if this.isLocked}} 🔒{{/if}}</span>

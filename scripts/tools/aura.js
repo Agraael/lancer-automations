@@ -170,6 +170,33 @@ export class LAAuras {
             return null;
         return Object.values(auras).find(a => a.name === auraName) || null;
     }
+
+    /**
+     * Toggle an aura's enabled state on an actor by name.
+     * @param {Actor|Token|TokenDocument} actorOrToken
+     * @param {string} auraName
+     * @param {boolean} [on] - true=enable, false=disable. Flip current state if omitted.
+     * @returns {Promise<boolean|null>} new enabled state, or null if the aura wasn't found.
+     */
+    static async toggleAura(actorOrToken, auraName, on) {
+        const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
+        const auras = actor?.getFlag('grid-aware-auras', 'auras');
+        if (!auras)
+            return null;
+        const entry = Object.entries(auras).find(([, a]) => /** @type {any} */ (a).name === auraName);
+        if (!entry)
+            return null;
+        const [key, aura] = entry;
+        const cur = !!(/** @type {any} */ (aura).enabled);
+        const next = typeof on === 'boolean' ? on : !cur;
+        if (next === cur)
+            return cur;
+        await actor.setFlag('grid-aware-auras', 'auras', {
+            ...auras,
+            [key]: { ...(/** @type {any} */ (aura)), enabled: next }
+        });
+        return next;
+    }
 }
 
 /** Scene grid size relative to baseline (100 px) — multiply stroke / dash / texture-scale fields by this. */
@@ -205,6 +232,7 @@ export const AurasAPI = {
     createAura: LAAuras.createAura,
     deleteAuras: LAAuras.deleteAuras,
     findAura: LAAuras.findAura,
+    toggleAura: LAAuras.toggleAura,
     gridScale,
     scaleAuraStroke,
 };

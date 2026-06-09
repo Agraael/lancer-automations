@@ -207,16 +207,17 @@ Prompts the user to pick an item from a list using a Choice Card.
 ---
 
 <details>
-<summary><b><code>getWeapons</code></b> · <b><code>reloadOneWeapon</code></b> · <b><code>rechargeSystem</code></b> · <b><code>findAura</code></b> · <b><code>findItemByLid</code></b></summary>
+<summary><b><code>getWeapons</code></b> · <b><code>reloadOneWeapon</code></b> · <b><code>rechargeSystem</code></b> · <b><code>findAura</code></b> · <b><code>toggleAura</code></b> · <b><code>findItemByLid</code></b></summary>
 
 <br>
 
 ```js
-api.getWeapons(entity)                           // → Array<Item> - all weapons on an actor
-await api.reloadOneWeapon(actorOrToken, name?)    // → Item|null - pick & reload a Loading weapon
-await api.rechargeSystem(actorOrToken, name?)     // → Item|null - pick & recharge a depleted system
-api.findAura(actorOrToken, auraName)              // → object|null - find Grid-Aware Aura by name
-api.findItemByLid(actorOrToken, lid)              // → Item|null - find item by Lancer ID
+api.getWeapons(entity)                                // → Array<Item> - all weapons on an actor
+await api.reloadOneWeapon(actorOrToken, name?)         // → Item|null - pick & reload a Loading weapon
+await api.rechargeSystem(actorOrToken, name?)          // → Item|null - pick & recharge a depleted system
+api.findAura(actorOrToken, auraName)                   // → object|null - find Grid-Aware Aura by name
+await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - flip/set aura's enabled state
+api.findItemByLid(actorOrToken, lid)                   // → Item|null - find item by Lancer ID
 ```
 
 </details>

@@ -659,9 +659,13 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         if (!settingOn())
             return super._getWaypointLabelContext(waypoint, _state);
         if (!waypoint.previous)
-            return null; // no label on origin
-        if (!waypoint.explicit)
-            return null; // hide on intermediate path nodes
+            return null;
+        if (!waypoint.explicit && waypoint.next
+            && waypoint.actionConfig?.visualize && waypoint.next.actionConfig?.visualize
+            && waypoint.action === waypoint.next.action)
+            return null;
+        if (waypoint.stage === 'passed' && waypoint.next?.stage === 'pending')
+            return null;
 
         const m = waypoint.measurement;
         if (!m)
@@ -671,8 +675,9 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         if (!ray)
             return null;
 
-        const totalCost = round(m.cost);
-        const deltaCost = round(m.backward?.cost ?? 0);
+        const isForceLabel = waypoint.action === 'forced';
+        const totalCost = isForceLabel ? round(m.distance) : round(m.cost);
+        const deltaCost = isForceLabel ? round(m.backward?.distance ?? 0) : round(m.backward?.cost ?? 0);
 
         // Use the landing elevation, not the raw waypoint elevation.
         const destElev = elevationForPreview(this.token.document, waypoint);
@@ -702,7 +707,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         const labelPos = _isoProjectLabelPos(labelAnchor);
 
         return {
-            cssClass: isLast ? 'last' : '',
+            cssClass: [isLast ? 'last' : '', isForceLabel ? 'force' : ''].filter(Boolean).join(' '),
             position: labelPos,
             uiScale,
             action: waypoint.actionConfig,
