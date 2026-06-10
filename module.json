@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "3.1.8",
+    "version": "3.1.9",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -10,8 +10,8 @@
         }
     ],
     "url": "https://github.com/Agraael/lancer-automations",
-    "manifest": "https://github.com/Agraael/lancer-automations/releases/download/3.1.8/module.json",
-    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.1.8/module.zip",
+    "manifest": "https://github.com/Agraael/lancer-automations/releases/download/3.1.9/module.json",
+    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.1.9/module.zip",
     "esmodules": [
         "scripts/combat/overwatch.js",
         "scripts/main.js",

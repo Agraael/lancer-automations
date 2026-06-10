@@ -1135,7 +1135,7 @@ async function checkReactions(triggerType, data) {
                     const recipients = new Set();
 
                     if (mode === 'owner' || mode === 'both') {
-                        const owners = game.users.filter(u => u.active && r.token.document.testUserPermission(u, "OWNER"));
+                        const owners = game.users.filter(u => u.active && !u.isGM && r.token.document.testUserPermission(u, "OWNER"));
                         owners.forEach(u => recipients.add(u));
                     }
 

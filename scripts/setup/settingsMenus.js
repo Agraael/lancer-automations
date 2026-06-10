@@ -517,6 +517,16 @@ const TOOLS_FIELDS = [
 ];
 
 const laKb = (key) => ({ type: 'keybinding', module: 'lancer-automations', key });
+const laTour = (key) => ({ type: 'tour', module: 'lancer-automations', key });
+
+const TUTORIALS_FIELDS = [
+    { type: 'section', label: 'Tutorials', hint: 'Guided walkthroughs of the module. Clicking a tour will close this window and start it.' },
+    laTour('config-tour'),
+    laTour('activation-manager-tour'),
+    laTour('effect-manager-tour'),
+    laTour('tah-tour'),
+    laTour('ruler-tour'),
+];
 
 const CONTROL_FIELDS = [
     { type: 'section', label: 'Lancer Automations' },
@@ -555,6 +565,7 @@ const TAB_DEFS = [
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
     { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
+    { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
 ];
 
 function _visibleTabs() {
@@ -693,6 +704,26 @@ function _buildItem(f) {
             name: game.i18n.localize(action.name ?? f.key),
             hint: action.hint ? game.i18n.localize(action.hint) : '',
             bindings: bindings.map(/** @type {any} */ b => ({ display: _formatBinding(b) }))
+        };
+    }
+    if (f.type === 'tour') {
+        const mod = game.modules.get(f.module);
+        if (!mod?.active)
+            return null;
+        const fullKey = `${f.module}.${f.key}`;
+        const tour = /** @type {any} */ (game.tours)?.get?.(fullKey);
+        if (!tour)
+            return null;
+        const rawTitle = tour.title ?? f.key;
+        const title = String(rawTitle).replace(/^Lancer Automations:\s*/i, '');
+        const stepCount = tour.steps?.length ?? 0;
+        return {
+            type: 'tour',
+            isTour: true,
+            fullKey,
+            title,
+            stepCount,
+            description: tour.description ?? '',
         };
     }
     if (f.type === 'moduleBoolean') {
@@ -1149,6 +1180,30 @@ export class LancerAutomationsConfig extends FormApplication {
                 current.push(binding);
                 await writeBindings(fullKey, current);
             });
+        });
+
+        $html.find('.la-tour-play').on('click', async (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            const row = ev.currentTarget.closest('.la-tour-row');
+            const fullKey = row?.dataset.fullKey;
+            if (!fullKey)
+                return;
+            const tour = /** @type {any} */ (game.tours)?.get?.(fullKey);
+            if (!tour)
+                return;
+            // Close the config window before starting the tour (matches Foundry's native Tour Manager UX).
+            try {
+                const appEl = ev.currentTarget.closest('.window-app');
+                const appId = appEl?.dataset.appid;
+                const app = appId ? ui.windows?.[appId] : null;
+                if (app)
+                    await app.close();
+            } catch { /* ignore */ }
+            try {
+                await tour.start();
+            } catch (e) {
+                console.error('lancer-automations | failed to start tour', fullKey, e);
+            }
         });
 
         $html.find('button[data-action-key]').on('click', async (/** @type {any} */ ev) => {

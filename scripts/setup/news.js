@@ -262,7 +262,7 @@ function _renderUpdate(update) {
         <div style="padding: 10px 4px;">
             <p>A new version of <b>${module.title}</b> is available: <span style="color: #782e22;"><b>v${newVersion}</b></span> (current: v${module.version}).</p>
             <p>You can update via the Foundry VTT Module Manager.</p>
-            <p style="margin-top: 8px;">Support development on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a>.</p>
+            <p style="margin-top: 8px;">More info, updates, and previews on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a>.</p>
             ${notesHtml ? `<div style="margin-top: 10px; padding: 10px; border: 1px solid #999; border-radius: 4px; background: rgba(0,0,0,0.05); max-height: 35vh; overflow-y: auto;">${notesHtml}</div>` : ""}
         </div>
     `;
