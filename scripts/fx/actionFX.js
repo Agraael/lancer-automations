@@ -2072,11 +2072,14 @@ Hooks.on('lancer.preFlow.TechAttackFlow', (flow) => {
     _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow));
 });
 
-/** Fires Core Power FX when a CoreActiveFlow starts. */
+/** Fires Core Power FX when a CoreActiveFlow starts. Skipped when no core energy remains (Lancer aborts at checkCorePower). */
 Hooks.on('lancer.preFlow.CoreActiveFlow', (flow) => {
     const token = _flowSourceToken(flow);
-    if (token)
-        playCorePowerFX(token);
+    if (!token)
+        return;
+    if (token.actor?.system?.core_energy === 0)
+        return;
+    playCorePowerFX(token);
 });
 
 /** Fires Quick/Full Tech or generic Quick FX when ActivationFlow/SystemFlow starts. */

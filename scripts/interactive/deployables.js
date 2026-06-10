@@ -111,6 +111,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     });
 
     if (result) {
+        await stampDeployableSource(result, weapon);
         const api = game.modules.get('lancer-automations')?.api;
         if (api?.handleTrigger) {
             await api.handleTrigger('onDeploy', {
@@ -381,6 +382,30 @@ export async function findDeployableInCompendium(lid) {
 }
 
 /**
+ * Stamp `flags.lancer-automations.sourceItemUuid` on each deployed token document.
+ * `resolveDeployableSourceItem` consults this flag before falling back to LID walks,
+ * so reactions on the correct source item fire when the owner has multiple matching items.
+ * @param {Token[]|Token|null} tokens
+ * @param {Item|null} sourceItem
+ */
+async function stampDeployableSource(tokens, sourceItem) {
+    const uuid = sourceItem?.uuid;
+    if (!uuid)
+        return;
+    const arr = Array.isArray(tokens) ? tokens : (tokens ? [tokens] : []);
+    for (const t of arr) {
+        const doc = t?.document ?? t;
+        if (!doc?.update)
+            continue;
+        try {
+            await doc.update({ 'flags.lancer-automations.sourceItemUuid': uuid });
+        } catch (e) {
+            console.warn('lancer-automations | stampDeployableSource failed:', e);
+        }
+    }
+}
+
+/**
  * Resolve the item that a deployable actor originated from. Walks the owner actor's
  * items for one whose `system.deployables[]` contains the deployable LID; falls back
  * to scanning Item compendiums (npc_feature, mech_system, weapon_mod, frame).
@@ -396,6 +421,19 @@ export async function resolveDeployableSourceItem(deployableActor) {
     const lid = deployableActor.system?.lid;
     if (!lid)
         return null;
+
+    // Flag stamped at deploy time identifies the exact source item.
+    try {
+        const tokens = deployableActor.getActiveTokens?.() ?? [];
+        for (const tk of tokens) {
+            const uuid = tk?.document?.flags?.['lancer-automations']?.sourceItemUuid;
+            if (uuid) {
+                const item = await fromUuid(uuid);
+                if (item)
+                    return item;
+            }
+        }
+    } catch (e) { /* fall through */ }
 
     const itemHasDeployable = (item) => {
         if (!item)
@@ -742,6 +780,7 @@ export async function placeDeployable(options = /** @type {any} */({})) {
 
     // Fire onDeploy trigger
     if (result) {
+        await stampDeployableSource(result, systemItem);
         const api = game.modules.get('lancer-automations')?.api;
         if (api?.handleTrigger) {
             await api.handleTrigger('onDeploy', {
@@ -2493,10 +2532,20 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
 
     const ownerName = ownerActor.name ?? "";
 
-    // Find the item on the owner that grants this deployable (first match)
-    const systemItem = ownerActor.items.find(item =>
+    const candidateItems = ownerActor.items.filter(item =>
         getItemDeployables(item, ownerActor).includes(deployableLid)
-    ) ?? null;
+    );
+    let systemItem = null;
+    if (candidateItems.length === 1) {
+        systemItem = candidateItems[0];
+    } else if (candidateItems.length > 1) {
+        systemItem = await pickItem(candidateItems, {
+            title: "LINK DEPLOYABLE",
+            description: `Which item deployed ${deployableActor.name}?`,
+            icon: "cci cci-deployable",
+            relatedToken: ownerToken
+        });
+    }
 
     // Stamp ownership flags onto the token
     await tokenDocument.update({
@@ -2507,7 +2556,8 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
                 deployableId: deployableActor.id,
                 ownerActorUuid: ownerActor.uuid,
                 ownerName,
-                systemItemId: systemItem?.id ?? null
+                systemItemId: systemItem?.id ?? null,
+                sourceItemUuid: systemItem?.uuid ?? null
             }
         }
     });

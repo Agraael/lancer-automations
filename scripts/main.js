@@ -776,6 +776,11 @@ async function checkReactions(triggerType, data) {
                         dbgAuto('skip:', token.name, item.name, 'onlyOnSourceMatch failed', { triggeringItemLid, triggeringDepLid, triggeringActorUuid, lid });
                         continue;
                     }
+                    // Same-LID dedupe: when reactor owns multiple items sharing this LID, only the exact triggering doc fires.
+                    if (triggeringItem && triggeringItemLid === lid && triggeringItem.id !== item.id) {
+                        dbgAuto('skip:', token.name, item.name, 'onlyOnSourceMatch: not the triggering doc');
+                        continue;
+                    }
                 }
 
                 if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType)) {
@@ -873,8 +878,8 @@ async function checkReactions(triggerType, data) {
                                     break;
                                 }
                             }
-                            // Frame core power: the object uses `active_name`, not `name`.
-                            if (actionData && reactionPath === 'core_system' && !actionData.name && actionData.active_name)
+                            // Frame core_system: `name` is the system title, `active_name` is the activation that fires.
+                            if (actionData && reactionPath === 'core_system' && actionData.active_name)
                                 actionData = { ...actionData, name: actionData.active_name };
                         }
 
@@ -3369,6 +3374,8 @@ async function onActivationStep(state) {
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
     let actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
+    // Lancer prepends ALL-CAPS flow tags like "CORE ACTIVATION :: " / "RESERVE :: " to action names.
+    actionName = actionName.replace(/^[A-Z][A-Z ]+ :: /, '');
 
     // Normalize built-in flows that have no item and use actor-prefixed titles
     const flowClass = state.name ?? '';
