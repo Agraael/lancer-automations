@@ -973,18 +973,12 @@ async function autoStatusCascading(actor) {
 function onCreateActiveEffect(document, _change, _userId) {
     if (!isMasterEnabled())
         return;
-    console.log('[LA-FX] createActiveEffect', { ae: document.name, statuses: [...(document.statuses ?? [])] });
     reconcileStatusFX(document.parent);
 }
 
 function onDeleteActiveEffect(document, _change, _userId) {
     if (!isMasterEnabled())
         return;
-    console.log('[LA-FX] deleteActiveEffect', {
-        ae: document.name,
-        statuses: [...(document.statuses ?? [])],
-        actorEffectsAfter: [...(document.parent?.effects ?? [])].map(e => e.name)
-    });
     reconcileStatusFX(document.parent);
 }
 
@@ -1105,13 +1099,7 @@ async function _doReconcileStatusFX(actor) {
         return;
     }
     const aeNames = new Set((actor.effects ?? []).map(e => e.name));
-    const _flagFilterIds = (tk) => {
-        const arr = tk.document?.flags?.tokenmagic?.filters ?? [];
-        return arr.map(f => f?.filterId ?? '?').join(',');
-    };
-    console.log('[LA-FX] reconcile', { actor: actor.name, aeNames: [...aeNames] });
     for (const token of tokens) {
-        console.log('[LA-FX]   flag(before reconcile loop) =', _flagFilterIds(token));
         // Inject fake puppets before any add/delete so TMFX's hook sees them.
         _ensureFakePuppetsForCustomFilters(token);
         for (const entry of EFFECT_MAP) {
@@ -1128,20 +1116,15 @@ async function _doReconcileStatusFX(actor) {
                         : flyingEffectIso;
                     preset = base;
                 }
-                console.log('[LA-FX]   ADD', entry.name, 'flag(before) =', _flagFilterIds(token));
                 await token.TMFXaddUpdateFilters(preset);
-                console.log('[LA-FX]   ADD', entry.name, 'flag(after)  =', _flagFilterIds(token));
             } else if (!wantFilter && hasFilter) {
                 for (const filterId of entry.filterIds) {
                     if (TokenMagic.hasFilterId(token, filterId)) {
-                        console.log('[LA-FX]   DEL', filterId, 'flag(before) =', _flagFilterIds(token));
                         await token.TMFXdeleteFilters(filterId);
-                        console.log('[LA-FX]   DEL', filterId, 'flag(after)  =', _flagFilterIds(token));
                     }
                 }
             }
         }
-        console.log('[LA-FX]   flag(end of reconcile)    =', _flagFilterIds(token));
     }
 }
 

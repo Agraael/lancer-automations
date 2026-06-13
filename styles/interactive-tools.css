@@ -1914,3 +1914,45 @@ h2.la-collapsible:hover {
 .lancer-mw-btn.current .lancer-mw-icon {
     background-color: #ffd166;
 }
+.la-per-frequency-row {
+    display: flex;
+    gap: 4px;
+    padding: 2px 4px;
+    flex-wrap: wrap;
+}
+.la-per-frequency-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #fff;
+}
+.la-pf-round { background: #1e88e5; }
+.la-pf-turn { background: #6a4c93; }
+
+.la-stab-card {
+    gap: 10px;
+}
+.la-stab-icon {
+    font-size: 1.5em;
+    flex-shrink: 0;
+}
+.la-stab-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.la-stab-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.95em;
+}
+.la-stab-detail {
+    font-size: 0.78em;
+    opacity: 0.85;
+    line-height: 1.2;
+}

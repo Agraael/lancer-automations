@@ -467,14 +467,12 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         if (!ranges.length)
             return undefined;
         let total;
-        if (waypoint.stage === 'passed') {
-            const mCost = Number(waypoint.measurement?.cost);
-            if (Number.isFinite(mCost))
-                total = mCost;
-            else
-                total = this._cumulativeRegularCostThrough(waypoint);
+        const mCost = Number(waypoint.measurement?.cost);
+        if (Number.isFinite(mCost)) {
+            total = mCost;
+        } else if (waypoint.stage === 'passed') {
+            total = this._cumulativeRegularCostThrough(waypoint);
         } else {
-            // measurement.cost includes history; we want regular history + this drag only.
             const laApi = game.modules.get('lancer-automations')?.api;
             const prior = Number(laApi?.getMovementHistory?.(this.token.document.id)?.intentional?.regular ?? 0);
             let lastPassed = waypoint.previous;
@@ -523,7 +521,15 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         return { ...base, color: tier.color };
     }
 
+    _getWaypointStyle(waypoint) {
+        if (waypoint?._laSilent)
+            return { radius: 0 };
+        return super._getWaypointStyle(waypoint);
+    }
+
     _getSegmentStyle(waypoint) {
+        if (waypoint?._laSilent)
+            return { width: 0 };
         // Debug moves draw no cost decorations.
         if (waypoint?.stage !== 'passed' && isForceDebugMovement())
             return this._computeSegmentStyle(waypoint);
@@ -677,7 +683,16 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
 
         const isForceLabel = waypoint.action === 'forced';
         const totalCost = isForceLabel ? round(m.distance) : round(m.cost);
-        const deltaCost = isForceLabel ? round(m.backward?.distance ?? 0) : round(m.backward?.cost ?? 0);
+        let deltaCost = isForceLabel ? round(m.backward?.distance ?? 0) : round(m.backward?.cost ?? 0);
+        // Measure delta against the last user-clicked waypoint, skipping silents and intermediates.
+        const skip = (wp) => wp && (!wp.explicit || wp.intermediate);
+        if (skip(waypoint.previous)) {
+            let prev = waypoint.previous;
+            while (skip(prev))
+                prev = prev.previous;
+            const prevTotal = isForceLabel ? round(prev?.measurement?.distance ?? 0) : round(prev?.measurement?.cost ?? 0);
+            deltaCost = totalCost - prevTotal;
+        }
 
         // Use the landing elevation, not the raw waypoint elevation.
         const destElev = elevationForPreview(this.token.document, waypoint);

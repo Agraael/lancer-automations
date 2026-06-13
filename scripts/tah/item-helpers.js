@@ -83,12 +83,34 @@ export function getItemStatus(itemOrAction, extraAction = null) {
         parts.push(`${val}/${max}`);
     };
 
+    const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
+    const inCombat = !!game.combat?.started;
+    const pushPerFreq = (max, used, iconReady, iconConsumed) => {
+        const ready = max - Math.min(max, used);
+        if (inCombat) {
+            if (ready <= 0) {
+                unavailable = true; badgeColor = '#c33';
+            } else if (ready < max && badgeColor !== '#c33')
+                badgeColor = '#cc7700';
+        }
+        const pips = [];
+        for (let i = 0; i < max; i++)
+            pips.push(`<span class="mdi ${i < ready ? iconReady : iconConsumed}"></span>`);
+        parts.push(pips.join(''));
+    };
+
     if (itemTags.some(t => t.lid === 'tg_loading'))
         pushLoaded(sys.loaded);
     if (itemTags.some(t => t.lid === 'tg_recharge'))
         pushCharged(sys.charged);
     if (itemTags.some(t => t.lid === 'tg_limited'))
         pushUses(sys.uses);
+    if (perFreqOn) {
+        const perRound = Number(itemTags.find(t => t.lid === 'tg_round')?.val ?? 0);
+        const perTurn = Number(itemTags.find(t => t.lid === 'tg_turn')?.val ?? 0);
+        if (perRound > 0) pushPerFreq(perRound, Number(sys.uses_per_round?.value ?? 0), 'mdi-restart', 'mdi-restart-off');
+        if (perTurn > 0) pushPerFreq(perTurn, Number(sys.uses_per_turn?.value ?? 0), 'mdi-circle-slice-8', 'mdi-circle-outline');
+    }
 
     // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
     const actionTags = isItem && extraAction?._addedViaExtrasUI ? (extraAction.tags ?? []) : [];
@@ -217,8 +239,11 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const hasLoading  = allTags.some(t => t.lid === 'tg_loading');
     const hasRecharge = allTags.some(t => t.lid === 'tg_recharge');
     const hasLimited  = allTags.some(t => t.lid === 'tg_limited');
+    const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
+    const perRoundMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_round')?.val ?? 0) : 0;
+    const perTurnMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_turn')?.val ?? 0) : 0;
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
-    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge)
+    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax)
         return;
 
     const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
@@ -293,6 +318,27 @@ export function appendItemPips(item, popup, depthCallbacks) {
                 pipsWrap.append(usesRow);
             }
         }
+        const perFreqDim = !game.combat?.started ? 'opacity:0.5;' : '';
+        const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed) => {
+            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${perFreqDim}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
+            for (let i = 1; i <= max; i++) {
+                const n = i;
+                const consumed = n <= used;
+                const pip = $(`<span style="${S_PIP}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
+                pip.on('click', async () => {
+                    playUiSound('toggle');
+                    const newUsed = n === used ? n - 1 : n;
+                    await patchState({ [fieldKey]: { value: Math.max(0, Math.min(max, newUsed)) } });
+                    rebuild();
+                });
+                usesRow.append(pip);
+            }
+            pipsWrap.append(usesRow);
+        };
+        if (perRoundMax > 0)
+            renderFreqRow('Per round', perRoundMax, Number(s.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off');
+        if (perTurnMax > 0)
+            renderFreqRow('Per turn', perTurnMax, Number(s.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline');
     };
     rebuild();
 

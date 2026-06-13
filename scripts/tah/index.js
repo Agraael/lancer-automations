@@ -156,7 +156,7 @@ Hooks.on('init', () => {
         scope: 'client',
         config: false,
         type: Number,
-        default: 0,
+        default: 1,
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE, 'tah.tokenFeedbackVolume', {
@@ -165,7 +165,7 @@ Hooks.on('init', () => {
         scope: 'client',
         config: false,
         type: Number,
-        default: 0,
+        default: 1,
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE, 'tah.damageSoundVolume', {
@@ -174,7 +174,7 @@ Hooks.on('init', () => {
         scope: 'client',
         config: false,
         type: Number,
-        default: 0,
+        default: 1,
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE, 'tah.actionFxVolume', {

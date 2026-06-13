@@ -85,6 +85,17 @@ async function _setAllyRepairs(allyActorId, newValue) {
     return true;
 }
 
+function _structureRepairRate(mech) {
+    const base = mech?.system?.structure_repair_cost ?? 2;
+    if (base <= 1)
+        return base;
+    const frame = mech?.system?.loadout?.frame?.value;
+    const traits = frame?.system?.traits ?? [];
+    const hasReplaceable = traits.some(t => /replaceable\s*parts/i.test(String(t?.name ?? '')))
+        || traits.some(t => (t?.bonuses ?? []).some(b => b?.lid === 'cheap_struct'));
+    return hasReplaceable ? 1 : base;
+}
+
 function _snapshotMech(mech, pilot, allies) {
     const sys = mech.system;
     /** @type {any[]} */
@@ -127,7 +138,7 @@ function _snapshotMech(mech, pilot, allies) {
         destroyedWeapons,
         destroyedSystems,
         hasDestroyed: destroyedWeapons.length + destroyedSystems.length > 0,
-        structureRate: sys.structure_repair_cost ?? 2,
+        structureRate: _structureRepairRate(mech),
         stressRate: sys.stress_repair_cost ?? 2,
         repairIcon: REPAIR_ICON,
         allies,

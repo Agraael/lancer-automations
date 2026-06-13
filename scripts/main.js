@@ -15,6 +15,7 @@ import { moveTokenTo } from "./movement/move-api.js";
 import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybindings.js";
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
 import { refreshActionLimits, registerActionLimitsHooks } from "./combat/action-limits.js";
+import { laDetailPopup } from "./interactive/detail-renderers.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
 import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
@@ -101,6 +102,7 @@ import './setup/scene-dim-from-image.js';
 import './setup/migrations.js';
 import { checkCompatibility } from "./setup/checkCompatibility.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./bonuses/infection.js";
+import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerFrequencyHooks, onRenderActorSheetPerFrequency } from "./combat/per-frequency-tags.js";
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initLancerDetectionModes } from "./vision/lancerDetectionModes.js";
@@ -824,11 +826,14 @@ async function checkReactions(triggerType, data) {
                     const sys = item.system;
                     const tags = sys?.tags ?? [];
                     const hasTag = lid => tags.some(t => t?.lid === lid);
+                    const tagVal = lid => Number(tags.find(t => t?.lid === lid)?.val ?? 0);
                     const hasLoading = hasTag('tg_loading');
                     const hasRecharge = hasTag('tg_recharge');
                     const hasUses = sys?.uses?.max > 0;
-                    if (!hasLoading && !hasRecharge && !hasUses && (token.isOwner || game.user.isGM))
-                        _warnReactionConfigOnce(`usage|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" has Check Usage enabled but no loading, recharge, or limited uses. The check has no effect.`);
+                    const perRoundLimit = game.combat?.started && game.settings.get('lancer-automations', 'enablePerRoundTurnTags') ? tagVal('tg_round') : 0;
+                    const perTurnLimit = game.combat?.started && game.settings.get('lancer-automations', 'enablePerRoundTurnTags') ? tagVal('tg_turn') : 0;
+                    if (!hasLoading && !hasRecharge && !hasUses && !perRoundLimit && !perTurnLimit && (token.isOwner || game.user.isGM))
+                        _warnReactionConfigOnce(`usage|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" has Check Usage enabled but no loading, recharge, limited uses, or per-round/turn tag. The check has no effect.`);
                     if (hasLoading && sys?.loaded === false) {
                         dbgAuto('skip:', token.name, item.name, 'not loaded');
                         continue;
@@ -839,6 +844,14 @@ async function checkReactions(triggerType, data) {
                     }
                     if (hasRecharge && sys?.charged === false) {
                         dbgAuto('skip:', token.name, item.name, 'not charged');
+                        continue;
+                    }
+                    if (perRoundLimit > 0 && Number(sys?.uses_per_round?.value ?? 0) >= perRoundLimit) {
+                        dbgAuto('skip:', token.name, item.name, 'per-round limit reached');
+                        continue;
+                    }
+                    if (perTurnLimit > 0 && Number(sys?.uses_per_turn?.value ?? 0) >= perTurnLimit) {
+                        dbgAuto('skip:', token.name, item.name, 'per-turn limit reached');
                         continue;
                     }
                 }
@@ -1485,6 +1498,16 @@ function registerSettings() {
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register('lancer-automations', 'enablePerRoundTurnTags', {
+        name: 'Per-Round / Per-Turn Tag Enforcement',
+        hint: 'Enforce the tg_round and tg_turn tags: block attacks/activations when the limit is reached, reset on round/turn. Requires reload.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        requiresReload: true
     });
 
     game.settings.register('lancer-automations', 'enableInfectionDamageIntegration', {
@@ -4445,6 +4468,7 @@ Hooks.on('init', () => {
         injectInfectionDamageType(); // Add "Infection" to DamageField choices
         injectInfectionCSS(); // Infection damage icon + color
     }
+    injectPerFrequencySchemaFields();
     patchStatRollCardTemplate();
 
     game.keybindings.register('lancer-automations', 'resetMovement', {
@@ -4463,7 +4487,258 @@ Hooks.on('init', () => {
     });
 });
 
+async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
+    const effects = [...(targetActor?.effects ?? [])].filter(e => !e.disabled && (e.statuses?.size || e.name));
+    if (!effects.length) {
+        ui.notifications.warn(`${targetActor?.name ?? 'Actor'} has no conditions to clear.`);
+        return null;
+    }
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => {
+            if (done)
+                return;
+            done = true;
+            popup.remove();
+            resolve(v);
+        };
+        const rows = effects.map(e => `
+            <div class="la-pick-cond" data-id="${e.id}" style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:3px;cursor:pointer;border:1px solid transparent;margin-bottom:4px;">
+                <img src="${e.img}" style="width:28px;height:28px;flex-shrink:0;border:none;">
+                <div style="display:flex;flex-direction:column;min-width:0;">
+                    <span style="font-weight:700;text-transform:uppercase;font-size:0.85em;color:#fff;">${e.name}</span>
+                    <span style="font-size:0.72em;color:#888;line-height:1.2;">${[...(e.statuses ?? [])].join(', ') || ''}</span>
+                </div>
+            </div>`).join('');
+        const popup = laDetailPopup('la-pick-cond-popup', prompt, targetActor.name, rows, 'system');
+        popup.find('.la-detail-close').on('click', () => finish(null));
+        popup.on('click', '.la-pick-cond', function (ev) {
+            ev.stopPropagation();
+            finish(String($(this).data('id')));
+        });
+        popup.on('mouseenter', '.la-pick-cond', function () {
+            $(this).css({ background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.15)' });
+        }).on('mouseleave', '.la-pick-cond', function () {
+            $(this).css({ background: '', borderColor: 'transparent' });
+        });
+        $('body').append(popup);
+        const dlg = anchorHtml.closest('.app, .application, .window-app').first();
+        const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
+        const dlgW = dlg.outerWidth() ?? 480;
+        const pw = popup.outerWidth();
+        const ph = popup.outerHeight();
+        const wx = window.innerWidth;
+        const wy = window.innerHeight;
+        let px = dlgOffset.left + dlgW + 8;
+        if (px + pw > wx - 10)
+            px = dlgOffset.left - pw - 8;
+        let py = dlgOffset.top;
+        if (py + ph > wy - 10)
+            py = wy - ph - 10;
+        const finalLeft = Math.max(10, px);
+        popup.css({ left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
+        popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
+        popup.on('click', e => e.stopPropagation());
+        $(document).one('click', () => finish(null));
+    });
+}
+
+async function laStabilizePrompt(state) {
+    if (!state.data)
+        throw new TypeError('Stabilize flow state data missing!');
+    const actor = state.actor;
+    if (actor?.is_npc?.()) {
+        const npcContent = `
+            <div class="lancer-dialog-header">
+                <h2 class="lancer-dialog-title">STABILIZE</h2>
+                <p class="lancer-dialog-subtitle">${actor.name}</p>
+            </div>
+            <div style="padding: 14px;">
+                <p style="margin: 0 0 10px;">The NPC clears all heat and the EXPOSED status, and reloads all LOADING weapons.</p>
+                <div class="lancer-info-box"><i class="fas fa-info-circle"></i><span>NPC Stabilize is fixed: Cool + Reload.</span></div>
+            </div>`;
+        return new Promise((resolve) => {
+            new Dialog({
+                title: `Stabilize - ${actor.name}`,
+                content: npcContent,
+                buttons: {
+                    submit: {
+                        icon: '<i class="fas fa-check"></i>',
+                        label: 'Stabilize',
+                        callback: () => {
+                            state.data.option1 = 'Cool';
+                            state.data.option2 = 'Reload';
+                            resolve(true);
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: 'Cancel',
+                        callback: () => resolve(false)
+                    }
+                },
+                default: 'submit',
+                close: () => resolve(false)
+            }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 460, top: 450, left: 150 }).render(true);
+        });
+    }
+    const opt1 = [
+        { val: 'Cool', label: 'Cool Mech', icon: 'fas fa-thermometer-empty', detail: 'Clear all heat and the EXPOSED status.' },
+        { val: 'Repair', label: 'Restore HP', icon: 'cci cci-repair', detail: 'Spend 1 repair to regain HP.' }
+    ];
+    const opt2 = [
+        { val: 'Reload', label: 'Reload', icon: 'cci cci-reload', detail: 'Reload all LOADING weapons.' },
+        { val: 'ClearBurn', label: 'Clear Burn', icon: 'cci cci-burn', detail: 'Remove all burn from yourself.' },
+        { val: 'ClearOwnCond', label: 'Clear Own Condition', icon: 'fas fa-user-shield', detail: 'Clear a condition affecting you (resolved manually).' },
+        { val: 'ClearOtherCond', label: 'Clear Ally Condition', icon: 'fas fa-hands-helping', detail: 'Clear a condition on an adjacent ally (resolved manually).' }
+    ];
+    const noRepair = actor.is_mech?.() && (actor.system.repairs?.value ?? 0) <= 0;
+    const card = (o, group, disabled) => `
+        <div class="lancer-list-item la-stab-card" data-group="${group}" data-val="${o.val}" ${disabled ? 'data-disabled="true" style="opacity:0.45;pointer-events:none;"' : ''}>
+            <i class="${o.icon} la-stab-icon"></i>
+            <div class="la-stab-text">
+                <span class="la-stab-label">${o.label}</span>
+                <span class="la-stab-detail">${o.detail}</span>
+            </div>
+        </div>`;
+    const content = `
+        <div class="lancer-dialog-header">
+            <h2 class="lancer-dialog-title">STABILIZE</h2>
+            <p class="lancer-dialog-subtitle">${actor.name}</p>
+        </div>
+        <div style="padding: 10px;">
+            <div class="lancer-section-title" style="margin-top:0;">OPTION 1</div>
+            <div class="lancer-list">${opt1.map(o => card(o, '1', o.val === 'Repair' && noRepair)).join('')}</div>
+            <div class="lancer-section-title" style="margin-top:14px;">OPTION 2</div>
+            <div class="lancer-list">${opt2.map(o => card(o, '2', false)).join('')}</div>
+        </div>`;
+    return new Promise((resolve) => {
+        let picked1 = state.data.option1 ?? 'Cool';
+        let picked2 = state.data.option2 ?? 'Reload';
+        if (picked1 === 'Repair' && noRepair)
+            picked1 = 'Cool';
+        let clearTargetUuid = null;
+        let clearEffectId = null;
+        let clearLabel = '';
+        const dlg = new Dialog({
+            title: `Stabilize - ${actor.name}`,
+            content,
+            buttons: {
+                submit: {
+                    icon: '<i class="fas fa-check"></i>',
+                    label: 'Submit',
+                    callback: () => {
+                        if (!picked1 || !picked2) {
+                            ui.notifications.warn('Pick one option from each group.');
+                            return false;
+                        }
+                        if ((picked2 === 'ClearOwnCond' || picked2 === 'ClearOtherCond') && !clearEffectId) {
+                            ui.notifications.warn('Select a condition to clear first.');
+                            return false;
+                        }
+                        state.data.option1 = picked1;
+                        state.data.option2 = picked2;
+                        if (clearEffectId) {
+                            state.data.la_clearTargetUuid = clearTargetUuid;
+                            state.data.la_clearEffectId = clearEffectId;
+                        }
+                        resolve(true);
+                    }
+                },
+                cancel: {
+                    icon: '<i class="fas fa-times"></i>',
+                    label: 'Cancel',
+                    callback: () => resolve(false)
+                }
+            },
+            default: 'submit',
+            close: () => resolve(false),
+            render: (html) => {
+                const $h = html instanceof $ ? html : $(html);
+                $h.find(`.la-stab-card[data-group="1"][data-val="${picked1}"]`).addClass('selected');
+                $h.find(`.la-stab-card[data-group="2"][data-val="${picked2}"]`).addClass('selected');
+                const refreshLabel = ($card) => {
+                    const $detail = $card.find('.la-stab-detail');
+                    if (clearLabel)
+                        $detail.text(`Target: ${clearLabel}`);
+                };
+                $h.find('.la-stab-card').on('click', async function (ev) {
+                    ev.stopPropagation();
+                    if ($(this).attr('data-disabled') === 'true')
+                        return;
+                    const g = String($(this).data('group'));
+                    const v = String($(this).data('val'));
+                    if (g === '2' && (v === 'ClearOwnCond' || v === 'ClearOtherCond')) {
+                        let targetActor = actor;
+                        let labelPrefix = '';
+                        if (v === 'ClearOtherCond') {
+                            const origin = actor.getActiveTokens?.()?.[0];
+                            const picked = await chooseToken(origin, { title: 'PICK ALLY', includeSelf: false, count: 1 });
+                            targetActor = picked?.[0]?.actor;
+                            if (!targetActor)
+                                return;
+                            labelPrefix = `${targetActor.name}: `;
+                        }
+                        const sid = await laPickConditionFromActor(targetActor, 'Clear which condition?', $h);
+                        if (!sid)
+                            return;
+                        const eff = targetActor.effects.get(sid);
+                        clearTargetUuid = targetActor.uuid;
+                        clearEffectId = sid;
+                        clearLabel = `${labelPrefix}${eff?.name ?? 'Condition'}`;
+                    } else if (g === '2') {
+                        clearTargetUuid = null;
+                        clearEffectId = null;
+                        clearLabel = '';
+                    }
+                    $h.find(`.la-stab-card[data-group="${g}"]`).removeClass('selected');
+                    $(this).addClass('selected');
+                    if (g === '1')
+                        picked1 = v;
+                    else {
+                        picked2 = v;
+                        refreshLabel($(this));
+                    }
+                });
+            }
+        }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520, top: 450, left: 150 });
+        dlg.render(true);
+    });
+}
+
+async function laStabilizeExtras(state) {
+    if (!state?.data)
+        return true;
+    const actor = state.actor;
+    if (state.data.la_clearEffectId && state.data.la_clearTargetUuid) {
+        try {
+            const target = await fromUuid(state.data.la_clearTargetUuid);
+            if (target?.deleteEmbeddedDocuments)
+                await target.deleteEmbeddedDocuments('ActiveEffect', [state.data.la_clearEffectId]);
+        } catch (e) {
+            console.warn('lancer-automations | stabilize condition clear failed:', e);
+        }
+    }
+    if (state.data.option2 === 'ClearBurn'
+        && game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
+        && actor?.system?.infection > 0) {
+        try {
+            await actor.update({ 'system.infection': 0 });
+        } catch (e) {
+            console.warn('lancer-automations | stabilize infection clear failed:', e);
+        }
+    }
+    return true;
+}
+
 Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
+    flowSteps.set('renderStabilizePrompt', laStabilizePrompt);
+    flowSteps.set('lancer-automations:stabilizeExtras', laStabilizeExtras);
+    try {
+        flows.get('StabilizeFlow')?.insertStepAfter('applyStabilizeUpdates', 'lancer-automations:stabilizeExtras');
+    } catch (e) {
+        console.warn('lancer-automations | could not insert stabilizeExtras step:', e);
+    }
     registerModuleFlows(flowSteps, flows);
     insertModuleFlowSteps(flowSteps, flows);
     registerAltStructFlowSteps(flowSteps, flows);
@@ -4474,6 +4749,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) => {
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
     registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
     registerScanFlowSteps(flowSteps, flows); // Override v3's printScanCard + post-process journal
+    registerPerFrequencyFlowSteps(flowSteps, flows);
 });
 
 async function _consumeFlowAction(flow, success) {
@@ -5136,6 +5412,7 @@ Hooks.on('ready', async () => {
     initTokenStatBar();
     if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
         initInfectionHooks();
+    initPerFrequencyHooks();
     initWreckTokenConfig();
 
     if (game.settings.get('lancer-automations', 'allowHalfSizeTokens')) {
@@ -5153,6 +5430,8 @@ Hooks.on('renderActorSheet', (app, html, data) => {
     }
     onRenderActorSheetInfection(app, html, data);
 });
+
+Hooks.on('renderActorSheet', (app, html) => onRenderActorSheetPerFrequency(app, html));
 
 // Ammo editor on mech_system item sheets – uncomment to activate
 Hooks.on('renderItemSheet', onRenderItemSheet);

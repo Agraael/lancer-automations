@@ -2,10 +2,13 @@
 
 import { getCurrentMovementType } from './keybindings.js';
 import { playUiSound } from '../tah/sound.js';
+import { initHexDragStabilizer } from './hex-drag-stabilizer.js';
+import { initTerrainTriggerSplits, injectTriggerSilentsAtDrop } from './terrain-trigger-waypoints.js';
 
 const MODULE_ID = 'lancer-automations';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
 const CLIMB_WAYPOINTS_ENABLED = 'enableClimbWaypoints';
+const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
 const DISABLE_AUTO_TERRAIN_ELEVATION = 'disableAutoTerrainElevation';
 const THT_ID = 'terrain-height-tools';
 const THT_IGNORE_FLAG = 'ignoreAutoElevation';
@@ -18,6 +21,14 @@ Hooks.once('init', () => {
     game.settings.register(MODULE_ID, CLIMB_WAYPOINTS_ENABLED, {
         name: 'Lancer Ruler: Auto-insert Climb Waypoints',
         hint: 'When the Lancer Ruler is active, split the movement path with "climb" waypoints wherever terrain elevation changes.',
+        scope: 'world',
+        type: Boolean,
+        default: false,
+        config: false
+    });
+    game.settings.register(MODULE_ID, SPLIT_AT_TRIGGER_BOUNDARIES, {
+        name: 'Split Movement at Trigger Boundaries',
+        hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end. Visual path unchanged.',
         scope: 'world',
         type: Boolean,
         default: false,
@@ -370,6 +381,8 @@ Hooks.once('ready', () => {
         return;
 
     libWrapper.register(MODULE_ID, 'foundry.documents.TokenDocument.prototype.getCompleteMovementPath', getCompleteMovementPathWrapper, 'WRAPPER');
+    initHexDragStabilizer();
+    initTerrainTriggerSplits();
 
     // Native Ctrl+wheel and Q/E elevation would add to pathfinder cost; we route to our offset.
     libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype._onDragMouseWheel', function() {}, 'OVERRIDE');
@@ -407,6 +420,7 @@ Hooks.once('ready', () => {
 
     // Only place we change stored elevation, keeping the path to one segment.
     libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype._prepareDragLeftDropUpdates', function(wrapped, event) {
+        injectTriggerSilentsAtDrop(event);
         const result = wrapped.call(this, event);
         const [updates, options] = result;
         // Pure-elevation drag: native drop skips contexts whose path has just the origin (no horizontal move).
