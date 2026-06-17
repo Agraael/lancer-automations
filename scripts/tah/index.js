@@ -2,6 +2,7 @@
 
 import { LancerHUD } from './hud.js';
 import { playUiSound } from './sound.js';
+import { forceHideStatHint } from './tokenStatHint.js';
 
 const MODULE = 'lancer-automations';
 const SETTING = 'tahEnabled';
@@ -412,20 +413,25 @@ Hooks.once('ready', () => {
     if (!game.modules.get('lib-wrapper')?.active)
         return;
     libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args) {
-        if (action === 'dragLeftMove' && this.object instanceof foundry.canvas.placeables.Token) {
-            try {
-                const dest = event?.interactionData?.destination;
-                if (dest) {
-                    const off = canvas.grid.getOffset(dest);
-                    const key = `${off.i},${off.j}`;
-                    const prev = _dragLastCell.get(this.object);
-                    if (prev !== key) {
-                        _dragLastCell.set(this.object, key);
-                        if (prev !== undefined)
-                            playUiSound('tokenDrag');
+        if (this.object instanceof foundry.canvas.placeables.Token) {
+            if (action === 'dragLeftStart' || action === 'dragLeftMove') {
+                forceHideStatHint();
+            }
+            if (action === 'dragLeftMove') {
+                try {
+                    const dest = event?.interactionData?.destination;
+                    if (dest) {
+                        const off = canvas.grid.getOffset(dest);
+                        const key = `${off.i},${off.j}`;
+                        const prev = _dragLastCell.get(this.object);
+                        if (prev !== key) {
+                            _dragLastCell.set(this.object, key);
+                            if (prev !== undefined)
+                                playUiSound('tokenDrag');
+                        }
                     }
-                }
-            } catch { /* ignore */ }
+                } catch { /* ignore */ }
+            }
         }
         return wrapped.call(this, action, event, ...args);
     }, 'WRAPPER');

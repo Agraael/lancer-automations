@@ -752,6 +752,10 @@ function destroyPopup() {
     _animEl = null;
 }
 
+export function forceHideStatHint() {
+    forceHide();
+}
+
 function forceHide() {
     clearDelay();
     destroyPopup();
@@ -1019,6 +1023,7 @@ export function initTokenStatHint() {
         forceHide();
         SCANNED_MEMO.clear();
     });
+
 
     Hooks.on('updateToken', (tokenDoc) => {
         if (_currentTokenId !== tokenDoc?.id)
