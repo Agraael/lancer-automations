@@ -1797,6 +1797,7 @@ export class ReactionEditor extends FormApplication {
             onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger, canTriggerReaction}",
             onTurnStart: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTurnEnd: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
+            onRoundStart: "{ combat, round, canTriggerReaction}",
             onPreStatusApplied: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl), canTriggerReaction}",
             onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl), canTriggerReaction}",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger, canTriggerReaction}",
@@ -2819,7 +2820,7 @@ export class ReactionEditor extends FormApplication {
 
     _getTriggerOptions(selected) {
         const groups = [
-            { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onTurnStart", "onTurnEnd"] },
+            { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
             { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
             { label: "Rolls", triggers: ["onRoll"] },
             { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onDamage"] },

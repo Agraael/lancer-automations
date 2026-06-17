@@ -136,7 +136,7 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 
 | # | Filter | Behavior |
 |---|---|---|
-| 1 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onEnterCombat`, `onExitCombat`). |
+| 1 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
 | 2 | `triggerSelf` / `triggerOther` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: require `triggerOther: true`. (Default both `false`, you must opt in.) |
 | 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning between item and general. |
 | 4 | Reaction availability | If the reaction config consumes a reaction (`consumeReaction`/`consumesReaction`), skip if the reactor has no reaction left. |

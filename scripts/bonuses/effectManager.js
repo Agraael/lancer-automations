@@ -388,6 +388,7 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onHpLoss', label: 'On HP Loss' },
     { value: 'onTurnStart', label: 'On Turn Start' },
     { value: 'onTurnEnd', label: 'On Turn End' },
+    { value: 'onRoundStart', label: 'On Round Start' },
     { value: 'onEnterCombat', label: 'On Enter Combat' },
     { value: 'onExitCombat', label: 'On Exit Combat' },
     { value: 'onPreStatusApplied', label: 'On Pre Status Applied' },

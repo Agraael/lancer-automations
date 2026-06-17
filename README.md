@@ -486,6 +486,7 @@ flowchart LR
 | `onActivation` | When an item or action is activated |
 | `onTurnStart` | At the start of a token's turn |
 | `onTurnEnd` | At the end of a token's turn |
+| `onRoundStart` | At the start of every round (including round 1). Data includes `round` number |
 | `onEnterCombat` | When a token joins combat |
 | `onExitCombat` | When a token leaves combat |
 | `onPreStatusApplied` | Before a status is applied, can cancel |

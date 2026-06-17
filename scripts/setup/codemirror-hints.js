@@ -121,6 +121,7 @@ const TRIGGER_FIELDS_BY_TRIGGER = {
     onStatusRemoved:     ['statusId', 'effect'],
     onTurnStart:         ['combat', 'combatant'],
     onTurnEnd:           ['combat', 'combatant'],
+    onRoundStart:        ['combat', 'round'],
     onEnterCombat:       ['combat'],
     onExitCombat:        ['combat'],
     onInitActivation:    ['actionName', 'item', 'cancelAction'],

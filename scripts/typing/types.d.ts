@@ -491,6 +491,7 @@ type TriggerType =
     | "onPreHpChange" | "onHpLoss" | "onHpGain"
     | "onDeploy"
     | "onTurnStart" | "onTurnEnd"
+    | "onRoundStart"
     | "onEnterCombat" | "onExitCombat"
     | "onUpdate";
 

@@ -49,6 +49,7 @@ let _placeRight = true;
 let _delayTimer = null;
 let _outTimer = null;
 let _hookedPan = false;
+let _tahWatch = null;
 let _hookedActorUpdate = false;
 
 function isEnabled() {
@@ -323,6 +324,15 @@ function buildHeaderHtml(token, mode) {
     if (isNpc) {
         const t = Number(actor.system?.tier) || 1;
         tierBadge = `<span class="la-stat-hint-tier">T${t}</span>`;
+    } else if (actor?.type === 'pilot') {
+        const ll = Number(actor.system?.level) || 0;
+        tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
+    } else if (actor?.type === 'mech') {
+        const pilot = actor.system?.pilot?.value;
+        const ll = pilot ? (Number(pilot.system?.level) || 0) : null;
+        if (ll !== null) {
+            tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
+        }
     }
     return `<div class="la-stat-hint-header">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span></div>`;
 }
@@ -734,6 +744,7 @@ function shouldShowHintFor(token) {
 
 function destroyPopup() {
     clearOutTimer();
+    _stopTahWatch();
     if (_popupEl && _popupEl.parentNode) {
         _popupEl.parentNode.removeChild(_popupEl);
     }
@@ -747,6 +758,49 @@ function forceHide() {
     _state = 'idle';
     _currentTokenId = null;
     _currentToken = null;
+}
+
+// hoverToken only fires over the canvas, so cursor sliding onto #la-hud leaks the popup.
+function _startTahWatch() {
+    if (_tahWatch) {
+        return;
+    }
+    _tahWatch = (ev) => {
+        if (ev.target?.closest?.('#la-hud')) {
+            _hideOnTahEnter();
+        }
+    };
+    document.addEventListener('mouseover', _tahWatch, true);
+}
+
+function _stopTahWatch() {
+    if (!_tahWatch) {
+        return;
+    }
+    document.removeEventListener('mouseover', _tahWatch, true);
+    _tahWatch = null;
+}
+
+function _hideOnTahEnter() {
+    if (_state === 'idle' || _state === 'out') {
+        return;
+    }
+    if (_state === 'delay') {
+        clearDelay();
+        _state = 'idle';
+        _currentTokenId = null;
+        _stopTahWatch();
+        return;
+    }
+    _state = 'out';
+    animateOut(() => {
+        if (_state === 'out') {
+            _state = 'idle';
+            _currentTokenId = null;
+            _currentToken = null;
+        }
+        _stopTahWatch();
+    });
 }
 
 function showFor(token) {
@@ -766,7 +820,7 @@ function showFor(token) {
 
     _state = 'in';
     playUiSound('details');
-    // Reflow required so the browser sees the initial state before la-show flips it.
+    _startTahWatch();
     void _animEl.offsetWidth;
     _animEl.classList.add('la-show');
     setTimeout(() => {

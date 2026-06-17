@@ -126,7 +126,8 @@ function shouldAutoElevate(tokenDoc, { ruler = true } = {}) {
     try {
         if (game.settings.get(MODULE_ID, DISABLE_AUTO_TERRAIN_ELEVATION)) return false;
     } catch { /* ignore */ }
-    if (tokenDoc.getFlag?.(THT_ID, THT_IGNORE_FLAG))
+    // getFlag throws on a scope whose module isn't active; gate the THT lookup.
+    if (game.modules.get(THT_ID)?.active && tokenDoc.getFlag?.(THT_ID, THT_IGNORE_FLAG))
         return false;
     if (tokenDoc.getFlag?.(MODULE_ID, LA_DISABLE_AUTO_TERRAIN_FLAG))
         return false;

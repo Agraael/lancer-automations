@@ -125,7 +125,7 @@ const REACTION_DEBOUNCE_MS = 100;
 let cachedFlatGeneralReactions = null;
 /** @type {Map<string, Array>} triggerType → filtered non-action reactions; cleared with cachedFlatGeneralReactions */
 const cachedNonActionReactionsByTrigger = new Map();
-const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd']);
+const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart']);
 let deployableConnectionsGraphic = null;
 let _hoverConnectionToken = null;
 let _hoverConnectionTicker = null;
@@ -434,7 +434,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         if (isCancelled)
             return null;
     }
-    const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd'];
+    const combatInherentTriggers = ['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart'];
     if (!isInCombat && !reaction.outOfCombat && !combatInherentTriggers.includes(triggerType)) {
         if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered, out of combat.`);
@@ -5680,6 +5680,20 @@ Hooks.on('combatTurnChange', async (combat, prior, current) => {
         }
     }
 
+});
+
+Hooks.on('combatStart', async (combat) => {
+    if (!game.users.activeGM?.isSelf) {
+        return;
+    }
+    await handleTrigger('onRoundStart', { combat, round: combat.round ?? 1 });
+});
+
+Hooks.on('combatRound', async (combat, updateData) => {
+    if (!game.users.activeGM?.isSelf) {
+        return;
+    }
+    await handleTrigger('onRoundStart', { combat, round: updateData?.round ?? combat.round });
 });
 
 // Init movement cap for all combatants when combat starts.

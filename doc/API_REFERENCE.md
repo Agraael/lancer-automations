@@ -140,6 +140,7 @@ Fires *before* movement is finalized. Allows interception.
 <details><summary><b>Turn Events</b></summary>
 
 - **`onTurnStart`** / **`onTurnEnd`**: `{ triggeringToken }`.
+- **`onRoundStart`**: `{ combat, round }`. Fires once at the start of every round, including round 1 (combat start).
 - **`onEnterCombat`** / **`onExitCombat`**: `{ triggeringToken }`. Fires when a token is added to or removed from the combat tracker.
 
 </details>
