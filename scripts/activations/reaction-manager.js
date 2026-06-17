@@ -292,13 +292,20 @@ export class ReactionManager {
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
     }
 
-    static async deleteGeneralReaction(name) {
+    static async deleteGeneralReaction(name, index = null) {
         const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
-        if (userSaved[name]) {
-            delete userSaved[name];
-            clearScriptCache();
-            await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
+        if (!userSaved[name]) {
+            return;
         }
+        const i = (index === null || index === undefined || index === '') ? null : Number.parseInt(index);
+        const arr = userSaved[name].reactions;
+        if (Number.isFinite(i) && Array.isArray(arr) && arr.length > 1 && i >= 0 && i < arr.length) {
+            arr.splice(i, 1);
+        } else {
+            delete userSaved[name];
+        }
+        clearScriptCache();
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
     }
 
     static async exportReactions() {
@@ -1425,30 +1432,40 @@ export class ReactionConfig extends FormApplication {
             new ReactionEditor({ isGeneral: true, name, reaction }).render(true);
         } else {
             const lid = li.data("lid");
-            const index = li.data("index");
+            const rawIndex = li.data("index");
+            const parsed = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? 0 : Number.parseInt(rawIndex);
+            const reactionIndex = Number.isFinite(parsed) ? parsed : 0;
             const all = ReactionManager.getAllReactions();
             const entry = all[lid];
-            if (!entry)
+            if (!entry || !Array.isArray(entry.reactions))
                 return;
-
-            const reactionIndex = (index === undefined) ? 0 : index;
             const reaction = entry.reactions[reactionIndex];
-            new ReactionEditor({ isGeneral: false, lid, reaction, reactionIndex: reactionIndex }).render(true);
+            if (!reaction)
+                return;
+            new ReactionEditor({ isGeneral: false, lid, reaction, reactionIndex }).render(true);
         }
     }
 
     async _onDeleteReaction(event) {
         const li = $(event.currentTarget).closest(".reaction-item");
         const isGeneral = li.data("is-general") === true || li.data("is-general") === "true";
+        const rawIndex = li.data("index");
+        const index = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? null : Number.parseInt(rawIndex);
 
         if (isGeneral) {
             const name = li.data("name");
-            await ReactionManager.deleteGeneralReaction(name);
+            await ReactionManager.deleteGeneralReaction(name, index);
         } else {
             const lid = li.data("lid");
-            let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);
-            if (userReactions[lid]) {
-                delete userReactions[lid];
+            const userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+            const entry = userReactions[lid];
+            if (entry) {
+                const arr = entry.reactions;
+                if (Number.isFinite(index) && Array.isArray(arr) && arr.length > 1 && index >= 0 && index < arr.length) {
+                    arr.splice(index, 1);
+                } else {
+                    delete userReactions[lid];
+                }
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
             }
         }
@@ -1460,7 +1477,7 @@ export class ReactionConfig extends FormApplication {
         const li = $(event.currentTarget).closest(".reaction-item");
         const lid = li.data("lid");
         const name = li.data("name");
-        const isGeneral = li.data("general");
+        const isGeneral = li.data("is-general") === true || li.data("is-general") === "true";
         const index = li.data("index");
 
         if (isGeneral) {
@@ -1476,10 +1493,14 @@ export class ReactionConfig extends FormApplication {
         } else {
             const all = ReactionManager.getAllReactions();
             const entry = all[lid];
-            if (!entry)
+            if (!entry || !Array.isArray(entry.reactions))
                 return;
-            const reactionIndex = (typeof index !== 'undefined') ? index : 0;
-            const reaction = foundry.utils.deepClone(entry.reactions[reactionIndex]);
+            const parsed = (index === undefined || index === null || index === '') ? 0 : Number.parseInt(index);
+            const reactionIndex = Number.isFinite(parsed) ? parsed : 0;
+            const src = entry.reactions[reactionIndex];
+            if (!src)
+                return;
+            const reaction = foundry.utils.deepClone(src);
             new ReactionEditor({ isGeneral: false, lid, reaction }).render(true);
         }
     }
@@ -1488,8 +1509,7 @@ export class ReactionConfig extends FormApplication {
         const checkbox = event.currentTarget;
         const li = $(checkbox).closest(".reaction-item");
         const checked = checkbox.checked;
-        const isGenTag = li.attr("data-is-general") || li.attr("data-general");
-        const isGeneral = isGenTag === "true";
+        const isGeneral = li.attr("data-is-general") === "true";
 
         if (isGeneral) {
             const name = li.data("name");
@@ -1499,10 +1519,10 @@ export class ReactionConfig extends FormApplication {
             if (!userSaved[name])
                 userSaved[name] = {};
 
-            if (index !== undefined && index !== null && index !== '') {
+            const i = (index === undefined || index === null || index === '') ? NaN : Number.parseInt(index);
+            if (Number.isFinite(i)) {
                 if (!Array.isArray(userSaved[name].reactions))
                     userSaved[name].reactions = [];
-                const i = Number.parseInt(index);
                 if (!userSaved[name].reactions[i])
                     userSaved[name].reactions[i] = {};
                 userSaved[name].reactions[i].enabled = checked;
@@ -1512,22 +1532,26 @@ export class ReactionConfig extends FormApplication {
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
         } else {
             const lid = li.data("lid");
-            const index = li.data("index");
+            const rawIndex = li.data("index");
+            const i = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? 0 : Number.parseInt(rawIndex);
+            if (!Number.isFinite(i)) {
+                return;
+            }
             const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
 
             if (userItemSettings[lid]) {
-                if (!userItemSettings[lid].reactions)
+                if (!Array.isArray(userItemSettings[lid].reactions))
                     userItemSettings[lid].reactions = [];
-                if (!userItemSettings[lid].reactions[index])
-                    userItemSettings[lid].reactions[index] = {};
-                userItemSettings[lid].reactions[index].enabled = checked;
+                if (!userItemSettings[lid].reactions[i])
+                    userItemSettings[lid].reactions[i] = {};
+                userItemSettings[lid].reactions[i].enabled = checked;
             } else {
                 const defaults = getDefaultItemReactionRegistry();
                 if (defaults[lid]) {
                     userItemSettings[lid] = {
                         itemType: defaults[lid].itemType,
-                        reactions: defaults[lid].reactions.map((r, i) =>
-                            i === Number.parseInt(index) ? { enabled: checked } : { enabled: r.enabled !== false }
+                        reactions: defaults[lid].reactions.map((r, idx) =>
+                            idx === i ? { enabled: checked } : { enabled: r.enabled !== false }
                         )
                     };
                 }
