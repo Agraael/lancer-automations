@@ -2,6 +2,15 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-06-17-lancer-3-2-6-post",
+            "date": "2026-06-17",
+            "title": "Lancer 3.2.6 + Feature Vote #1 results",
+            "body": [
+                "<p>Hey there! The first Patreon feature vote has ended, and there's a new update post on Lancer Automations and other modules.</p>",
+                "<p>Check out the recap and the new builds on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-3-2-6-161317024\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
             "id": "2026-06-08-patreon-feature-vote-1",
             "date": "2026-06-08",
             "title": "Patreon Feature Vote #1",

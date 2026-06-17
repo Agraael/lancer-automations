@@ -465,6 +465,10 @@ async function wreckIt(token) {
     const wreckMode = (tokenWreckMode && tokenWreckMode !== 'default')
         ? tokenWreckMode
         : getWreckMode(category);
+    if (wreckMode === 'none') {
+        log(`${token.name} wreck skipped (mode = none)`);
+        return token;
+    }
     const tileWreck = wreckMode === 'tile';
 
     if (tileWreck) {
@@ -753,27 +757,14 @@ function _renderWreckTab(app, html, data) {
 
     const wreckHtml = showWreck ? _buildWreckSectionHtml(flags) : '';
     const awarenessHtml = _buildAwarenessSectionHtml(flags);
-    const rulerHtml = _buildRulerSectionHtml(flags);
 
-    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la">${rulerHtml}${wreckHtml}${awarenessHtml}</div>`;
+    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la">${wreckHtml}${awarenessHtml}</div>`;
     const resourcesTab = el.querySelector('div.tab[data-tab="resources"]');
     if (resourcesTab)
         resourcesTab.insertAdjacentHTML('afterend', tabHtml);
 
     if (typeof app.setPosition === 'function')
         app.setPosition({ height: 'auto' });
-}
-
-function _buildRulerSectionHtml(flags) {
-    const ignoreRuler = flags.ignoreRulerAutoElevation === true;
-    return `
-        <div class="form-group">
-            <label>Ignore Ruler Auto-Elevation</label>
-            <div class="form-fields">
-                <input type="checkbox" name="flags.${MODULE_ID}.ignoreRulerAutoElevation" data-dtype="Boolean" ${ignoreRuler ? 'checked' : ''}>
-            </div>
-        </div>
-    `;
 }
 
 function _buildWreckSectionHtml(flags) {
@@ -796,6 +787,7 @@ function _buildWreckSectionHtml(flags) {
                     ${modeOpt('default', 'Default (use category setting)')}
                     ${modeOpt('token', 'Token')}
                     ${modeOpt('tile', 'Tile')}
+                    ${modeOpt('none', 'Skip (do nothing)')}
                 </select>
             </div>
         </div>

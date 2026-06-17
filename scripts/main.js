@@ -95,7 +95,16 @@ import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settings
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
 import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
+import { registerTokenStatHintSettings, initTokenStatHint } from "./tah/tokenStatHint.js";
 import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
+import {
+    LANCER_ACTOR_TYPES,
+    isLancerActor,
+    hasMechStats,
+    hasReaction,
+    isTokenInCombat,
+    isTokenVisible,
+} from "./utils/lancer-token.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import './filters/customFilters.js';
 import './setup/scene-dim-from-image.js';
@@ -1643,7 +1652,7 @@ function registerSettings() {
         default: true,
     });
     // Per-category wreck mode + terrain.
-    const wreckModeChoices = { token: 'Token', tile: 'Tile' };
+    const wreckModeChoices = { token: 'Token', tile: 'Tile', none: 'Skip (do nothing)' };
     for (const cat of ['mech', 'human', 'monstrosity', 'biological']) {
         const label = cat.charAt(0).toUpperCase() + cat.slice(1);
         game.settings.register('lancer-automations', `wreckMode_${cat}`, {
@@ -4454,6 +4463,7 @@ Hooks.on('init', () => {
     registerSettingsMenus(); // Grouped Activations / Combat / Deployables menus
     registerTourBootstrap();
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
+    registerTokenStatHintSettings(); // Hover stat-hint popup
     registerIsoSettings(); // Isometric-perspective compat toggles
     registerFlowStatePersistence();
 
@@ -5380,6 +5390,13 @@ Hooks.on('ready', async () => {
         delayedTokenAppearance,
         getIsoProvider,
         isoLabelTransform,
+        // Shared token / actor predicates
+        LANCER_ACTOR_TYPES,
+        isLancerActor,
+        hasMechStats,
+        hasReaction,
+        isTokenInCombat,
+        isTokenVisible,
         // Tests
         tests: {
             cardStack: CardStackTests,
@@ -5410,6 +5427,7 @@ Hooks.on('ready', async () => {
 
     initStatusFX();
     initTokenStatBar();
+    initTokenStatHint();
     if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
         initInfectionHooks();
     initPerFrequencyHooks();

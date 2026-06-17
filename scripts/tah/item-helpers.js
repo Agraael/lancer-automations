@@ -162,10 +162,23 @@ export function laHudItemChildren(item, opts = {}) {
     const sys = item.system;
     const profiles = sys.profiles ?? [];
     const activeIdx = sys.selected_profile_index ?? 0;
+    const activeProfileActions = profiles[activeIdx]?.actions ?? [];
     const taggedActions = [
         ...getItemActions(item).map(a => ({ a, source: item })),
+        ...activeProfileActions.map(a => ({ a, source: item })),
         ...getItemActions(modItem).map(a => ({ a, source: modItem })),
     ];
+    // Dedupe by (name, activation, source).
+    const _seenActions = new Set();
+    const _dedupedActions = [];
+    for (const entry of taggedActions) {
+        const key = `${entry.source?.id ?? '?'}|${entry.a?.name ?? ''}|${entry.a?.activation ?? ''}`;
+        if (_seenActions.has(key)) continue;
+        _seenActions.add(key);
+        _dedupedActions.push(entry);
+    }
+    taggedActions.length = 0;
+    taggedActions.push(..._dedupedActions);
     const items = [...defaultActions];
 
     // ── Profiles ──────────────────────────────────────────────────────────────

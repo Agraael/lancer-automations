@@ -15,27 +15,23 @@ import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { buildCombatBar } from './combat-bar.js';
 import { activateCombatantSocket } from '../socket.js';
 import { collectSearchResults, openSearchResults } from './search.js';
-import { showPopupAt, toggleDetailPopup } from './hud-popups.js';
+import { showPopupAt, toggleDetailPopup, hasAutomation } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
 import { LogPanel } from './log-panel.js';
 import { GlossaryPanel } from './glossary-panel.js';
 import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
 
-// v13 toggleCombatant takes {active, combat}; target game.combat so Remove works mid-encounter.
 async function _toggleTokenInCombat(token) {
     const tokenDoc = /** @type {any} */ (token?.document);
     if (!tokenDoc) return;
-    const wantActive = !token.inCombat;
-    const combat = /** @type {any} */ (game).combat ?? /** @type {any} */ (game).combats?.viewed;
     try {
-        if (typeof tokenDoc.toggleCombatant === 'function') {
-            await tokenDoc.toggleCombatant({ active: wantActive, combat });
+        const existing = tokenDoc.combatant;
+        if (existing) {
+            await existing.delete();
             return;
         }
-        const TD = /** @type {any} */ (CONFIG).Token?.documentClass;
-        if (wantActive) await TD?.createCombatants?.([tokenDoc], { combat });
-        else            await TD?.deleteCombatants?.([tokenDoc], { combat });
+        await tokenDoc.toggleCombatant({ active: true });
     } catch (e) {
         console.warn('lancer-automations | toggleCombatant failed', e);
     }
@@ -1053,6 +1049,12 @@ export class LancerHUD {
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
 
+            // Subtle automation hint: tiny rightward triangle attached to the left status bar (same color as the bar).
+            if (hasAutomation(item.hoverData?.item ?? item.hoverData?.action?.name ?? item.label)) {
+                row.css('position', 'relative');
+                row.append(`<span class="la-hud-auto-tick" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:4px solid var(--primary-color);border-top:3px solid transparent;border-bottom:3px solid transparent;pointer-events:none;"></span>`);
+            }
+
             // Hover sound on leaf rows (and Log / Glossary) only in hover-mode. Click-to-open
             // mode plays sound on click, not on hover, matching other rows.
             if ((!hasChildren || item.isLogPanel || item.isGlossaryPanel) && !this._clickToOpen)
@@ -1395,7 +1397,7 @@ export class LancerHUD {
         const token = this._token;
         const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
         const basicQuick = () => [
-            this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
+            this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, 'When you BOOST, you move at least 1 space, up to your SPEED. This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
             this._simpleItem('Hide',     'systems/lancer/assets/icons/status_hidden.svg',    { name: 'Hide',     activation: 'Quick'          }, 'Obscure your position, becoming HIDDEN and unable to be identified, precisely located, or targeted directly by attacks or hostile actions.'),
             this._simpleItem('Search',   'modules/lancer-automations/icons/search.svg',      { name: 'Search',   activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
             ...(showAHIS ? [this._simpleItem('Interact', 'modules/lancer-automations/icons/click.svg',       { name: 'Interact', activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
@@ -1522,11 +1524,11 @@ export class LancerHUD {
             colLabel: 'Attacks',
             getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'Make one attack with a single weapon.' }) }, 'Skirmish'),
-                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'Make two attacks, each with a different weapon, or two attacks with the same weapon. You may also make one attack with a SUPERHEAVY weapon.' }) }, 'Barrage'),
-                    this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
-                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'Perform a melee attack to grapple a target, end an existing grapple, or break free from a grapple.'),
-                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'Make a melee or ranged attack using a non-weapon object or piece of terrain. On a hit, deal 1d6 AP kinetic damage.' }) }, 'Improvised Attack'),
+                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: ap({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish'),
+                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: ap({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage'),
+                    this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'When you RAM, you make a melee attack with the aim of knocking a target down or back. \r \n To RAM, make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
+                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'When you GRAPPLE, you grab hold of a target to overpower them. \r \n To GRAPPLE, choose an adjacent character and make a melee attack. On a hit: \r &bull; both characters become ENGAGED; \r &bull; neither can BOOST or take reactions while grappled; \r &bull; the smaller becomes IMMOBILIZED and is dragged when the larger moves. If same SIZE, contested HULL check at start of turn decides who is larger. \r \n A GRAPPLE ends when adjacency breaks, the attacker ends it as a free action, or the defender wins a contested HULL check as a quick action.'),
+                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: ap({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
                     this._lockable({ label: 'Fight', icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: ap({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight'),
@@ -1649,11 +1651,11 @@ export class LancerHUD {
         const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
         const basicChildren = () => {
             const items = [
-                this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
+                this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'When you BOOST, you move at least 1 space, up to your SPEED. This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
                 ...(showAHIS && actor.type !== 'npc' ? [this._simpleItem('Aid', 'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid', activation: 'Quick' }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).')] : []),
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
                 this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
-                this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'Shut down your mech as a desperate measure, to end system attacks, regain control of AI, and cool your mech. The mech is STUNNED until rebooted via the BOOT UP action.'),
+                this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'When you SHUT DOWN, your mech powers off to end tech effects and cool down. \r \n As a quick action, your mech takes the SHUT DOWN status: \r &bull; all heat is cleared, as is EXPOSED; \r &bull; cascading NHPs return to normal; \r &bull; tech-caused statuses (LOCK ON, etc.) immediately end; \r &bull; the mech gains IMMUNITY to all tech actions and attacks; \r &bull; the mech is STUNNED indefinitely. \r \n The only way to remove SHUT DOWN is to BOOT UP.'),
                 ...(showAHIS ? [this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.')] : []),
                 ...(showAHIS ? [this._simpleItem('Interact',  'modules/lancer-automations/icons/click.svg',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
                 this._simpleItem('Prepare',   'modules/lancer-automations/icons/light-bulb.svg',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
@@ -1661,7 +1663,7 @@ export class LancerHUD {
                 this._lockable({ label: 'Standing Up', icon: 'modules/lancer-automations/icons/underhand.svg', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up'),
             ];
             if (actor.type === 'mech')
-                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'Trigger a reactor meltdown. Your mech will explode at the end of your next turn or immediately if you choose to EJECT.' }) });
+                items.push({ label: 'Self Destruct', icon: 'modules/lancer-automations/icons/time-bomb.svg', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'When you SELF DESTRUCT, you overload your reactor in a final, catastrophic play. \r \n As a quick action, initiate a reactor meltdown. The mech explodes at the end of your next turn, or at the end of one of your turns within the following two rounds (your choice): \r &bull; the mech is annihilated, killing anyone inside; \r &bull; a BURST 2 explosion deals 4d6 explosive damage; \r &bull; characters caught who succeed on an AGILITY save take half damage.' }) });
             return this._enrichHoverData(items, { actor, category: 'Actions' });
         };
         return {
@@ -2670,6 +2672,7 @@ export class LancerHUD {
             return {
                 label: feat.name,
                 icon: feat.img ?? null,
+                hoverData: { actor: this._actor, item: feat, category: 'Traits' },
                 onClick: () => /** @type {any} */ (feat).beginSystemFlow(),
                 broadcastFn: (_t, a) => {
                     const f = a.items.find(i => i.type === 'npc_feature' && i.system?.lid === sys.lid); if (f) /** @type {any} */
@@ -2880,6 +2883,7 @@ export class LancerHUD {
         return traits.map(/** @type {any} */ (trait) => ({
             label: trait.name,
             icon: 'systems/lancer/assets/icons/trait.svg',
+            hoverData: { actor, item: trait, category: 'Frame Traits' },
             onClick: () => {
                 const F = /** @type {any} */ (game).lancer?.flows?.get('SimpleTextFlow'); if (F)
                     new F(frame, { title: trait.name, description: trait.description }).begin();
@@ -3577,7 +3581,7 @@ export class LancerHUD {
             const rangeLabel = 'Reach: ' + Object.entries(rangeMap)
                 .map(([type, val]) => `<i class="cci ${RANGE_CCI[type] ?? 'cci-range'}" style="font-size:1.1em;vertical-align:middle;"></i>${val}`)
                 .join(' ');
-            return [{
+            return [{ label: 'RANGE', isSectionLabel: true }, {
                 inputCell: true,
                 subtype: 'toggle',
                 name: rangeLabel,

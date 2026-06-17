@@ -409,7 +409,8 @@ Hooks.once('ready', () => {
 // v13's MouseInteractionManager captures callbacks at construction; wrapping Token._onDragLeftMove never fires.
 const _dragLastCell = new WeakMap();
 Hooks.once('ready', () => {
-    if (!game.modules.get('lib-wrapper')?.active) return;
+    if (!game.modules.get('lib-wrapper')?.active)
+        return;
     libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args) {
         if (action === 'dragLeftMove' && this.object instanceof foundry.canvas.placeables.Token) {
             try {
@@ -420,7 +421,8 @@ Hooks.once('ready', () => {
                     const prev = _dragLastCell.get(this.object);
                     if (prev !== key) {
                         _dragLastCell.set(this.object, key);
-                        if (prev !== undefined) playUiSound('tokenDrag');
+                        if (prev !== undefined)
+                            playUiSound('tokenDrag');
                     }
                 }
             } catch { /* ignore */ }
@@ -593,18 +595,24 @@ Hooks.on('combatStart', (combat) => {
 });
 
 Hooks.on('createCombatant', (combatant) => {
+    if (!game.users.activeGM?.isSelf)
+        return;
     const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
     if (tok)
         applyDefaultAuras(tok);
 });
 
 Hooks.on('createToken', (tokenDoc) => {
+    if (!game.users.activeGM?.isSelf)
+        return;
     const tok = canvas.tokens?.get(tokenDoc.id);
     if (tok)
         applyDefaultAuras(tok);
 });
 
 Hooks.on('deleteCombat', (combat) => {
+    if (!game.users.activeGM?.isSelf)
+        return;
     for (const c of combat.combatants) {
         const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
         if (tok)
@@ -613,20 +621,25 @@ Hooks.on('deleteCombat', (combat) => {
 });
 
 Hooks.on('deleteCombatant', (/** @type {any} */ combatant) => {
+    if (!game.users.activeGM?.isSelf)
+        return;
     const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
-    if (!tok) return;
+    if (!tok)
+        return;
     // if token is still in another active combat, leave auras alone
     let stillInCombat = false;
     for (const c of (game.combats?.contents ?? [])) {
         /** @type {any} */
         const combat = c;
-        if (!combat.active) continue;
+        if (!combat.active)
+            continue;
         if (combat.combatants?.some?.((/** @type {any} */ x) => x.token?.id === tok.id)) {
             stillInCombat = true;
             break;
         }
     }
-    if (stillInCombat) return;
+    if (stillInCombat)
+        return;
     disableCombatAuras(tok);
 });
 
@@ -700,7 +713,8 @@ Hooks.once('ready', () => {
             }
             return await original(state, options);
         } finally {
-            if (destroy) destroy();
+            if (destroy)
+                destroy();
         }
     });
 

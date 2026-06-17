@@ -2,6 +2,13 @@
 // Replaces vanilla bar1/bar2 for mech/npc/deployable actors. Disabled by default.
 
 import { getIsoProvider } from '../setup/iso-settings.js';
+import {
+    isLancerActor as isLancerCombatant,
+    hasMechStats,
+    hasReaction,
+    isTokenInCombat,
+    isTokenVisible,
+} from '../utils/lancer-token.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatBar';
@@ -11,7 +18,9 @@ const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
 const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
 const SETTING_EFFECT_ICON_SCALE = 'statBarEffectIconScale';
+const SETTING_MIN_ZOOM_SCALE = 'statBarMinZoomScale';
 const SETTING_DEFAULT_PILOT_STRESS = 'statBarDefaultPilotStress';
+const SETTING_SHOW_VALUES = 'statBarShowValues';
 
 const VIS_ALL = 'all';
 const VIS_OWNER = 'owner';
@@ -53,6 +62,9 @@ const FLASH_LINGER_MS = 600;
 
 // Hub width cap — larger tokens get a centered hub.
 const MAX_BAR_WIDTH = 500;
+
+const REF_GRID_SIZE = 100;
+const REF_ROW_HEIGHT = 7;
 
 // ---------------------------------------------------------------------------
 // Bar definitions
@@ -140,14 +152,6 @@ function isEnabled() {
     }
 }
 
-function isLancerCombatant(actor) {
-    if (!actor) {
-        return false;
-    }
-    const t = actor.type;
-    return t === 'mech' || t === 'npc' || t === 'deployable' || t === 'pilot';
-}
-
 const ISO_SETTING_STATBAR = 'iso.statBar';
 const ISO_SETTING_RETICLE = 'iso.targetReticle';
 const ISO_SETTING_HITZONE = 'iso.clickZone';
@@ -172,13 +176,6 @@ function _getIsoState(token, settingKey = ISO_SETTING_STATBAR) {
     };
 }
 
-function hasMechStats(actor) {
-    return actor?.type === 'mech' || actor?.type === 'npc';
-}
-function hasReaction(actor) {
-    return actor?.type !== 'deployable';
-}
-
 const FLAG_HIDDEN = 'statBarHidden';
 const FLAG_COMBAT_ONLY = 'statBarCombatOnly';
 const FLAG_ROW_HEIGHT = 'statBarRowHeight';
@@ -195,20 +192,24 @@ function getWorldSetting(key, fallback) {
     }
 }
 
-function statBarHidden(tokenDoc) {
-    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_HIDDEN);
-    if (flag === true || flag === false) {
-        return flag;
+// Per-token boolean flag with world-default fallback. Used for any binary toggle
+// where the token can override the world setting.
+function tokenBoolFlag(tokenDoc, flag, settingKey) {
+    const v = tokenDoc?.getFlag?.(MODULE_ID, flag);
+    if (v === true || v === false) {
+        return v;
     }
-    return getWorldSetting(SETTING_DEFAULT_HIDDEN, false) === true;
+    return getWorldSetting(settingKey, false) === true;
 }
 
+function statBarHidden(tokenDoc) {
+    return tokenBoolFlag(tokenDoc, FLAG_HIDDEN, SETTING_DEFAULT_HIDDEN);
+}
 function statBarCombatOnly(tokenDoc) {
-    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_COMBAT_ONLY);
-    if (flag === true || flag === false) {
-        return flag;
-    }
-    return getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false) === true;
+    return tokenBoolFlag(tokenDoc, FLAG_COMBAT_ONLY, SETTING_DEFAULT_COMBAT_ONLY);
+}
+function showsPilotStress(tokenDoc) {
+    return tokenBoolFlag(tokenDoc, FLAG_PILOT_STRESS, SETTING_DEFAULT_PILOT_STRESS);
 }
 
 function statBarRowHeight(tokenDoc) {
@@ -220,38 +221,15 @@ function statBarRowHeight(tokenDoc) {
     return Number.isFinite(fallback) && fallback > 0 ? Number(fallback) : 0;
 }
 
-function showsPilotStress(tokenDoc) {
-    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_PILOT_STRESS);
-    if (flag === true || flag === false) {
-        return flag;
+// Per-combat-state visibility mode: per-token flag wins, else the matching world setting.
+function resolveVisibilityMode(tokenDoc, inCombat) {
+    const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
+    const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
+    const m = tokenDoc?.getFlag?.(MODULE_ID, flagKey);
+    if (m === VIS_ALL || m === VIS_OWNER || m === VIS_NONE) {
+        return m;
     }
-    return getWorldSetting(SETTING_DEFAULT_PILOT_STRESS, false) === true;
-}
-
-function isTokenInCombat(token) {
-    const id = token?.id;
-    if (!id) {
-        return false;
-    }
-    for (const combat of game.combats ?? []) {
-        if (!combat.started) {
-            continue;
-        }
-        if (combat.combatants.some(c => c.tokenId === id)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-function isTokenVisible(token) {
-    if (!token) {
-        return false;
-    }
-    if (token.document?.hidden && !game.user.isGM) {
-        return false;
-    }
-    return token.visible !== false;
+    return getWorldSetting(settingKey, VIS_ALL);
 }
 
 function shouldShowBars(token) {
@@ -261,40 +239,22 @@ function shouldShowBars(token) {
     if (statBarHidden(token.document)) {
         return false;
     }
-    if (statBarCombatOnly(token.document) && !isTokenInCombat(token)) {
-        return false;
-    }
-    // Visibility mode per combat state. Per-token flag overrides world default.
     const inCombat = isTokenInCombat(token);
-    const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
-    const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
-    const tokenMode = token.document?.getFlag?.(MODULE_ID, flagKey);
-    const mode = (tokenMode === VIS_ALL || tokenMode === VIS_OWNER || tokenMode === VIS_NONE)
-        ? tokenMode
-        : getWorldSetting(settingKey, VIS_ALL);
-    if (mode === VIS_NONE) {
-        // NONE still allows controlled + flash overrides.
-        if (_flashingTokens.has(token.id)) {
-            return true;
-        }
-        if (token.controlled) {
-            return true;
-        }
+    if (statBarCombatOnly(token.document) && !inCombat) {
         return false;
     }
-    if (mode === VIS_OWNER && !token.actor?.isOwner) {
-        if (_flashingTokens.has(token.id)) {
-            return true;
-        }
-        return false;
-    }
+    // Flash override beats every mode.
     if (_flashingTokens.has(token.id)) {
         return true;
     }
-    if (token.hover) {
-        return true;
+    const mode = resolveVisibilityMode(token.document, inCombat);
+    if (mode === VIS_NONE) {
+        return !!token.controlled;
     }
-    if (token.controlled) {
+    if (mode === VIS_OWNER && !token.actor?.isOwner) {
+        return false;
+    }
+    if (token.controlled || token.hover) {
         return true;
     }
     if (token.targeted?.has(game.user)) {
@@ -688,7 +648,67 @@ function spawnFlash(token, barId, oldVal, newVal) {
 // Rendering
 // ---------------------------------------------------------------------------
 
-function drawSegment(gfx, x, y, w, h, def, v) {
+const BAKE_RESOLUTION = 4;
+
+// Replaces gfx in container with a baked sprite at the same Z-position and
+// tracks the texture for cleanup. Returns true if the swap happened.
+function bakeAndSwap(container, gfx, tokenId, { addAt } = {}) {
+    const sprite = bakeGraphicsToTexture(gfx);
+    if (!sprite) {
+        return false;
+    }
+    container.removeChild(gfx);
+    if (Number.isFinite(addAt)) {
+        container.addChildAt(sprite, addAt);
+    } else {
+        container.addChild(sprite);
+    }
+    gfx.destroy();
+    const entry = _overlayHubs.get(tokenId);
+    if (entry) {
+        entry.bakedTextures = entry.bakedTextures || [];
+        entry.bakedTextures.push(sprite._laBakedTexture);
+    }
+    return true;
+}
+
+// Bakes a Graphics into a high-res RenderTexture and returns a Sprite that
+// renders crisp at any zoom. Caller is responsible for destroying the original
+// Graphics; the texture lives on sprite._laBakedTexture for later cleanup.
+function bakeGraphicsToTexture(gfx, resolution = BAKE_RESOLUTION) {
+    if (!canvas?.app?.renderer || !gfx) {
+        return null;
+    }
+    try {
+        const bounds = gfx.getLocalBounds();
+        if (bounds.width <= 0 || bounds.height <= 0) {
+            return null;
+        }
+        const region = new PIXI.Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+        const tex = canvas.app.renderer.generateTexture(gfx, {
+            resolution,
+            region,
+            multisample: PIXI.MSAA_QUALITY?.HIGH ?? 4,
+        });
+        // Mipmaps so the GPU uses pre-filtered downsampled copies instead of
+        // 1-of-N nearest sampling (which is what causes the visible moiré).
+        if (tex.baseTexture) {
+            tex.baseTexture.mipmap = PIXI.MIPMAP_MODES?.ON ?? 1;
+            tex.baseTexture.anisotropicLevel = 16;
+            tex.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? 1;
+            tex.baseTexture.update();
+        }
+        const sprite = new PIXI.Sprite(tex);
+        sprite.position.set(bounds.x, bounds.y);
+        sprite._laBakedTexture = tex;
+        return sprite;
+    } catch (e) {
+        console.warn(`${MODULE_ID} | bakeGraphicsToTexture failed`, e);
+        return null;
+    }
+}
+
+function drawSegment(gfx, x, y, w, h, def, v, cs = 1) {
     const max = (v.max && v.max > 0) ? v.max : (def.softMax ?? 1);
     const value = Math.max(0, v.value ?? 0);
     const pct = Math.max(0, Math.min(1, value / max));
@@ -697,28 +717,27 @@ function drawSegment(gfx, x, y, w, h, def, v) {
     gfx.beginFill(0x111111, 0.9);
     gfx.drawRect(x, y, w, h);
     gfx.endFill();
-    // Brighter interior — 1px border reads as a frame.
     gfx.beginFill(0x222222, 0.9);
-    gfx.drawRect(x + 1, y + 1, w - 2, h - 2);
+    gfx.drawRect(x + cs, y + cs, w - 2 * cs, h - 2 * cs);
     gfx.endFill();
 
     if (def.pips) {
         // Drains left to right: empty slots on the left, filled on the right.
-        const gap = 1;
-        const inner = w - 2;
+        const gap = cs;
+        const inner = w - 2 * cs;
         const segW = (inner - gap * (max - 1)) / max;
         const emptyCount = max - value;
         for (let s = 0; s < max; s++) {
             const filled = s >= emptyCount;
             gfx.beginFill(filled ? def.color : 0x333333, filled ? 1 : 0.6);
-            gfx.drawRect(x + 1 + s * (segW + gap), y + 1, segW, h - 2);
+            gfx.drawRect(x + cs + s * (segW + gap), y + cs, segW, h - 2 * cs);
             gfx.endFill();
         }
     } else {
-        const fillW = Math.max(0, (w - 2) * pct);
+        const fillW = Math.max(0, (w - 2 * cs) * pct);
         if (fillW > 0) {
             gfx.beginFill(def.color, 1);
-            gfx.drawRect(x + 1, y + 1, fillW, h - 2);
+            gfx.drawRect(x + cs, y + cs, fillW, h - 2 * cs);
             gfx.endFill();
         }
     }
@@ -732,6 +751,13 @@ function _removeOverlayHub(tokenId) {
     }
     if (!entry.wrapper.destroyed) {
         entry.wrapper.destroy({ children: true });
+    }
+    if (entry.bakedTextures) {
+        for (const tex of entry.bakedTextures) {
+            try {
+                tex.destroy(true);
+            } catch { /* ignore */ }
+        }
     }
     _overlayHubs.delete(tokenId);
 }
@@ -756,6 +782,23 @@ function _ensureSyncTicker(token) {
             entry.wrapper.position.set(active.mesh.position.x, active.mesh.position.y);
         } else {
             entry.wrapper.position.set(active.position.x, active.position.y);
+        }
+        const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
+        if (minZoom > 0 && !iso) {
+            const zoom = canvas.stage?.scale?.x || 1;
+            const kx = Math.max(1, (REF_GRID_SIZE * minZoom) / (entry.tokenW * zoom));
+            const ky = Math.max(1, (REF_ROW_HEIGHT * minZoom) / (entry.rowHeight * zoom));
+            entry.wrapper.scale.set(kx, ky);
+            entry.hub.position.set(
+                (entry.tokenW / kx - entry.width) / 2,
+                entry.startY / ky
+            );
+            // Undo non-uniform stretch on labels.
+            for (const child of entry.hub.children) {
+                if (child?.name === 'la-bar-label') {
+                    child.scale.set((ky / kx) / 8, 1 / 8);
+                }
+            }
         }
     };
     _syncTickers.set(token.id, tick);
@@ -800,7 +843,8 @@ function drawStatHub() {
     const token = this;
     const actor = token?.actor;
 
-    if (!token?.bars) return;
+    if (!token?.bars)
+        return;
 
     token.bars.removeChildren();
 
@@ -866,40 +910,40 @@ function drawStatHub() {
 
     const width = Math.min(token.w, MAX_BAR_WIDTH);
     const rowHeightOverride = statBarRowHeight(token.document);
-    // Scales with grid, not token size.
     const rowHeight = rowHeightOverride > 0
         ? rowHeightOverride
-        : Math.max(5, Math.floor(canvas.dimensions.size * 0.07));
-    const rowGap = 1;
-    const startY = token.h + 3 - rowHeight;
+        : Math.max(3, Math.round(canvas.dimensions.size * 0.07));
+    const chromeScale = Math.max(0.5, rowHeight / REF_ROW_HEIGHT);
+    const rowGap = chromeScale;
+    const startY = token.h + Math.max(2, Math.round(rowHeight * 0.4)) - rowHeight;
 
     // Reaction extends left of the bar block.
     const indicatorW = reactionEnabled ? rowHeight : 0;
-    const indicatorGap = reactionEnabled ? 1 : 0;
+    const indicatorGap = reactionEnabled ? chromeScale : 0;
     const reactionExtension = indicatorW + indicatorGap;
     const layoutOffsetX = 0;
 
     const usableW = width;
-    const colGap = mechStats ? 1 : 0;
+    const colGap = mechStats ? chromeScale : 0;
     // Pip column shrinks with fewer pips, capped at 4 for sizing.
     let pipColW = 0;
     if (mechStats) {
         const baseColW = Math.floor(usableW * 0.32);
-        const innerGap = 1;
-        const pipSlotW = (baseColW - 2 - innerGap * 3) / 4;
+        const innerGap = chromeScale;
+        const pipSlotW = (baseColW - 2 * chromeScale - innerGap * 3) / 4;
         const structMax = actor.system?.structure?.max ?? 0;
         const stressMax = actor.system?.stress?.max ?? 0;
         const pipCount = Math.min(4, Math.max(structMax, stressMax, 1));
-        pipColW = Math.ceil(pipCount * pipSlotW + innerGap * (pipCount - 1) + 2);
+        pipColW = Math.ceil(pipCount * pipSlotW + innerGap * (pipCount - 1) + 2 * chromeScale);
     }
 
     // Armor ticks — right of HP bar, GM/owners only.
     const canSeeArmor = game.user?.isGM || actor.isOwner;
     const armorVal = canSeeArmor ? Math.max(0, Math.min(8, actor.system?.armor ?? 0)) : 0;
-    const armorTickW = 1;
-    const armorTickGap = 1;
+    const armorTickW = chromeScale * 2;
+    const armorTickGap = chromeScale;
     const armorW = armorVal > 0
-        ? armorVal * armorTickW + (armorVal - 1) * armorTickGap + 2
+        ? armorVal * armorTickW + (armorVal - 1) * armorTickGap + 2 * chromeScale
         : 0;
     const armorGap = armorVal > 0 ? colGap : 0;
 
@@ -931,7 +975,7 @@ function drawStatHub() {
         container.position.set((token.w - width) / 2, startY);
     }
 
-    _overlayHubs.set(token.id, { wrapper, hub: container });
+    _overlayHubs.set(token.id, { wrapper, hub: container, width, rowHeight, startY, tokenW: token.w, tokenH: token.h });
 
     const gfx = new PIXI.Graphics();
     container.addChild(gfx);
@@ -945,7 +989,7 @@ function drawStatHub() {
         gfx.drawRect(reactionX, 0, indicatorW, rowHeight);
         gfx.endFill();
         gfx.beginFill(reactionAvailable ? 0x9944cc : 0x333333, reactionAvailable ? 1 : 0.6);
-        gfx.drawRect(reactionX + 1, 1, indicatorW - 2, rowHeight - 2);
+        gfx.drawRect(reactionX + chromeScale, chromeScale, indicatorW - 2 * chromeScale, rowHeight - 2 * chromeScale);
         gfx.endFill();
     }
 
@@ -953,37 +997,40 @@ function drawStatHub() {
         const y = rowIdx * (rowHeight + rowGap);
         const [leftDef, rightDef] = row;
         if (leftDef && visibleIds.has(leftDef.id)) {
-            drawSegment(gfx, layoutOffsetX, y, pipColW, rowHeight, leftDef, leftDef.getValue(actor));
+            drawSegment(gfx, layoutOffsetX, y, pipColW, rowHeight, leftDef, leftDef.getValue(actor), chromeScale);
         }
         if (rightDef && visibleIds.has(rightDef.id)) {
-            drawSegment(gfx, rightColX, y, rightColW, rowHeight, rightDef, rightDef.getValue(actor));
+            drawSegment(gfx, rightColX, y, rightColW, rowHeight, rightDef, rightDef.getValue(actor), chromeScale);
         }
     });
 
     // Armor ticks (HP row, right extension).
     if (armorVal > 0 && visibleIds.has('hp')) {
         const armorX = rightColX + rightColW + armorGap;
-        const innerH = rowHeight - 2;
+        const innerH = rowHeight - 2 * chromeScale;
         gfx.beginFill(0x111111, 0.9);
         gfx.drawRect(armorX, 0, armorW, rowHeight);
         gfx.endFill();
         for (let i = 0; i < armorVal; i++) {
-            const tx = armorX + 1 + i * (armorTickW + armorTickGap);
+            const tx = armorX + chromeScale + i * (armorTickW + armorTickGap);
             gfx.beginFill(0xc8c8c8, 1);
-            gfx.drawRect(tx, 1, armorTickW, innerH);
+            gfx.drawRect(tx, chromeScale, armorTickW, innerH);
             gfx.endFill();
         }
     }
+
+    // Static chrome at the back of the z-stack so live overlays (OS, stripes, labels) sit on top.
+    bakeAndSwap(container, gfx, token.id, { addAt: 0 });
 
     // Overshield overlay on HP row.
     const osVal = actor.system?.overshield?.value ?? 0;
     const hpMax = getEffectiveMax(actor, 'hp');
     if (osVal > 0 && hpMax > 0 && visibleIds.has('hp')) {
         const osPct = Math.min(1, osVal / hpMax);
-        const osW = Math.max(0, Math.floor((rightColW - 2) * osPct));
-        const osX = rightColX + 1;
-        const osY = 1;
-        const osH = rowHeight - 2;
+        const osW = Math.max(0, Math.floor((rightColW - 2 * chromeScale) * osPct));
+        const osX = rightColX + chromeScale;
+        const osY = chromeScale;
+        const osH = rowHeight - 2 * chromeScale;
 
         const osGfx = new PIXI.Graphics();
         osGfx.name = 'la-overshield';
@@ -1018,7 +1065,7 @@ function drawStatHub() {
             }
             // Right-edge terminator
             osGfx.beginFill(0x000000, 1);
-            osGfx.drawRect(osX + osW - 1, osY, 1, osH);
+            osGfx.drawRect(osX + osW - chromeScale, osY, chromeScale, osH);
             osGfx.endFill();
         };
         canvas.app.ticker.add(tick);
@@ -1069,8 +1116,8 @@ function drawStatHub() {
 
         // Separator edge.
         stripeGfx.beginFill(0x000000, 1);
-        const delimX = direction === 'left' ? stripeX : stripeX + stripeW - 1;
-        stripeGfx.drawRect(delimX, stripeY, 1, stripeH);
+        const delimX = direction === 'left' ? stripeX : stripeX + stripeW - chromeScale;
+        stripeGfx.drawRect(delimX, stripeY, chromeScale, stripeH);
         stripeGfx.endFill();
 
         const periodMs = 900;
@@ -1103,14 +1150,16 @@ function drawStatHub() {
             const fillW = heatBarW * heatPct;
             if (fillW > 0) {
                 heatGfx.beginFill(0x000000, 1);
-                heatGfx.drawRect(heatBarX + fillW - 1, heatRowY + 1, 1, rowHeight - 2);
+                heatGfx.drawRect(heatBarX + fillW - chromeScale, heatRowY + chromeScale, chromeScale, rowHeight - 2 * chromeScale);
                 heatGfx.endFill();
             }
             // Danger Zone tick at 50%.
-            const dangerX = heatBarX + heatBarW * 0.5;
+            const dangerX = heatBarX + heatBarW * 0.5 - Math.floor(chromeScale / 2);
             heatGfx.beginFill(0x882222, 0.8);
-            heatGfx.drawRect(dangerX, heatRowY + 1, 1, rowHeight - 2);
+            heatGfx.drawRect(dangerX, heatRowY + chromeScale, chromeScale, rowHeight - 2 * chromeScale);
             heatGfx.endFill();
+
+            bakeAndSwap(container, heatGfx, token.id);
         }
     }
 
@@ -1184,10 +1233,14 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
     if (!game.user?.isGM && !actor.isOwner) {
         return;
     }
+    if (getWorldSetting(SETTING_SHOW_VALUES, true) === false) {
+        return;
+    }
     const innerH = rowHeight - 2;
-    const renderScale = 4;
+    const renderScale = 8;
     const renderFontSize = Math.max(8, (innerH + 2) * renderScale);
     const renderStroke = Math.max(1, Math.round(renderFontSize * 0.15));
+    const txtResolution = 2;
 
     const makeStyle = (fill) => new PIXI.TextStyle({
         fontFamily: 'Signika, sans-serif',
@@ -1244,6 +1297,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         let cursorX = 0;
         for (const seg of segments) {
             const txt = new PIXI.Text(seg.text, seg.style);
+            txt.resolution = txtResolution;
             txt.anchor.set(0, 0.5);
             txt.position.set(cursorX, 0);
             labelContainer.addChild(txt);
@@ -1515,6 +1569,27 @@ export function registerTokenStatBarSettings() {
     game.settings.register(MODULE_ID, SETTING_DEFAULT_PILOT_STRESS, {
         scope: 'world', config: false, type: Boolean, default: false,
     });
+    game.settings.register(MODULE_ID, SETTING_SHOW_VALUES, {
+        name: 'Show Numeric Values on Bars',
+        hint: 'When off, HP/Heat/Stress numbers are hidden — only the bars themselves are drawn.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+        onChange: () => {
+            if (!isEnabled() || !canvas?.tokens) {
+                return;
+            }
+            for (const tok of canvas.tokens.placeables) {
+                if (!isLancerCombatant(tok.actor)) {
+                    continue;
+                }
+                try {
+                    tok.drawBars();
+                } catch { /* ignore */ }
+            }
+        },
+    });
     game.settings.register(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, {
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
@@ -1530,6 +1605,16 @@ export function registerTokenStatBarSettings() {
         default: 0.7,
         range: { min: 0.3, max: 1, step: 0.05 },
         requiresReload: true,
+    });
+
+    game.settings.register(MODULE_ID, SETTING_MIN_ZOOM_SCALE, {
+        name: 'Minimum Bar Zoom Scale',
+        hint: 'Below this zoom level, the bar keeps a constant screen size instead of shrinking with the canvas. 0 = disabled (scales naturally). 1 = lock at 1x zoom equivalent.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 4, step: 0.1 },
     });
 
 }
@@ -1731,7 +1816,9 @@ export function initTokenStatBar() {
             if (prev.pilotStress !== undefined && prev.pilotStress !== next.pilotStress
                 && actor.type === 'pilot' && canvas?.interface?.createScrollingText) {
                 let showScroll = true;
-                try { showScroll = !!game.settings.get('lancer', 'floatingNumbers'); } catch { /* ignore */ }
+                try {
+                    showScroll = !!game.settings.get('lancer', 'floatingNumbers');
+                } catch { /* ignore */ }
                 if (showScroll) {
                     const delta = next.pilotStress - prev.pilotStress;
                     canvas.interface.createScrollingText(tok.center, `${delta > 0 ? '+' : ''}${delta} Stress`, {
@@ -2089,6 +2176,7 @@ export function initTokenStatBar() {
         const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
         const visIn = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_IN_COMBAT) ?? '';
         const disableAutoTerrain = !!tokenDoc.getFlag(MODULE_ID, 'disableAutoTerrainElevation');
+        const ignoreRulerAutoElev = !!tokenDoc.getFlag(MODULE_ID, 'ignoreRulerAutoElevation');
         const isPilotActor = tokenDoc?.actor?.type === 'pilot';
         const pilotStress = showsPilotStress(tokenDoc);
         const visOption = (val, label, current) =>
@@ -2144,6 +2232,11 @@ export function initTokenStatBar() {
                 <label>Disable Auto-elevation from Terrain</label>
                 <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
                 <p class="notes">Per-token override: skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
+            </div>
+            <div class="form-group">
+                <label>Ignore Ruler Auto-Elevation</label>
+                <input type="checkbox" name="flags.${MODULE_ID}.ignoreRulerAutoElevation" ${ignoreRulerAutoElev ? 'checked' : ''}/>
+                <p class="notes">Per-token override: skip auto-elevation only during ruler moves. Non-ruler auto-elevation paths still run.</p>
             </div>
         `;
         if (typeof app.setPosition === 'function') {

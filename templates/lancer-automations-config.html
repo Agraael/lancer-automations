@@ -26,12 +26,22 @@
         <div class="tab {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
             {{#each this.items}}
             {{#if this.isSection}}
+            {{#if this.isSubsection}}
+            {{#if this.collapsible}}
+            <h3 class="la-subsection-header la-collapsible" data-collapsed="{{#if this.collapsed}}true{{else}}false{{/if}}" style="border-bottom: 1px dashed rgba(120,46,34,0.5); margin: 8px 0 4px 16px; padding-left: 8px; font-size: 0.88em; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; color: #5a3a30;">
+                <i class="fas fa-chevron-down la-chevron" style="font-size: 0.7em; transition: transform 0.15s;"></i>{{this.label}}
+            </h3>
+            {{else}}
+            <h3 class="la-subsection-header" data-collapsed="false" style="border-bottom: 1px dashed rgba(120,46,34,0.5); margin: 8px 0 4px 16px; padding-left: 8px; font-size: 0.88em; color: #5a3a30;">{{this.label}}</h3>
+            {{/if}}
+            {{else}}
             {{#if this.collapsible}}
             <h2 class="la-section la-collapsible" data-collapsed="{{#if this.collapsed}}true{{else}}false{{/if}}" style="border-bottom: 1px solid #782e22; margin: 12px 0 6px; font-size: 1em; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;">
                 <i class="fas fa-chevron-down la-chevron" style="font-size: 0.75em; transition: transform 0.15s;"></i>{{this.label}}
             </h2>
             {{else}}
             <h2 class="la-section" data-collapsed="false" style="border-bottom: 1px solid #782e22; margin: 12px 0 6px; font-size: 1em;">{{this.label}}</h2>
+            {{/if}}
             {{/if}}
             {{#if this.hint}}<p class="notes la-section-hint" style="margin: -2px 0 6px; font-size: 0.82em; opacity: 0.8; line-height: 1.4;">{{{this.hint}}}</p>{{/if}}
             {{else if this.isCompactBooleans}}

@@ -953,6 +953,8 @@ export async function repairLCPData() {
         // Build maps of raw LCP data by LID
         const rawAmmoByLid = new Map();
         const rawWeaponByLid = new Map();
+        const rawActionsByLid = new Map();
+        const _actionBuckets = ['systems', 'weapons', 'frames', 'mods', 'pilot_gear', 'core_bonuses', 'talents', 'npc_features'];
         for (const data of allData) {
             for (const sys of data?.cp?.data?.systems ?? []) {
                 if (sys.ammo?.length && sys.id)
@@ -961,6 +963,12 @@ export async function repairLCPData() {
             for (const wpn of data?.cp?.data?.weapons ?? []) {
                 if (wpn.id)
                     rawWeaponByLid.set(wpn.id, wpn);
+            }
+            for (const bucket of _actionBuckets) {
+                for (const entry of data?.cp?.data?.[bucket] ?? []) {
+                    if (entry?.id && entry.actions?.length)
+                        rawActionsByLid.set(entry.id, entry.actions);
+                }
             }
         }
 
@@ -999,7 +1007,7 @@ export async function repairLCPData() {
                     if (packFailed)
                         break;
                     try {
-                        if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid))
+                        if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid, rawActionsByLid))
                             fixed++;
                     } catch (e) {
                         const msg = String(e?.message ?? e);
@@ -1062,13 +1070,36 @@ const _WEAPON_TYPES = ['CQB', 'Cannon', 'Launcher', 'Melee', 'Nexus', 'Rifle'];
 const _WEAPON_SIZES = ['Auxiliary', 'Main', 'Heavy', 'Superheavy'];
 
 /** Fix a single item from raw LCP source. Returns true if changed. */
-async function _fixItem(item, rawAmmoByLid, rawWeaponByLid) {
+async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
     const lid = item.system?.lid;
     if (!lid)
         return false;
 
     const updates = {};
     let changed = false;
+
+    // --- Action name fixes ---
+    const rawActions = rawActionsByLid?.get(lid);
+    if (Array.isArray(item.system?.actions) && item.system.actions.length) {
+        let actionsChanged = false;
+        const fixedActions = item.system.actions.map((a, i) => {
+            const cur = (a?.name ?? '').trim();
+            if (cur && cur.toLowerCase() !== 'action')
+                return a;
+            const raw = rawActions?.[i]?.name?.trim?.();
+            const newName = (raw && raw.toLowerCase() !== 'action')
+                ? raw
+                : (item.system.actions.length > 1 ? `${item.name} ${i + 1}` : item.name);
+            if (newName === cur)
+                return a;
+            actionsChanged = true;
+            return { ...a, name: newName };
+        });
+        if (actionsChanged) {
+            updates['system.actions'] = fixedActions;
+            changed = true;
+        }
+    }
 
     // --- Ammo fixes ---
     const rawAmmo = rawAmmoByLid.get(lid);

@@ -66,7 +66,7 @@ async function _showFirstLaunchPopup() {
                 },
                 decline: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Don't count me",
+                    label: "I'm already counted (Or don't want to be)",
                     callback: () => pick(CONSENT_DECLINED),
                 },
             },

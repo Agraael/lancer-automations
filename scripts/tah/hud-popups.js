@@ -4,10 +4,35 @@ import { laDetailPopup, laBindPopupBehavior } from '../interactive/detail-render
 import { ReactionManager } from '../activations/reaction-manager.js';
 import { playUiSound } from './sound.js';
 
-function hasAutomation(itemOrName) {
-    const lid = itemOrName?.system?.lid;
-    const group = lid ? ReactionManager.getReactions(lid) : ReactionManager.getGeneralReaction(itemOrName);
-    return !!(group?.reactions?.length);
+const LA_DIRECT_AUTOMATED = new Set([
+    'skirmish', 'barrage', 'fight', 'stabilize', 'boot up', 'shut down',
+    'basic tech', 'invade', 'basic attack', 'prepare', 'reload', 'interact',
+    'handle', 'standing up', 'stand up', 'self destruct',
+    'improvised attack', 'damage', 'throw weapon', 'pickup weapon',
+    'deploy item', 'recall item', 'recall'
+]);
+
+function _entryIsAutomated(entry) {
+    if (!entry) return false;
+    if (Array.isArray(entry.reactions) && entry.reactions.length) return true;
+    return !!(entry.activationType || entry.activationCode || entry.evaluate
+        || (Array.isArray(entry.triggers) && entry.triggers.length));
+}
+
+export function hasAutomation(itemOrName) {
+    if (!itemOrName) return false;
+    const lid = itemOrName?.system?.lid ?? (typeof itemOrName?.lid === 'string' ? itemOrName.lid : null);
+    if (lid && _entryIsAutomated(ReactionManager.getReactions(lid))) return true;
+    const raw = typeof itemOrName === 'string' ? itemOrName : (itemOrName?.name ?? '');
+    const name = String(raw).replace(/<[^>]*>/g, '').trim();
+    if (!name) return false;
+    if (_entryIsAutomated(ReactionManager.getGeneralReaction(name))) return true;
+    const generals = ReactionManager.getGeneralReactions?.() ?? {};
+    const lc = name.toLowerCase();
+    for (const key of Object.keys(generals)) {
+        if (key.toLowerCase() === lc && _entryIsAutomated(generals[key])) return true;
+    }
+    return LA_DIRECT_AUTOMATED.has(lc);
 }
 
 /**

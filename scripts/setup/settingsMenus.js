@@ -51,13 +51,15 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' },
     { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end.' },
     { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.' },
-    { key: 'speedProvider.colorStandard', type: 'color', label: 'Speed Color: Standard' },
-    { key: 'speedProvider.colorBoost', type: 'color', label: 'Speed Color: Boost' },
-    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Speed Color: Over-boost' },
-    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Speed Color: Free Movement' },
-    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Speed Color: Force Movement' },
     { key: 'resetMovementTypeOnDragStart', type: 'boolean', label: 'Reset Movement Type on Drag Start', hint: 'Each drag starts on the token\'s natural action (walk, or fly if the token is flying). Use M to cycle mid-drag.' },
     { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
+
+    { type: 'section', label: 'Ruler Speed Colors', collapsible: true, collapsed: true, subsection: true },
+    { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
+    { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
+    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Over-boost' },
+    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' },
+    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Force Movement' },
 ];
 
 const WRECKS_FIELDS = [
@@ -92,6 +94,7 @@ const WRECKS_FIELDS = [
                 return [
                     { value: 'token', label: 'Token', selected: cur === 'token' },
                     { value: 'tile', label: 'Tile', selected: cur === 'tile' },
+                    { value: 'none', label: 'Skip (do nothing)', selected: cur === 'none' },
                 ];
             };
             const terrainChoices = (key) => {
@@ -181,6 +184,8 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
     { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
     { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Stress on Pilot Tokens' },
+    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'When off, HP/Heat/Stress numbers are hidden, only the bars are drawn.' },
+    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' },
     { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
     { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
     { type: 'button',
@@ -197,6 +202,21 @@ const TOKENS_DISPLAY_FIELDS = [
                 ui.notifications.warn('applyDefaultsToCurrentScene is not exported.');
         },
     },
+
+    { type: 'section', label: 'Token Stat Hint', collapsible: true, collapsed: true },
+    { key: 'tokenStatHintEnabled', type: 'boolean', label: 'Enable Token Stat Hint', hint: 'Hover popup showing stats for hovered tokens.' },
+    { key: 'tokenStatHintDelayMs', type: 'slider', label: 'Hover Delay (ms)', min: 0, max: 2000, step: 50, hint: 'Delay before the popup appears.' },
+    { key: 'tokenStatHintScale', type: 'slider', label: 'Popup Scale', min: 0.5, max: 2, step: 0.05, hint: 'Visual size of the popup. Independent of token size and zoom.' },
+    { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'Show for Controlled Token', hint: 'When off, the popup is suppressed for the token you currently control.' },
+    { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'Show Only In Combat', hint: 'When on, the popup only appears for tokens in an active combat.' },
+    { key: 'tokenStatHintLabelMode', type: 'select', label: 'Header Label (NPC)',
+        choices: [
+            { value: 'actor', label: 'Always show name' },
+            { value: 'scan', label: 'Tied to scan (UNKNOWN until scanned)' },
+        ],
+        hint: 'How to display the NPC token name in the popup header.',
+    },
+    { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
 ];
 
 const TAH_FIELDS = [
@@ -483,7 +503,7 @@ const TOOLS_FIELDS = [
         key: 'openLcpRepair',
         label: 'Apply Fixes (LCP Data)',
         icon: 'fas fa-wrench',
-        hint: '(optional, mainly for ammo stuff) Rebuild all compendium and actor item data with Lancer Automations patches applied.',
+        hint: '(optional) Rebuild compendium and actor item data with LA patches applied: ammo metadata, weapon profile text merging, and missing/empty action names (e.g. "Auto-Cooler" actions previously named just "Action").',
         onClick: () => repairLCPData(),
     },
     { type: 'button',
@@ -676,7 +696,7 @@ function _buildItem(f) {
             if (!m?.active || m.title !== f.requireForkTitle.title)
                 return null;
         }
-        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed };
+        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed, isSubsection: !!f.subsection };
     }
     if (f.type === 'button')
         return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '', isLocked: !game.user.isGM && !f.clientAllowed };
@@ -822,12 +842,18 @@ function _buildItem(f) {
         sliderMax: f.max ?? setting.range?.max ?? 1,
         sliderStep: f.step ?? setting.range?.step ?? 0.1,
         isSection: f.type === 'section',
-        choices: (typeof f.getChoices === 'function' ? f.getChoices() : f.choices)
-            ?? (setting.choices
-                ? Object.entries(setting.choices).map(([k, v]) => ({
-                    value: k, label: v, selected: k === value
-                }))
-                : []),
+        choices: (() => {
+            const raw = (typeof f.getChoices === 'function' ? f.getChoices() : f.choices);
+            if (raw) {
+                return raw.map(c => ({ ...c, selected: c.selected ?? (c.value === value) }));
+            }
+            if (setting.choices) {
+                return Object.entries(setting.choices).map(([k, v]) => ({
+                    value: k, label: v, selected: k === value,
+                }));
+            }
+            return [];
+        })(),
         isLocked: _isLockedForUser(f.key)
     };
 }
@@ -1021,13 +1047,28 @@ function _patchSettingsGet(formMap) {
     };
 }
 
-/** @param {any} $h2 @param {boolean} collapsed */
-function _toggleSection($h2, collapsed) {
-    $h2.attr('data-collapsed', collapsed ? 'true' : 'false');
-    $h2.find('.la-chevron').css('transform', collapsed ? 'rotate(-90deg)' : '');
-    let $next = $h2.next();
-    while ($next.length && !$next.is('h2.la-section')) {
-        $next.toggle(!collapsed);
+/** @param {any} $header @param {boolean} collapsed */
+function _toggleSection($header, collapsed) {
+    $header.attr('data-collapsed', collapsed ? 'true' : 'false');
+    $header.find('.la-chevron').css('transform', collapsed ? 'rotate(-90deg)' : '');
+
+    const isSub = $header.is('h3.la-subsection-header');
+    // Subsections stop on the next header of any level; top-level sections stop only on the next top-level.
+    const stopSelector = isSub
+        ? 'h2.la-section, h3.la-subsection-header'
+        : 'h2.la-section';
+
+    let $next = $header.next();
+    let underCollapsedSub = false;
+    while ($next.length && !$next.is(stopSelector)) {
+        if (collapsed) {
+            $next.toggle(false);
+        } else if (!isSub && $next.is('h3.la-subsection-header')) {
+            $next.toggle(true);
+            underCollapsedSub = $next.attr('data-collapsed') === 'true';
+        } else {
+            $next.toggle(!underCollapsedSub);
+        }
         $next = $next.next();
     }
 }
@@ -1231,18 +1272,18 @@ export class LancerAutomationsConfig extends FormApplication {
             ev.stopPropagation();
             await _previewSettingSound(ev.currentTarget.dataset.previewKey);
         });
-        $html.find('h2.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h2) => {
-            const $h2 = $(h2);
-            const label = $h2.text().trim();
+        $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h) => {
+            const $h = $(h);
+            const label = $h.text().trim();
             const collapsed = this._sectionStates.has(label)
                 ? this._sectionStates.get(label)
-                : $h2.attr('data-collapsed') === 'true';
-            _toggleSection($h2, collapsed);
+                : $h.attr('data-collapsed') === 'true';
+            _toggleSection($h, collapsed);
         }).on('click', (/** @type {any} */ ev) => {
-            const $h2 = $(ev.currentTarget);
-            const next = $h2.attr('data-collapsed') !== 'true';
-            _toggleSection($h2, next);
-            this._sectionStates.set($h2.text().trim(), next);
+            const $h = $(ev.currentTarget);
+            const next = $h.attr('data-collapsed') !== 'true';
+            _toggleSection($h, next);
+            this._sectionStates.set($h.text().trim(), next);
         });
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
