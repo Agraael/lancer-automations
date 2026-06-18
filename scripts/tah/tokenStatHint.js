@@ -16,6 +16,7 @@ const SETTING_SHOW_CONTROLLED = 'tokenStatHintShowForControlled';
 const SETTING_COMBAT_ONLY = 'tokenStatHintCombatOnly';
 const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
 const SETTING_UNKNOWN_LABEL = 'tokenStatHintUnknownLabel';
+const SETTING_HIDE_CLASS_UNKNOWN = 'tokenStatHintHideClassWhenUnknown';
 
 const LABEL_ACTOR = 'actor';   // always show the token name
 const LABEL_SCAN = 'scan';     // tied to scan: name if scanned, "UNKNOWN" otherwise
@@ -106,6 +107,12 @@ function getUnknownLabel() {
         }
     } catch { /* ignore */ }
     return 'UNKNOWN';
+}
+function hideClassWhenUnknown() {
+    try {
+        return game.settings.get(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN) === true;
+    } catch { /* ignore */ }
+    return false;
 }
 function isBurnEnabled() {
     try {
@@ -303,6 +310,31 @@ function cell(iconHtml, value, color = '#ddd') {
     return `<span class="la-stat-hint-cell">${iconHtml}<span class="la-stat-hint-val" style="color:${esc(color)};">${esc(value)}</span></span>`;
 }
 
+function getActorSubtitleText(actor) {
+    if (!actor) {
+        return '';
+    }
+    if (actor.type === 'npc') {
+        try {
+            const cls = actor.items?.find?.(i => i.is_npc_class?.());
+            const templates = actor.items?.filter?.(i => i.is_npc_template?.()) ?? [];
+            const parts = [];
+            if (cls?.name) {
+                parts.push(cls.name);
+            }
+            if (templates.length > 0) {
+                parts.push(templates.map(t => t.name).join(', '));
+            }
+            return parts.join(' · ');
+        } catch { /* ignore */ }
+        return '';
+    }
+    if (actor.type === 'mech') {
+        return actor.system?.loadout?.frame?.value?.name ?? '';
+    }
+    return '';
+}
+
 function buildHeaderHtml(token, mode) {
     const actor = token.actor;
     const isNpc = actor?.type === 'npc';
@@ -318,12 +350,22 @@ function buildHeaderHtml(token, mode) {
         if (!isOwnSide && labelMode === LABEL_SCAN) {
             label = getUnknownLabel();
         }
-        return `<div class="la-stat-hint-header la-unknown"><s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s></div>`;
+        let unknownSub = '';
+        const subText = getActorSubtitleText(actor);
+        if (subText && !hideClassWhenUnknown()) {
+            unknownSub = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
+        }
+        return `<div class="la-stat-hint-header la-unknown"><s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s>${unknownSub}</div>`;
     }
 
+    let subtitle = '';
     if (isNpc) {
         const t = Number(actor.system?.tier) || 1;
         tierBadge = `<span class="la-stat-hint-tier">T${t}</span>`;
+        const subText = getActorSubtitleText(actor);
+        if (subText) {
+            subtitle = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
+        }
     } else if (actor?.type === 'pilot') {
         const ll = Number(actor.system?.level) || 0;
         tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
@@ -334,7 +376,14 @@ function buildHeaderHtml(token, mode) {
             tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
         }
     }
-    return `<div class="la-stat-hint-header">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span></div>`;
+    let titleExtra = '';
+    if (actor?.type === 'mech') {
+        const frameName = getActorSubtitleText(actor);
+        if (frameName) {
+            titleExtra = `<span class="la-stat-hint-frame">${esc(frameName)}</span>`;
+        }
+    }
+    return `<div class="la-stat-hint-header"><div class="la-stat-hint-title">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span>${titleExtra}</div>${subtitle}</div>`;
 }
 
 function buildRevealRowsHtml(actor, s) {
@@ -357,11 +406,11 @@ function buildRevealRowsHtml(actor, s) {
             const burnCol = s.burn > 0 ? '#d74242' : dimColor;
             parts.push(cell(cciIcon('cci-burn', burnCol), String(s.burn), burnCol));
         }
-        const osCol = s.overshield > 0 ? '#60a5fa' : dimColor;
-        parts.push(cell(glyph('🛡', osCol, 16), String(s.overshield), osCol));
         if (isMechOrNpc) {
             parts.push(cell(svgIcon(ICON.armor), String(s.armor)));
         }
+        const osCol = s.overshield > 0 ? '#60a5fa' : dimColor;
+        parts.push(cell(glyph('🛡', osCol, 16), String(s.overshield), osCol));
         rows.push(parts.join(''));
     }
 
@@ -430,7 +479,10 @@ function buildRevealRowsHtml(actor, s) {
         rows.push(parts.join(''));
     }
 
-    return rows.map(r => `<div class="la-stat-hint-row">${r}</div>`).join('');
+    return rows.map((r, i) => {
+        const sep = (i === 2 && rows.length > 2) ? '<div class="la-stat-hint-sep"></div>' : '';
+        return sep + `<div class="la-stat-hint-row">${r}</div>`;
+    }).join('');
 }
 
 // Unknown view: vitals only. Struct/Stress as val/max, HP/Heat as deltas
@@ -521,8 +573,9 @@ function ensureStyleSheet() {
 }
 .la-stat-hint-header {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
     padding: 5px 9px;
     background: #1a1a1a;
     border-bottom: 1px solid #444;
@@ -534,25 +587,54 @@ function ensureStyleSheet() {
 .la-stat-hint-header.la-unknown {
     background: #1a1a1a;
     border-bottom: 1px solid #444;
+    align-items: center;
     justify-content: center;
+}
+.la-stat-hint-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.la-stat-hint-subtitle {
+    color: #888;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    opacity: 0.85;
 }
 .la-stat-hint-tier { color: #ffaa55; font-weight: 600; }
 .la-stat-hint-name { color: #eeeeee; }
-.la-stat-hint-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px 9px;
+.la-stat-hint-frame {
+    color: #888;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    opacity: 0.85;
+    margin-left: 4px;
 }
-.la-stat-hint-row {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    white-space: nowrap;
+.la-stat-hint-rows {
+    display: grid;
+    grid-template-columns: repeat(5, max-content);
+    column-gap: 14px;
+    row-gap: 4px;
+    padding: 6px 9px;
     font-size: 13px;
     line-height: 1;
     color: #ddd;
     font-weight: 400;
+    white-space: nowrap;
+}
+.la-stat-hint-row {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: center;
+}
+.la-stat-hint-sep {
+    grid-column: 1 / -1;
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    margin: 2px 0 0;
+    height: 0;
 }
 .la-stat-hint-cell {
     display: inline-flex;
@@ -996,6 +1078,14 @@ export function registerTokenStatHintSettings() {
         config: false,
         type: String,
         default: 'UNKNOWN',
+    });
+    game.settings.register(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN, {
+        name: 'Hide NPC class/templates when not scanned',
+        hint: 'When on, the class + templates subtitle (NPC) or frame name (Mech) is hidden under the UNKNOWN header until scanned.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
     });
 }
 

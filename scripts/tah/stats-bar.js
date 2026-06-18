@@ -57,10 +57,12 @@ export function buildStatsHtml(actor, token = null) {
 
     const hpRatio    = hp.max > 0 ? hp.value / hp.max : 1;
     const heatRatio  = heat.max > 0 ? heat.value / heat.max : 0;
-    // HP: red → yellow → green (two-stop, avoids brown midpoint)
-    const hpColor = hpRatio < 0.5
-        ? lerpColor(244, 67, 54, 255, 215, 0,  hpRatio * 2)
-        : lerpColor(255, 215, 0, 76, 175, 80, (hpRatio - 0.5) * 2);
+    // HP: red → yellow → green (two-stop, avoids brown midpoint). Over max (OS boost) → cyan/teal.
+    const hpColor = hpRatio > 1
+        ? '#5ec0c5'
+        : hpRatio < 0.5
+            ? lerpColor(244, 67, 54, 255, 215, 0,  hpRatio * 2)
+            : lerpColor(255, 215, 0, 76, 175, 80, (hpRatio - 0.5) * 2);
     // Heat: grey → yellow → orange → red (3-segment)
     let heatColor;
     if (heatRatio < 1 / 3)

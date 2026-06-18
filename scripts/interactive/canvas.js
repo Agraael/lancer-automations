@@ -11,7 +11,7 @@ import { getHexGroundElevation } from "../combat/terrain-utils.js";
 import { getIsoProvider } from "../setup/iso-settings.js";
 
 import {
-    _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard
+    _queueCard, _queueCardUrgent, _createInfoCard, _updateInfoCard, _removeInfoCard
 } from "./cards.js";
 
 import { _rulerMove } from "../main.js";
@@ -1639,7 +1639,8 @@ const _title = "TELEPORT"; // for _queueCard
 /** @returns {Promise<{cancelled: boolean, moves?: object[]}>} */
 export function knockBackToken(tokens, distance, options = {}) {
     const _title = options.title || 'KNOCKBACK';
-    return _queueCard(() => new Promise((resolve) => {
+    return _queueCardUrgent(() => new Promise((resolve) => {
+        // reactive card — jumps any open mount-pick / weapon-pick card already in the queue.
         const {
             title = "KNOCKBACK",
             description = "Select destination for each token.",

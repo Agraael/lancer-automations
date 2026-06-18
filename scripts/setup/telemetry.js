@@ -3,6 +3,7 @@ import { getSupabase } from "./supabase-client.js";
 const MODULE_NAMESPACE = "lancer-automations";
 const INSTALL_ID_SETTING = "dataInstallId";
 const CONSENT_SETTING = "dataConsent";
+const LAST_PING_SETTING = "dataLastPing";
 
 const ROLE_GM = "gm";
 const ROLE_PLAYER = "player";
@@ -29,6 +30,35 @@ async function _upsertUser(userHash, role) {
             throw error;
     } catch (err) {
         console.error("Lancer Automation | Supabase error:", err);
+    }
+}
+
+async function _pingDaily(_userHash, role) {
+    try {
+        const { error } = await getSupabase().rpc("record_ping", { p_role: role });
+        if (error)
+            throw error;
+    } catch (err) {
+        console.error("Lancer Automation | Supabase daily ping error:", err);
+    }
+}
+
+async function _maybeDailyTouch(userHash, role) {
+    const today = new Date().toISOString().slice(0, 10);
+    let last = "";
+    try {
+        last = game.settings.get(MODULE_NAMESPACE, LAST_PING_SETTING) || "";
+    } catch {
+        // Setting not registered yet.
+    }
+    if (last === today)
+        return;
+    await _pingDaily(userHash, role);
+    await _upsertUser(userHash, role);
+    try {
+        await game.settings.set(MODULE_NAMESPACE, LAST_PING_SETTING, today);
+    } catch {
+        // Setting not registered yet.
     }
 }
 
@@ -121,7 +151,7 @@ async function _handleStartup() {
             installId = foundry.utils.randomID();
             await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
         }
-        await _upsertUser(installId, consent);
+        await _maybeDailyTouch(installId, consent);
         return;
     }
 
@@ -183,6 +213,12 @@ Hooks.once("setup", () => {
         config: false,
         type: String,
         default: CONSENT_PENDING,
+    });
+    game.settings.register(MODULE_NAMESPACE, LAST_PING_SETTING, {
+        scope: "client",
+        config: false,
+        type: String,
+        default: "",
     });
 
     game.settings.registerMenu(MODULE_NAMESPACE, "consentMenu", {

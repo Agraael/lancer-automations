@@ -972,11 +972,21 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     return result;
 }
 
+// Gate: Lancer ruler on AND auto-terrain-elevation not disabled.
+function _isLancerCostActive() {
+    try {
+        if (!game.settings.get(MODULE_ID, 'enableBuiltinSpeedProvider')) return false;
+        if (game.settings.get(MODULE_ID, 'disableAutoTerrainElevation')) return false;
+    } catch { return false; }
+    return true;
+}
+
 Hooks.once('ready', () => {
     if (!game.modules.get('lib-wrapper')?.active)
         return;
 
     libWrapper.register(MODULE_ID, 'foundry.documents.TokenDocument.prototype._inferMovementAction', function(wrapped) {
+        if (!_isLancerCostActive()) return wrapped.call(this);
         if (isFlying(this))
             return 'fly';
         return wrapped.call(this);
@@ -984,11 +994,13 @@ Hooks.once('ready', () => {
 
     libWrapper.register(MODULE_ID, 'foundry.documents.TokenDocument.prototype.measureMovementPath', function(wrapped, waypoints, options) {
         const result = wrapped.call(this, waypoints, options);
+        if (!_isLancerCostActive()) return result;
         return applyLancerCost(this, waypoints, result);
     }, 'WRAPPER');
 
-    // Returning [] kills region-boundary waypoints + detour billing; regionPenaltyAtCells still charges cost.
-    libWrapper.register(MODULE_ID, 'foundry.data.regionBehaviors.ModifyMovementCostRegionBehaviorType.prototype._getTerrainEffects', function() {
+    // MIXED so the gate can fall back to native region behavior when off.
+    libWrapper.register(MODULE_ID, 'foundry.data.regionBehaviors.ModifyMovementCostRegionBehaviorType.prototype._getTerrainEffects', function(wrapped, ...args) {
+        if (!_isLancerCostActive()) return wrapped.call(this, ...args);
         return [];
-    }, 'OVERRIDE');
+    }, 'MIXED');
 });

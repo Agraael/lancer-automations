@@ -1859,18 +1859,18 @@ export function injectKnockbackCheckbox(state) {
         const val = state.data._csmKnockback.value;
 
         const containerScope = _detectSvelteScope($form, 'label.container');
-        const valueScope = _detectSvelteScope($form, '.reliable-value');
+        const valueScope = _detectSvelteScope($form, '.reliable-value, .damage-hud-section');
 
         const $row = $(`
-            <div class="csm-knockback-row" style="grid-area: knockback; display: flex; align-items: center; gap: 4px;">
+            <div class="csm-knockback-row flexrow" style="grid-area: knockback; align-items: center;">
                 <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;">
                     <input type="checkbox" class="csm-knockback-checkbox ${containerScope}" ${checked ? 'checked' : ''}>
-                    <i class="mdi mdi-arrow-expand-all i--s ${containerScope}"></i>
                     <span style="text-wrap: nowrap;">Knockback</span>
                 </label>
-                <input class="csm-knockback-value reliable-value ${valueScope}"
-                       type="number" value="${val}" min="1"
-                       style="width: 3em; ${checked ? '' : 'display:none;'}">
+                <i class="csm-knockback-icon mdi mdi-arrow-expand-all i--2 ${valueScope}" data-tooltip="Knockback" style="${checked ? '' : 'display:none;opacity:0;'}"></i>
+                <input class="lancer-input csm-knockback-value reliable-value ${valueScope}"
+                       type="text" inputmode="numeric" pattern="[0-9]*" data-dtype="string" value="${val}"
+                       style="${checked ? '' : 'display:none;opacity:0;'}">
             </div>
         `);
 
@@ -1880,7 +1880,11 @@ export function injectKnockbackCheckbox(state) {
         $row.find('.csm-knockback-checkbox').on('change', function () {
             const isChecked = $(this).is(':checked');
             state.data._csmKnockback.enabled = isChecked;
-            $row.find('.csm-knockback-value').toggle(isChecked);
+            const $targets = $row.find('.csm-knockback-value, .csm-knockback-icon');
+            if (isChecked)
+                $targets.stop(true, true).animate({ opacity: 1 }, { duration: 400, easing: 'linear', start: function () { $(this).css('display', ''); } });
+            else
+                $targets.stop(true, true).animate({ opacity: 0 }, { duration: 400, easing: 'linear', complete: function () { $(this).css('display', 'none'); } });
         });
 
         // Bind value input

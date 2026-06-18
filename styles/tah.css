@@ -50,6 +50,27 @@
     max-width: 250px;
 }
 
+.la-hud-row,
+.la-hud-cell {
+    position: relative;
+}
+
+.la-hud-row::after,
+.la-hud-cell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    pointer-events: none;
+    transition: background 0.12s ease-out;
+}
+
+/* Dim non-hovered columns via an overlay so inline backgrounds set by JS don't override us. */
+#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-row::after,
+#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-cell::after {
+    background: rgba(0, 0, 0, 0.08);
+}
+
 .la-hud-col-label {
     padding: 3px 12px 4px;
     background: var(--primary-color);
@@ -299,7 +320,9 @@
     font-size: 0.82em;
 }
 
-.la-hud-glossary-panel { width: 480px; }
+.la-hud-glossary-panel {
+    width: 480px;
+}
 
 .la-hud-log-panel {
     min-width: 320px;
@@ -733,9 +756,18 @@ input.la-status-search {
     gap: 3px;
 }
 
-.la-bonus-row__body { flex: 1; }
-.la-bonus-row__detail { color: #666; }
-.la-bonus-row__kind { opacity: 0.6; font-size: 0.85em; }
+.la-bonus-row__body {
+    flex: 1;
+}
+
+.la-bonus-row__detail {
+    color: #666;
+}
+
+.la-bonus-row__kind {
+    opacity: 0.6;
+    font-size: 0.85em;
+}
 
 .la-bonus-del {
     cursor: pointer;
@@ -747,14 +779,43 @@ input.la-status-search {
 }
 
 /* Status tooltip lines */
-.la-tooltip-line { color: #bbb; margin-bottom: 4px; line-height: 1.4; }
-.la-tooltip-label { font-weight: bold; color: #fff; margin-top: 4px; }
-.la-tooltip-duration { color: #aaa; font-size: 0.85em; margin-top: 2px; }
+.la-tooltip-line {
+    color: #bbb;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+.la-tooltip-label {
+    font-weight: bold;
+    color: #fff;
+    margin-top: 4px;
+}
+
+.la-tooltip-duration {
+    color: #aaa;
+    font-size: 0.85em;
+    margin-top: 2px;
+}
 
 /* Sub-panel text */
-.la-sub-close { cursor: pointer; margin-left: 8px; opacity: 0.8; }
-.la-sub-label { flex: 1; color: #ccc; text-transform: none; letter-spacing: 0; }
-.la-sub-stack { color: #fff; min-width: 18px; text-align: center; }
+.la-sub-close {
+    cursor: pointer;
+    margin-left: 8px;
+    opacity: 0.8;
+}
+
+.la-sub-label {
+    flex: 1;
+    color: #ccc;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.la-sub-stack {
+    color: #fff;
+    min-width: 18px;
+    text-align: center;
+}
 
 /* Sub-panel +/-/✕ buttons */
 .la-sub-btn {
@@ -770,9 +831,18 @@ input.la-status-search {
     user-select: none;
     color: #fff;
 }
-.la-sub-btn--minus { background: #555; }
-.la-sub-btn--plus  { background: #3a6a3a; }
-.la-sub-btn--del   { background: #6a2a2a; }
+
+.la-sub-btn--minus {
+    background: #555;
+}
+
+.la-sub-btn--plus {
+    background: #3a6a3a;
+}
+
+.la-sub-btn--del {
+    background: #6a2a2a;
+}
 
 /* Toggle switch (inputCell). Bg set inline. */
 .la-toggle-switch {
@@ -816,12 +886,38 @@ input.la-status-search {
     align-items: center;
     gap: 2px;
 }
-.la-waypoint-label .la-line { display: flex; align-items: center; gap: 4px; }
-.la-waypoint-label .la-img { width: 14px; height: 14px; background-size: contain; background-repeat: no-repeat; }
-.la-waypoint-label .la-icon { font-size: 12px; }
-.la-waypoint-label .la-delta { color: #ffc107; }
-.la-waypoint-label .la-elev { color: #9ecbff; }
+
+.la-waypoint-label .la-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.la-waypoint-label .la-img {
+    width: 14px;
+    height: 14px;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.la-waypoint-label .la-icon {
+    font-size: 12px;
+}
+
+.la-waypoint-label .la-delta {
+    color: #ffc107;
+}
+
+.la-waypoint-label .la-elev {
+    color: #9ecbff;
+}
+
 .la-waypoint-label .la-penalty,
-.la-waypoint-label .la-penalty-value { color: #ff7043; }
+.la-waypoint-label .la-penalty-value {
+    color: #ff7043;
+}
+
 .la-waypoint-label.force .la-total,
-.la-waypoint-label.force .la-delta { color: #b78cff; }
+.la-waypoint-label.force .la-delta {
+    color: #b78cff;
+}

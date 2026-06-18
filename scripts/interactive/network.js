@@ -169,7 +169,8 @@ export function startChoiceCard(options = {}) {
         forceSocket = false,
         item = null,
         relatedToken = null,
-        originToken = null
+        originToken = null,
+        urgent = false
     } = /** @type {any} */ (options);
 
     // Normalize userIdControl to an array.
@@ -448,7 +449,7 @@ export function startChoiceCard(options = {}) {
         _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
         _bindItemChip(cardEl, item);
         _updatePendingBadge();
-    }), _title);
+    }), _title, { urgent });
 }
 
 /**

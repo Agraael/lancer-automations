@@ -449,7 +449,7 @@ details.la-scan-collapsible[open] > .la-scan-card-details {
 
 .la-scan-tag {
     display: inline-block;
-    background: rgba(120, 46, 34, 0.08);
+    background: color-mix(in srgb, var(--primary-color, #782e22) 8%, transparent);
     border: 1px solid #aaa;
     border-radius: 2px;
     padding: 0 5px;
@@ -521,7 +521,7 @@ details.la-scan-collapsible[open] > .la-scan-card-details {
 
 
 .la-compact-bool:hover {
-    background: rgba(120, 46, 34, 0.08);
+    background: color-mix(in srgb, var(--primary-color, #782e22) 8%, transparent);
 }
 
 .la-preview-btn {
@@ -539,15 +539,15 @@ details.la-scan-collapsible[open] > .la-scan-card-details {
     font-weight: 700 !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #782e22;
+    color: var(--primary-color, #782e22);
     padding: 4px 8px;
-    background: linear-gradient(to right, rgba(120, 46, 34, 0.12), rgba(120, 46, 34, 0));
-    border-bottom: 2px solid #782e22 !important;
-    border-left: 3px solid #782e22;
+    background: linear-gradient(to right, color-mix(in srgb, var(--primary-color, #782e22) 12%, transparent), transparent);
+    border-bottom: 2px solid var(--primary-color, #782e22) !important;
+    border-left: 3px solid var(--primary-color, #782e22);
     margin: 16px 0 8px !important;
 }
 h2.la-collapsible:hover {
-    background: rgba(120, 46, 34, 0.18) !important;
+    background: color-mix(in srgb, var(--primary-color, #782e22) 18%, transparent) !important;
 }
 
 .la-config-form {
@@ -606,6 +606,11 @@ h2.la-collapsible:hover {
     background: #f5f5f5;
     color: var(--primary-color);
     font-weight: bold;
+    text-shadow: 0 0 6px var(--primary-color) !important;
+}
+#reaction-manager-config .sheet-tabs .item.active i,
+#lancer-automations-config .sheet-tabs .item.active i {
+    text-shadow: inherit !important;
 }
 
 .la-config-tabs {
@@ -662,8 +667,8 @@ h2.la-collapsible:hover {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-top: 1px solid #782e22;
-    background: rgba(120, 46, 34, 0.04);
+    border-top: 1px solid var(--primary-color, #782e22);
+    background: color-mix(in srgb, var(--primary-color, #782e22) 4%, transparent);
     margin: 0;
 }
 

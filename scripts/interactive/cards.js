@@ -124,9 +124,13 @@ export function _updatePendingBadge() {
     }
 }
 
-export function _queueCard(fn, title = '') {
-    // --- In-scope: push on visual stack, bypass queue ---
-    if (_cardCallbackDepth > 0) {
+export function _queueCardUrgent(fn, title = '') {
+    return _queueCard(fn, title, { urgent: true });
+}
+
+export function _queueCard(fn, title = '', { urgent = false } = {}) {
+    // --- In-scope or urgent (reactive): push on visual stack, bypass serial queue ---
+    if (urgent || _cardCallbackDepth > 0) {
         if (_cardVisualStack.length > 0)
             _cardVisualStack[_cardVisualStack.length - 1].hide();
         return fn();

@@ -676,6 +676,7 @@ interface LancerAutomationsAPI {
         item?: Item;
         relatedToken?: Token | null;
         originToken?: Token | null;
+        urgent?: boolean;
     }): Promise<{ choiceIdx: number | null; responderIds: string[] } | null>;
     openChoiceMenu(): Promise<void>;
     pickItem(items: any[], options?: {

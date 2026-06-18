@@ -395,6 +395,65 @@ async function barrageValidation() {
     assert(countVisibleCards() === 0, "Card cleaned up", `got ${countVisibleCards()}`);
 }
 
+// ─── Test 8: Urgent card jumps the queue ─────────────────────────────
+async function urgentJumpsQueue() {
+    const api = getApi();
+    console.log('%c── Test: Urgent jumps queue ──', 'color:cyan;');
+
+    // Open a regular "or" card and leave it waiting (no choice clicked).
+    let firstDone = false;
+    const p1 = api.startChoiceCard({
+        title: "WAITING FIRST",
+        mode: "or",
+        choices: [
+            { text: "Finish",
+                callback: async () => {
+                    firstDone = true;
+                } }
+        ]
+    });
+
+    await delay(300);
+    assert(countVisibleCards() === 1, "First card visible", `got ${countVisibleCards()}`);
+
+    // Open an urgent card while the first is still open and waiting.
+    let urgentDone = false;
+    const p2 = api.startChoiceCard({
+        title: "URGENT",
+        mode: "or",
+        urgent: true,
+        choices: [
+            { text: "Done",
+                callback: async () => {
+                    urgentDone = true;
+                } }
+        ]
+    });
+
+    await delay(300);
+    assert(countAllCards() === 2, "Both cards in DOM (first hidden, urgent visible)", `got ${countAllCards()}`);
+    assert(countVisibleCards() === 1, "Exactly one visible (urgent on top)", `got ${countVisibleCards()}`);
+    const visibleTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(visibleTitle === "URGENT", "Urgent card is on top", `visible: "${visibleTitle}"`);
+
+    // Close urgent — first should reappear.
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(500);
+    assert(urgentDone, "Urgent callback ran", "");
+    await p2;
+
+    const after = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(after === "WAITING FIRST", "First card reappears after urgent pops", `visible: "${after}"`);
+    assert(countAllCards() === 1, "Only first card remains", `got ${countAllCards()}`);
+
+    // Close first.
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(400);
+    assert(firstDone, "First callback ran", "");
+    assert(countVisibleCards() === 0, "All cleaned up", `got ${countVisibleCards()}`);
+    await p1;
+}
+
 // ─── Run All ─────────────────────────────────────────────────────────
 async function runAll() {
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
@@ -426,9 +485,12 @@ async function runAll() {
     await barrageValidation();
     await delay(500);
 
+    await urgentJumpsQueue();
+    await delay(500);
+
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
     console.log('%c║   All tests complete!                ║', 'color:gold;');
     console.log('%c╚══════════════════════════════════════╝', 'color:gold;');
 }
 
-export const CardStackTests = { orBasic, andBasic, andSubCard, externalQueues, andCancel, nestedStack, barrageValidation, runAll };
+export const CardStackTests = { orBasic, andBasic, andSubCard, externalQueues, andCancel, nestedStack, barrageValidation, urgentJumpsQueue, runAll };
