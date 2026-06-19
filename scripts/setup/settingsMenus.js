@@ -217,7 +217,7 @@ const TOKENS_DISPLAY_FIELDS = [
         hint: 'How to display the NPC token name in the popup header.',
     },
     { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
-    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates when not scanned', hint: 'Hide the NPC class+templates subtitle (or Mech frame name) under the UNKNOWN header until scanned.' },
+    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Hide the NPC class+templates subtitle (or Mech frame name) and the NPC tier badge under the UNKNOWN header until scanned.' },
 ];
 
 const TAH_FIELDS = [

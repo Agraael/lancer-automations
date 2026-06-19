@@ -84,18 +84,17 @@ export function getItemStatus(itemOrAction, extraAction = null) {
     };
 
     const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
-    const inCombat = !!game.combat?.started;
     const pushPerFreq = (max, used, iconReady, iconConsumed) => {
         const ready = max - Math.min(max, used);
-        if (inCombat) {
-            if (ready <= 0) {
-                unavailable = true; badgeColor = '#c33';
-            } else if (ready < max && badgeColor !== '#c33')
-                badgeColor = '#cc7700';
-        }
+        if (ready <= 0) {
+            unavailable = true; badgeColor = '#c33';
+        } else if (ready < max && badgeColor !== '#c33')
+            badgeColor = '#cc7700';
         const pips = [];
-        for (let i = 0; i < max; i++)
-            pips.push(`<span class="mdi ${i < ready ? iconReady : iconConsumed}"></span>`);
+        for (let i = 0; i < max; i++) {
+            const isReady = i < ready;
+            pips.push(`<span class="mdi ${isReady ? iconReady : iconConsumed}" style="color:${isReady ? '#3a9e6e' : '#c33'};"></span>`);
+        }
         parts.push(pips.join(''));
     };
 
@@ -140,9 +139,10 @@ export function laHudRenderIcon(icon) {
             || icon.includes('modules/lancer-automations/')
             || icon.startsWith('icons/svg/');
         const filter = isWhite ? 'invert(1)' : 'none';
-        return `<img src="${icon}" style="width:20px;height:20px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+        const cls = isWhite ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
+        return `<img class="${cls}" src="${icon}" style="width:20px;height:20px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
-    return `<i class="${icon}" style="font-size:1.15em;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+    return `<i class="${icon} la-hud-icon" style="font-size:1.15em;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
 }
 
 

@@ -626,10 +626,8 @@ export class LancerHUD {
             scheduleCollapse: clickToOpen ? () => {} : _scheduleCollapse,
         });
         hud.on('mouseleave', () => {
-            if (!clickToOpen) {
-                _clearC1Active();
+            if (!clickToOpen)
                 _scheduleCollapse();
-            }
         }).on('mouseenter', _cancelCollapse);
         if (!clickToOpen) {
             c2.on('mouseleave', _scheduleCollapse).on('mouseenter', _cancelCollapse);
@@ -957,7 +955,10 @@ export class LancerHUD {
                     cell.data('restingBg', BG_DEFAULT);
                 }
                 cell.on('mouseenter', () => {
-                    this._cancelCollapse?.(); cell.css({ background: BG_HOVER });
+                    this._cancelCollapse?.();
+                    cell.css({ background: BG_ACTIVE, color: TEXT_ACTIVE });
+                    cell.find('.la-inc-val').css('color', TEXT_ACTIVE);
+                    cell.find('.la-hud-cell__btn').css('color', TEXT_ACTIVE);
                     playUiSound('hover');
                     const clip = cell.find('.la-hud-clip')[0]; const pan = cell.find('.la-hud-pan')[0];
                     if (clip && pan) {
@@ -966,7 +967,10 @@ export class LancerHUD {
                     }
                 });
                 cell.on('mouseleave', () => {
-                    cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT }); cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
+                    cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT, color: '' });
+                    cell.find('.la-inc-val').css('color', '');
+                    cell.find('.la-hud-cell__btn').css('color', '');
+                    cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
                 });
                 col.append(cell);
                 continue;
@@ -1052,7 +1056,8 @@ export class LancerHUD {
             // Subtle automation hint: tiny rightward triangle attached to the left status bar (same color as the bar).
             if (hasAutomation(item.hoverData?.item ?? item.hoverData?.action?.name ?? item.label)) {
                 row.css('position', 'relative');
-                row.append(`<span class="la-hud-auto-tick" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:4px solid var(--primary-color);border-top:3px solid transparent;border-bottom:3px solid transparent;pointer-events:none;"></span>`);
+                const _tickColor = _stripeStyle ? _stripeStyle.color : 'var(--primary-color)';
+                row.append(`<span class="la-hud-auto-tick" style="position:absolute;left:3px;top:50%;transform:translateY(-50%);width:0;height:0;border-left:4px solid ${_tickColor};border-top:3px solid transparent;border-bottom:3px solid transparent;pointer-events:none;"></span>`);
             }
 
             // Hover sound on leaf rows (and Log / Glossary) only in hover-mode. Click-to-open
@@ -3270,7 +3275,8 @@ export class LancerHUD {
             ? invertOverride
             : this._isWhiteSvgIcon(img);
         const filter = doInvert ? 'invert(1)' : 'none';
-        return `<img src="${img}" onerror="this.onerror=null;this.src='icons/svg/dice-target.svg';" style="width:${size}px;height:${size}px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+        const cls = doInvert ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
+        return `<img class="${cls}" src="${img}" onerror="this.onerror=null;this.src='icons/svg/dice-target.svg';" style="width:${size}px;height:${size}px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
 
     _buildMacroItems() {
@@ -4030,8 +4036,14 @@ export class LancerHUD {
         const badgeHtml = badge ? `<span class="la-hud-badge" style="color:${badgeColor ?? '#3a9e6e'};">${badge}</span>` : '';
         const row = $(`<div class="la-hud-row">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${label}${actHtml}</span></span>${badgeHtml}${countHtml}${arrow}</div>`);
         row.on('mouseenter', () => {
-            if (!row.hasClass('la-hud-active'))
-                row.css({ background: row.data('hoverBg') ?? BG_HOVER, color: row.data('hoverColor') ?? TEXT_DEFAULT });
+            if (!row.hasClass('la-hud-active')) {
+                const specialBg = row.data('hoverBg');
+                if (specialBg) {
+                    row.css({ background: specialBg, color: row.data('hoverColor') ?? TEXT_DEFAULT });
+                } else {
+                    row.css({ background: BG_ACTIVE, color: TEXT_ACTIVE });
+                }
+            }
             const clip = row.find('.la-hud-clip')[0];
             const pan  = row.find('.la-hud-pan')[0];
             if (clip && pan) {
@@ -4136,9 +4148,11 @@ export class LancerHUD {
                 css.borderLeftColor = rb;
             r.css(css).removeClass('la-hud-active');
         });
-        if (isCategory)
+        const specialBg = activeRow.data('hoverBg');
+        if (specialBg) {
+            activeRow.css({ background: specialBg, color: activeRow.data('hoverColor') ?? TEXT_DEFAULT }).addClass('la-hud-active');
+        } else {
             activeRow.css({ background: BG_ACTIVE, color: TEXT_ACTIVE }).addClass('la-hud-active');
-        else
-            activeRow.css({ background: activeRow.data('hoverBg') ?? BG_HOVER, color: activeRow.data('hoverColor') ?? TEXT_DEFAULT }).addClass('la-hud-active');
+        }
     }
 }

@@ -66,9 +66,30 @@
 }
 
 /* Dim non-hovered columns via an overlay so inline backgrounds set by JS don't override us. */
-#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-row::after,
-#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-cell::after {
-    background: rgba(0, 0, 0, 0.08);
+#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-row:not(.la-hud-active)::after,
+#la-hud:has(.la-hud-col:hover) .la-hud-col:not(:hover) .la-hud-cell:not(.la-hud-active)::after {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* On red active/hover rows/cells: dark icons invert to white, white-source icons drop their invert filter. */
+.la-hud-row.la-hud-active .la-hud-icon--dark,
+.la-hud-row:hover .la-hud-icon--dark,
+.la-hud-cell.la-hud-active .la-hud-icon--dark,
+.la-hud-cell:hover .la-hud-icon--dark {
+    filter: invert(1) !important;
+}
+
+.la-hud-row.la-hud-active .la-hud-icon--white,
+.la-hud-row:hover .la-hud-icon--white,
+.la-hud-cell.la-hud-active .la-hud-icon--white,
+.la-hud-cell:hover .la-hud-icon--white {
+    filter: none !important;
+}
+
+/* Automation-presence tick: red on default bg, white on red active/hover. */
+.la-hud-row.la-hud-active .la-hud-auto-tick,
+.la-hud-row:hover .la-hud-auto-tick {
+    border-left-color: #fff !important;
 }
 
 .la-hud-col-label {
@@ -854,6 +875,7 @@ input.la-status-search {
     cursor: pointer;
     transition: background 0.15s;
     flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .la-toggle-knob {
@@ -864,6 +886,7 @@ input.la-status-search {
     border-radius: 1px;
     background: #fff;
     transition: left 0.15s;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 /* Lancer TokenRuler waypoint label */

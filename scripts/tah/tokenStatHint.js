@@ -350,12 +350,28 @@ function buildHeaderHtml(token, mode) {
         if (!isOwnSide && labelMode === LABEL_SCAN) {
             label = getUnknownLabel();
         }
+        let unknownTier = '';
+        if (!hideClassWhenUnknown()) {
+            if (isNpc) {
+                const t = Number(actor.system?.tier) || 1;
+                unknownTier = `<span class="la-stat-hint-tier">T${t}</span>`;
+            } else if (actor?.type === 'pilot') {
+                const ll = Number(actor.system?.level) || 0;
+                unknownTier = `<span class="la-stat-hint-tier">LL${ll}</span>`;
+            } else if (actor?.type === 'mech') {
+                const pilot = actor.system?.pilot?.value;
+                const ll = pilot ? (Number(pilot.system?.level) || 0) : null;
+                if (ll !== null) {
+                    unknownTier = `<span class="la-stat-hint-tier">LL${ll}</span>`;
+                }
+            }
+        }
         let unknownSub = '';
         const subText = getActorSubtitleText(actor);
         if (subText && !hideClassWhenUnknown()) {
             unknownSub = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
         }
-        return `<div class="la-stat-hint-header la-unknown"><s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s>${unknownSub}</div>`;
+        return `<div class="la-stat-hint-header la-unknown"><div class="la-stat-hint-title">${unknownTier}<s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s></div>${unknownSub}</div>`;
     }
 
     let subtitle = '';
@@ -587,8 +603,6 @@ function ensureStyleSheet() {
 .la-stat-hint-header.la-unknown {
     background: #1a1a1a;
     border-bottom: 1px solid #444;
-    align-items: center;
-    justify-content: center;
 }
 .la-stat-hint-title {
     display: flex;
@@ -1080,8 +1094,8 @@ export function registerTokenStatHintSettings() {
         default: 'UNKNOWN',
     });
     game.settings.register(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN, {
-        name: 'Hide NPC class/templates when not scanned',
-        hint: 'When on, the class + templates subtitle (NPC) or frame name (Mech) is hidden under the UNKNOWN header until scanned.',
+        name: 'Hide NPC class/templates/tier when not scanned',
+        hint: 'When on, the class + templates subtitle (NPC), frame name (Mech), and NPC tier badge are hidden under the UNKNOWN header until scanned.',
         scope: 'world',
         config: false,
         type: Boolean,

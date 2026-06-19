@@ -1741,7 +1741,7 @@ function registerSettings() {
         scope: 'world',
         config: false,
         type: Boolean,
-        default: true,
+        default: false,
     });
     game.settings.register('lancer-automations', 'syncActorNameToToken', {
         name: 'Sync actor name to token name',
@@ -1749,7 +1749,7 @@ function registerSettings() {
         scope: 'world',
         config: false,
         type: Boolean,
-        default: true,
+        default: false,
     });
     game.settings.register('lancer-automations', 'scanJournalSource', {
         name: 'Scan journal source',

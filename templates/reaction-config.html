@@ -328,7 +328,7 @@
                                     style="display: none; padding-left: 15px; border-left: 2px solid color-mix(in srgb, var(--primary-color), transparent 70%);">
                                     {{#each this.reactions}}
                                     <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
-                                        data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                                        data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
                                         <span class="col-enabled"><input type="checkbox" class="reaction-enabled"
                                                 {{checked this.enabled}}></span>
                                         <span class="col-type">
@@ -353,7 +353,7 @@
                             </div>
                             {{else}}
                             <div class="reaction-item flexrow" data-lid="{{this.lid}}" data-name="{{this.name}}"
-                                data-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
+                                data-is-general="{{this.isGeneral}}" data-index="{{this.reactionIndex}}">
                                 <span class="col-enabled"><input type="checkbox" class="reaction-enabled" {{checked
                                         this.enabled}}></span>
                                 <span class="col-type">
