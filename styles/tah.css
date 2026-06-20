@@ -944,3 +944,66 @@ input.la-status-search {
 .la-waypoint-label.force .la-delta {
     color: #b78cff;
 }
+/* Compact LA config grid (token sheet → Resources tab + L.A tab) */
+.la-stat-bar-config {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 0.75rem;
+    row-gap: 0.35rem;
+}
+.la-compact-config {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.la-compact-config > .la-config-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 1.25rem;
+    row-gap: 0.5rem;
+}
+.la-compact-config .form-group:has(file-picker) {
+    grid-column: 1 / -1;
+}
+.la-compact-config > .la-config-section + .la-config-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    padding-top: 1rem;
+}
+.la-stat-bar-config > .la-managed-by {
+    grid-column: 1 / -1;
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.55);
+    margin: 0 0 0.2rem 0;
+}
+.la-stat-bar-config > .form-group,
+.la-compact-config .form-group {
+    flex-wrap: wrap;
+    margin-bottom: 0;
+    row-gap: 0;
+    min-width: 0;
+}
+.la-stat-bar-config > .form-group > label,
+.la-compact-config .form-group > label {
+    flex: 0 0 auto;
+    min-width: 7rem;
+}
+.la-stat-bar-config > .form-group > input[type="checkbox"],
+.la-stat-bar-config > .form-group > input[type="number"],
+.la-stat-bar-config > .form-group > select,
+.la-stat-bar-config > .form-group .form-fields,
+.la-compact-config .form-group > input[type="checkbox"],
+.la-compact-config .form-group > input[type="number"],
+.la-compact-config .form-group > input[type="text"],
+.la-compact-config .form-group > select,
+.la-compact-config .form-group .form-fields {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.la-stat-bar-config > .form-group .notes,
+.la-compact-config .form-group .notes {
+    flex-basis: 100%;
+    margin: 0.15rem 0 0 0;
+    font-size: 0.75em;
+    line-height: 1.25;
+    color: rgba(255, 255, 255, 0.45);
+}

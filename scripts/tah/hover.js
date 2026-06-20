@@ -2,52 +2,9 @@
 
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, getMaxWeaponRanges_WithBonus, getWeaponProfiles_WithBonus } from '../tools/misc-tools.js';
 import { scaleAuraStroke as _scaleAuraStroke } from '../tools/aura.js';
+import { createPulsingRangeHighlight } from '../interactive/canvas.js';
 
-// ── LA_range_preview aura ────────────────────────────────────────────────────────
-
-const RANGE_PREVIEW_NAME = 'LA_range_preview';
-
-const RANGE_PREVIEW_TEMPLATE = {
-    unified: false,
-    name: RANGE_PREVIEW_NAME,
-    enabled: false,
-    onlyEnabledInCombat: false,
-    keyPressMode: 'DISABLED',
-    keyToPress: 'AltLeft',
-    lineType: 1,
-    lineWidth: 3,
-    lineColor: '#ffffff',
-    lineOpacity: 0.75,
-    lineDashSize: 15,
-    lineGapSize: 15,
-    fillType: 2,
-    fillColor: '#ffffff',
-    fillOpacity: 0.05,
-    fillTexture: 'modules/terrain-height-tools/textures/hatching.png',
-    fillTextureOffset: { x: 0, y: 0 },
-    fillTextureOffsetAnimation: { x: 30, y: 30 },
-    fillTextureScale: { x: 500, y: 500 },
-    ownerVisibility: {
-        default: true,
-        hovered: true,
-        controlled: true,
-        dragging: true,
-        targeted: true,
-        turn: false,
-    },
-    nonOwnerVisibility: {
-        default: false,
-        hovered: false,
-        controlled: false,
-        dragging: false,
-        targeted: false,
-        turn: false,
-    },
-    effects: [],
-    macros: [],
-    terrainHeightTools: getTHTConfig(),
-    elevationAware: true,
-};
+// ── Range preview (pulsing highlight) ────────────────────────────────────────────
 
 function hasGAAFork() {
     const mod = game.modules.get('grid-aware-auras');
@@ -80,70 +37,25 @@ function hasGAA() {
     return !!game.modules.get('grid-aware-auras')?.active;
 }
 
-/**
- * Ensure the token document has a LA_range_preview aura. Creates it (disabled) if missing.
- * @param {any} tokenDoc
- */
-async function ensureRangePreviewAura(tokenDoc) {
-    if (!hasGAA())
-        return;
-    const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
-    if (auras.some(a => a.name === RANGE_PREVIEW_NAME))
-        return;
-    const aura = foundry.utils.deepClone(RANGE_PREVIEW_TEMPLATE);
-    aura.id = foundry.utils.randomID();
-    aura.radius = '1';
-    _scaleAuraStroke(aura);
-    await tokenDoc.setFlag('grid-aware-auras', 'auras', [...auras, aura]);
-}
+const _rangePreviewDestroyByTokenId = new Map();
 
-/**
- * Enable LA_range_preview aura in-memory with the given radius. Does NOT write to token flags.
- * @param {any} token  — canvas Token object (not document)
- * @param {number} range
- */
 export async function activateRangePreview(token, range) {
-    if (!hasGAA())
+    if (!token || range == null)
         return;
-    const auraLayer = /** @type {any} */ (canvas).gaaAuraLayer;
-    if (!auraLayer)
-        return;
-    let auras = auraLayer._auraManager?.getTokenAuras?.(token);
-    let aura = auras?.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
-    // If the aura doesn't exist yet, create it in flags and re-fetch from canvas
-    if (!aura) {
-        await ensureRangePreviewAura(token.document);
-        auras = auraLayer._auraManager?.getTokenAuras?.(token);
-        aura = auras?.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
-        if (!aura)
-            return;
-    }
-    const cfg = foundry.utils.deepClone(/** @type {any} */ (aura).config);
-    cfg.enabled = true;
-    cfg.radiusCalculated = Math.max(1, range);
-    /** @type {any} */ (aura).update(cfg, { force: true });
+    deactivateRangePreview(token);
+    const radius = Math.max(1, range);
+    const destroy = createPulsingRangeHighlight(token, radius, { includeSelf: false });
+    _rangePreviewDestroyByTokenId.set(token.id, destroy);
 }
 
-/**
- * Disable LA_range_preview aura in-memory.
- * @param {any} token  — canvas Token object (not document)
- */
 export function deactivateRangePreview(token) {
-    if (!hasGAA())
+    if (!token)
         return;
-    const auraLayer = /** @type {any} */ (canvas).gaaAuraLayer;
-    if (!auraLayer)
+    const destroy = _rangePreviewDestroyByTokenId.get(token.id);
+    if (!destroy)
         return;
-    const auras = auraLayer._auraManager?.getTokenAuras?.(token);
-    if (!auras)
-        return;
-    const aura = auras.find(/** @type {any} */ a => a.config?.name === RANGE_PREVIEW_NAME);
-    if (!aura)
-        return;
-    const cfg = foundry.utils.deepClone(/** @type {any} */ (aura).config);
-    cfg.enabled = false;
-    cfg.radiusCalculated = 1;
-    /** @type {any} */ (aura).update(cfg, { force: true });
+    try { destroy(); } catch { /* ignore */ }
+    _rangePreviewDestroyByTokenId.delete(token.id);
 }
 
 // ── Range computation ──────────────────────────────────────────────────────────
@@ -600,19 +512,6 @@ export async function disableCombatAuras(token) {
 }
 
 export { AURA_DEFS };
-
-// ── Hook: ensure LA_range_preview aura on token creation ─────────────────────────
-
-Hooks.on('createToken', async (tokenDoc, _options, userId) => {
-    if (userId !== game.user.id)
-        return;
-    if (!hasGAA())
-        return;
-    const actorType = tokenDoc.actor?.type;
-    if (!['mech', 'npc', 'pilot', 'deployable'].includes(actorType))
-        return;
-    await ensureRangePreviewAura(tokenDoc);
-});
 
 Hooks.on('updateToken', async (tokenDoc, change, _options, userId) => {
     if (userId !== game.user.id)

@@ -633,8 +633,24 @@ function renderReactionDialog(popupData) {
         close: () => {
             closeDetailPanel();
             activeReactionDialog = null;
+            if (!_suppressCloseEmit) {
+                try {
+                    game.socket.emit('module.lancer-automations', {
+                        action: 'closeReactionPopup',
+                        payload: {}
+                    });
+                } catch { /* ignore */ }
+            }
         }
     }, { top: 450, left: 150, classes: ['dialog', 'lancer-dialog-base', 'lancer-no-title']});
 
     activeReactionDialog.render(true);
+}
+
+let _suppressCloseEmit = false;
+export function closeReactionPopupFromRemote() {
+    if (!activeReactionDialog) return;
+    _suppressCloseEmit = true;
+    try { activeReactionDialog.close(); } catch { /* ignore */ }
+    _suppressCloseEmit = false;
 }

@@ -1749,11 +1749,7 @@ export function getDefaultGeneralReactionRegistry() {
         triggerOther: false,
         autoActivate: true,
         outOfCombat: true,
-        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            if (api.findEffectOnToken(reactorToken, 'slowed')) {
-                ui.notifications.warn(`${reactorToken.name} is Slowed and cannot Boost.`);
-                return false;
-            }
+        evaluate: function (_triggerType, _triggerData, _reactorToken, _item, _activationName, _api) {
             return true;
         },
         activationType: "code",

@@ -12,7 +12,6 @@ const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
 const DISABLE_AUTO_TERRAIN_ELEVATION = 'disableAutoTerrainElevation';
 const THT_ID = 'terrain-height-tools';
 const THT_IGNORE_FLAG = 'ignoreAutoElevation';
-const LA_IGNORE_RULER_FLAG = 'ignoreRulerAutoElevation';
 const LA_DISABLE_AUTO_TERRAIN_FLAG = 'disableAutoTerrainElevation';
 
 const AUTO_MOVEMENT_TYPES = new Set(['walk', 'crawl', 'climb', 'jump', 'fly']);
@@ -120,7 +119,7 @@ function terrainTopUnder(tokenDoc, position) {
     return highest;
 }
 
-function shouldAutoElevate(tokenDoc, { ruler = true } = {}) {
+function shouldAutoElevate(tokenDoc, { ruler: _ruler = true } = {}) {
     if (!isEnabled())
         return false;
     try {
@@ -130,8 +129,6 @@ function shouldAutoElevate(tokenDoc, { ruler = true } = {}) {
     if (game.modules.get(THT_ID)?.active && tokenDoc.getFlag?.(THT_ID, THT_IGNORE_FLAG))
         return false;
     if (tokenDoc.getFlag?.(MODULE_ID, LA_DISABLE_AUTO_TERRAIN_FLAG))
-        return false;
-    if (ruler && tokenDoc.getFlag?.(MODULE_ID, LA_IGNORE_RULER_FLAG))
         return false;
     return true;
 }

@@ -830,6 +830,35 @@ interface LancerAutomationsAPI {
         }
     ): Promise<{ completed: boolean; flow?: any }>;
 
+    // ── ExtraBarsAPI ──
+    /**
+     * Update the value of a manual extra-bar entry on a token.
+     * Accepts a number, a numeric string, or a delta string ("+2" / "-3").
+     * Returns the new value, or null if the token/entry is invalid or the entry is path-bound (read-only).
+     */
+    updateExtraBarValue(
+        token: Token | TokenDocument | string,
+        entryId: string,
+        value: number | string,
+    ): Promise<number | null>;
+    /**
+     * Add a new extra bar to a token by overlaying `partial` on the default shape.
+     * The default uses `system.hp.value` / `system.hp.max` as path sources. Auto-generates a fresh id
+     * if `partial.id` is missing or collides with an existing entry.
+     * Returns the created entry id, or null on failure.
+     */
+    addExtraBar(
+        token: Token | TokenDocument | string,
+        partial?: object,
+    ): Promise<string | null>;
+    /**
+     * Remove an extra bar by id. Returns true if removed, false if not found or on failure.
+     */
+    removeExtraBar(
+        token: Token | TokenDocument | string,
+        entryId: string,
+    ): Promise<boolean>;
+
     [key: string]: any;
 }
 

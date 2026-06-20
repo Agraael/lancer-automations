@@ -1,6 +1,6 @@
 /* global game, canvas, fromUuid, ui, Dialog, HTMLVideoElement */
 
-import { displayReactionPopup } from './activations/reactions-ui.js';
+import { displayReactionPopup, closeReactionPopupFromRemote } from './activations/reactions-ui.js';
 import {
     applyKnockbackMoves, startChoiceCard,
     showUserIdControlledChoiceCard, resolveGMChoiceCard,
@@ -185,6 +185,10 @@ const HANDLERS = {
         }
         if (reconstructed.length > 0)
             displayReactionPopup(triggerType, reconstructed);
+    },
+
+    closeReactionPopup: async () => {
+        closeReactionPopupFromRemote();
     },
 
     setActorFlag: async (payload) => {

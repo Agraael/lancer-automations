@@ -235,7 +235,7 @@ const movingTargetSniperReaction = {
                             return;
                         }
                         if (mover)
-                            game.user.updateTokenTargets([mover.id]);
+                            /** @type {any} */ (canvas.tokens).setTargets([mover.id]);
                         await api.beginWeaponAttackFlow(rifle, {});
                     }
                 }]
@@ -3951,7 +3951,7 @@ api.registerDefaultItemReactions({
                         subtype: 'half_damage'
                     };
                     if (attacker)
-                        game.user.updateTokenTargets([attacker.id]);
+                        /** @type {any} */ (canvas.tokens).setTargets([attacker.id]);
                     await api.beginWeaponAttackFlow(weapon, {}, { flow_bonus: [halfDamageBonus] });
                 }
             }
@@ -4057,7 +4057,7 @@ api.registerDefaultItemReactions({
                     applyTo: [id]
                 }));
 
-                game.user.updateTokenTargets(targets.map(t => t.id));
+                /** @type {any} */ (canvas.tokens).setTargets(targets.map(t => t.id));
                 await api.executeDamageRoll(
                     reactorToken, targets, damageVal, "Explosive",
                     `${item.name} — Rainmaker Volley`,

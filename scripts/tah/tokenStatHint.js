@@ -7,6 +7,7 @@ import {
     isTokenInCombat,
     isTokenVisible,
 } from '../utils/lancer-token.js';
+import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
@@ -672,11 +673,77 @@ function ensureStyleSheet() {
     flex-shrink: 0;
 }
 .la-stat-hint-cell .la-stat-hint-val { font-weight: 400; }
+.la-stat-hint-extras {
+    padding: 4px 9px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.la-stat-hint-extras .la-stat-hint-sep {
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    height: 0;
+    margin: 0 0 4px;
+}
+.la-stat-hint-extra-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+.la-stat-hint-extra-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: brightness(0) saturate(100%) invert(1);
+}
+.la-stat-hint-extra-val {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.la-stat-hint-extra-label {
+    color: #888;
+    opacity: 0.85;
+    font-size: 10px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 `;
     const el = document.createElement('style');
     el.id = 'la-stat-hint-styles';
     el.textContent = css;
     document.head.appendChild(el);
+}
+
+// Third section of the popup: user-defined extra bars. Returns an empty string
+// if no visible extras. Each row: icon + colored "value/max" + optional label.
+function buildExtrasHintHtml(token, actor) {
+    const tokenDoc = token?.document;
+    if (!tokenDoc || !actor)
+        return '';
+    const extras = tokenDoc.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    if (!extras.length)
+        return '';
+    const visible = extras.filter(e => _resolveExtraBarValues(actor, e).ownerOk);
+    if (!visible.length)
+        return '';
+    const rows = visible.map(e => {
+        const { value, max } = _resolveExtraBarValues(actor, e);
+        const color = e.color?.stops?.[0] ?? '#cccccc';
+        const iconSrc = e.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg';
+        const labelHtml = e.showLabelInHint && e.label
+            ? `<span class="la-stat-hint-extra-label">${esc(e.label)}</span>`
+            : '';
+        return `<div class="la-stat-hint-extra-row">
+            <img class="la-stat-hint-extra-icon" src="${esc(iconSrc)}" alt="">
+            <span class="la-stat-hint-extra-val" style="color:${esc(color)};">${value}/${max}</span>
+            ${labelHtml}
+        </div>`;
+    }).join('');
+    return `<div class="la-stat-hint-extras"><div class="la-stat-hint-sep"></div>${rows}</div>`;
 }
 
 function buildPopupDom(token) {
@@ -697,6 +764,7 @@ function buildPopupDom(token) {
         headerHtml = buildHeaderHtml(token, 'unknown-damaged');
         rowsHtml = `<div class="la-stat-hint-rows">${buildDamagedRowsHtml(actor, s)}</div>`;
     }
+    const extrasHtml = buildExtrasHintHtml(token, actor);
 
     const popup = document.createElement('div');
     popup.className = 'la-stat-hint-popup';
@@ -706,7 +774,7 @@ function buildPopupDom(token) {
     const stripeHtml = disp
         ? `<div class="la-stat-hint-stripe" style="background:${esc(disp.color)};" title="${esc(disp.label)}"></div>`
         : '';
-    anim.innerHTML = `${stripeHtml}<div class="la-stat-hint-body">${headerHtml}${rowsHtml}</div>`;
+    anim.innerHTML = `${stripeHtml}<div class="la-stat-hint-body">${headerHtml}${rowsHtml}${extrasHtml}</div>`;
     popup.appendChild(anim);
     popup.dataset.viewMode = viewMode;
     popup.dataset.tokenId = token.id;

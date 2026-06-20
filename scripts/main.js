@@ -94,7 +94,7 @@ export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js"
 import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
-import { registerTokenStatBarSettings, initTokenStatBar } from "./tah/tokenStatBar.js";
+import { registerTokenStatBarSettings, initTokenStatBar, ExtraBarsAPI } from "./tah/tokenStatBar.js";
 import { registerTokenStatHintSettings, initTokenStatHint } from "./tah/tokenStatHint.js";
 import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
 import {
@@ -4815,8 +4815,7 @@ Hooks.once('ready', async () => {
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();
 
-    // Lancer system v3 registers a renderCombatDock handler that calls html.find() expecting
-    // jQuery; v13 passes HTMLElement. libWrap Hooks.callAll to wrap the html arg for that hook.
+    // Lancer system's renderCombatDock listener calls html.find() but v13 hands it a raw HTMLElement.
     if (typeof libWrapper !== 'undefined') {
         try {
             libWrapper.register('lancer-automations', 'Hooks.callAll', function (wrapped, hook, ...args) {
@@ -4829,8 +4828,7 @@ Hooks.once('ready', async () => {
             console.warn('lancer-automations | Could not wrap Hooks.callAll for renderCombatDock fix:', e);
         }
 
-        // Sub-1x1 tokens have bounds < grid size, which crams the HUD button layout. Floor the
-        // HUD container to at least one grid cell and re-center it on the token.
+        // Floor the TokenHUD container at one grid cell so sub-1x1 tokens don't cram the buttons.
         try {
             const hudNs = /** @type {any} */ (foundry.applications).hud;
             libWrapper.register('lancer-automations', 'foundry.applications.hud.BasePlaceableHUD.prototype._updatePosition', function (wrapped, position) {
@@ -4842,11 +4840,11 @@ Hooks.once('ready', async () => {
                 const gridSize = dims?.size ?? 100;
                 const minSize = gridSize / s;
                 if (result.width < minSize) {
-                    result.left -= (minSize - result.width) / 2;
+                    result.left -= ((minSize - result.width) / 2) * s;
                     result.width = minSize;
                 }
                 if (result.height < minSize) {
-                    result.top -= (minSize - result.height) / 2;
+                    result.top -= ((minSize - result.height) / 2) * s;
                     result.height = minSize;
                 }
                 return result;
@@ -5363,6 +5361,7 @@ Hooks.on('ready', async () => {
         ...RestAPI,
         ...AurasAPI,
         ...ItemDisabledAPI,
+        ...ExtraBarsAPI,
         applyInfection,
         repairLCPData,
         TriggerUseAmmoFlow,

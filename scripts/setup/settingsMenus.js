@@ -179,15 +179,42 @@ const TOKENS_DISPLAY_FIELDS = [
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
+
+    { type: 'section', label: 'Display', subsection: true },
     { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale (Stat Bar)', min: 0.3, max: 1, step: 0.05 },
+    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'When off, HP/Heat/Stress numbers are hidden, only the bars are drawn.' },
+    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' },
+
+    { type: 'section', label: 'Per-Token Defaults', subsection: true },
     { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
     { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
     { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
     { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Stress on Pilot Tokens' },
-    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'When off, HP/Heat/Stress numbers are hidden, only the bars are drawn.' },
-    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' },
+
+    { type: 'section', label: 'Visibility', subsection: true },
     { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
     { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
+
+    { type: 'section', label: 'Auto-Injected Bars (Talents & Frame Counters)', subsection: true },
+    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent Counter Bars', hint: 'Inject an extra bar for every talent counter and frame core counter on Lancer tokens. Deleted bars are not re-added.' },
+    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Talent Counter Bar Color', hint: 'Color used for newly auto-injected bars. Existing bars keep their original color.' },
+    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Talent Counter Width (%)', min: 1, max: 100, step: 1, hint: 'Width % used for newly auto-injected bars. Each is added on its own line.' },
+    { type: 'button',
+        key: 'statBarReinjectAllAutoBars',
+        label: 'Reinject Auto-Bars on All Tokens',
+        icon: 'fas fa-sync',
+        hint: 'Rebuild auto-injected bars on every Lancer token in every scene and on every actor prototype. Clears prior tombstones.',
+        onClick: async () => {
+            const mod = await import('../tah/tokenStatBar.js');
+            const fn = /** @type {any} */ (mod).reinjectAutoBarsOnAllTokens;
+            if (typeof fn === 'function')
+                await fn();
+            else
+                ui.notifications.warn('reinjectAutoBarsOnAllTokens is not exported.');
+        },
+    },
+
+    { type: 'section', label: 'Scene Actions', subsection: true },
     { type: 'button',
         key: 'statBarApplyDefaults',
         label: 'Apply Defaults to Current Scene',

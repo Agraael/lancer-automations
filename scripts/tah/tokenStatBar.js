@@ -9,6 +9,7 @@ import {
     isTokenInCombat,
     isTokenVisible,
 } from '../utils/lancer-token.js';
+import { setTokenFlag } from '../socket.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatBar';
@@ -21,6 +22,9 @@ const SETTING_EFFECT_ICON_SCALE = 'statBarEffectIconScale';
 const SETTING_MIN_ZOOM_SCALE = 'statBarMinZoomScale';
 const SETTING_DEFAULT_PILOT_STRESS = 'statBarDefaultPilotStress';
 const SETTING_SHOW_VALUES = 'statBarShowValues';
+const SETTING_AUTO_INJECT_TALENTS = 'statBarAutoInjectTalents';
+const SETTING_AUTO_INJECT_TALENT_COLOR = 'statBarAutoInjectTalentColor';
+const SETTING_AUTO_INJECT_TALENT_WIDTH = 'statBarAutoInjectTalentWidthPct';
 
 const VIS_ALL = 'all';
 const VIS_OWNER = 'owner';
@@ -182,6 +186,32 @@ const FLAG_ROW_HEIGHT = 'statBarRowHeight';
 const FLAG_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 const FLAG_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
 const FLAG_PILOT_STRESS = 'statBarPilotStress';
+const FLAG_EXTRAS = 'statBarExtras';
+const FLAG_AUTO_KEYS = 'statBarAutoInjectedKeys';
+export { FLAG_EXTRAS };
+
+// Accepts Token (placeable), TokenDocument, scene-local token id, or uuid. Returns TokenDocument or null.
+async function _resolveTokenDocument(arg) {
+    if (!arg)
+        return null;
+    if (typeof arg === 'string') {
+        try {
+            if (arg.includes('.')) {
+                const doc = /** @type {any} */ (await fromUuid(arg));
+                return doc?.documentName === 'Token' ? doc : (doc?.token ?? null);
+            }
+            for (const scene of game.scenes) {
+                const t = scene.tokens.get(arg);
+                if (t)
+                    return t;
+            }
+            return canvas?.tokens?.get(arg)?.document ?? null;
+        } catch {
+            return null;
+        }
+    }
+    return /** @type {any} */ (arg).document ?? arg;
+}
 
 function getWorldSetting(key, fallback) {
     try {
@@ -331,7 +361,719 @@ function getEffectiveMax(actor, hostId) {
     return 0;
 }
 
-function snapshotValues(actor) {
+// Parse "#rrggbb" into a 0xrrggbb integer (PIXI fill format). Falls back to gray.
+function _parseHex(hex) {
+    if (typeof hex !== 'string')
+        return 0x888888;
+    const s = hex.trim().replace(/^#/, '');
+    const n = parseInt(s, 16);
+    return Number.isFinite(n) ? (n & 0xffffff) : 0x888888;
+}
+
+// Path resolver: supports normal actor-rooted paths plus two special prefixes
+// used by auto-injected counter bars:
+//   "items.{id}.{rest}"        → walks actor.items.get(id) (e.g. frame on a mech)
+//   "pilotItems.{id}.{rest}"   → walks actor.system.pilot.value.items.get(id) when
+//                                 the actor is a mech, otherwise falls back to actor.items
+//                                 (talents live on the pilot for mechs, on the pilot actor itself otherwise)
+function _readActorPath(actor, path) {
+    if (!actor || !path)
+        return undefined;
+    let m = /^items\.([^.]+)\.(.+)$/.exec(path);
+    if (m) {
+        const item = actor.items?.get?.(m[1]);
+        if (!item)
+            return undefined;
+        return foundry.utils.getProperty(item, m[2]);
+    }
+    m = /^pilotItems\.([^.]+)\.(.+)$/.exec(path);
+    if (m) {
+        const pilot = actor.system?.pilot?.value ?? actor;
+        const item = pilot?.items?.get?.(m[1]);
+        if (!item)
+            return undefined;
+        return foundry.utils.getProperty(item, m[2]);
+    }
+    return foundry.utils.getProperty(actor, path);
+}
+
+// Resolve an extra bar's current value/max and per-user visibility.
+// Exported so the stat-hint popup can render the same numbers without duplicating logic.
+export function _resolveExtraBarValues(actor, entry) {
+    const read = (src) => {
+        if (!src)
+            return 0;
+        if (src.kind === 'manual')
+            return Number(src.value) || 0;
+        if (src.kind === 'path' && actor)
+            return Number(_readActorPath(actor, src.path)) || 0;
+        return 0;
+    };
+    const value = read(entry?.valueSource);
+    const rawMax = read(entry?.maxSource);
+    const max = rawMax > 0 ? rawMax : (entry?.segmented ? Math.max(1, Number(entry?.segments) || 1) : 1);
+    const ownerOk = !entry?.ownerOnly || game.user?.isGM || actor?.isOwner;
+    return { value, max, ownerOk };
+}
+
+// Enumerate every talent rank counter and frame core counter on an actor.
+// Returns [{ autoKey, label, valuePath, maxPath }] using actor-rooted "items.{id}.{rest}"
+// paths that the extended resolver understands.
+function _enumerateAutoCounters(actor) {
+    const out = [];
+    if (!actor)
+        return out;
+    const pilot = actor.system?.pilot?.value ?? actor;
+    const talentItems = pilot?.items
+        ? [...pilot.items.values()].filter(/** @type {any} */ i => i.type === 'talent')
+        : [];
+    for (const talent of talentItems) {
+        const lid = /** @type {any} */ (talent).system?.lid ?? talent.id;
+        const ranks = /** @type {any} */ (talent).system?.ranks ?? [];
+        const currRank = /** @type {any} */ (talent).system?.curr_rank ?? ranks.length;
+        const lastIdx = Math.min(currRank, ranks.length);
+        for (let r = 0; r < lastIdx; r++) {
+            const counters = ranks[r]?.counters ?? [];
+            for (let c = 0; c < counters.length; c++) {
+                const counter = counters[c];
+                out.push({
+                    autoKey: `talent:${lid}:r${r}:c${c}`,
+                    label: counter?.name ?? 'Counter',
+                    valuePath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.value`,
+                    maxPath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.max`,
+                });
+            }
+        }
+    }
+    const frame = actor.system?.loadout?.frame?.value;
+    const csCounters = frame?.system?.core_system?.counters ?? [];
+    for (let c = 0; c < csCounters.length; c++) {
+        const counter = csCounters[c];
+        const lid = frame.system?.lid ?? frame.id;
+        out.push({
+            autoKey: `frame:${lid}:c${c}`,
+            label: counter?.name ?? 'Core Counter',
+            valuePath: `items.${frame.id}.system.core_system.counters.${c}.value`,
+            maxPath: `items.${frame.id}.system.core_system.counters.${c}.max`,
+        });
+    }
+    return out;
+}
+
+// Idempotent auto-injection of talent/frame counters as extra bars on a token.
+// Only runs on the active GM client. Skips counters whose autoKey already
+// exists in the live array OR has ever been injected before (tombstone sidecar
+// flag FLAG_AUTO_KEYS), so user-deleted bars stay deleted.
+async function _autoInjectCounters(tokenDoc) {
+    try {
+        if (!game.users?.activeGM?.isSelf)
+            return;
+        if (!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS))
+            return;
+        const td = /** @type {any} */ (tokenDoc)?.document ?? tokenDoc;
+        if (!td)
+            return;
+        const actor = td.actor;
+        if (!actor || !['mech', 'pilot', 'npc'].includes(actor.type))
+            return;
+
+        const color = game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161';
+        const widthPct = Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
+
+        const existing = td.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+        const seen = td.getFlag(MODULE_ID, FLAG_AUTO_KEYS) ?? {};
+        const liveKeys = new Set(existing.filter(/** @type {any} */ e => e?.autoKey).map(/** @type {any} */ e => e.autoKey));
+
+        const counters = _enumerateAutoCounters(actor);
+        const toAdd = counters.filter(c => !liveKeys.has(c.autoKey) && !seen[c.autoKey]);
+        if (!toAdd.length)
+            return;
+
+        const next = existing.slice();
+        const seenNext = { ...seen };
+        for (const c of toAdd) {
+            next.push(_buildAutoInjectedEntry(c, color, widthPct));
+            seenNext[c.autoKey] = true;
+        }
+        await setTokenFlag(td, MODULE_ID, FLAG_EXTRAS, next);
+        await setTokenFlag(td, MODULE_ID, FLAG_AUTO_KEYS, seenNext);
+    } catch (err) {
+        console.warn(`${MODULE_ID} | _autoInjectCounters failed`, err);
+    }
+}
+
+// Build an auto-injected entry from an enumerated counter + style settings.
+function _buildAutoInjectedEntry(c, color, widthPct) {
+    const base = _defaultExtraBar();
+    return {
+        ...base,
+        id: foundry.utils.randomID(),
+        autoKey: c.autoKey,
+        label: c.label,
+        layoutMode: 'newLine',
+        widthPct,
+        color: { kind: 'solid', stops: [color] },
+        icon: DEFAULT_EXTRA_BAR_ICON,
+        valueSource: { kind: 'path', path: c.valuePath, value: 0 },
+        maxSource: { kind: 'path', path: c.maxPath, value: 1 },
+        segmented: true,
+        showLabelInHint: true,
+        ownerOnly: true,
+    };
+}
+
+// Reset auto-injected entries on a single token. If the world auto-inject setting
+// is ON, removes everything tagged with an autoKey, clears the tombstone sidecar,
+// and synchronously builds fresh entries for every current counter. If the setting
+// is OFF, just strips the auto entries and clears the sidecar (clean wipe).
+// Writes the result in a single setFlag call so it works regardless of GM status
+// (no reliance on the global GM-gated injector) and avoids any read-after-write race.
+async function _resetAutoInjectedExtras(tokenDoc) {
+    try {
+        const td = /** @type {any} */ (tokenDoc)?.document ?? tokenDoc;
+        if (!td)
+            return false;
+        const existing = td.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+        const kept = existing.filter(/** @type {any} */ e => !e?.autoKey);
+        let nextArr = kept;
+        const nextSeen = {};
+        if (game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS)) {
+            const actor = td.actor;
+            if (actor && ['mech', 'pilot', 'npc'].includes(actor.type)) {
+                const color = game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161';
+                const widthPct = Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
+                const counters = _enumerateAutoCounters(actor);
+                const fresh = counters.map(c => _buildAutoInjectedEntry(c, color, widthPct));
+                nextArr = [...kept, ...fresh];
+                for (const c of counters)
+                    nextSeen[c.autoKey] = true;
+            }
+        }
+        await setTokenFlag(td, MODULE_ID, FLAG_EXTRAS, nextArr);
+        await setTokenFlag(td, MODULE_ID, FLAG_AUTO_KEYS, nextSeen);
+        return true;
+    } catch (err) {
+        console.warn(`${MODULE_ID} | _resetAutoInjectedExtras failed`, err);
+        return false;
+    }
+}
+
+// Group extras into lines respecting layoutMode + 100% width cap. Overflow wraps.
+function _groupExtrasIntoLines(extras) {
+    const lines = [];
+    let cur = null;
+    for (const e of extras ?? []) {
+        const w = Math.max(1, Math.min(100, Number(e?.widthPct) || 100));
+        const breaks = !cur || e?.layoutMode === 'newLine' || (cur.used + w) > 100;
+        if (breaks) {
+            cur = { entries: [], used: 0 };
+            lines.push(cur);
+        }
+        cur.entries.push({ entry: e, width: w });
+        cur.used += w;
+    }
+    return lines;
+}
+
+const DEFAULT_EXTRA_BAR_ICON = 'modules/lancer-automations/icons/perspective-dice-two.svg';
+
+export function _defaultExtraBar() {
+    return {
+        id: foundry.utils.randomID(),
+        label: '',
+        layoutMode: 'newLine',
+        widthPct: 100,
+        valueSource: { kind: 'path', path: 'system.hp.value', value: 0 },
+        maxSource: { kind: 'path', path: 'system.hp.max', value: 1 },
+        segmented: false,
+        segments: 4,
+        color: { kind: 'solid', stops: ['#66cc66'] },
+        ownerOnly: false,
+        icon: DEFAULT_EXTRA_BAR_ICON,
+        showLabelInHint: false,
+        linkedItemUuid: '',
+    };
+}
+
+/**
+ * Update the value of a manual extra-bar entry.
+ * Accepts a number, a numeric string, or a delta string ("+2" / "-3").
+ * Rejects path-bound entries (read-only) and unknown ids.
+ * @returns {Promise<number|null>} the new value, or null on failure.
+ */
+export async function updateExtraBarValue(token, entryId, value) {
+    const td = await _resolveTokenDocument(token);
+    if (!td || !entryId) {
+        console.warn(`${MODULE_ID} | updateExtraBarValue: invalid token or entryId`);
+        return null;
+    }
+    const arr = foundry.utils.deepClone(/** @type {any} */ (td).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const entry = arr.find(/** @type {any} */ x => x.id === entryId);
+    if (!entry) {
+        console.warn(`${MODULE_ID} | updateExtraBarValue: entry ${entryId} not found`);
+        return null;
+    }
+    if (entry.valueSource?.kind !== 'manual') {
+        console.warn(`${MODULE_ID} | updateExtraBarValue: entry ${entryId} is not manual (path-bound bars are read-only)`);
+        return null;
+    }
+    let next;
+    if (typeof value === 'string') {
+        const raw = value.trim();
+        const num = Number(raw);
+        if (!Number.isFinite(num)) {
+            console.warn(`${MODULE_ID} | updateExtraBarValue: NaN value "${value}"`);
+            return null;
+        }
+        next = (raw.startsWith('+') || raw.startsWith('-'))
+            ? (Number(entry.valueSource.value) || 0) + num
+            : num;
+    } else {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            console.warn(`${MODULE_ID} | updateExtraBarValue: NaN value`);
+            return null;
+        }
+        next = num;
+    }
+    entry.valueSource.value = next;
+    try {
+        await /** @type {any} */ (td).setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+    } catch (err) {
+        console.warn(`${MODULE_ID} | updateExtraBarValue: setFlag failed`, err);
+        return null;
+    }
+    return next;
+}
+
+/**
+ * Create a new extra bar by overlaying `partial` on the default shape.
+ * Auto-generates a fresh id if missing or colliding with an existing entry.
+ * @returns {Promise<string|null>} the new entry id, or null on failure.
+ */
+export async function addExtraBar(token, partial = {}) {
+    const td = await _resolveTokenDocument(token);
+    if (!td) {
+        console.warn(`${MODULE_ID} | addExtraBar: invalid token`);
+        return null;
+    }
+    if (partial && typeof partial !== 'object') {
+        console.warn(`${MODULE_ID} | addExtraBar: partial must be an object`);
+        return null;
+    }
+    const arr = foundry.utils.deepClone(/** @type {any} */ (td).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    // API entries default to owner-only; partial wins.
+    const base = { ..._defaultExtraBar(), ownerOnly: true };
+    const entry = foundry.utils.mergeObject(base, partial ?? {}, { inplace: false });
+    if (!entry.id || arr.some(/** @type {any} */ x => x.id === entry.id)) {
+        entry.id = foundry.utils.randomID();
+    }
+    arr.push(entry);
+    try {
+        await /** @type {any} */ (td).setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+    } catch (err) {
+        console.warn(`${MODULE_ID} | addExtraBar: setFlag failed`, err);
+        return null;
+    }
+    return entry.id;
+}
+
+/**
+ * Remove an extra bar by id.
+ * @returns {Promise<boolean>} true if removed, false if not found or on failure.
+ */
+export async function removeExtraBar(token, entryId) {
+    const td = await _resolveTokenDocument(token);
+    if (!td || !entryId) {
+        console.warn(`${MODULE_ID} | removeExtraBar: invalid token or entryId`);
+        return false;
+    }
+    const arr = foundry.utils.deepClone(/** @type {any} */ (td).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const next = arr.filter(/** @type {any} */ x => x.id !== entryId);
+    if (next.length === arr.length)
+        return false;
+    try {
+        await /** @type {any} */ (td).setFlag(MODULE_ID, FLAG_EXTRAS, next);
+    } catch (err) {
+        console.warn(`${MODULE_ID} | removeExtraBar: setFlag failed`, err);
+        return false;
+    }
+    return true;
+}
+
+export const ExtraBarsAPI = { updateExtraBarValue, addExtraBar, removeExtraBar };
+
+function _escAttr(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _renderExtraBarRowHtml(entry, idx, overflow, collapsed) {
+    const e = entry;
+    const v = e.valueSource ?? {};
+    const m = e.maxSource ?? {};
+    const stops = e.color?.stops ?? ['#888888'];
+    const summary = e.label || (v.kind === 'path' ? (v.path || 'unset') : `${v.value ?? 0}`);
+    return `
+        <div class="la-extra-bar-row${collapsed ? ' collapsed' : ''}" data-idx="${idx}" data-id="${e.id}">
+            <div class="la-extra-bar-header">
+                <span class="la-extra-bar-drag" draggable="true" title="Drag to reorder">≡</span>
+                <button type="button" class="la-extra-bar-toggle" title="${collapsed ? 'Expand' : 'Collapse'}">
+                    <i class="fas fa-chevron-${collapsed ? 'right' : 'down'}"></i>
+                </button>
+                <input type="text" class="la-extra-bar-label" data-field="label" value="${_escAttr(e.label ?? '')}" placeholder="Label" maxlength="14">
+                <span class="la-extra-bar-summary" title="${_escAttr(summary)}">${_escAttr(summary)}</span>
+                <input type="number" data-field="widthPct" value="${e.widthPct}" min="1" max="100" step="1" title="Width %" class="la-extra-bar-width" style="${overflow ? 'border-color:#c33;color:#c33;' : ''}">
+                <span class="la-extra-bar-pct">%</span>
+                <label class="la-extra-bar-cb" title="Owner-only"><input type="checkbox" data-field="ownerOnly" ${e.ownerOnly ? 'checked' : ''}><span>Owner</span></label>
+                <button type="button" class="la-extra-bar-del" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="la-extra-bar-body" style="${collapsed ? 'display:none;' : ''}">
+                <div class="la-extra-bar-line">
+                    <span class="la-extra-bar-tag">Layout</span>
+                    <select data-field="layoutMode">
+                        <option value="newLine" ${e.layoutMode === 'newLine' ? 'selected' : ''}>New line</option>
+                        <option value="sameLine" ${e.layoutMode === 'sameLine' ? 'selected' : ''}>Same line</option>
+                    </select>
+                </div>
+                <div class="la-extra-bar-line">
+                    <span class="la-extra-bar-tag">Value</span>
+                    <select data-field="valueSource.kind">
+                        <option value="path" ${v.kind === 'path' ? 'selected' : ''}>Path</option>
+                        <option value="manual" ${v.kind === 'manual' ? 'selected' : ''}>Manual</option>
+                    </select>
+                    <input type="text" data-field="valueSource.path" value="${_escAttr(v.path ?? '')}" placeholder="system.hp.value" class="la-extra-bar-grow" style="${v.kind !== 'path' ? 'display:none;' : ''}">
+                    <input type="number" data-field="valueSource.value" value="${v.value ?? 0}" step="1" style="${v.kind !== 'manual' ? 'display:none;' : ''}">
+                </div>
+                <div class="la-extra-bar-line">
+                    <span class="la-extra-bar-tag">Max</span>
+                    <select data-field="maxSource.kind">
+                        <option value="path" ${m.kind === 'path' ? 'selected' : ''}>Path</option>
+                        <option value="manual" ${m.kind === 'manual' ? 'selected' : ''}>Manual</option>
+                    </select>
+                    <input type="text" data-field="maxSource.path" value="${_escAttr(m.path ?? '')}" placeholder="system.hp.max" class="la-extra-bar-grow" style="${m.kind !== 'path' ? 'display:none;' : ''}">
+                    <input type="number" data-field="maxSource.value" value="${m.value ?? 1}" step="1" style="${m.kind !== 'manual' ? 'display:none;' : ''}">
+                </div>
+                <div class="la-extra-bar-line">
+                    <label class="la-extra-bar-cb" title="Display as discrete pips using the max value as the segment count."><input type="checkbox" data-field="segmented" ${e.segmented ? 'checked' : ''}><span>Segmented</span></label>
+                    <span class="la-extra-bar-tag" style="margin-left:auto;">Color</span>
+                    <input type="color" data-field="color.stops.0" value="${stops[0] ?? '#888888'}">
+                </div>
+                <div class="la-extra-bar-line">
+                    <span class="la-extra-bar-tag">Icon</span>
+                    <img class="la-extra-bar-icon-preview" src="${_escAttr(e.icon ?? DEFAULT_EXTRA_BAR_ICON)}" alt="" onerror="this.style.opacity='0.3';">
+                    <input type="text" data-field="icon" value="${_escAttr(e.icon ?? DEFAULT_EXTRA_BAR_ICON)}" placeholder="${DEFAULT_EXTRA_BAR_ICON}" class="la-extra-bar-grow">
+                    <button type="button" class="la-extra-bar-icon-pick" title="Browse files"><i class="fas fa-file-import"></i></button>
+                    <label class="la-extra-bar-cb" title="Show label next to the icon in the hover stat hint"><input type="checkbox" data-field="showLabelInHint" ${e.showLabelInHint ? 'checked' : ''}><span>Show label in hint</span></label>
+                </div>
+                ${e.autoKey ? '' : `
+                <div class="la-extra-bar-line">
+                    <span class="la-extra-bar-tag" title="Right-click in TAH Resources opens this item's sheet.">Linked Item</span>
+                    <input type="text" data-field="linkedItemUuid" value="${_escAttr(e.linkedItemUuid ?? '')}" placeholder="Actor.X.Item.Y (UUID)" class="la-extra-bar-grow" readonly>
+                    <button type="button" class="la-extra-bar-item-pick" title="Pick an item from the actor"><i class="fas fa-link"></i></button>
+                    <button type="button" class="la-extra-bar-item-clear" title="Clear linked item"><i class="fas fa-times"></i></button>
+                </div>`}
+            </div>
+        </div>
+    `;
+}
+
+// Inject CSS once for the extra-bars editor.
+function _ensureExtraBarsStyles() {
+    if (document.getElementById('la-extra-bars-styles'))
+        return;
+    const s = document.createElement('style');
+    s.id = 'la-extra-bars-styles';
+    s.textContent = `
+        /* Span both columns of the form grid and lay the section out vertically. */
+        .la-extra-bars-group { grid-column: 1 / -1; display: block !important; }
+        .la-extra-bars-group > label { display: block; margin-bottom: 4px; }
+        .la-extra-bars-group > .notes { display: block; margin-top: 6px; }
+        .la-extra-bars-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; width: 100%; }
+        .la-extra-bar-row { border: 1px solid #888; border-radius: 3px; background: rgba(0,0,0,0.04); width: 100%; box-sizing: border-box; }
+        .la-extra-bar-row.dragging { opacity: 0.4; }
+        .la-extra-bar-row.drag-over { border-color: var(--color-warm-1, #c97a2b); }
+        .la-extra-bar-row.collapsed { background: rgba(0,0,0,0.02); }
+        .la-extra-bar-header { display: flex; align-items: center; gap: 4px; padding: 4px 6px; width: 100%; box-sizing: border-box; }
+        .la-extra-bar-body { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px 6px; border-top: 1px dashed rgba(128,128,128,0.4); }
+        .la-extra-bar-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; width: 100%; }
+        .la-extra-bar-tag { font-size: 0.75em; text-transform: uppercase; opacity: 0.65; letter-spacing: 0.05em; min-width: 44px; flex-shrink: 0; }
+        .la-extra-bar-drag { cursor: grab; user-select: none; padding: 0 2px; font-size: 1.1em; opacity: 0.55; flex-shrink: 0; }
+        .la-extra-bar-drag:active { cursor: grabbing; }
+        .la-extra-bar-toggle { background: none; border: none; cursor: pointer; padding: 2px 4px; color: inherit; opacity: 0.7; flex-shrink: 0; }
+        .la-extra-bar-toggle:hover { opacity: 1; }
+        .la-extra-bar-label { width: 110px; flex-shrink: 0; }
+        .la-extra-bar-summary { font-size: 0.8em; opacity: 0.6; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; font-family: var(--font-mono, monospace); }
+        .la-extra-bar-row:not(.collapsed) .la-extra-bar-summary { display: none; }
+        .la-extra-bar-width { width: 50px; flex-shrink: 0; }
+        .la-extra-bar-pct { opacity: 0.55; font-size: 0.85em; margin-left: -2px; }
+        .la-extra-bar-cb { display: inline-flex; align-items: center; gap: 3px; font-size: 0.85em; white-space: nowrap; flex-shrink: 0; }
+        .la-extra-bar-cb input { margin: 0; width: auto; }
+        .la-extra-bar-del { background: none; border: 1px solid #c33; color: #c33; padding: 2px 6px; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+        .la-extra-bar-del:hover { background: #c33; color: #fff; }
+        .la-extra-bar-stops { padding: 2px 6px; cursor: pointer; flex-shrink: 0; }
+        .la-extra-bars-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+        .la-extra-bars-add, .la-extra-bars-reset { padding: 4px 10px; cursor: pointer; }
+        .la-extra-bars-reset { background: rgba(25, 97, 97, 0.18); border-color: #196161; }
+        .la-extra-bars-reset:hover { background: rgba(25, 97, 97, 0.32); }
+        /* Compact form controls so multiple fit on a line. */
+        .la-extra-bar-row select, .la-extra-bar-row input[type="text"], .la-extra-bar-row input[type="number"] { height: 24px; padding: 0 4px; font-size: 0.9em; box-sizing: border-box; }
+        .la-extra-bar-row select { width: auto; min-width: 90px; }
+        .la-extra-bar-row input[type="number"] { width: 60px; }
+        .la-extra-bar-grow { flex: 1; min-width: 100px; }
+        .la-extra-bar-row input[type="color"] { width: 28px; height: 24px; padding: 0; cursor: pointer; flex-shrink: 0; border-radius: 3px; }
+        .la-extra-bar-icon-preview { width: 22px; height: 22px; flex-shrink: 0; object-fit: contain; background: rgba(0,0,0,0.25); border: 1px solid #888; border-radius: 3px; padding: 1px; }
+        .la-extra-bar-icon-pick { padding: 2px 6px; cursor: pointer; flex-shrink: 0; background: none; border: 1px solid #888; border-radius: 3px; color: inherit; height: 24px; }
+        .la-extra-bar-icon-pick:hover { background: rgba(255,255,255,0.05); }
+    `;
+    document.head.appendChild(s);
+}
+
+function _bindExtraBarsUI(root, tokenDoc, app) {
+    _ensureExtraBarsStyles();
+    const listEl = root.querySelector?.('[data-extras]');
+    const addBtn = root.querySelector?.('.la-extra-bars-add');
+    const formEl = root.querySelector?.('form') ?? root.closest?.('form') ?? root;
+    if (!listEl || !addBtn || !formEl)
+        return;
+
+    // Working copy. Persisted on form submit.
+    let arr = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+
+    // Per-id collapsed state. Existing rows start collapsed so the list is scannable.
+    const collapsedIds = new Set(arr.map(/** @type {any} */ e => e?.id).filter(Boolean));
+
+    const computeOverflow = () => {
+        const lines = _groupExtrasIntoLines(arr);
+        // Mark every entry whose requested width pushed it onto a new line.
+        const overflowing = new Set();
+        let cur = null;
+        for (const e of arr) {
+            const w = Math.max(1, Math.min(100, Number(e?.widthPct) || 100));
+            const breaks = !cur || e?.layoutMode === 'newLine' || (cur.used + w) > 100;
+            if (breaks) {
+                if (cur && e?.layoutMode === 'sameLine' && (cur.used + w) > 100) {
+                    overflowing.add(e.id);
+                }
+                cur = { used: 0 };
+            }
+            cur.used += w;
+        }
+        void lines;
+        return overflowing;
+    };
+
+    const rerender = () => {
+        const overflowing = computeOverflow();
+        listEl.innerHTML = arr.map((e, i) => _renderExtraBarRowHtml(e, i, overflowing.has(e.id), collapsedIds.has(e.id))).join('');
+        bindRow();
+        if (typeof app.setPosition === 'function')
+            app.setPosition({ height: 'auto' });
+    };
+
+    const setField = (entry, field, value) => {
+        if (field.includes('.')) {
+            foundry.utils.setProperty(entry, field, value);
+        } else {
+            entry[field] = value;
+        }
+    };
+
+    const bindRow = () => {
+        listEl.querySelectorAll('.la-extra-bar-row').forEach(/** @type {any} */(rowEl) => {
+            const idx = Number(rowEl.dataset.idx);
+            const entry = arr[idx];
+            if (!entry)
+                return;
+
+            rowEl.querySelectorAll('[data-field]').forEach(/** @type {any} */(input) => {
+                input.addEventListener('change', () => {
+                    const field = input.dataset.field;
+                    let value;
+                    if (input.type === 'checkbox') {
+                        value = input.checked;
+                    } else if (input.type === 'number') {
+                        value = Number(input.value) || 0;
+                    } else {
+                        value = input.value;
+                    }
+                    setField(entry, field, value);
+                    // Re-render on changes that affect visibility of dependent fields.
+                    if (field === 'valueSource.kind' || field === 'maxSource.kind'
+                        || field === 'segmented'
+                        || field === 'layoutMode' || field === 'widthPct') {
+                        rerender();
+                    }
+                });
+                input.addEventListener('input', () => {
+                    // Live-update on color pickers so the saved value reflects the last pick.
+                    if (input.type === 'color') {
+                        setField(entry, input.dataset.field, input.value);
+                    }
+                });
+            });
+
+            rowEl.querySelector('.la-extra-bar-del')?.addEventListener('click', () => {
+                collapsedIds.delete(entry.id);
+                arr.splice(idx, 1);
+                rerender();
+            });
+
+            // Icon path → live-update the preview img on input.
+            const iconInput = /** @type {any} */ (rowEl.querySelector('input[data-field="icon"]'));
+            const iconPreview = /** @type {any} */ (rowEl.querySelector('.la-extra-bar-icon-preview'));
+            iconInput?.addEventListener('input', () => {
+                if (iconPreview) {
+                    iconPreview.src = iconInput.value || DEFAULT_EXTRA_BAR_ICON;
+                    iconPreview.style.opacity = '';
+                }
+            });
+
+            // Icon picker button → open Foundry's FilePicker rooted in modules/lancer-automations/icons.
+            rowEl.querySelector('.la-extra-bar-icon-pick')?.addEventListener('click', () => {
+                const current = (entry.icon || DEFAULT_EXTRA_BAR_ICON);
+                const fp = new FilePicker({
+                    type: 'imagevideo',
+                    current,
+                    callback: (path) => {
+                        entry.icon = path;
+                        if (iconInput) iconInput.value = path;
+                        if (iconPreview) {
+                            iconPreview.src = path;
+                            iconPreview.style.opacity = '';
+                        }
+                    },
+                });
+                fp.browse();
+            });
+
+            // Item picker → choose an Item from the actor (or any actor) to link.
+            rowEl.querySelector('.la-extra-bar-item-pick')?.addEventListener('click', async () => {
+                const actor = tokenDoc?.actor ?? tokenDoc?.parent?.actor;
+                const pilot = actor?.system?.pilot?.value;
+                const sources = [];
+                if (actor) sources.push({ label: actor.name ?? 'Actor', items: [...(actor.items?.values?.() ?? [])] });
+                if (pilot && pilot !== actor) sources.push({ label: `${pilot.name ?? 'Pilot'} (Pilot)`, items: [...(pilot.items?.values?.() ?? [])] });
+                const optionGroups = sources.filter(s => s.items.length).map(s =>
+                    `<optgroup label="${_escAttr(s.label)}">${s.items.map(i =>
+                        `<option value="${_escAttr(i.uuid)}" ${entry.linkedItemUuid === i.uuid ? 'selected' : ''}>${_escAttr(i.name)} [${_escAttr(i.type)}]</option>`
+                    ).join('')}</optgroup>`
+                ).join('');
+                const content = `<form><div class="form-group"><label>Linked Item</label><select name="uuid" style="width:100%;">${optionGroups || '<option value="">(no items found)</option>'}</select></div></form>`;
+                const picked = await Dialog.prompt({
+                    title: 'Link Item to Extra Bar',
+                    content,
+                    label: 'Link',
+                    callback: (/** @type {any} */ html) => {
+                        const sel = (html?.find?.('select[name="uuid"]')?.[0]) ?? html?.querySelector?.('select[name="uuid"]');
+                        return sel?.value ?? '';
+                    },
+                    rejectClose: false,
+                });
+                if (typeof picked === 'string') {
+                    entry.linkedItemUuid = picked;
+                    rerender();
+                }
+            });
+            rowEl.querySelector('.la-extra-bar-item-clear')?.addEventListener('click', () => {
+                entry.linkedItemUuid = '';
+                rerender();
+            });
+
+            rowEl.querySelector('.la-extra-bar-toggle')?.addEventListener('click', () => {
+                if (collapsedIds.has(entry.id))
+                    collapsedIds.delete(entry.id);
+                else
+                    collapsedIds.add(entry.id);
+                rerender();
+            });
+
+            // HTML5 drag/drop reorder — dragstart fires from the handle only.
+            const dragHandle = rowEl.querySelector('.la-extra-bar-drag');
+            if (dragHandle) {
+                dragHandle.addEventListener('dragstart', (/** @type {any} */ ev) => {
+                    rowEl.classList.add('dragging');
+                    ev.dataTransfer.effectAllowed = 'move';
+                    ev.dataTransfer.setData('text/plain', String(idx));
+                });
+                dragHandle.addEventListener('dragend', () => rowEl.classList.remove('dragging'));
+            }
+            rowEl.addEventListener('dragover', (/** @type {any} */ ev) => {
+                ev.preventDefault();
+                rowEl.classList.add('drag-over');
+            });
+            rowEl.addEventListener('dragleave', () => rowEl.classList.remove('drag-over'));
+            rowEl.addEventListener('drop', (/** @type {any} */ ev) => {
+                ev.preventDefault();
+                rowEl.classList.remove('drag-over');
+                const from = Number(ev.dataTransfer.getData('text/plain'));
+                const to = idx;
+                if (Number.isFinite(from) && from !== to) {
+                    const moved = arr.splice(from, 1)[0];
+                    arr.splice(to, 0, moved);
+                    rerender();
+                }
+            });
+        });
+    };
+
+    addBtn.addEventListener('click', () => {
+        const entry = _defaultExtraBar();
+        arr.push(entry);
+        collapsedIds.add(entry.id);
+        rerender();
+    });
+
+    // Reset auto-injected bars: re-syncs from talent / frame core counters when
+    // the world setting is on, or wipes auto entries + tombstones when it's off.
+    const resetBtn = root.querySelector?.('.la-extra-bars-reset');
+    resetBtn?.addEventListener('click', async () => {
+        const settingOn = !!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS);
+        // Persist the in-memory edits first so user changes aren't blown away by setFlag races.
+        try {
+            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+        } catch (err) {
+            console.warn(`${MODULE_ID} | reset auto: failed to persist current state`, err);
+        }
+        const ok = await _resetAutoInjectedExtras(tokenDoc);
+        if (!ok) {
+            ui.notifications.warn('Reset failed — check the console.');
+            return;
+        }
+        // Pull the fresh array back into the editor and re-render.
+        arr = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+        for (const e of arr) {
+            if (e?.id && e.autoKey)
+                collapsedIds.add(e.id);
+        }
+        rerender();
+        ui.notifications.info(settingOn
+            ? 'Talent counter bars re-synced.'
+            : 'Auto-injected bars removed.');
+    });
+
+    // Persist on form submit. Foundry's submit fires before close.
+    formEl.addEventListener('submit', () => {
+        // Defer so this runs after Foundry's own form-data extraction.
+        Promise.resolve().then(() => {
+            try {
+                tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+            } catch (err) {
+                console.warn(`${MODULE_ID} | failed to persist extra bars`, err);
+            }
+        });
+    }, true);
+
+    rerender();
+}
+
+function snapshotValues(actor, tokenDoc = null) {
+    const extras = tokenDoc?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extrasSnap = {};
+    for (const e of extras) {
+        if (!e?.id)
+            continue;
+        extrasSnap[e.id] = _resolveExtraBarValues(actor, e).value;
+    }
     return {
         hp: actor.system?.hp?.value ?? 0,
         heat: actor.system?.heat?.value ?? 0,
@@ -342,6 +1084,7 @@ function snapshotValues(actor) {
         burn: actor.system?.burn ?? 0,
         infection: actor.system?.infection ?? 0,
         reaction: actor.system?.action_tracker?.reaction === true,
+        extras: extrasSnap,
     };
 }
 
@@ -644,6 +1387,80 @@ function spawnFlash(token, barId, oldVal, newVal) {
     }
 }
 
+function spawnFlashExtra(token, entryId, oldVal, newVal) {
+    const geom = token._laBarsGeom;
+    if (!geom || !Array.isArray(geom.extras) || oldVal === newVal)
+        return;
+    let target = null;
+    let lineY = 0;
+    for (const line of geom.extras) {
+        const found = line.entries.find(/** @type {any} */ e => e.entryId === entryId);
+        if (found) {
+            target = found;
+            lineY = line.y;
+            break;
+        }
+    }
+    if (!target)
+        return;
+    const { rowHeight } = geom;
+    const isDamage = newVal < oldVal;
+
+    if (target.segmented) {
+        const max = Math.max(1, target.segments);
+        const colX = target.x;
+        const colW = target.w;
+        const y = lineY + 1;
+        const h = rowHeight - 2;
+        const gap = 1;
+        const inner = colW - 2;
+        const segW = (inner - gap * (max - 1)) / max;
+        // LTR fill: changed pips sit between min(old,new) and max(old,new) from the left.
+        const lo = Math.max(0, Math.min(max, Math.min(oldVal, newVal)));
+        const hi = Math.max(0, Math.min(max, Math.max(oldVal, newVal)));
+        if (hi <= lo)
+            return;
+        const flashStartX = colX + 1 + lo * (segW + gap);
+        const flashEndX = colX + 1 + hi * (segW + gap) - gap;
+        const initialFlashW = flashEndX - flashStartX;
+        if (initialFlashW <= 0)
+            return;
+        runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) => {
+            const remainingW = initialFlashW * (1 - eased);
+            // Damage: pips drain from the right → flash shrinks from the left.
+            const drawX = isDamage
+                ? flashStartX
+                : flashStartX + (initialFlashW - remainingW);
+            gfx.beginFill(0xffffff, 1);
+            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.endFill();
+        });
+        return;
+    }
+
+    // Solid / gradient bar — rectangular flash on the changed slice.
+    const hostMax = Math.max(1, oldVal, newVal);
+    const barX = target.x + 1;
+    const barW = target.w - 2;
+    const y = lineY + 1;
+    const h = rowHeight - 2;
+    const lo = Math.min(oldVal, newVal);
+    const hi = Math.max(oldVal, newVal);
+    const initialFlashX = barX + (lo / hostMax) * barW;
+    const initialFlashW = ((hi - lo) / hostMax) * barW;
+    if (initialFlashW <= 0)
+        return;
+    runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) => {
+        const remainingW = initialFlashW * (1 - eased);
+        const drawX = isDamage
+            ? initialFlashX
+            : initialFlashX + (initialFlashW - remainingW);
+        gfx.beginFill(0xffffff, 1);
+        gfx.drawRect(drawX, y, remainingW, h);
+        gfx.endFill();
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -722,13 +1539,14 @@ function drawSegment(gfx, x, y, w, h, def, v, cs = 1) {
     gfx.endFill();
 
     if (def.pips) {
-        // Drains left to right: empty slots on the left, filled on the right.
+        // Default: drains left-first (Structure/Stress convention). When def.pipsLTR
+        // is set, fills left-first (progress-bar convention) — used by extras.
         const gap = cs;
         const inner = w - 2 * cs;
         const segW = (inner - gap * (max - 1)) / max;
-        const emptyCount = max - value;
+        const filledCount = Math.max(0, Math.min(max, value));
         for (let s = 0; s < max; s++) {
-            const filled = s >= emptyCount;
+            const filled = def.pipsLTR ? (s < filledCount) : (s >= max - filledCount);
             gfx.beginFill(filled ? def.color : 0x333333, filled ? 1 : 0.6);
             gfx.drawRect(x + cs + s * (segW + gap), y + cs, segW, h - 2 * cs);
             gfx.endFill();
@@ -786,7 +1604,9 @@ function _ensureSyncTicker(token) {
         const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
         if (minZoom > 0 && !iso) {
             const zoom = canvas.stage?.scale?.x || 1;
-            const kx = Math.max(1, (REF_GRID_SIZE * minZoom) / (entry.tokenW * zoom));
+            // Use effective bar width so sub-1x1 tokens don't get double-scaled.
+            const effW = Math.max(entry.tokenW, entry.width);
+            const kx = Math.max(1, (REF_GRID_SIZE * minZoom) / (effW * zoom));
             const ky = Math.max(1, (REF_ROW_HEIGHT * minZoom) / (entry.rowHeight * zoom));
             entry.wrapper.scale.set(kx, ky);
             entry.hub.position.set(
@@ -908,7 +1728,9 @@ function drawStatHub() {
         return;
     }
 
-    const width = Math.min(token.w, MAX_BAR_WIDTH);
+    // Floor the bar at one grid cell so small tokens stay readable.
+    const minBarW = canvas.dimensions?.size ?? token.w;
+    const width = Math.min(MAX_BAR_WIDTH, Math.max(token.w, minBarW));
     const rowHeightOverride = statBarRowHeight(token.document);
     const rowHeight = rowHeightOverride > 0
         ? rowHeightOverride
@@ -1163,6 +1985,65 @@ function drawStatHub() {
         }
     }
 
+    // Extra bars (user-defined via Resources tab). Drawn live (post-bake) so a
+    // value redraw doesn't have to invalidate the baked chrome.
+    const extras = /** @type {any} */ (token).document?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const visibleExtras = extras.filter(/** @type {any} */ e => _resolveExtraBarValues(actor, e).ownerOk);
+    const extraLines = _groupExtrasIntoLines(visibleExtras);
+    const extrasGeom = [];
+    const extrasSeparator = extraLines.length > 0 && rows.length > 0
+        ? Math.max(1, Math.round(chromeScale))
+        : 0;
+    if (extraLines.length > 0) {
+        const extraGfx = new PIXI.Graphics();
+        extraGfx.name = 'la-extras';
+        container.addChild(extraGfx);
+        const extrasStartY = rows.length * (rowHeight + rowGap) + extrasSeparator;
+        const lineGap = Math.floor(chromeScale);
+        const interGap = chromeScale;
+        for (let li = 0; li < extraLines.length; li++) {
+            const line = extraLines[li];
+            const lineY = extrasStartY + li * (rowHeight + lineGap);
+            let runningX = 0;
+            const entryGeoms = [];
+            for (let ei = 0; ei < line.entries.length; ei++) {
+                const { entry, width } = line.entries[ei];
+                const slot = Math.floor(usableW * (width / 100));
+                const w = Math.max(2, slot - (ei < line.entries.length - 1 ? interGap : 0));
+                const { value, max } = _resolveExtraBarValues(actor, entry);
+                const stops = entry?.color?.stops?.length ? entry.color.stops : ['#888888'];
+                const segCount = Math.max(1, Math.round(max));
+                if (entry?.segmented) {
+                    drawSegment(
+                        extraGfx, runningX, lineY, w, rowHeight,
+                        { color: _parseHex(stops[0]), pips: true, pipsLTR: true },
+                        { value, max: segCount },
+                        chromeScale
+                    );
+                } else {
+                    drawSegment(
+                        extraGfx, runningX, lineY, w, rowHeight,
+                        { color: _parseHex(stops[0]), softMax: 1 },
+                        { value, max },
+                        chromeScale
+                    );
+                }
+                entryGeoms.push({
+                    entryId: entry.id,
+                    x: runningX,
+                    w,
+                    segmented: !!entry.segmented,
+                    segments: segCount,
+                    primaryColor: _parseHex(stops[0]),
+                });
+                runningX += slot;
+            }
+            extrasGeom.push({ y: lineY, entries: entryGeoms });
+        }
+        // Bake to match the chrome (raw Graphics look noticeably sharper).
+        bakeAndSwap(container, extraGfx, token.id);
+    }
+
     // Geometry for spawnFlash(). startY=0 because the container is already offset.
     token._laBarsGeom = {
         layoutOffsetX,
@@ -1175,14 +2056,18 @@ function drawStatHub() {
         reactionExtension,
         rightColX,
         rightColW,
+        extras: extrasGeom,
     };
 
     // Seed snapshot; updateActor writes subsequent ones.
     if (!_lastValues.has(token.id)) {
-        _lastValues.set(token.id, snapshotValues(actor));
+        _lastValues.set(token.id, snapshotValues(actor, /** @type {any} */ (token).document));
     }
 
-    const totalHeight = rows.length * (rowHeight + rowGap) - rowGap;
+    const extraLinesHeight = extraLines.length > 0
+        ? extraLines.length * rowHeight + (extraLines.length - 1) * Math.floor(chromeScale) + Math.floor(chromeScale)
+        : 0;
+    const totalHeight = rows.length * (rowHeight + rowGap) - rowGap + extrasSeparator + extraLinesHeight;
     token.bars.visible = true;
     token.bars.height = totalHeight;
     // Zero alpha only on first draw so redraws don't flicker.
@@ -1474,7 +2359,7 @@ function injectLancerHud(hud, html, actor) {
         cell('system.overshield.value', sys?.overshield?.value ?? 0, COLORS.overshield, 'Overshield') +
         (infectionOn && !isPilot ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
         cell('system.burn',              sys?.burn ?? 0,              COLORS.burn,       'Burn');
-    const topAttribute = `<div class="attribute la-hud-top" style="${containerStyle} position: absolute; top: 44px; transform: translateY(-100%); left: 50%; margin-left: -50px;">${topInner}</div>`;
+    const topAttribute = `<div class="attribute la-hud-top" style="${containerStyle} position: absolute; top: 44px; left: 50%; transform: translate(-50%, -100%);">${topInner}</div>`;
 
     // Bottom: Structure, HP, Stress, Heat (pilots/deployables skip struct/stress; pilots also skip heat).
     const mechStats = hasMechStats(actor);
@@ -1484,7 +2369,7 @@ function injectLancerHud(hud, html, actor) {
         (mechStats ? cell('system.stress.value',    sys?.stress?.value ?? 0,    COLORS.stress,    `Stress (max ${sys?.stress?.max ?? 0})`) : '') +
         (pilotStressOn ? cell('system.bond_state.stress.value', sys?.bond_state?.stress?.value ?? 0, 0xd9b800, `Stress (max ${sys?.bond_state?.stress?.max ?? 8})`) : '') +
         (isPilot ? '' : cell('system.heat.value',      sys?.heat?.value ?? 0,      COLORS.heat,      `Heat (max ${sys?.heat?.max ?? 0})`));
-    const bottomAttribute = `<div class="attribute la-hud-bottom" style="${containerStyle} position: absolute; top: calc(100% - 44px); left: 50%; margin-left: -50px;">${bottomInner}</div>`;
+    const bottomAttribute = `<div class="attribute la-hud-bottom" style="${containerStyle} position: absolute; top: calc(100% - 44px); left: 50%; transform: translateX(-50%);">${bottomInner}</div>`;
 
     const middleCol = $html.find('.col.middle');
     // Drop vanilla bar1/bar2 fields, we replace them.
@@ -1541,6 +2426,60 @@ function injectLancerHud(hud, html, actor) {
             }
         })
         .on('focusout', focusOutHandler);
+
+    // Extras column, mirrored from the reaction box on the left.
+    const tokenDoc = hud.object?.document;
+    const extras = tokenDoc?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const visibleExtras = extras.filter(/** @type {any} */ e => _resolveExtraBarValues(actor, e).ownerOk);
+    if (visibleExtras.length) {
+        const extraInputs = visibleExtras.map(/** @type {any} */ e => {
+            const { value, max } = _resolveExtraBarValues(actor, e);
+            const primary = e.color?.stops?.[0] ?? '#888888';
+            const ro = e.valueSource?.kind !== 'manual';
+            const title = (e.label || 'Extra') + ` (${value}/${max})` + (ro ? ' — read-only (path-bound)' : '');
+            return `<input type="text" class="la-hud-extra-input" data-entry-id="${_escAttr(e.id)}" value="${value}" title="${_escAttr(title)}" ${ro ? 'readonly' : ''} style="width:40px;height:30px;font-size:20px;margin:2px;padding-inline:1px;text-align:center;border:1px solid ${_escAttr(primary)};${ro ? 'opacity:0.55;' : ''}">`;
+        }).join('');
+        const extraBlock = `<div class="attribute la-hud-extras" style="position:absolute;left:100%;top:50%;transform:translateY(-50%);width:50px;display:flex;flex-direction:column;justify-content:center;align-items:center;">${extraInputs}</div>`;
+        const rightCol = $html.find('.col.right');
+        if (rightCol.length) {
+            rightCol.prepend(extraBlock);
+        } else {
+            middleCol.append(extraBlock);
+        }
+
+        const extrasFocusOut = async (ev) => {
+            ev.preventDefault();
+            const input = ev.currentTarget;
+            const entryId = input.dataset.entryId;
+            const raw = (input.value ?? '').trim();
+            const num = Number(raw);
+            if (!Number.isFinite(num))
+                return;
+            const arr = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+            const entry = arr.find(/** @type {any} */ x => x.id === entryId);
+            if (!entry || entry.valueSource?.kind !== 'manual')
+                return;
+            let next = num;
+            if (raw.startsWith('+') || raw.startsWith('-')) {
+                next = (Number(entry.valueSource.value) || 0) + num;
+            }
+            entry.valueSource.value = next;
+            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+            hud.clear();
+        };
+
+        $html.find('input.la-hud-extra-input')
+            .on('click', (ev) => {
+                const el = /** @type {HTMLInputElement} */ (ev.currentTarget);
+                if (!el.readOnly)
+                    el.select();
+            })
+            .on('keydown', (ev) => {
+                if (ev.code === 'Enter' || ev.code === 'NumpadEnter')
+                    ev.currentTarget.blur();
+            })
+            .on('focusout', extrasFocusOut);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1615,6 +2554,39 @@ export function registerTokenStatBarSettings() {
         type: Number,
         default: 0,
         range: { min: 0, max: 4, step: 0.1 },
+    });
+    game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENTS, {
+        name: 'Auto-add Talent Counter Bars',
+        hint: 'Inject an extra stat bar for every talent counter and frame core counter on Lancer tokens. User-deleted bars are not re-added.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () => {
+            if (!game.users?.activeGM?.isSelf || !canvas?.ready)
+                return;
+            for (const t of canvas.tokens?.placeables ?? []) {
+                if (isLancerCombatant(t.actor))
+                    _autoInjectCounters(t.document);
+            }
+        },
+    });
+    game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR, {
+        name: 'Talent Counter Bar Color',
+        hint: 'Color used for auto-injected talent counter bars. Existing bars keep their original color when this changes.',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#196161',
+    });
+    game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH, {
+        name: 'Talent Counter Width (%)',
+        hint: 'Width % used for auto-injected talent counter bars. Existing bars keep their original width when this changes.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 32,
+        range: { min: 1, max: 100, step: 1 },
     });
 
 }
@@ -1693,6 +2665,33 @@ class TokenStatBarConfig extends FormApplication {
             }
         }
     }
+}
+
+// Reset auto-injected bars on every scene token and every actor prototype.
+export async function reinjectAutoBarsOnAllTokens() {
+    if (!game.user?.isGM) {
+        ui.notifications?.warn('Only the GM can reinject auto bars.');
+        return;
+    }
+    let sceneTokens = 0, prototypes = 0, failed = 0;
+    for (const scene of game.scenes ?? []) {
+        for (const td of scene.tokens ?? []) {
+            if (!isLancerCombatant(td.actor))
+                continue;
+            const ok = await _resetAutoInjectedExtras(td);
+            if (ok) sceneTokens++; else failed++;
+        }
+    }
+    for (const actor of game.actors ?? []) {
+        if (!isLancerCombatant(actor))
+            continue;
+        const proto = /** @type {any} */ (actor.prototypeToken ?? actor.token);
+        if (!proto)
+            continue;
+        const ok = await _resetAutoInjectedExtras(proto);
+        if (ok) prototypes++; else failed++;
+    }
+    ui.notifications?.info(`Reinjected auto bars on ${sceneTokens} scene token(s) and ${prototypes} prototype(s)${failed ? ` (${failed} failed)` : ''}.`);
 }
 
 export async function applyDefaultsToCurrentScene() {
@@ -1784,18 +2783,14 @@ export function initTokenStatBar() {
         if (!isEnabled() || !isLancerCombatant(actor)) {
             return;
         }
-        const watched = ['hp', 'structure', 'heat', 'stress', 'bond_state', 'overshield', 'burn', 'infection', 'action_tracker'];
         const sysChange = change?.system;
         if (!sysChange) {
             return;
         }
-        if (!watched.some(k => k in sysChange)) {
-            return;
-        }
-
+        // Don't gate on watched keys: extras may bind anywhere. The per-bar diff filters no-ops.
         for (const tok of actor.getActiveTokens()) {
-            const prev = _lastValues.get(tok.id) ?? {};
-            const next = snapshotValues(actor);
+            const prev = _lastValues.get(tok.id) ?? { extras: {} };
+            const next = snapshotValues(actor, tok.document);
 
             // Redraw hub with new values.
             try {
@@ -1809,6 +2804,16 @@ export function initTokenStatBar() {
             for (const id of FLASH_BARS) {
                 if (prev[id] !== undefined && prev[id] !== next[id]) {
                     spawnFlash(tok, id, prev[id], next[id]);
+                    flashed = true;
+                }
+            }
+            // Path-bound extras: their value updates when the actor changes.
+            const prevExtras = prev.extras ?? {};
+            const nextExtras = next.extras ?? {};
+            for (const id of Object.keys(nextExtras)) {
+                const ov = prevExtras[id];
+                if (ov !== undefined && ov !== nextExtras[id]) {
+                    spawnFlashExtra(tok, id, ov, nextExtras[id]);
                     flashed = true;
                 }
             }
@@ -2156,6 +3161,92 @@ export function initTokenStatBar() {
     }
     Hooks.on('canvasReady', sweepDisplayBars);
 
+    // ── Auto-inject talent / frame core counters as extras (GM-only) ──────────
+    const _sweepAutoInjectCounters = () => {
+        if (!isEnabled() || !canvas?.scene)
+            return;
+        if (!game.users?.activeGM?.isSelf)
+            return;
+        if (!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS))
+            return;
+        for (const t of canvas.tokens?.placeables ?? []) {
+            if (isLancerCombatant(t.actor))
+                _autoInjectCounters(t.document);
+        }
+    };
+    if (canvas?.ready) {
+        _sweepAutoInjectCounters();
+    }
+    Hooks.on('canvasReady', _sweepAutoInjectCounters);
+
+    Hooks.on('createToken', (tokenDoc) => {
+        if (!isEnabled())
+            return;
+        if (!isLancerCombatant(tokenDoc?.actor))
+            return;
+        _autoInjectCounters(tokenDoc);
+    });
+
+    Hooks.on('updateActor', (actor, changes) => {
+        if (!isEnabled() || !isLancerCombatant(actor))
+            return;
+        const touched = !!(changes?.system?.loadout
+            || changes?.items
+            || foundry.utils.hasProperty(changes ?? {}, 'system.pilot'));
+        if (!touched)
+            return;
+        for (const tok of actor.getActiveTokens())
+            _autoInjectCounters(tok.document);
+    });
+
+    // updateItem doesn't bubble to updateActor; relay it here.
+    Hooks.on('updateItem', (item) => {
+        if (!isEnabled())
+            return;
+        if (item?.type !== 'talent' && item?.type !== 'frame')
+            return;
+        const parentActor = item.parent;
+        if (!parentActor)
+            return;
+        const actors = [];
+        if (isLancerCombatant(parentActor))
+            actors.push(parentActor);
+        // Mechs that have this pilot also see the change.
+        for (const a of game.actors ?? []) {
+            if (a.type === 'mech' && a.system?.pilot?.value?.id === parentActor.id)
+                actors.push(a);
+        }
+        for (const a of actors) {
+            for (const tok of a.getActiveTokens()) {
+                const prev = _lastValues.get(tok.id) ?? { extras: {} };
+                _autoInjectCounters(tok.document);
+                try { tok.drawBars(); } catch (e) { console.warn(`${MODULE_ID} | updateItem drawBars`, e); }
+                const next = snapshotValues(a, tok.document);
+                let flashed = false;
+                const prevExtras = prev.extras ?? {};
+                const nextExtras = next.extras ?? {};
+                for (const id of Object.keys(nextExtras)) {
+                    const ov = prevExtras[id];
+                    if (ov !== undefined && ov !== nextExtras[id]) {
+                        spawnFlashExtra(tok, id, ov, nextExtras[id]);
+                        flashed = true;
+                    }
+                }
+                _lastValues.set(tok.id, next);
+                if (flashed) {
+                    _flashingTokens.add(tok.id);
+                    const ft = _getFadeTarget(tok);
+                    if (ft) ft.alpha = 1;
+                    setTimeout(() => {
+                        _flashingTokens.delete(tok.id);
+                        if (tok?.destroyed) return;
+                        if (!shouldShowBars(tok)) fadeBars(tok, 0);
+                    }, FLASH_TOTAL_MS + FLASH_LINGER_MS);
+                }
+            }
+        }
+    });
+
     // Token Config Resources tab override.
     Hooks.on('renderTokenConfig', (app, html) => {
         if (!isEnabled()) {
@@ -2175,8 +3266,6 @@ export function initTokenStatBar() {
         const rowHeight = statBarRowHeight(tokenDoc);
         const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
         const visIn = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_IN_COMBAT) ?? '';
-        const disableAutoTerrain = !!tokenDoc.getFlag(MODULE_ID, 'disableAutoTerrainElevation');
-        const ignoreRulerAutoElev = !!tokenDoc.getFlag(MODULE_ID, 'ignoreRulerAutoElevation');
         const isPilotActor = tokenDoc?.actor?.type === 'pilot';
         const pilotStress = showsPilotStress(tokenDoc);
         const visOption = (val, label, current) =>
@@ -2195,7 +3284,8 @@ export function initTokenStatBar() {
         tab.innerHTML = `
             <input type="hidden" name="bar1.attribute" value="${bar1Attr}"/>
             <input type="hidden" name="bar2.attribute" value="${bar2Attr}"/>
-            <p class="notes">Lancer Automations is managing this token's bars.</p>
+            <div class="la-stat-bar-config">
+            <p class="notes la-managed-by">Lancer Automations is managing this token's bars.</p>
             <div class="form-group">
                 <label>Hide Stat Bar</label>
                 <input type="checkbox" name="flags.${MODULE_ID}.${FLAG_HIDDEN}" ${hidden ? 'checked' : ''}/>
@@ -2228,17 +3318,20 @@ export function initTokenStatBar() {
                 <p class="notes">Show the bond stress bar (and input) on this pilot's token.</p>
             </div>
             ` : ''}
-            <div class="form-group">
-                <label>Disable Auto-elevation from Terrain</label>
-                <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
-                <p class="notes">Per-token override: skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
+            <div class="form-group la-extra-bars-group">
+                <label>Extra Bars</label>
+                <div class="la-extra-bars-list" data-extras></div>
+                <div class="la-extra-bars-actions">
+                    <button type="button" class="la-extra-bars-add"><i class="fas fa-plus"></i> Add Bar</button>
+                    <button type="button" class="la-extra-bars-reset" title="Re-apply auto-injected counter bars (or remove them when the world setting is off)">
+                        <i class="fas fa-rotate"></i> Reset Auto-Injected
+                    </button>
+                </div>
+                <p class="notes">User-defined bars drawn below the standard ones. Layout: 100% width per line; "same line" lays out side-by-side until the line is full.</p>
             </div>
-            <div class="form-group">
-                <label>Ignore Ruler Auto-Elevation</label>
-                <input type="checkbox" name="flags.${MODULE_ID}.ignoreRulerAutoElevation" ${ignoreRulerAutoElev ? 'checked' : ''}/>
-                <p class="notes">Per-token override: skip auto-elevation only during ruler moves. Non-ruler auto-elevation paths still run.</p>
             </div>
         `;
+        _bindExtraBarsUI(root, tokenDoc, app);
         if (typeof app.setPosition === 'function') {
             app.setPosition({ height: 'auto' });
         }
@@ -2259,10 +3352,43 @@ export function initTokenStatBar() {
         if (!tok) {
             return;
         }
+        // Manual-value edits to extras: diff vs the seeded snapshot, then redraw.
+        const extrasTouched = foundry.utils.hasProperty(change, `flags.${MODULE_ID}.${FLAG_EXTRAS}`);
+        const prev = _lastValues.get(tok.id) ?? { extras: {} };
         try {
             tok.drawBars();
         } catch (e) {
             console.warn(`${MODULE_ID} | drawBars on flag update failed`, e);
+        }
+        if (extrasTouched) {
+            const next = snapshotValues(tokenDoc.actor, tokenDoc);
+            let flashed = false;
+            const prevExtras = prev.extras ?? {};
+            const nextExtras = next.extras ?? {};
+            for (const id of Object.keys(nextExtras)) {
+                const ov = prevExtras[id];
+                if (ov !== undefined && ov !== nextExtras[id]) {
+                    spawnFlashExtra(tok, id, ov, nextExtras[id]);
+                    flashed = true;
+                }
+            }
+            _lastValues.set(tok.id, next);
+            if (flashed) {
+                _flashingTokens.add(tok.id);
+                const ft = _getFadeTarget(tok);
+                if (ft) {
+                    ft.alpha = 1;
+                }
+                setTimeout(() => {
+                    _flashingTokens.delete(tok.id);
+                    if (tok?.destroyed) {
+                        return;
+                    }
+                    if (!shouldShowBars(tok)) {
+                        fadeBars(tok, 0);
+                    }
+                }, FLASH_TOTAL_MS + FLASH_LINGER_MS);
+            }
         }
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
     });

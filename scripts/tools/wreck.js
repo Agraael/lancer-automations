@@ -757,8 +757,9 @@ function _renderWreckTab(app, html, data) {
 
     const wreckHtml = showWreck ? _buildWreckSectionHtml(flags) : '';
     const awarenessHtml = _buildAwarenessSectionHtml(flags);
+    const elevationHtml = _buildElevationSectionHtml(flags);
 
-    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la">${wreckHtml}${awarenessHtml}</div>`;
+    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la"><div class="la-compact-config">${wreckHtml}${awarenessHtml}${elevationHtml}</div></div>`;
     const resourcesTab = el.querySelector('div.tab[data-tab="resources"]');
     if (resourcesTab)
         resourcesTab.insertAdjacentHTML('afterend', tabHtml);
@@ -780,6 +781,7 @@ function _buildWreckSectionHtml(flags) {
     const terrainOverride = flags.terrainOverride ?? 'default';
     const tOpt = (val, label) => `<option value="${val}" ${terrainOverride === val ? 'selected' : ''}>${label}</option>`;
     return `
+        <div class="la-config-section">
         <div class="form-group">
             <label>Wreck Mode</label>
             <div class="form-fields">
@@ -848,6 +850,7 @@ function _buildWreckSectionHtml(flags) {
             </div>
             <p class="notes">Play visual effect when this token is wrecked.</p>
         </div>
+        </div>
     `;
 }
 
@@ -855,6 +858,7 @@ function _buildAwarenessSectionHtml(flags) {
     const mode = flags.awarenessMode ?? 'default';
     const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
     return `
+        <div class="la-config-section">
         <div class="form-group">
             <label>Detection Visual</label>
             <div class="form-fields">
@@ -866,6 +870,20 @@ function _buildAwarenessSectionHtml(flags) {
                 </select>
             </div>
             <p class="notes">Controls Battle Awareness display. Non-default modes also disable Sensor detection on this token.</p>
+        </div>
+        </div>
+    `;
+}
+
+function _buildElevationSectionHtml(flags) {
+    const disableAutoTerrain = !!flags.disableAutoTerrainElevation;
+    return `
+        <div class="la-config-section">
+        <div class="form-group">
+            <label>Disable Auto-elevation from Terrain</label>
+            <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
+            <p class="notes">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
+        </div>
         </div>
     `;
 }

@@ -7,7 +7,7 @@ import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeploya
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
-import { isActionDisabledByStatus, isStaleStatusSource } from '../combat/action-limits.js';
+import { isActionDisabledByStatus, isStaleStatusSource, getActionLockInfo } from '../combat/action-limits.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
 import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview } from './hover.js';
 import { resurrect } from '../tools/wreck.js';
@@ -21,6 +21,7 @@ import { LogPanel } from './log-panel.js';
 import { GlossaryPanel } from './glossary-panel.js';
 import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
+import { _resolveExtraBarValues, updateExtraBarValue } from './tokenStatBar.js';
 
 async function _toggleTokenInCombat(token) {
     const tokenDoc = /** @type {any} */ (token?.document);
@@ -552,7 +553,10 @@ export class LancerHUD {
                 closeCol(c4, 80);
                 this._c2Category = cat; this._c2AnchorRow = row;
                 this._c3SourceItem = null; this._c4SourceItem = null;
-                c2.find('.la-hud-col-label').text(/** @type {any} */ (cat).colLabel);
+                {
+                    const _cl = /** @type {any} */ (cat).colLabel;
+                    c2.find('.la-hud-col-label').text(typeof _cl === 'function' ? _cl() : _cl);
+                }
                 this._openCol(c2, /** @type {any} */ (cat).getItems(), row);
                 c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function() {
                     $(this).css('pointerEvents', '');
@@ -851,22 +855,16 @@ export class LancerHUD {
         const byStatus = isActionDisabledByStatus(this._actor, actionName);
         if (byStatus) item.statusKind = 'unavailable';
         else if (byOther) item.softDisabled = true;
-        const blocked = (a) => isActionDisabledByStatus(a, actionName)
-            || ((/** @type {Record<string,string[]>} */(a?.getFlag('lancer-automations', 'lockedActions'))?.[actionName] ?? [])
-                .some(s => !isStaleStatusSource(s)));
         item.onClick = () => {
-            if (blocked(this._actor)) {
-                ui.notifications.warn(`${actionName} is locked on ${this._actor.name}.`);
-                return;
+            if (isActionDisabledByStatus(this._actor, actionName)
+                || (/** @type {Record<string,string[]>} */(this._actor?.getFlag('lancer-automations', 'lockedActions'))?.[actionName] ?? [])
+                    .some(s => !isStaleStatusSource(s))) {
+                ui.notifications.warn(`${actionName} is locked on ${this._actor.name}. Firing anyway.`);
             }
             return origClick?.();
         };
-        if (origBroadcast) {
-            item.broadcastFn = (t, a) => {
-                if (blocked(a)) return;
-                return origBroadcast(t, a);
-            };
-        }
+        if (origBroadcast)
+            item.broadcastFn = origBroadcast;
         return item;
     }
 
@@ -914,7 +912,12 @@ export class LancerHUD {
                         this._suppressRefreshDepth++; setTimeout(() => this._suppressRefreshDepth--, 300);
                     };
                     const updateDisplay = () => {
-                        cell.find('.la-inc-val').css('color', valColor(cur)).text(valText()); cell.data('restingBg', restingBg(cur)).css('borderLeftColor', borderColor(cur));
+                        const c = valColor(cur);
+                        cell.data('restingValColor', c);
+                        if (!cell.is(':hover'))
+                            cell.find('.la-inc-val').css('color', c);
+                        cell.find('.la-inc-val').text(valText());
+                        cell.data('restingBg', restingBg(cur)).css('borderLeftColor', borderColor(cur));
                     };
                     cell.find('.la-dec-btn').on('click', (ev) => {
                         ev.stopPropagation(); if (cur <= min)
@@ -925,6 +928,7 @@ export class LancerHUD {
                             return; playUiSound('toggle'); suppress(); cur = Math.min(max, cur + step); item.onValueChanged(cur); updateDisplay();
                     });
                     cell.data('restingBg', restingBg(cur));
+                    cell.data('restingValColor', valColor(cur));
                 } else if (item.subtype === 'toggle') {
                     let on = !!item.getValue();
                     const onColor = 'var(--primary-color)';
@@ -968,10 +972,18 @@ export class LancerHUD {
                 });
                 cell.on('mouseleave', () => {
                     cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT, color: '' });
-                    cell.find('.la-inc-val').css('color', '');
+                    cell.find('.la-inc-val').css('color', cell.data('restingValColor') ?? '');
                     cell.find('.la-hud-cell__btn').css('color', '');
                     cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
                 });
+                if (item.onRightClick) {
+                    cell.attr('title', 'Right click for details');
+                    cell.on('contextmenu', ev => {
+                        ev.preventDefault();
+                        playUiSound('details');
+                        item.onRightClick(cell);
+                    });
+                }
                 col.append(cell);
                 continue;
             }
@@ -1281,6 +1293,7 @@ export class LancerHUD {
             ...(isDeployable ? [] : [this._catWeapons()]),
             this._catTech(),
             ...(isDeployable || isPilot ? [] : [this._catDeployables()]),
+            ...(isDeployable || isPilot ? [] : [this._catResources()]),
             ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : isPilot ? [this._catPilotGear()] : []),
             ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : isPilot ? [this._catPilot()] : []),
             ...(isMech ? [this._catTalents()] : []),
@@ -1348,9 +1361,39 @@ export class LancerHUD {
                         })
                     }];
                 })(),
-                { label: 'Resources', childColLabel: 'Resources', getChildren: () => (items => items.length ? items : [])(this._resourceItems()) },
-                { label: 'Ammo', childColLabel: 'Ammo', getChildren: () => this._ammoItems() },
             ],
+        };
+    }
+
+    _catResources() {
+        return {
+            label: 'Resources',
+            // One source → use its name as the col header; two or more → "Resources".
+            colLabel: () => {
+                const c = this._resourceItems().length > 0;
+                const e = this._resourceExtras().length > 0;
+                const a = this._ammoItems().length > 0;
+                const sum = (c ? 1 : 0) + (e ? 1 : 0) + (a ? 1 : 0);
+                if (sum === 1) return c ? 'Resources' : e ? 'Extra' : 'Ammo';
+                return 'Resources';
+            },
+            getItems: () => {
+                const counters = this._resourceItems();
+                const extras = this._resourceExtras();
+                const ammo = this._ammoItems();
+                const out = [];
+                let pushed = false;
+                const append = (rows, label) => {
+                    if (!rows.length) return;
+                    if (pushed) out.push({ isSectionLabel: true, label });
+                    out.push(...rows);
+                    pushed = true;
+                };
+                append(counters, 'Resources');
+                append(extras, 'Extra');
+                append(ammo, 'Ammo');
+                return out;
+            },
         };
     }
 
@@ -3070,8 +3113,6 @@ export class LancerHUD {
         const hasBoth  = actions.length && counters.length;
 
         if (actions.length) {
-            if (hasBoth)
-                items.push({ label: 'ACTIONS', isSectionLabel: true });
             actions.forEach((action, actionIdx) => items.push({
                 label: action.name,
                 icon: getActivationIcon(action),
@@ -3104,6 +3145,7 @@ export class LancerHUD {
         const actor = this._actor;
         const pilot = actor?.system?.pilot?.value ?? actor;
         const items = [];
+        const roman = ['I', 'II', 'III', 'IV', 'V'];
         for (const talent of [...pilot.items.values()].filter(/** @type {any} */ i => i.type === 'talent')) {
             const sys      = /** @type {any} */ (talent).system;
             const ranks    = sys?.ranks ?? [];
@@ -3114,7 +3156,16 @@ export class LancerHUD {
                 const counters = rank.counters ?? [];
                 counters.forEach((counter, cidx) => {
                     const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
-                    items.push(this._buildCounterRow(counter, path, /** @type {any} */ (talent), 'modules/lancer-automations/icons/perspective-dice-two.svg'));
+                    const rankLabel = `${roman[rankIdx] ?? String(rankIdx + 1)}: ${rank.name}`;
+                    const onRightClick = (/** @type {any} */ row) => {
+                        const key = `${/** @type {any} */ (talent).id}_${rankIdx}_${cidx}`;
+                        const desc = laFormatDetailHtml(rank.description ?? '');
+                        const descHtml = desc ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>` : '';
+                        const actionsHtml = laRenderActions(rank.actions ?? []);
+                        const bodyHtml = (descHtml + actionsHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
+                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${/** @type {any} */ (talent).name} · Rank ${roman[rankIdx] ?? rankIdx + 1}`, bodyHtml, theme: 'talent', item: /** @type {any} */ (talent), row });
+                    };
+                    items.push(this._buildCounterRow(counter, path, /** @type {any} */ (talent), 'modules/lancer-automations/icons/perspective-dice-two.svg', onRightClick));
                 });
             });
         }
@@ -3125,6 +3176,39 @@ export class LancerHUD {
             items.push(this._buildCounterRow(counter, path, frame, 'modules/lancer-automations/icons/perspective-dice-two.svg'));
         });
         return items;
+    }
+
+    // Non-auto stat-bar extras. Auto-injected ones already show up as talent/frame counter rows.
+    _resourceExtras() {
+        const actor = this._actor;
+        const tokenDoc = /** @type {any} */ (this._token?.document);
+        const raw = (tokenDoc?.getFlag?.('lancer-automations', 'statBarExtras') ?? [])
+            .filter(/** @type {any} */ e => !e?.autoKey);
+        const out = [];
+        for (const entry of raw) {
+            const resolved = _resolveExtraBarValues(actor, entry);
+            if (!resolved.ownerOk) continue;
+            // max must be a number. inputCell stringifies it into `${cur}/${max}`.
+            out.push({
+                inputCell: true,
+                subtype: 'increment',
+                name: entry.label || 'Extra',
+                icon: entry.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg',
+                step: 1,
+                min: 0,
+                max: resolved.max,
+                getValue: () => _resolveExtraBarValues(actor, entry).value,
+                onValueChanged: (newVal) => updateExtraBarValue(tokenDoc, entry.id, newVal),
+                ...(entry.linkedItemUuid ? {
+                    onRightClick: async () => {
+                        const item = await fromUuid(entry.linkedItemUuid);
+                        if (item?.sheet) item.sheet.render(true);
+                        else ui.notifications?.warn(`Linked item not found: ${entry.linkedItemUuid}`);
+                    },
+                } : {}),
+            });
+        }
+        return out;
     }
 
     _ammoItems() {
@@ -3166,12 +3250,13 @@ export class LancerHUD {
     }
 
     /** Build a single increment/decrement counter row item. */
-    _buildCounterRow(/** @type {any} */ counter, path, /** @type {any} */ talent, icon = null) {
+    _buildCounterRow(/** @type {any} */ counter, path, /** @type {any} */ talent, icon = null, onRightClick = null) {
         return {
             inputCell: true,
             subtype: 'increment',
             name: counter.name,
             ...(icon ? { icon } : {}),
+            ...(onRightClick ? { onRightClick } : {}),
             step: 1,
             min: 0,
             max: counter.max,
@@ -3767,12 +3852,29 @@ export class LancerHUD {
         return invades;
     }
 
+    _actionLockReasonHtml(actionName) {
+        if (!this._actor || !actionName) return '';
+        const info = getActionLockInfo(this._actor, actionName);
+        if (!info.statuses.length && !info.sources.length) return '';
+        const statusLabel = (id) => {
+            const raw = CONFIG.statusEffects?.find?.(e => e.id === id)?.name ?? id;
+            const localized = game.i18n.localize(raw);
+            return localized === raw && raw.includes('.') ? id : localized;
+        };
+        const parts = [
+            ...info.statuses.map(statusLabel),
+            ...info.sources
+        ];
+        const escape = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+        return `<p class="la-hud-action-locked-reason" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(160,119,68,0.18);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Locked by:</strong> ${parts.map(escape).join(', ')}</p>`;
+    }
+
     _actionPopup(action, source = null, themeOverride = null) {
         return (/** @type {any} */ row) => {
             const sourceName = typeof source === 'string' ? source : /** @type {any} */ (source)?.name ?? null;
             const sourceType = typeof source === 'string' ? null : /** @type {any} */ (source)?.system?.type ?? null;
             const tier = (typeof source !== 'string' ? source?.parent?.system?.tier : null) ?? 1;
-            const bodyHtml = laRenderActionDetail(action, { tier });
+            const bodyHtml = this._actionLockReasonHtml(action.name) + laRenderActionDetail(action, { tier });
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);

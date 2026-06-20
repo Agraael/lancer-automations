@@ -1679,7 +1679,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
 
     const fireOne = async (weapon) => {
         if (preTarget)
-            game.user.updateTokenTargets([preTarget.id]);
+            /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
         let suppressBonus;
         if (hasNonAux) {
             suppressBonus = isAuxSize(weapon);
@@ -1833,7 +1833,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
 
         const fireOne = async (weapon) => {
             if (preTarget) {
-                game.user.updateTokenTargets([preTarget.id]);
+                /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
             }
             let suppressBonus;
             if (hasNonAux) {
@@ -1956,11 +1956,12 @@ function _resolveWeaponsAndActor(input) {
 }
 
 function _getActorWeapons(actor) {
-    return (actor?.items ?? []).filter(i =>
-        i.type === "mech_weapon" ||
-        i.type === "pilot_weapon" ||
-        (i.type === "npc_feature" && i.system?.type === "Weapon")
-    );
+    return (actor?.items ?? []).filter(i => {
+        if (i.system?.destroyed) return false;
+        return i.type === "mech_weapon" ||
+            i.type === "pilot_weapon" ||
+            (i.type === "npc_feature" && i.system?.type === "Weapon");
+    });
 }
 
 /**

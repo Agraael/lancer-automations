@@ -31,6 +31,13 @@ const STATUS_DISABLING_ACTION = (() => {
     return m;
 })();
 
+export function getActionLockInfo(actor, actionName) {
+    const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(s => actor?.statuses?.has?.(s));
+    const tracker = /** @type {Record<string,string[]>} */(actor?.getFlag?.('lancer-automations', 'lockedActions') ?? {})[actionName] ?? [];
+    const sources = tracker.filter(s => !isStaleStatusSource(s));
+    return { statuses, sources };
+}
+
 export function isActionDisabledByStatus(actor, actionName) {
     const statuses = STATUS_DISABLING_ACTION[actionName];
     if (!statuses)

@@ -52,29 +52,91 @@ Hooks.on('canvasTearDown', () => {
 });
 
 /** @returns {PIXI.Graphics} */
-export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false) {
+// Paint a list of cells (hex or square) onto a PIXI.Graphics. Caller sets fill/stroke.
+function _paintCells(graphics, cells, { gridSize = canvas.grid.size } = {}) {
+    const hex = isHexGrid();
+    for (const cell of cells) {
+        const col = typeof cell === 'string' ? Number(cell.split(',')[0]) : cell.col;
+        const row = typeof cell === 'string' ? Number(cell.split(',')[1]) : cell.row;
+        if (hex) {
+            drawHexAt(graphics, col, row);
+        } else {
+            const c = getHexCenter(col, row);
+            graphics.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+        }
+    }
+}
+
+// Group cells by min distance from any origin offset. Skips dist 0.
+function _groupCellsByDistance(originOffsets, cellKeys) {
+    const hex = isHexGrid();
+    const byDist = new Map();
+    for (const key of cellKeys) {
+        const [col, row] = key.split(',').map(Number);
+        let minDist = Infinity;
+        for (const o of originOffsets) {
+            const d = hex
+                ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
+                : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
+            if (d < minDist)
+                minDist = d;
+        }
+        if (minDist === 0)
+            continue;
+        if (!byDist.has(minDist))
+            byDist.set(minDist, []);
+        byDist.get(minDist).push({ col, row });
+    }
+    return byDist;
+}
+
+// Wave-pulse tick for canvas.app.ticker.add(...).
+function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {}) {
+    const {
+        color = 0x929292,
+        peakAlpha = 0.1,
+        baseAlpha = 0.00,
+        baseLineAlpha = 0.00,
+        msPerCell = 300,
+        slowRangeThreshold = 5,
+        slowFloorMs = 2400,
+        ringWidth = 1,
+        lineWidth = 1.2,
+        lineAlphaMul = 6,
+    } = opts;
+    const basePeriod = msPerCell * (range + 1);
+    const periodMs = opts.periodMs ?? (range < slowRangeThreshold ? Math.max(slowFloorMs, basePeriod) : basePeriod);
+    return () => {
+        pulseGraphic.clear();
+        const t = (performance.now() % periodMs) / periodMs;
+        const cur = t * range;
+        for (const [dist, list] of hexesByDist) {
+            const raw = Math.abs(dist - cur);
+            const delta = Math.min(raw, range - raw);
+            const waveAlpha = delta > ringWidth ? 0 : peakAlpha * (1 - delta / ringWidth);
+            const fillAlpha = Math.min(1, baseAlpha + waveAlpha);
+            const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
+            pulseGraphic.lineStyle(lineWidth, color, lineAlpha);
+            pulseGraphic.beginFill(color, fillAlpha);
+            _paintCells(pulseGraphic, list);
+            pulseGraphic.endFill();
+        }
+    };
+}
+
+export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false, opts = {}) {
     const highlight = new PIXI.Graphics();
     const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
+    const lineAlpha = opts.lineAlpha ?? (isHexGrid() ? 0.4 : 0.7);
+    const lineWidth = opts.lineWidth ?? 2;
 
-    if (isHexGrid()) {
-        highlight.lineStyle(2, color, 0.4);
+    if (lineWidth > 0 && lineAlpha > 0)
+        highlight.lineStyle(lineWidth, color, lineAlpha);
+    if (alpha > 0)
         highlight.beginFill(color, alpha);
-        for (const key of inRange) {
-            const [col, row] = key.split(',').map(Number);
-            drawHexAt(highlight, col, row);
-        }
+    _paintCells(highlight, inRange);
+    if (alpha > 0)
         highlight.endFill();
-    } else {
-        const gridSize = canvas.grid.size;
-        highlight.lineStyle(2, color, 0.7);
-        highlight.beginFill(color, alpha);
-        for (const key of inRange) {
-            const [col, row] = key.split(',').map(Number);
-            const center = getHexCenter(col, row);
-            highlight.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
-        }
-        highlight.endFill();
-    }
 
     if (canvas.tokens?.parent) {
         canvas.tokens.parent.addChildAt(highlight, canvas.tokens.parent.getChildIndex(canvas.tokens));
@@ -88,8 +150,8 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
  * Hex range highlight (gray, low-alpha) with animated wave pulse, matching the
  * visual used by choose-token / knockback cards. Returns a destroy() function.
  */
-export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false } = {}) {
-    const rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, includeSelf);
+export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false, staticFillAlpha = 0.1, staticLineAlpha = 0.15, fadeInMs = 180, fadeOutMs = 180 } = {}) {
+    const rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, staticFillAlpha, includeSelf, { lineAlpha: staticLineAlpha });
 
     const pulseGraphic = new PIXI.Graphics();
     if (canvas.tokens?.parent) {
@@ -98,54 +160,37 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
         canvas.stage.addChild(pulseGraphic);
     }
 
-    const inRangeSetForPulse = getInRangeOffsets(casterToken, range, { includeSelf: true });
-    const originOffsets = getOccupiedOffsets(casterToken);
-    const hexesByDist = new Map();
-    for (const key of inRangeSetForPulse) {
-        const [col, row] = key.split(',').map(Number);
-        let minDist = Infinity;
-        for (const o of originOffsets) {
-            const d = isHexGrid()
-                ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-            if (d < minDist)
-                minDist = d;
-        }
-        if (minDist === 0)
-            continue;
-        if (!hexesByDist.has(minDist))
-            hexesByDist.set(minDist, []);
-        hexesByDist.get(minDist).push({ col, row });
-    }
-
-    const periodMs = 3200;
-    const ringWidth = 1.1;
-    const gridSize = canvas.grid.size;
-    const wavePulse = () => {
-        pulseGraphic.clear();
-        const t = (performance.now() % periodMs) / periodMs;
-        const cur = t * (range + 1);
-        for (const [dist, list] of hexesByDist) {
-            const delta = Math.abs(dist - cur);
-            if (delta > ringWidth)
-                continue;
-            const alpha = 0.035 * (1 - delta / ringWidth);
-            pulseGraphic.lineStyle(0);
-            pulseGraphic.beginFill(0x929292, alpha);
-            for (const { col, row } of list) {
-                if (isHexGrid())
-                    drawHexAt(pulseGraphic, col, row);
-                else {
-                    const c = getHexCenter(col, row);
-                    pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                }
-            }
-            pulseGraphic.endFill();
-        }
-    };
+    const hexesByDist = _groupCellsByDistance(
+        getOccupiedOffsets(casterToken),
+        getInRangeOffsets(casterToken, range, { includeSelf: true })
+    );
+    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
     canvas.app.ticker.add(wavePulse);
 
-    return () => {
+    rangeHighlight.alpha = 0;
+    pulseGraphic.alpha = 0;
+    let fadeStart = performance.now();
+    let fadeFrom = 0;
+    let fadeTo = 1;
+    let fadeDur = Math.max(1, fadeInMs);
+    let onFadeDone = null;
+    const fadeTick = () => {
+        const elapsed = performance.now() - fadeStart;
+        const k = Math.min(1, elapsed / fadeDur);
+        const a = fadeFrom + (fadeTo - fadeFrom) * k;
+        rangeHighlight.alpha = a;
+        pulseGraphic.alpha = a;
+        if (k >= 1) {
+            canvas.app.ticker.remove(fadeTick);
+            const cb = onFadeDone;
+            onFadeDone = null;
+            if (cb)
+                cb();
+        }
+    };
+    canvas.app.ticker.add(fadeTick);
+
+    const doDestroy = () => {
         canvas.app.ticker.remove(wavePulse);
         if (rangeHighlight) {
             if (rangeHighlight.parent)
@@ -155,6 +200,19 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
         if (pulseGraphic.parent)
             pulseGraphic.parent.removeChild(pulseGraphic);
         pulseGraphic.destroy();
+    };
+
+    return () => {
+        if (fadeOutMs <= 0) {
+            doDestroy();
+            return;
+        }
+        fadeStart = performance.now();
+        fadeFrom = rangeHighlight.alpha ?? 1;
+        fadeTo = 0;
+        fadeDur = Math.max(1, fadeOutMs);
+        onFadeDone = doDestroy;
+        canvas.app.ticker.add(fadeTick);
     };
 }
 
@@ -267,7 +325,9 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
     let outsideHandler = null;
     let escHandler = null;
     const close = () => {
-        if (popupEl) { popupEl.remove(); popupEl = null; }
+        if (popupEl) {
+            popupEl.remove(); popupEl = null;
+        }
         if (outsideHandler) {
             document.removeEventListener('pointerdown', outsideHandler, true);
             outsideHandler = null;
@@ -288,8 +348,12 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
             <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
             <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
             ${sel ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
-        row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,100,0,0.4)'; });
-        row.addEventListener('mouseleave', () => { row.style.background = sel ? 'rgba(255,100,0,0.25)' : 'transparent'; });
+        row.addEventListener('mouseenter', () => {
+            row.style.background = 'rgba(255,100,0,0.4)';
+        });
+        row.addEventListener('mouseleave', () => {
+            row.style.background = sel ? 'rgba(255,100,0,0.25)' : 'transparent';
+        });
         row.addEventListener('click', (e) => {
             e.stopPropagation();
             onPick(token);
@@ -305,10 +369,13 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
     if (r.bottom > window.innerHeight)
         el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
     outsideHandler = (e) => {
-        if (popupEl && !popupEl.contains(/** @type {Node} */ (e.target))) close();
+        if (popupEl && !popupEl.contains(/** @type {Node} */ (e.target)))
+            close();
     };
     escHandler = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        if (e.key === 'Escape') {
+            e.preventDefault(); close();
+        }
     };
     setTimeout(() => {
         document.addEventListener('pointerdown', outsideHandler, true);
@@ -350,51 +417,11 @@ export function chooseToken(casterToken, options = {}) {
         let wavePulse = null;
         if (range !== null && casterToken) {
             rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, 0.1, includeSelf);
-
-            const inRangeSetForPulse = getInRangeOffsets(casterToken, range, { includeSelf: true });
-            const originOffsets = getOccupiedOffsets(casterToken);
-            const hexesByDist = new Map();
-            for (const key of inRangeSetForPulse) {
-                const [col, row] = key.split(',').map(Number);
-                let minDist = Infinity;
-                for (const o of originOffsets) {
-                    const d = isHexGrid()
-                        ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                        : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-                    if (d < minDist)
-                        minDist = d;
-                }
-                if (minDist === 0)
-                    continue;
-                if (!hexesByDist.has(minDist))
-                    hexesByDist.set(minDist, []);
-                hexesByDist.get(minDist).push({ col, row });
-            }
-            const periodMs = 3200;
-            const ringWidth = 1.1;
-            const gridSize = canvas.grid.size;
-            wavePulse = () => {
-                pulseGraphic.clear();
-                const t = (performance.now() % periodMs) / periodMs;
-                const cur = t * (range + 1);
-                for (const [dist, list] of hexesByDist) {
-                    const delta = Math.abs(dist - cur);
-                    if (delta > ringWidth)
-                        continue;
-                    const alpha = 0.035 * (1 - delta / ringWidth);
-                    pulseGraphic.lineStyle(0);
-                    pulseGraphic.beginFill(0x929292, alpha);
-                    for (const { col, row } of list) {
-                        if (isHexGrid()) {
-                            drawHexAt(pulseGraphic, col, row);
-                        } else {
-                            const c = getHexCenter(col, row);
-                            pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                        }
-                    }
-                    pulseGraphic.endFill();
-                }
-            };
+            const hexesByDist = _groupCellsByDistance(
+                getOccupiedOffsets(casterToken),
+                getInRangeOffsets(casterToken, range, { includeSelf: true })
+            );
+            wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
             canvas.app.ticker.add(wavePulse);
         }
 
@@ -926,51 +953,13 @@ export async function placeZone(casterToken, options = {}) {
             const rangeAnchor = rangeOrigin || casterToken;
             rangeHighlight = drawRangeHighlight(rangeAnchor, range, 0x888888, 0.1, false);
 
-            const inRangeSetForPulse = getInRangeOffsets(rangeAnchor, range, { includeSelf: true });
             const isPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
             const originOffsets = isPoint ? [pixelToOffset(rangeAnchor.x, rangeAnchor.y)] : getOccupiedOffsets(rangeAnchor);
-            const hexesByDist = new Map();
-            for (const key of inRangeSetForPulse) {
-                const [col, row] = key.split(',').map(Number);
-                let minDist = Infinity;
-                for (const o of originOffsets) {
-                    const d = isHexGrid()
-                        ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                        : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-                    if (d < minDist)
-                        minDist = d;
-                }
-                if (minDist === 0)
-                    continue;
-                if (!hexesByDist.has(minDist))
-                    hexesByDist.set(minDist, []);
-                hexesByDist.get(minDist).push({ col, row });
-            }
-            const periodMs = 3200;
-            const ringWidth = 1.1;
-            const gridSize = canvas.grid.size;
-            wavePulse = () => {
-                pulseGraphic.clear();
-                const t = (performance.now() % periodMs) / periodMs;
-                const cur = t * (range + 1);
-                for (const [dist, list] of hexesByDist) {
-                    const delta = Math.abs(dist - cur);
-                    if (delta > ringWidth)
-                        continue;
-                    const alpha = 0.035 * (1 - delta / ringWidth);
-                    pulseGraphic.lineStyle(0);
-                    pulseGraphic.beginFill(0x929292, alpha);
-                    for (const { col, row } of list) {
-                        if (isHexGrid()) {
-                            drawHexAt(pulseGraphic, col, row);
-                        } else {
-                            const c = getHexCenter(col, row);
-                            pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                        }
-                    }
-                    pulseGraphic.endFill();
-                }
-            };
+            const hexesByDist = _groupCellsByDistance(
+                originOffsets,
+                getInRangeOffsets(rangeAnchor, range, { includeSelf: true })
+            );
+            wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
             canvas.app.ticker.add(wavePulse);
         }
 
@@ -1392,52 +1381,8 @@ export async function moveToken(token, options = {}) {
             };
             if (range >= 0) {
                 rangeHighlight = drawRangeHighlight(token, range, 0x888888, 0.1, true);
-
-                // Group in-range hexes by min planar distance from origin token's footprint.
-                const originOffsets = getOccupiedOffsets(token);
-                const hexesByDist = new Map();
-                for (const key of inRangeSet) {
-                    const [col, row] = key.split(',').map(Number);
-                    let minDist = Infinity;
-                    for (const o of originOffsets) {
-                        const d = isHexGrid()
-                            ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                            : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-                        if (d < minDist)
-                            minDist = d;
-                    }
-                    if (minDist === 0)
-                        continue;
-                    if (!hexesByDist.has(minDist))
-                        hexesByDist.set(minDist, []);
-                    hexesByDist.get(minDist).push({ col, row });
-                }
-
-                const periodMs = 3200;
-                const ringWidth = 1.1;
-                const gridSize = canvas.grid.size;
-                wavePulse = () => {
-                    pulseGraphic.clear();
-                    const t = (performance.now() % periodMs) / periodMs;
-                    const cur = t * (range + 1);
-                    for (const [dist, list] of hexesByDist) {
-                        const delta = Math.abs(dist - cur);
-                        if (delta > ringWidth)
-                            continue;
-                        const alpha = 0.035 * (1 - delta / ringWidth);
-                        pulseGraphic.lineStyle(0);
-                        pulseGraphic.beginFill(0x929292, alpha);
-                        for (const { col, row } of list) {
-                            if (isHexGrid()) {
-                                drawHexAt(pulseGraphic, col, row);
-                            } else {
-                                const c = getHexCenter(col, row);
-                                pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                            }
-                        }
-                        pulseGraphic.endFill();
-                    }
-                };
+                const hexesByDist = _groupCellsByDistance(getOccupiedOffsets(token), inRangeSet);
+                wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
                 canvas.app.ticker.add(wavePulse);
             }
 
@@ -2170,49 +2115,9 @@ export function placeToken(options = {}) {
                     rangeHighlight = hl;
                 }
 
-                // Wave pulse (subtle outward ripple over the range hexes).
                 const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
-                const hexesByDist = new Map();
-                for (const key of inRangeSet) {
-                    const [col, row] = key.split(',').map(Number);
-                    let minDist = Infinity;
-                    for (const o of originOffsetsForPulse) {
-                        const d = isHexGrid()
-                            ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                            : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-                        if (d < minDist)
-                            minDist = d;
-                    }
-                    if (minDist === 0)
-                        continue;
-                    if (!hexesByDist.has(minDist))
-                        hexesByDist.set(minDist, []);
-                    hexesByDist.get(minDist).push({ col, row });
-                }
-                const periodMs = 3200;
-                const ringWidth = 1.1;
-                wavePulse = () => {
-                    pulseGraphic.clear();
-                    const t = (performance.now() % periodMs) / periodMs;
-                    const cur = t * (range + 1);
-                    for (const [dist, list] of hexesByDist) {
-                        const delta = Math.abs(dist - cur);
-                        if (delta > ringWidth)
-                            continue;
-                        const alpha = 0.035 * (1 - delta / ringWidth);
-                        pulseGraphic.lineStyle(0);
-                        pulseGraphic.beginFill(0x929292, alpha);
-                        for (const { col, row } of list) {
-                            if (isHexGrid()) {
-                                drawHexAt(pulseGraphic, col, row);
-                            } else {
-                                const c = getHexCenter(col, row);
-                                pulseGraphic.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                            }
-                        }
-                        pulseGraphic.endFill();
-                    }
-                };
+                const hexesByDist = _groupCellsByDistance(originOffsetsForPulse, inRangeSet);
+                wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
                 canvas.app.ticker.add(wavePulse);
             }
         }
