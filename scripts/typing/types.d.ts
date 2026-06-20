@@ -832,9 +832,10 @@ interface LancerAutomationsAPI {
 
     // ── ExtraBarsAPI ──
     /**
-     * Update the value of a manual extra-bar entry on a token.
+     * Update the value of an extra-bar entry on a token.
+     * Manual entries write the per-token flag; path-bound entries write back through item.update() / actor.update().
      * Accepts a number, a numeric string, or a delta string ("+2" / "-3").
-     * Returns the new value, or null if the token/entry is invalid or the entry is path-bound (read-only).
+     * Returns the new value, or null if the token/entry is invalid.
      */
     updateExtraBarValue(
         token: Token | TokenDocument | string,
@@ -842,9 +843,9 @@ interface LancerAutomationsAPI {
         value: number | string,
     ): Promise<number | null>;
     /**
-     * Add a new extra bar to a token by overlaying `partial` on the default shape.
-     * The default uses `system.hp.value` / `system.hp.max` as path sources. Auto-generates a fresh id
-     * if `partial.id` is missing or collides with an existing entry.
+     * Create a new extra bar by overlaying `partial` on the default shape.
+     * API-created entries default to ownerOnly: true; pass `ownerOnly: false` to make public.
+     * The default value/max bind to `system.hp.value` / `system.hp.max`.
      * Returns the created entry id, or null on failure.
      */
     addExtraBar(

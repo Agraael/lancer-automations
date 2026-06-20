@@ -7,7 +7,7 @@
 | **[AUTOMATION_SYSTEM.md](AUTOMATION_SYSTEM.md)** | How the automation engine works: trigger lifecycle, filters, callbacks, activation modes, sockets, cancel/modify, flow injection, registration, caches |
 | **[API_COMBAT.md](API_COMBAT.md)** | Combat flows, spatial/distance tools, weapon/item details, resource management |
 | **[API_EFFECTS.md](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
-| **[API_INTERACTIVE.md](API_INTERACTIVE.md)** | Token picker, zones, knockback, movement, choice cards, deployment, thrown weapons, movement tracking |
+| **[API_INTERACTIVE.md](API_INTERACTIVE.md)** | Token picker, zones, knockback, movement, choice cards, deployment, thrown weapons, movement tracking, extra stat bars |
 | **[API_HOWTO.md](API_HOWTO.md)** | Registration, user helpers, how-tos, Grid-Aware Auras wrapper |
 
 ---

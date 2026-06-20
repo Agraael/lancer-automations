@@ -750,3 +750,92 @@ api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current t
 ```
 
 </details>
+
+---
+
+## Extra Stat Bars
+
+Extra bars drawn under a token's HP/Heat/etc. Stored per-token at `flags.lancer-automations.statBarExtras`. Non-auto entries also show up in the TAH Resources column.
+
+<details>
+<summary><b><code>addExtraBar</code></b> <sup>async</sup> → <code>string | null</code></summary>
+
+<br>
+
+```js
+const id = await api.addExtraBar(token, partial)
+```
+
+Create a new extra bar by overlaying `partial` on the default shape. Returns the new entry id, or `null` on failure. API-created entries default to `ownerOnly: true` (only the actor's owners and the GM see them); pass `ownerOnly: false` in `partial` to make it public.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token | TokenDocument | string` | *required* | A Token, TokenDocument, id, or uuid |
+| <kbd>partial</kbd> | `object` | `{}` | Fields overlaying the default entry (see shape below) |
+
+Entry shape (all fields optional in `partial`):
+
+```js
+{
+    id: string,                    // auto-generated if missing
+    label: string,                 // short tag, e.g. "AP"
+    layoutMode: 'newLine' | 'sameLine',
+    widthPct: number,              // 1..100
+    valueSource: { kind: 'path' | 'manual', path?: string, value?: number },
+    maxSource:   { kind: 'path' | 'manual', path?: string, value?: number },
+    segmented: boolean,            // when on, pip count = resolved max
+    color: { kind: 'solid', stops: ['#RRGGBB'] },
+    ownerOnly: boolean,
+    icon: string,                  // file path
+    showLabelInHint: boolean,      // show label in the hover stat hint
+    linkedItemUuid: string,        // right-click in TAH opens this item's sheet
+}
+```
+
+`valueSource.path` / `maxSource.path` understand three prefixes:
+- `system.X` — reads from the actor
+- `items.{itemId}.X` — reads from `actor.items.get(itemId)`
+- `pilotItems.{itemId}.X` — reads from the pilot's items when the actor is a mech
+
+</details>
+
+---
+
+<details>
+<summary><b><code>updateExtraBarValue</code></b> <sup>async</sup> → <code>number | null</code></summary>
+
+<br>
+
+```js
+const newVal = await api.updateExtraBarValue(token, entryId, value)
+```
+
+Update the value of an extra bar. Manual entries write the per-token flag; path-bound entries write back through `item.update()` or `actor.update()` at the source path. Returns the new value, or `null` if the token/entry is invalid.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token | TokenDocument | string` | *required* | A Token, TokenDocument, id, or uuid |
+| <kbd>entryId</kbd> | `string` | *required* | The entry's id |
+| <kbd>value</kbd> | `number | string` | *required* | A number, numeric string, or delta string (`"+2"` / `"-3"`) |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>removeExtraBar</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
+
+```js
+const ok = await api.removeExtraBar(token, entryId)
+```
+
+Remove an extra bar by id. Returns `true` if removed, `false` if not found.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token | TokenDocument | string` | *required* | A Token, TokenDocument, id, or uuid |
+| <kbd>entryId</kbd> | `string` | *required* | The entry's id |
+
+</details>
