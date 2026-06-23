@@ -1322,7 +1322,7 @@ export class LancerHUD {
                     childColLabel: actor.type === 'mech' ? 'Action' : 'Quick',
                     getChildren: () => [
                         ...(actor.type === 'mech' ? [
-                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE in the same scene, it deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }, 'Overcharge'),
+                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }, 'Overcharge'),
                             { isSectionLabel: true, label: 'Quick' },
                         ] : []),
                         ...(/** @type {any} */ (this._catQuickActions().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
