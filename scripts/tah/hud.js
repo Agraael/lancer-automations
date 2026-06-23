@@ -1,7 +1,7 @@
 /* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog, FilePicker */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus } from '../tools/misc-tools.js';
+import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction } from '../interactive/deployables.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
@@ -112,12 +112,111 @@ export class LancerHUD {
         this._favoritesActive      = false;
         this._categories           = null;
         this._clickToOpen          = false;
+        this._narrativeMode        = false;
         // Track what's currently open in each column for in-place refresh
         this._c2Category    = null;   // category whose getItems() fills c2
         this._c2AnchorRow   = null;   // c1 row that opened c2
         this._c3SourceItem  = null;   // c2 item whose getChildren() fills c3
         this._c3AnchorRow   = null;   // c2 row that opened c3
         this._c4SourceItem  = null;   // c3 item whose getChildren() fills c4
+    }
+
+    async bindNarrative() {
+        this.unbind();
+        this._narrativeMode = true;
+        this._tokens = [];
+        this._token = null;
+        ++this._bindGen;
+        this._render();
+    }
+
+    _getNarrativeLinkedActor() {
+        const uuid = game.settings.get('lancer-automations', 'tah.narrativeLinkedActorUuid');
+        if (!uuid)
+            return null;
+        const actor = /** @type {any} */ (fromUuidSync(uuid));
+        if (!actor || actor.type !== 'pilot')
+            return null;
+        return actor;
+    }
+
+    async _openNarrativeLinkDialog() {
+        const pilots = (game.actors?.contents ?? []).filter(a => a.type === 'pilot' && a.isOwner);
+        const current = game.settings.get('lancer-automations', 'tah.narrativeLinkedActorUuid');
+        const currentActor = current ? /** @type {any} */ (fromUuidSync(current)) : null;
+        const subtitle = currentActor ? `Currently linked: ${currentActor.name}` : 'No pilot linked';
+        const tokenImg = (a) => a?.prototypeToken?.texture?.src || a?.img || 'icons/svg/mystery-man.svg';
+        const cards = pilots.map(p => {
+            const sel = p.uuid === current;
+            return `<div class="la-narrative-pilot-card${sel ? ' selected' : ''}" data-uuid="${p.uuid}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid ${sel ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${sel ? 'color-mix(in srgb, var(--primary-color), white 85%)' : '#fff'};cursor:pointer;transition:background 0.1s, border-color 0.1s;">
+                <img src="${tokenImg(p)}" style="width:40px;height:40px;object-fit:cover;border:1px solid #999;border-radius:3px;background:#1a1a1a;flex-shrink:0;">
+                <span style="flex:1;font-weight:600;color:#111;">${p.name}</span>
+            </div>`;
+        }).join('');
+        const content = `
+            <div class="lancer-dialog-base">
+                <div class="lancer-dialog-header">
+                    <div class="lancer-dialog-title">LINK NARRATIVE HUD</div>
+                    <div class="lancer-dialog-subtitle">${subtitle}</div>
+                </div>
+                <div class="lancer-info-box">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Pick a pilot to drive the narrative HUD. Stats, attributes and categories reflect this pilot.</span>
+                </div>
+                <div style="margin-top:12px;">
+                    <label style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Pilot</label>
+                    <div class="la-narrative-pilot-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;padding:2px;">
+                        ${cards || '<div style="font-size:0.85em;color:#888;font-style:italic;">No pilot found.</div>'}
+                    </div>
+                    <input type="hidden" name="pilot-uuid" value="${current || ''}">
+                </div>
+            </div>
+        `;
+        const dlg = new Dialog({
+            title: 'Link Narrative HUD',
+            content,
+            buttons: {
+                link: {
+                    icon: '<i class="fas fa-link"></i>',
+                    label: 'Link',
+                    callback: async (html) => {
+                        const uuid = String(/** @type {any} */ (html).find('[name="pilot-uuid"]').val() || '');
+                        await game.settings.set('lancer-automations', 'tah.narrativeLinkedActorUuid', uuid);
+                        if (this._narrativeMode)
+                            this.bindNarrative();
+                    },
+                },
+                unlink: {
+                    icon: '<i class="fas fa-unlink"></i>',
+                    label: 'Unlink',
+                    callback: async () => {
+                        await game.settings.set('lancer-automations', 'tah.narrativeLinkedActorUuid', '');
+                        if (this._narrativeMode)
+                            this.bindNarrative();
+                    },
+                },
+                cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            },
+            default: 'link',
+            render: (html) => {
+                const $html = /** @type {any} */ (html);
+                $html.find('.la-narrative-pilot-card').on('click', function () {
+                    const $card = $(this);
+                    $html.find('.la-narrative-pilot-card').css({
+                        background: '#fff', 'border-color': '#999',
+                    }).removeClass('selected');
+                    $card.css({
+                        background: 'color-mix(in srgb, var(--primary-color), white 85%)',
+                        'border-color': 'var(--primary-color)',
+                    }).addClass('selected');
+                    $html.find('[name="pilot-uuid"]').val(String($card.attr('data-uuid') || ''));
+                });
+                $html.closest('.app').find('.dialog-buttons').css({
+                    display: 'flex', 'flex-direction': 'row', gap: '6px',
+                });
+            },
+        }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 480 }).render(true);
+        return dlg;
     }
 
     async bind(tokens) {
@@ -158,6 +257,7 @@ export class LancerHUD {
         this._c4AnchorRow = null;
         this._token   = null;
         this._tokens  = [];
+        this._narrativeMode = false;
         this._pendingCol3Refresh = null;
         this._pendingCol4Refresh = null;
         clearTimeout(this._refreshTimer);
@@ -192,7 +292,7 @@ export class LancerHUD {
 
     /** In-place stats bar refresh. Does not collapse sub-columns. */
     updateStatsInPlace() {
-        if (!this._actor || !this._el)
+        if (!this._actor || !this._el || this._narrativeMode)
             return;
         this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
         this._updateCombatBar();
@@ -222,7 +322,7 @@ export class LancerHUD {
     }
 
     refresh() {
-        if (!this._token || this._suppressRefreshDepth > 0)
+        if ((!this._token && !this._narrativeMode) || this._suppressRefreshDepth > 0)
             return;
         // Status panel open: sync rows in-place, never close + reopen.
         if (this._statusPanelInstance?.isVisible) {
@@ -247,13 +347,15 @@ export class LancerHUD {
     }
 
     get _actor() {
+        if (this._narrativeMode)
+            return this._getNarrativeLinkedActor();
         return this._token?.actor;
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
 
     _render(animate = true) {
-        if (!this._actor)
+        if (!this._actor && !this._narrativeMode)
             return;
 
         const categories = this._buildCategories();
@@ -263,66 +365,51 @@ export class LancerHUD {
         this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
-        const tokenName = this._tokens.length > 1
-            ? `${this._tokens.length} TOKENS`
-            : (this._token.name ?? actor.name ?? '');
+        const tokenName = this._narrativeMode
+            ? (actor ? (actor.name ?? 'UNLINKED') : 'UNLINKED')
+            : (this._tokens.length > 1
+                ? `${this._tokens.length} TOKENS`
+                : (this._token.name ?? actor.name ?? ''));
         // Resolve disposition / team (only if setting is on)
         let _dispColor = null;
         let _dispLabel = null;
-        if (game.settings.get('lancer-automations', 'tah.showDisposition')) {
-            try {
-                const tfActive = game.modules.get('token-factions')?.active;
-                const tfAdvanced = tfActive && game.settings.get('token-factions', 'color-from') === 'advanced-factions';
-                if (tfAdvanced) {
-                    const teamId = this._token.document.getFlag?.('token-factions', 'team')
-                        || this._token.actor?.prototypeToken?.flags?.['token-factions']?.team;
-                    if (teamId) {
-                        const teams = game.settings.get('token-factions', 'team-setup') || [];
-                        const team = teams.find(t => t.id === teamId);
-                        if (team) {
-                            _dispColor = team.color;
-                            _dispLabel = team.name;
-                        }
-                    }
-                }
-            } catch { /* ignore */ }
-            if (!_dispColor) {
-                const disp = this._token.document.disposition;
-                const dispMap = {
-                    [CONST.TOKEN_DISPOSITIONS.HOSTILE]: { color: '#e53935', label: 'Hostile' },
-                    [CONST.TOKEN_DISPOSITIONS.NEUTRAL]: { color: '#f9a825', label: 'Neutral' },
-                    [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
-                    [CONST.TOKEN_DISPOSITIONS.SECRET]: { color: '#7e57c2', label: 'Secret' },
-                };
-                const d = dispMap[disp] ?? { color: '#888', label: 'Unknown' };
-                _dispColor = d.color;
-                _dispLabel = d.label;
-            }
+        if (!this._narrativeMode && game.settings.get('lancer-automations', 'tah.showDisposition')) {
+            const d = getTokenDispositionInfo(this._token) ?? { color: '#888', label: 'Unknown' };
+            _dispColor = d.color;
+            _dispLabel = d.label;
         }
 
         const titleEl = $(`<div class="la-hud-token-title"><span class="la-hud-token-name">${tokenName}</span></div>`);
 
-        // Combat toggle icon (left of token name)
-        const inCombat = this._token.inCombat;
-        const combatToggle = $(`<span class="la-combat-toggle${inCombat ? ' la-combat-toggle--in' : ''}" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
-        combatToggle.on('mouseenter', () => playUiSound('statusHover'));
-        combatToggle.on('click', async () => {
-            const targets = (this._tokens?.length ? this._tokens : [this._token]).filter(Boolean);
-            const wantActive = !this._token.inCombat;
-            for (const t of targets) {
-                if (!!t.inCombat === wantActive)
-                    continue;
-                await _toggleTokenInCombat(t);
-            }
-            const nowInCombat = this._token.inCombat;
-            combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
-            combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
-            this._updateCombatBar();
-        });
-        titleEl.find('.la-hud-token-name').before(combatToggle);
+        if (this._narrativeMode) {
+            const linked = !!actor;
+            const linkBtn = $(`<span class="la-combat-toggle${linked ? ' la-combat-toggle--in' : ''}" title="${linked ? 'Unlink / change pilot' : 'Link to pilot'}"><i class="fas fa-${linked ? 'link' : 'link-slash'}"></i></span>`);
+            linkBtn.on('mouseenter', () => playUiSound('statusHover'));
+            linkBtn.on('click', () => this._openNarrativeLinkDialog());
+            titleEl.find('.la-hud-token-name').before(linkBtn);
+        } else {
+            // Combat toggle icon (left of token name)
+            const inCombat = this._token.inCombat;
+            const combatToggle = $(`<span class="la-combat-toggle${inCombat ? ' la-combat-toggle--in' : ''}" title="${inCombat ? 'Remove from combat' : 'Add to combat'}"><i class="fas fa-swords"></i></span>`);
+            combatToggle.on('mouseenter', () => playUiSound('statusHover'));
+            combatToggle.on('click', async () => {
+                const targets = (this._tokens?.length ? this._tokens : [this._token]).filter(Boolean);
+                const wantActive = !this._token.inCombat;
+                for (const t of targets) {
+                    if (!!t.inCombat === wantActive)
+                        continue;
+                    await _toggleTokenInCombat(t);
+                }
+                const nowInCombat = this._token.inCombat;
+                combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
+                combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
+                this._updateCombatBar();
+            });
+            titleEl.find('.la-hud-token-name').before(combatToggle);
+        }
 
-        const statsEl = buildStatsEl(actor, this._token);
-        const combatBar = buildCombatBar(actor, this._token);
+        const statsEl = (this._narrativeMode && !actor) ? $('<div></div>') : buildStatsEl(actor, this._token);
+        const combatBar = this._narrativeMode ? $('<div></div>') : buildCombatBar(actor, this._token);
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
@@ -434,7 +521,10 @@ export class LancerHUD {
             nameSpan.css({ color: '', cursor: '' });
         });
         nameSpan.on('click', () => {
-            actor.sheet?.render(true);
+            if (this._narrativeMode)
+                this._openNarrativeLinkDialog();
+            else
+                actor.sheet?.render(true);
         });
         titleEl.on('mouseenter', () => {
             lockBtn.css('opacity', unlocked ? 0.9 : 0.4);
@@ -1283,6 +1373,16 @@ export class LancerHUD {
 
     // ── Category list (order = HUD order) ──────────────────────────────────
     _buildCategories() {
+        if (this._narrativeMode) {
+            const linked = !!this._actor;
+            return [
+                ...(linked ? [this._catPilot()] : []),
+                ...(linked ? [this._catSkills()] : []),
+                ...(linked ? [this._catResources()] : []),
+                this._catNarrativeUtility(linked),
+                this._catMacros(),
+            ];
+        }
         const types        = this._tokens.map(t => t.actor?.type);
         const isMech       = types.every(t => t === 'mech');
         const isDeployable = types.every(t => t === 'deployable');
@@ -1293,7 +1393,7 @@ export class LancerHUD {
             ...(isDeployable ? [] : [this._catWeapons()]),
             this._catTech(),
             ...(isDeployable || isPilot ? [] : [this._catDeployables()]),
-            ...(isDeployable || isPilot ? [] : [this._catResources()]),
+            ...(isDeployable ? [] : [this._catResources()]),
             ...(isMech ? [this._catSystems()] : isNpc ? [this._catNpcSystems()] : isPilot ? [this._catPilotGear()] : []),
             ...(isMech ? [this._catFrame()]   : isNpc ? [this._catNpcFrame()]   : isPilot ? [this._catPilot()] : []),
             ...(isMech ? [this._catTalents()] : []),
@@ -1322,7 +1422,7 @@ export class LancerHUD {
                     childColLabel: actor.type === 'mech' ? 'Action' : 'Quick',
                     getChildren: () => [
                         ...(actor.type === 'mech' ? [
-                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Each time you OVERCHARGE, the next time you OVERCHARGE deals more self-heat. The sequence is 1d3 heat, 1d6 heat, 1d6+4 heat. It resets on a FULL REPAIR.' }) }, 'Overcharge'),
+                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Once per turn, you can OVERCHARGE your mech, allowing you to make any quick action as a free action, even actions you have already taken this turn.\n\nThe first time you OVERCHARGE, take 1 heat.\nThe second time, take 1d3 heat.\nThe third time, take 1d6 heat.\nEach time after, take 1d6+4 heat.\n\nA FULL REPAIR resets this counter.' }) }, 'Overcharge'),
                             { isSectionLabel: true, label: 'Quick' },
                         ] : []),
                         ...(/** @type {any} */ (this._catQuickActions().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
@@ -1846,7 +1946,7 @@ export class LancerHUD {
                 label: 'Other Skill',
                 badge: '+0',
                 badgeColor: '#777',
-                icon: null,
+                icon: 'systems/lancer/assets/icons/white/skill.svg',
                 hoverData: { actor, item: null, action: { name: 'Other Skill' }, category: 'Skills' },
                 onClick:     () => /** @type {any} */ (actor).beginStatFlow?.('system.other_skill', 'Other Skill'),
                 broadcastFn: (_t, a) => /** @type {any} */ (a)?.beginStatFlow?.('system.other_skill', 'Other Skill'),
@@ -1870,6 +1970,44 @@ export class LancerHUD {
                 { label: 'Skills',   childColLabel: 'Skills',   getChildren: () => statsItems },
                 ...(skillItems.length ? [{ label: 'Triggers', childColLabel: 'Triggers', getChildren: () => skillItems }] : []),
             ],
+        };
+    }
+
+    _catNarrativeUtility(linked) {
+        const actor = this._actor;
+        const items = [
+            { label: 'Glossary', isGlossaryPanel: true },
+            { label: 'Vote',
+                icon: 'modules/lancer-automations/icons/vote.svg',
+                onClick: () => {
+                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    if (api?.openChoiceMenu)
+                        api.openChoiceMenu();
+                    else
+                        /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.');
+                },
+            },
+        ];
+        if (linked && actor) {
+            items.push({ label: 'Downtime',
+                icon: 'systems/lancer/assets/icons/white/downtime.svg',
+                onClick: async () => {
+                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    await api?.executeDowntime?.();
+                },
+            });
+            items.push({ label: 'Reserve',
+                icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
+                onClick: () => {
+                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    api?.openAddReserveDialog?.(actor);
+                },
+            });
+        }
+        return {
+            label: 'Utility',
+            colLabel: 'Utility',
+            getItems: () => items,
         };
     }
 
@@ -2402,13 +2540,15 @@ export class LancerHUD {
         };
     }
 
-    _catReserves({ source, typeFilter = null, label = 'Reserves' } = {}) {
+    _catReserves({ source, typeFilter = null, excludeType = null, label = 'Reserves' } = {}) {
         return {
             label,
             colLabel: label,
             getItems: () => {
                 const reserves = (source?.items ?? []).filter(/** @type {any} */ i => i.type === 'reserve');
-                const filtered = typeFilter ? reserves.filter(/** @type {any} */ r => (r.system?.type ?? '') === typeFilter) : reserves;
+                let filtered = typeFilter ? reserves.filter(/** @type {any} */ r => (r.system?.type ?? '') === typeFilter) : reserves;
+                if (excludeType)
+                    filtered = filtered.filter(/** @type {any} */ r => (r.system?.type ?? '') !== excludeType);
                 if (!filtered.length)
                     return [];
                 const TYPE_ORDER  = ['Mech', 'Tactical', 'Project', 'Organization', 'Resources', 'Resource', 'Bonus'];
@@ -2512,7 +2652,7 @@ export class LancerHUD {
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: armor ? 'armor-id' : 'no-armor', dataValue: armor ? armor.id : actor.id, title: armor ? armor.name : 'No Armor', subtitle: 'Pilot Armor', bodyHtml: armorBody, theme: 'system', item: armor, row }),
                     },
                     ...(() => {
-                        const reserveRows = this._catReserves({ source: actor }).getItems().filter(/** @type {any} */ r => !r.isSectionLabel);
+                        const reserveRows = this._catReserves({ source: actor, excludeType: 'Mech' }).getItems().filter(/** @type {any} */ r => !r.isSectionLabel);
                         if (!reserveRows.length)
                             return [];
                         return [{ isSectionLabel: true, label: 'RESERVES' }, ...reserveRows];
@@ -3150,24 +3290,31 @@ export class LancerHUD {
             const sys      = /** @type {any} */ (talent).system;
             const ranks    = sys?.ranks ?? [];
             const currRank = sys?.curr_rank ?? 0;
-            Array.from({ length: currRank }, (_, rankIdx) => ranks[rankIdx]).forEach((rank, rankIdx) => {
-                if (!rank)
-                    return;
+            // Counters sharing an lid/name supersede across ranks: keep only the highest rank.
+            const byKey = new Map();
+            for (let rankIdx = 0; rankIdx < Math.min(currRank, ranks.length); rankIdx++) {
+                const rank = ranks[rankIdx];
+                if (!rank) continue;
                 const counters = rank.counters ?? [];
-                counters.forEach((counter, cidx) => {
-                    const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
-                    const rankLabel = `${roman[rankIdx] ?? String(rankIdx + 1)}: ${rank.name}`;
-                    const onRightClick = (/** @type {any} */ row) => {
-                        const key = `${/** @type {any} */ (talent).id}_${rankIdx}_${cidx}`;
-                        const desc = laFormatDetailHtml(rank.description ?? '');
-                        const descHtml = desc ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>` : '';
-                        const actionsHtml = laRenderActions(rank.actions ?? []);
-                        const bodyHtml = (descHtml + actionsHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
-                        this._showItemPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${/** @type {any} */ (talent).name} · Rank ${roman[rankIdx] ?? rankIdx + 1}`, bodyHtml, theme: 'talent', item: /** @type {any} */ (talent), row });
-                    };
-                    items.push(this._buildCounterRow(counter, path, /** @type {any} */ (talent), 'modules/lancer-automations/icons/perspective-dice-two.svg', onRightClick));
-                });
-            });
+                for (let cidx = 0; cidx < counters.length; cidx++) {
+                    const counter = counters[cidx];
+                    const k = counter?.lid || counter?.name || `r${rankIdx}c${cidx}`;
+                    byKey.set(k, { rankIdx, cidx, counter, rank });
+                }
+            }
+            for (const { rankIdx, cidx, counter, rank } of byKey.values()) {
+                const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
+                const rankLabel = `${roman[rankIdx] ?? String(rankIdx + 1)}: ${rank.name}`;
+                const onRightClick = (/** @type {any} */ row) => {
+                    const key = `${/** @type {any} */ (talent).id}_${rankIdx}_${cidx}`;
+                    const desc = laFormatDetailHtml(rank.description ?? '');
+                    const descHtml = desc ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>` : '';
+                    const actionsHtml = laRenderActions(rank.actions ?? []);
+                    const bodyHtml = (descHtml + actionsHtml) || '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
+                    this._showItemPopup({ cssClass: 'la-hud-popup la-hud-talent-popup', dataKey: 'rank-key', dataValue: key, title: rankLabel, subtitle: `${/** @type {any} */ (talent).name} · Rank ${roman[rankIdx] ?? rankIdx + 1}`, bodyHtml, theme: 'talent', item: /** @type {any} */ (talent), row });
+                };
+                items.push(this._buildCounterRow(counter, path, /** @type {any} */ (talent), 'modules/lancer-automations/icons/perspective-dice-two.svg', onRightClick));
+            }
         }
         const frame = actor?.system?.loadout?.frame?.value;
         const csCounters = frame?.system?.core_system?.counters ?? [];

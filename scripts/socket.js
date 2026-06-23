@@ -10,7 +10,7 @@ import {
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
 } from './interactive/index.js';
 import { setEffect, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
-import { performGMInputScan, performSystemScan } from './tools/scan.js';
+import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
 import { executeStatRoll, getItemLID } from './tools/misc-tools.js';
 
@@ -360,6 +360,16 @@ const HANDLERS = {
         if (!target)
             return;
         await performGMInputScan([target], payload.scanTitle, payload.requestingUserName);
+    },
+
+    scanSystemOptionsRequest: async (payload) => {
+        if (!game.user.isGM)
+            return;
+        const target = canvas.tokens.get(payload.targetId);
+        if (!target)
+            return;
+        ui.notifications.info(`${payload.requestingUserName} requested a system scan of ${payload.targetName}.`);
+        await showSystemScanDialog([target]);
     },
 
     scanSystemJournalRequest: async (payload) => {

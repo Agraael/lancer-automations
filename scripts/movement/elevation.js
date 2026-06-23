@@ -41,6 +41,14 @@ Hooks.once('init', () => {
         default: false,
         config: false
     });
+    game.settings.register(MODULE_ID, 'disableAutoElevationOnMeasure', {
+        name: 'Disable Auto-elevation on Measure Distance',
+        hint: 'Stop following THT terrain elevation while the ruler measures distance. Drop-position elevation is unaffected.',
+        scope: 'world',
+        type: Boolean,
+        default: false,
+        config: false
+    });
 });
 
 // Per-drag offset bumped by [/]/[\]; resets on drag start/cancel.

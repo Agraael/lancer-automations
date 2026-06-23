@@ -36,9 +36,14 @@ function _fmtTags(tags) {
         return [];
     return tags.map((t) => {
         const baseName = t.name ?? t.lid?.replace(/^tg_/, '') ?? '';
-        return t.val !== undefined && t.val !== null && String(t.val).length
+        const name = t.val !== undefined && t.val !== null && String(t.val).length
             ? baseName.replace('{VAL}', t.val)
             : baseName;
+        if (!name)
+            return null;
+        const rawDesc = String(t.description ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        const description = rawDesc.replace('{VAL}', t.val ?? '');
+        return { name, description, lid: t.lid ?? '' };
     }).filter(Boolean);
 }
 
@@ -123,6 +128,40 @@ function _buildCoreBonus(cb) {
         name: cb.name,
         effect: cb.system.effect || '',
         description: cb.system.description || '',
+    };
+}
+
+function _buildCorePower(frame) {
+    const cs = frame?.system?.core_system;
+    if (!cs)
+        return null;
+    return {
+        name: cs.name || 'Core Power',
+        passiveName: cs.passive_name || '',
+        passiveEffect: cs.passive_effect || '',
+        activeName: cs.active_name || '',
+        activeEffect: cs.active_effect || '',
+        activation: cs.activation || '',
+        description: cs.description || '',
+        tags: _fmtTags(cs.tags),
+        actions: _formatActions(cs.active_actions ?? cs.actions ?? []),
+    };
+}
+
+function _buildTalent(t) {
+    const sys = t.system ?? {};
+    const currRank = sys.curr_rank ?? 0;
+    const ranks = (sys.ranks ?? []).map((r, i) => ({
+        index: i + 1,
+        name: r?.name || '',
+        description: r?.description || '',
+        actions: _formatActions(r?.actions ?? []),
+        acquired: i < currRank,
+    }));
+    return {
+        name: t.name,
+        currRank,
+        ranks,
     };
 }
 
@@ -341,11 +380,15 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         levelOrTier = pilotActor ? `LL${pilotActor.system.level || 0}` : 'LL?';
 
         data.coreBonuses = [];
+        data.talents = [];
         if (pilotActor?.items) {
             for (const cb of pilotActor.items.filter((i) => i.type === 'core_bonus'))
                 data.coreBonuses.push(_buildCoreBonus(cb));
+            for (const t of pilotActor.items.filter((i) => i.type === 'talent'))
+                data.talents.push(_buildTalent(t));
         }
 
+        data.corePower = _buildCorePower(frameData);
         data.traits = (frameData?.system?.traits ?? []).map(_buildMechTrait);
 
         data.weapons = [];
@@ -774,8 +817,25 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520 }).render(true);
 }
 
-async function showSystemScanDialog(targets) {
+export async function showSystemScanDialog(targets) {
     const targetArray = Array.isArray(targets) ? targets : [targets];
+
+    if (!game.user.isGM) {
+        for (const target of targetArray) {
+            game.socket.emit('module.lancer-automations', {
+                action: 'scanSystemOptionsRequest',
+                payload: {
+                    targetId: target.id,
+                    targetName: target.name,
+                    requestingUserId: game.user.id,
+                    requestingUserName: game.user.name,
+                },
+            });
+        }
+        ui.notifications.info(`Scan request sent to GM for ${targetArray.length} target${targetArray.length > 1 ? 's' : ''}.`);
+        return;
+    }
+
     const targetNames = targetArray.map((t) => t.name).join(', ');
 
     const defaultOwnership = _defaultOwnershipForScan(game.user, canvas.tokens?.controlled?.[0]);

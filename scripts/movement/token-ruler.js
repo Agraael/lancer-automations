@@ -745,6 +745,11 @@ function _thtGroundAt(point) {
     return getHexGroundElevation(offset.j, offset.i) || 0;
 }
 
+function _measureTerrainElevDisabled() {
+    try { return !!game.settings.get(MODULE_ID, 'disableAutoElevationOnMeasure'); }
+    catch { return false; }
+}
+
 class LancerCanvasRuler extends foundry.canvas.interaction.Ruler {
     _getWaypointLabelContext(waypoint, state) {
         const ctx = super._getWaypointLabelContext(waypoint, state);
@@ -754,8 +759,10 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler {
             ctx.position = _isoProjectLabelPos(ctx.position);
         if (!ctx?.elevation || !waypoint.previous)
             return ctx;
-        const here = _thtGroundAt(waypoint) + (waypoint.elevation || 0);
-        const prev = _thtGroundAt(waypoint.previous) + (waypoint.previous.elevation || 0);
+        const groundHere = _measureTerrainElevDisabled() ? 0 : _thtGroundAt(waypoint);
+        const groundPrev = _measureTerrainElevDisabled() ? 0 : _thtGroundAt(waypoint.previous);
+        const here = groundHere + (waypoint.elevation || 0);
+        const prev = groundPrev + (waypoint.previous.elevation || 0);
         const delta = here - prev;
         ctx.elevation.total = here;
         ctx.elevation.hidden = here === 0 && delta === 0;

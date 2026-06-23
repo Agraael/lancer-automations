@@ -109,6 +109,31 @@ Hooks.on('init', () => {
         type: Boolean,
         default: false,
     });
+    game.settings.register(MODULE, 'tah.narrativeMode', {
+        name: 'Narrative TAH',
+        hint: 'When no token is selected, show a narrative HUD that can be linked to a pilot.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () => {
+            const tokens = (canvas?.tokens?.controlled ?? []).filter(t =>
+                ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner);
+            if (tokens.length === 0) {
+                if (game.settings.get(MODULE, 'tah.narrativeMode'))
+                    hud.bindNarrative();
+                else
+                    hud.unbind();
+            }
+        },
+    });
+    game.settings.register(MODULE, 'tah.narrativeLinkedActorUuid', {
+        name: 'Narrative Linked Actor',
+        scope: 'client',
+        config: false,
+        type: String,
+        default: '',
+    });
     game.settings.register(MODULE, 'tah.hoverCloseDelay', {
         name: 'Hover Close Delay (seconds)',
         hint: 'How long the HUD stays open after the mouse leaves.',
@@ -205,7 +230,7 @@ Hooks.on('init', () => {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail']) {
+    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat']) {
         game.settings.register(MODULE, `tah.statSound.${e}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });
@@ -473,9 +498,20 @@ Hooks.on('controlToken', (_token, controlled) => {
         );
         if (all.length > 0)
             hud.bind(all);
+        else if (game.settings.get('lancer-automations', 'tah.narrativeMode'))
+            hud.bindNarrative();
         else
             hud.unbind();
     });
+});
+
+Hooks.on('canvasReady', () => {
+    if (!enabled())
+        return;
+    if ((canvas?.tokens?.controlled ?? []).length > 0)
+        return;
+    if (game.settings.get('lancer-automations', 'tah.narrativeMode'))
+        hud.bindNarrative();
 });
 
 // ── Actor data changed (HP, heat, structure, action tracker…) ────────────────

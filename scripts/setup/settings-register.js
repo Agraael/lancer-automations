@@ -398,7 +398,7 @@ export function registerSettings() {
     });
     game.settings.register('lancer-automations', 'autoTokenHeightVehicleSquad', {
         name: 'Vehicle & Squad Height Adjustments',
-        hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.',
+        hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.',
         scope: 'world',
         config: false,
         type: Boolean,

@@ -9,6 +9,7 @@ const SETTING_AWARENESS_COMBAT_ONLY = 'lancerAwarenessCombatOnly';
 const SETTING_SENSOR_USE_MODE_RANGE = 'lancerSensorUseModeRange';
 const SETTING_AWARENESS_USE_MODE_RANGE = 'lancerAwarenessUseModeRange';
 const SETTING_BASIC_SIGHT_999 = 'basicSightTo999';
+const SETTING_FORCE_FULL_DARKVISION = 'forceFullDarkvision';
 const SETTING_DRAG_VISION_MODE = 'dragVisionMode';
 
 function _getSetting(key) {
@@ -357,6 +358,14 @@ function _registerVisionSettings() {
         type: Boolean,
         default: false
     });
+    game.settings.register(MODULE_ID, SETTING_FORCE_FULL_DARKVISION, {
+        name: 'Force darkvision + light perception = 9999',
+        hint: 'On token creation: enable sight, set darkvision range and light perception detection range to 9999.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
     game.settings.register(MODULE_ID, SETTING_DRAG_VISION_MODE, {
         name: 'Drag-vision mode',
         hint: 'How to interpret the Drag Vision Multiplier value while a token is being dragged.',
@@ -422,6 +431,23 @@ function _onCreateToken(tokenDoc, _options, userId) {
     if (_getSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== 999) {
         update["sight.range"] = 999;
     }
+    if (_getSetting(SETTING_FORCE_FULL_DARKVISION)) {
+        if (!tokenDoc.sight?.enabled) update["sight.enabled"] = true;
+        if (tokenDoc.sight?.range !== 9999) update["sight.range"] = 9999;
+        if (tokenDoc.sight?.visionMode !== 'darkvision') update["sight.visionMode"] = 'darkvision';
+        const dm = update.detectionModes ?? [...(tokenDoc.detectionModes ?? [])];
+        const lp = dm.find(/** @type {any} */ m => m?.id === 'lightPerception');
+        if (lp) {
+            if (lp.range !== 9999 || lp.enabled !== true) {
+                lp.range = 9999;
+                lp.enabled = true;
+                update.detectionModes = dm;
+            }
+        } else {
+            dm.push({ id: 'lightPerception', enabled: true, range: 9999 });
+            update.detectionModes = dm;
+        }
+    }
     if (Object.keys(update).length > 0) {
         tokenDoc.update(update);
     }
@@ -432,16 +458,41 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false) {
         return;
     }
     const overrideSightRange = _getSetting(SETTING_BASIC_SIGHT_999);
+    const forceFullDark = _getSetting(SETTING_FORCE_FULL_DARKVISION);
+    const applyFullDark = (dm, sight, keyPrefix, update) => {
+        if (!sight?.enabled) update[`${keyPrefix}sight.enabled`] = true;
+        if (sight?.range !== 9999) update[`${keyPrefix}sight.range`] = 9999;
+        if (sight?.visionMode !== 'darkvision') update[`${keyPrefix}sight.visionMode`] = 'darkvision';
+        const lp = dm.find(/** @type {any} */ m => m?.id === 'lightPerception');
+        let dmChanged = false;
+        if (lp) {
+            if (lp.range !== 9999 || lp.enabled !== true) {
+                lp.range = 9999;
+                lp.enabled = true;
+                dmChanged = true;
+            }
+        } else {
+            dm.push({ id: 'lightPerception', enabled: true, range: 9999 });
+            dmChanged = true;
+        }
+        return dmChanged;
+    };
 
     ui.notifications.info("Updating prototype token vision...");
     await Promise.all(game.actors.map(a => {
         const proto = a.prototypeToken;
         const { updates, changed } = _augmentDetectionModes(proto?.detectionModes);
         const update = {};
-        if (changed) {
-            update["prototypeToken.detectionModes"] = updates;
+        let dm = updates;
+        let dmChanged = changed;
+        if (forceFullDark) {
+            const dmChanged2 = applyFullDark(dm, proto?.sight, "prototypeToken.", update);
+            dmChanged = dmChanged || dmChanged2;
         }
-        if (overrideSightRange && proto?.sight?.range !== 999) {
+        if (dmChanged) {
+            update["prototypeToken.detectionModes"] = dm;
+        }
+        if (overrideSightRange && proto?.sight?.range !== 999 && !forceFullDark) {
             update["prototypeToken.sight.range"] = 999;
         }
         if (Object.keys(update).length === 0) {
@@ -463,11 +514,17 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false) {
             const { updates: dm, changed } = _augmentDetectionModes(t.detectionModes);
             const u = { _id: t.id };
             let any = false;
-            if (changed) {
+            let dmChanged = changed;
+            if (forceFullDark) {
+                const dmChanged2 = applyFullDark(dm, t.sight, "", u);
+                dmChanged = dmChanged || dmChanged2;
+                if (Object.keys(u).some(k => k.startsWith('sight.'))) any = true;
+            }
+            if (dmChanged) {
                 u.detectionModes = dm;
                 any = true;
             }
-            if (overrideSightRange && t.sight?.range !== 999) {
+            if (overrideSightRange && t.sight?.range !== 999 && !forceFullDark) {
                 u["sight.range"] = 999;
                 any = true;
             }

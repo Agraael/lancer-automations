@@ -80,6 +80,11 @@ const DAMAGE_SOUNDS = {
     hit_overshield: { folder: `${STATS_BASE}/hit_overshield`, scale: 0.1 },
 };
 
+// Folder-based stat sounds (random file each play). Registered under tah.statSound.*.
+const STAT_FOLDER_SOUNDS = {
+    generic_stat: { folder: `${STATS_BASE}/generic_stat`, scale: 0.3 },
+};
+
 /** Single-file stat change sounds. */
 const STAT_SOUNDS = {
     hp_loss:     { src: `${STATS_BASE}/hp_loss.wav`,     scale: 0.2 },
@@ -159,9 +164,10 @@ export async function playDamageSound(type, { force = false } = {}) {
     _playDamageAudio(src, cfg.scale);
 }
 
-export function playStatsSound(key, { force = false } = {}) {
-    const cfg = STAT_SOUNDS[key];
-    if (!cfg)
+export async function playStatsSound(key, { force = false } = {}) {
+    const single = STAT_SOUNDS[key];
+    const folder = STAT_FOLDER_SOUNDS[key];
+    if (!single && !folder)
         return;
     if (!force) {
         try {
@@ -169,7 +175,14 @@ export function playStatsSound(key, { force = false } = {}) {
                 return;
         } catch { /* not ready */ }
     }
-    _playDamageAudio(cfg.src, cfg.scale);
+    if (single) {
+        _playDamageAudio(single.src, single.scale);
+        return;
+    }
+    const files = await _listFolderFiles(folder.folder);
+    if (!files.length)
+        return;
+    _playDamageAudio(files[Math.floor(Math.random() * files.length)], folder.scale);
 }
 
 export function playStatusSfxSound(key, { force = false } = {}) {
@@ -200,6 +213,8 @@ function _wasRecentlyDamaged(actorId) {
 // Pre-warm the folder caches so the first damage doesn't pay a browse latency hit.
 Hooks.once('ready', () => {
     for (const cfg of Object.values(DAMAGE_SOUNDS))
+        _listFolderFiles(cfg.folder);
+    for (const cfg of Object.values(STAT_FOLDER_SOUNDS))
         _listFolderFiles(cfg.folder);
 });
 

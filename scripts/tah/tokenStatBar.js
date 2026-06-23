@@ -10,6 +10,7 @@ import {
     isTokenVisible,
 } from '../utils/lancer-token.js';
 import { setTokenFlag } from '../socket.js';
+import { playStatsSound } from './sound.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatBar';
@@ -397,8 +398,39 @@ function _readActorPath(actor, path) {
     return foundry.utils.getProperty(actor, path);
 }
 
-// Resolve an extra bar's current value/max and per-user visibility.
-// Exported so the stat-hint popup can render the same numbers without duplicating logic.
+// True if `user` has an OBSERVER-or-better scan journal entry for this actor.
+function _isActorScannedByUser(actor, user) {
+    if (!actor || !user)
+        return false;
+    try {
+        for (const entry of /** @type {any} */ (game.journal ?? [])) {
+            const scan = /** @type {any} */ (entry.getFlag?.(MODULE_ID, 'scan'));
+            if (scan?.actorUuid !== actor.uuid)
+                continue;
+            if (entry.testUserPermission?.(user, 'OBSERVER'))
+                return true;
+        }
+    } catch { /* ignore */ }
+    return false;
+}
+
+// Resolve visibility from the 3-mode field. Falls back to legacy ownerOnly, then 'scanned'.
+function _resolveExtraBarVisibility(actor, entry) {
+    let mode = entry?.visibility;
+    if (!mode)
+        mode = entry?.ownerOnly === true ? 'owner' : entry?.ownerOnly === false ? 'all' : 'scanned';
+    if (mode === 'all')
+        return true;
+    if (game.user?.isGM || actor?.isOwner)
+        return true;
+    if (mode === 'owner')
+        return false;
+    // 'scanned': own-side actors always reveal to non-owners (no scan concept); NPC/deployable need a scan.
+    if (actor?.type === 'pilot' || actor?.type === 'mech')
+        return true;
+    return _isActorScannedByUser(actor, game.user);
+}
+
 export function _resolveExtraBarValues(actor, entry) {
     const read = (src) => {
         if (!src)
@@ -412,7 +444,7 @@ export function _resolveExtraBarValues(actor, entry) {
     const value = read(entry?.valueSource);
     const rawMax = read(entry?.maxSource);
     const max = rawMax > 0 ? rawMax : (entry?.segmented ? Math.max(1, Number(entry?.segments) || 1) : 1);
-    const ownerOk = !entry?.ownerOnly || game.user?.isGM || actor?.isOwner;
+    const ownerOk = _resolveExtraBarVisibility(actor, entry);
     return { value, max, ownerOk };
 }
 
@@ -432,17 +464,23 @@ function _enumerateAutoCounters(actor) {
         const ranks = /** @type {any} */ (talent).system?.ranks ?? [];
         const currRank = /** @type {any} */ (talent).system?.curr_rank ?? ranks.length;
         const lastIdx = Math.min(currRank, ranks.length);
+        // Counters keyed by lid/name supersede across ranks: keep only the highest rank.
+        const byKey = new Map();
         for (let r = 0; r < lastIdx; r++) {
             const counters = ranks[r]?.counters ?? [];
             for (let c = 0; c < counters.length; c++) {
                 const counter = counters[c];
-                out.push({
-                    autoKey: `talent:${lid}:r${r}:c${c}`,
-                    label: counter?.name ?? 'Counter',
-                    valuePath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.value`,
-                    maxPath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.max`,
-                });
+                const k = counter?.lid || counter?.name || `r${r}c${c}`;
+                byKey.set(k, { r, c, counter });
             }
+        }
+        for (const { r, c, counter } of byKey.values()) {
+            out.push({
+                autoKey: `talent:${lid}:r${r}:c${c}`,
+                label: counter?.name ?? 'Counter',
+                valuePath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.value`,
+                maxPath: `pilotItems.${talent.id}.system.ranks.${r}.counters.${c}.max`,
+            });
         }
     }
     const frame = actor.system?.loadout?.frame?.value;
@@ -518,7 +556,8 @@ function _buildAutoInjectedEntry(c, color, widthPct) {
         maxSource: { kind: 'path', path: c.maxPath, value: 1 },
         segmented: true,
         showLabelInHint: true,
-        ownerOnly: true,
+        visibility: 'scanned',
+        audioTextFeedback: true,
     };
 }
 
@@ -588,10 +627,11 @@ export function _defaultExtraBar() {
         segmented: false,
         segments: 4,
         color: { kind: 'solid', stops: ['#66cc66'] },
-        ownerOnly: false,
+        visibility: 'scanned',
         icon: DEFAULT_EXTRA_BAR_ICON,
         showLabelInHint: false,
         linkedItemUuid: '',
+        audioTextFeedback: false,
     };
 }
 
@@ -662,8 +702,8 @@ export async function addExtraBar(token, partial = {}) {
         return null;
     }
     const arr = foundry.utils.deepClone(/** @type {any} */ (td).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
-    // API entries default to owner-only; partial wins.
-    const base = { ..._defaultExtraBar(), ownerOnly: true };
+    // API entries default to scanned; partial wins.
+    const base = { ..._defaultExtraBar(), visibility: 'scanned', audioTextFeedback: true };
     const entry = foundry.utils.mergeObject(base, partial ?? {}, { inplace: false });
     if (!entry.id || arr.some(/** @type {any} */ x => x.id === entry.id)) {
         entry.id = foundry.utils.randomID();
@@ -724,7 +764,14 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed) {
                 <span class="la-extra-bar-summary" title="${_escAttr(summary)}">${_escAttr(summary)}</span>
                 <input type="number" data-field="widthPct" value="${e.widthPct}" min="1" max="100" step="1" title="Width %" class="la-extra-bar-width" style="${overflow ? 'border-color:#c33;color:#c33;' : ''}">
                 <span class="la-extra-bar-pct">%</span>
-                <label class="la-extra-bar-cb" title="Owner-only"><input type="checkbox" data-field="ownerOnly" ${e.ownerOnly ? 'checked' : ''}><span>Owner</span></label>
+                ${(() => {
+                    const vis = e.visibility ?? (e.ownerOnly === true ? 'owner' : e.ownerOnly === false ? 'all' : 'scanned');
+                    return `<select class="la-extra-bar-vis" data-field="visibility" title="Visibility: who sees this bar">
+                        <option value="owner" ${vis === 'owner' ? 'selected' : ''}>Owner only</option>
+                        <option value="scanned" ${vis === 'scanned' ? 'selected' : ''}>Scanned</option>
+                        <option value="all" ${vis === 'all' ? 'selected' : ''}>All</option>
+                    </select>`;
+                })()}
                 <button type="button" class="la-extra-bar-del" title="Delete"><i class="fas fa-trash"></i></button>
             </div>
             <div class="la-extra-bar-body" style="${collapsed ? 'display:none;' : ''}">
@@ -764,6 +811,7 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed) {
                     <input type="text" data-field="icon" value="${_escAttr(e.icon ?? DEFAULT_EXTRA_BAR_ICON)}" placeholder="${DEFAULT_EXTRA_BAR_ICON}" class="la-extra-bar-grow">
                     <button type="button" class="la-extra-bar-icon-pick" title="Browse files"><i class="fas fa-file-import"></i></button>
                     <label class="la-extra-bar-cb" title="Show label next to the icon in the hover stat hint"><input type="checkbox" data-field="showLabelInHint" ${e.showLabelInHint ? 'checked' : ''}><span>Show label in hint</span></label>
+                    <label class="la-extra-bar-cb" title="Float a +/- text over the token and play the generic_stat sound on value change"><input type="checkbox" data-field="audioTextFeedback" ${e.audioTextFeedback ? 'checked' : ''}><span>Audio/Text Feedback</span></label>
                 </div>
                 ${e.autoKey ? '' : `
                 <div class="la-extra-bar-line">
@@ -1387,7 +1435,41 @@ function spawnFlash(token, barId, oldVal, newVal) {
     }
 }
 
+// Audio + scrolling text. Fires even without a rendered hub.
+function fireExtraFeedback(token, entryId, oldVal, newVal) {
+    if (oldVal === newVal)
+        return;
+    try {
+        const extras = /** @type {any} */ (token).document?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+        const entry = extras.find(/** @type {any} */ e => e?.id === entryId);
+        if (!entry?.audioTextFeedback)
+            return;
+        const canSee = _resolveExtraBarVisibility(/** @type {any} */ (token).actor, entry);
+        const delta = newVal - oldVal;
+        const label = entry.label || 'Stat';
+        const text = canSee ? `${delta > 0 ? '+' : ''}${delta} ${label}` : '???';
+        if (canvas?.interface?.createScrollingText) {
+            let showScroll = true;
+            try { showScroll = !!game.settings.get('lancer', 'floatingNumbers'); } catch { /* ignore */ }
+            if (showScroll) {
+                const primary = canSee ? (entry.color?.stops?.[0] ?? '#ffffff') : '#888888';
+                canvas.interface.createScrollingText(token.center, text, {
+                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                    direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
+                    fontSize: 28,
+                    fill: primary,
+                    stroke: 0,
+                    strokeThickness: 4,
+                    jitter: 0.25,
+                });
+            }
+        }
+        playStatsSound('generic_stat');
+    } catch { /* ignore */ }
+}
+
 function spawnFlashExtra(token, entryId, oldVal, newVal) {
+    fireExtraFeedback(token, entryId, oldVal, newVal);
     const geom = token._laBarsGeom;
     if (!geom || !Array.isArray(geom.extras) || oldVal === newVal)
         return;
@@ -1403,6 +1485,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
     }
     if (!target)
         return;
+
     const { rowHeight } = geom;
     const isDamage = newVal < oldVal;
 
@@ -1725,6 +1808,9 @@ function drawStatHub() {
 
     if (rows.length === 0) {
         token.bars.visible = false;
+        // Seed snapshot anyway: updateToken/updateActor still need it to diff extras.
+        if (!_lastValues.has(token.id))
+            _lastValues.set(token.id, snapshotValues(actor, /** @type {any} */ (token).document));
         return;
     }
 

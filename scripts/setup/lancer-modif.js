@@ -1256,8 +1256,11 @@ function getDesiredWallHeight(actor) {
         const items = Array.from(actor.items ?? []);
         if (items.some(i => i.system?.lid === 'npcc_squad'))
             return 0.5;
-        if (items.some(i => /vehicle/i.test(i.system?.lid ?? '')))
-            return Math.min(Math.max(size - 1, 1), 4) + 0.1;
+        if (items.some(i => /vehicle/i.test(i.system?.lid ?? ''))) {
+            if (size <= 1)
+                return 0.5;
+            return Math.min(size - 1, 4) + 0.1;
+        }
     }
     return size + 0.1;
 }

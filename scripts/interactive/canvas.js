@@ -94,6 +94,7 @@ function _groupCellsByDistance(originOffsets, cellKeys) {
 function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {}) {
     const {
         color = 0x929292,
+        lineColor = 0xFFFFFF,
         peakAlpha = 0.1,
         baseAlpha = 0.00,
         baseLineAlpha = 0.00,
@@ -116,7 +117,7 @@ function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {}) {
             const waveAlpha = delta > ringWidth ? 0 : peakAlpha * (1 - delta / ringWidth);
             const fillAlpha = Math.min(1, baseAlpha + waveAlpha);
             const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
-            pulseGraphic.lineStyle(lineWidth, color, lineAlpha);
+            pulseGraphic.lineStyle(lineWidth, lineColor, lineAlpha);
             pulseGraphic.beginFill(color, fillAlpha);
             _paintCells(pulseGraphic, list);
             pulseGraphic.endFill();
@@ -129,9 +130,10 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
     const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
     const lineAlpha = opts.lineAlpha ?? (isHexGrid() ? 0.4 : 0.7);
     const lineWidth = opts.lineWidth ?? 2;
+    const lineColor = opts.lineColor ?? color;
 
     if (lineWidth > 0 && lineAlpha > 0)
-        highlight.lineStyle(lineWidth, color, lineAlpha);
+        highlight.lineStyle(lineWidth, lineColor, lineAlpha);
     if (alpha > 0)
         highlight.beginFill(color, alpha);
     _paintCells(highlight, inRange);
@@ -151,7 +153,7 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
  * visual used by choose-token / knockback cards. Returns a destroy() function.
  */
 export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false, staticFillAlpha = 0.1, staticLineAlpha = 0.15, fadeInMs = 180, fadeOutMs = 180 } = {}) {
-    const rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, staticFillAlpha, includeSelf, { lineAlpha: staticLineAlpha });
+    const rangeHighlight = drawRangeHighlight(casterToken, range, 0x888888, staticFillAlpha, includeSelf, { lineAlpha: staticLineAlpha, lineColor: 0xFFFFFF });
 
     const pulseGraphic = new PIXI.Graphics();
     if (canvas.tokens?.parent) {
@@ -494,7 +496,7 @@ export function chooseToken(casterToken, options = {}) {
             if (safeMove)
                 canvas.stage.off('pointermove', safeMove);
             if (safeKey)
-                document.removeEventListener('keydown', safeKey);
+                document.removeEventListener('keydown', safeKey, true);
             if (rangeHighlight) {
                 if (rangeHighlight.parent) {
                     rangeHighlight.parent.removeChild(rangeHighlight);
@@ -787,18 +789,11 @@ export function chooseToken(casterToken, options = {}) {
             showStackPicker(tokensHere, sx + 10, sy + 10);
         };
 
-        const abortHandler = (event) => {
-            if (event.data.button === 2) { // Right click
-                if (stackPopupEl) {
-                    closeStackPopup();
-                    return;
-                }
-                doConfirm();
-            }
-        };
-
         const keyHandler = (event) => {
             if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
                 if (stackPopupEl) {
                     closeStackPopup();
                     return;
@@ -833,12 +828,10 @@ export function chooseToken(casterToken, options = {}) {
         };
         safeMove = safe(moveHandler);
         safeClick = safe(clickHandler);
-        safeAbort = safe(abortHandler);
         safeKey = safe(keyHandler);
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
-        canvas.stage.on('rightdown', safeAbort);
-        document.addEventListener('keydown', safeKey);
+        document.addEventListener('keydown', safeKey, true);
     }), _title);
 }
 
@@ -1339,7 +1332,7 @@ export async function moveToken(token, options = {}) {
                 if (safeMove)
                     canvas.stage.off('pointermove', safeMove);
                 if (safeKey)
-                    document.removeEventListener('keydown', safeKey);
+                    document.removeEventListener('keydown', safeKey, true);
                 restoreLayerClick();
                 if (rangeHighlight) {
                     if (rangeHighlight.parent)
@@ -1457,11 +1450,11 @@ export async function moveToken(token, options = {}) {
                 _updateInfoCard(cardEl, "teleport", { selectedPos, tokenName: token.name });
             };
 
-            const abortHandler = () => {
-                doCleanup(); resolve(null);
-            };
             const keyHandler = (e) => {
                 if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
                     doCleanup(); resolve(null);
                 }
             };
@@ -1479,12 +1472,10 @@ export async function moveToken(token, options = {}) {
             };
             safeMove = safe(moveHandler);
             safeClick = safe(clickHandler);
-            safeAbort = safe(abortHandler);
             safeKey = safe(keyHandler);
             canvas.stage.on('click', safeClick);
-            canvas.stage.on('rightdown', safeAbort);
             canvas.stage.on('pointermove', safeMove);
-            document.addEventListener('keydown', safeKey);
+            document.addEventListener('keydown', safeKey, true);
         }), _title);
         if (!picked)
             return null;
@@ -1625,7 +1616,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             if (safeMove)
                 canvas.stage.off('pointermove', safeMove);
             if (safeKey)
-                document.removeEventListener('keydown', safeKey);
+                document.removeEventListener('keydown', safeKey, true);
             restoreLayerClick();
 
             if (rangeHighlight) {
@@ -1922,24 +1913,11 @@ export function knockBackToken(tokens, distance, options = {}) {
             updateVisuals();
         };
 
-        const abortHandler = (event) => {
-            if (event.data.button === 2) {
-
-                if (moves.has(tokenList[activeIndex].id)) {
-                    moves.delete(tokenList[activeIndex].id);
-                    if (traces.has(tokenList[activeIndex].id)) {
-                        const t = traces.get(tokenList[activeIndex].id);
-                        t.destroy();
-                        traces.delete(tokenList[activeIndex].id);
-                    }
-                    updateCard();
-                    updateVisuals();
-                } else { /* empty */ }
-            }
-        };
-
         const keyHandler = (event) => {
             if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
                 doCleanup(); // Cancel
                 resolve(null);
             }
@@ -1962,12 +1940,10 @@ export function knockBackToken(tokens, distance, options = {}) {
         };
         safeMove = safe(moveHandler);
         safeClick = safe(clickHandler);
-        safeAbort = safe(abortHandler);
         safeKey = safe(keyHandler);
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
-        canvas.stage.on('rightdown', safeAbort);
-        document.addEventListener('keydown', safeKey);
+        document.addEventListener('keydown', safeKey, true);
     }), _title);
 }
 
@@ -2422,16 +2398,6 @@ export function placeToken(options = {}) {
             }
         };
 
-        const rightHandler = (event) => {
-            if (event.data.button === 2 && placements.length > 0) {
-                const removed = placements.pop();
-                if (removed.graphics?.parent)
-                    removed.graphics.parent.removeChild(removed.graphics);
-                removed.graphics?.destroy();
-                refreshCard();
-            }
-        };
-
         const ascendKeys = new Set([
             ...(game.keybindings.get('core', 'zoomIn') ?? []).map(b => b.key),
             'NumpadAdd', 'KeyE',
@@ -2442,6 +2408,9 @@ export function placeToken(options = {}) {
         ]);
         const keyHandler = (event) => {
             if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
                 doCleanup();
                 resolve(null);
                 return;
@@ -2483,11 +2452,9 @@ export function placeToken(options = {}) {
         };
         safeMove = safe(moveHandler);
         safeClick = safe(clickHandler);
-        safeRight = safe(rightHandler);
         safeKey = safe(keyHandler);
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
-        canvas.stage.on('rightdown', safeRight);
         document.addEventListener('keydown', safeKey, true);
     }), _title);
 }
@@ -2537,7 +2504,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             if (safeMove)
                 canvas.stage.off('pointermove', safeMove);
             if (safeKey)
-                document.removeEventListener('keydown', safeKey);
+                document.removeEventListener('keydown', safeKey, true);
             if (cursorPreview.parent)
                 cursorPreview.parent.removeChild(cursorPreview);
             cursorPreview.destroy();
@@ -2647,19 +2614,11 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             showStackPicker(tokensHere, (oe?.clientX ?? 0) + 10, (oe?.clientY ?? 0) + 10);
         };
 
-        const abortHandler = (event) => {
-            if (event.data.button === 2) {
-                if (stackPopupEl) {
-                    closeStackPopup();
-                    return;
-                }
-                doCleanup();
-                resolve(null);
-            }
-        };
-
         const keyHandler = (event) => {
             if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
                 if (stackPopupEl) {
                     closeStackPopup();
                     return;
@@ -2682,11 +2641,9 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         };
         safeMove = safe(moveHandler);
         safeClick = safe(clickHandler);
-        safeAbort = safe(abortHandler);
         safeKey = safe(keyHandler);
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
-        canvas.stage.on('rightdown', safeAbort);
-        document.addEventListener('keydown', safeKey);
+        document.addEventListener('keydown', safeKey, true);
     });
 }

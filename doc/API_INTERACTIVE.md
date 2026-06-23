@@ -766,7 +766,7 @@ Extra bars drawn under a token's HP/Heat/etc. Stored per-token at `flags.lancer-
 const id = await api.addExtraBar(token, partial)
 ```
 
-Create a new extra bar by overlaying `partial` on the default shape. Returns the new entry id, or `null` on failure. API-created entries default to `ownerOnly: true` (only the actor's owners and the GM see them); pass `ownerOnly: false` in `partial` to make it public.
+Create a new extra bar by overlaying `partial` on the default shape. Returns the new entry id, or `null` on failure. API-created entries default to `visibility: 'scanned'` (visible to owners, the GM, and users who have scanned the actor; own-side pilots/mechs are always visible). Pass `visibility: 'owner' | 'scanned' | 'all'` in `partial` to override.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -785,7 +785,7 @@ Entry shape (all fields optional in `partial`):
     maxSource:   { kind: 'path' | 'manual', path?: string, value?: number },
     segmented: boolean,            // when on, pip count = resolved max
     color: { kind: 'solid', stops: ['#RRGGBB'] },
-    ownerOnly: boolean,
+    visibility: 'owner' | 'scanned' | 'all',
     icon: string,                  // file path
     showLabelInHint: boolean,      // show label in the hover stat hint
     linkedItemUuid: string,        // right-click in TAH opens this item's sheet

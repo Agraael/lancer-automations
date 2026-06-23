@@ -333,7 +333,7 @@ await api.addConstantBonus(actor, {
 | Property | Type | Description |
 |:---------|:-----|:------------|
 | <kbd>rangeType</kbd> | `string` | `"Range"`, `"Threat"`, `"Line"`, `"Blast"`, `"Burst"`, `"Cone"` |
-| <kbd>rangeMode</kbd> | `string` | `"add"` (default) or `"override"` |
+| <kbd>rangeMode</kbd> | `string` | `"add"` (default, accepts negative val), `"override"` (set existing or create), or `"change"` (replace all ranges with a single entry) |
 
 </details>
 

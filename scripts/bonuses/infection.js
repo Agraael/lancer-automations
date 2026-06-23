@@ -389,40 +389,48 @@ export function initInfectionHooks() {
 
     Hooks.on('updateCombat', onUpdateCombatInfection);
 
-    if (typeof libWrapper !== 'undefined') {
-        libWrapper.register(MODULE_ID, 'CONFIG.Actor.documentClass.prototype.statChangeScrollingText',
-            async function (wrapped, data) {
-                await wrapped(data);
-                const newVal = data?.system?.infection;
-                if (newVal === undefined)
-                    return;
-                const val = (this.system?.infection ?? 0) - newVal;
-                if (!val)
-                    return;
-                const tokenId = this.token?.id
-                    ?? canvas?.scene?.tokens?.find(t => t.actor?.id === this.id)?.id;
-                if (!tokenId)
-                    return;
-                const token = canvas?.tokens?.get(tokenId);
-                if (!token || !canvas?.interface?.createScrollingText)
-                    return;
-                let showScroll = true;
-                try {
-                    showScroll = !!game.settings.get('lancer', 'floatingNumbers');
-                } catch { /* ignore */ }
-                if (!showScroll)
-                    return;
-                await canvas.interface.createScrollingText(token.center, `${val < 0 ? '+' : '-'}${Math.abs(val)} Infection`, {
-                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    direction: val < 0 ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    fontSize: 28,
-                    fill: '0x006400',
-                    stroke: 0,
-                    strokeThickness: 4,
-                    jitter: 0.25,
-                });
-            }, 'WRAPPER');
-    }
+    // Per-client running snapshot. updateActor fires on every client (the hook
+    // arg `change` contains the NEW value, the actor itself already reflects it
+    // by hook time, so we need our own prev).
+    const _prevInfection = new Map();
+    const _seedInfection = () => {
+        for (const a of game.actors ?? []) {
+            if (a.system?.infection !== undefined)
+                _prevInfection.set(a.id, Number(a.system.infection ?? 0));
+        }
+    };
+    Hooks.once('ready', _seedInfection);
+    Hooks.on('canvasReady', _seedInfection);
+    Hooks.on('createActor', (actor) => {
+        _prevInfection.set(actor.id, Number(actor.system?.infection ?? 0));
+    });
+    Hooks.on('updateActor', (actor, change) => {
+        const newVal = change?.system?.infection;
+        if (newVal === undefined)
+            return;
+        const prev = _prevInfection.get(actor.id) ?? 0;
+        const next = Number(newVal);
+        _prevInfection.set(actor.id, next);
+        const delta = next - prev;
+        if (!delta)
+            return;
+        const token = actor.token?.object ?? actor.getActiveTokens?.()[0];
+        if (!token || !canvas?.interface?.createScrollingText)
+            return;
+        let showScroll = true;
+        try { showScroll = !!game.settings.get('lancer', 'floatingNumbers'); } catch { /* ignore */ }
+        if (!showScroll)
+            return;
+        canvas.interface.createScrollingText(token.center, `${delta > 0 ? '+' : ''}${delta} Infection`, {
+            anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+            direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
+            fontSize: 28,
+            fill: '0x006400',
+            stroke: 0,
+            strokeThickness: 4,
+            jitter: 0.25,
+        });
+    });
 
     // Modify "took X damage" messages to show infection
     Hooks.on('preCreateChatMessage', (msg) => {

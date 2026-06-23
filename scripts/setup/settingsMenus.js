@@ -51,6 +51,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' },
     { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end.' },
     { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.' },
+    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the canvas measure ruler labels. Token drag and drop unaffected.' },
     { key: 'resetMovementTypeOnDragStart', type: 'boolean', label: 'Reset Movement Type on Drag Start', hint: 'Each drag starts on the token\'s natural action (walk, or fly if the token is flying). Use M to cycle mid-drag.' },
     { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
 
@@ -160,7 +161,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
-    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size-1, capped at 4). Squads get 0.5.' },
+    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.' },
     { type: 'button',
         key: 'syncAllTokenHeights',
         label: 'Apply Token Heights to All Actors',
@@ -250,6 +251,7 @@ const TOKENS_DISPLAY_FIELDS = [
 const TAH_FIELDS = [
     { type: 'section', label: 'Token Action HUD' },
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
+    { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' },
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.maxColumnItems', type: 'number' },
@@ -376,7 +378,7 @@ const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
-const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail'];
+const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
 const STATUS_SFX_EVENTS = ['bonus'];
 
 function _toLabel(s) {
@@ -403,6 +405,17 @@ const SOUNDS_FIELDS = [
 
     { type: 'section', label: 'Stat feedback (mute toggles)', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STAT_EVENTS.map((e) => ({ key: `tah.statSound.${e}`, label: _toLabel(e), preview: true })) },
+    { type: 'button',
+        key: 'toggleLancerFloatingNumbers',
+        label: 'Toggle Lancer Floating Numbers',
+        icon: 'fas fa-arrows-alt-v',
+        clientAllowed: true,
+        onClick: async () => {
+            const cur = !!game.settings.get('lancer', 'floatingNumbers');
+            await game.settings.set('lancer', 'floatingNumbers', !cur);
+            ui.notifications?.info(`Floating Numbers: ${!cur ? 'ON' : 'OFF'}`);
+        },
+    },
 
     { type: 'section', label: 'Status SFX (mute toggles)', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
@@ -500,6 +513,7 @@ const VISION_FIELDS = [
 
     { type: 'section', label: 'Basic Vision' },
     { key: 'basicSightTo999', type: 'boolean' },
+    { key: 'forceFullDarkvision', type: 'boolean' },
 
     { type: 'section', label: 'Drag Vision' },
     { key: 'dragVisionMode', type: 'select' },

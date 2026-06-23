@@ -46,6 +46,45 @@ export const ACTIVATION_TAG_MAP = {
  * @param {string} activationType  e.g. "Quick", "Full", "Quick Tech", "Full Tech", "Invade"
  * @returns {{ action: Object, sourceItem: Item }[]}
  */
+/** @returns {{color: string, label: string} | null} */
+export function getTokenDispositionInfo(token) {
+    if (!token?.document)
+        return null;
+    const disp = token.document.disposition;
+    const dispMap = {
+        [CONST.TOKEN_DISPOSITIONS.HOSTILE]:  { color: '#e53935', label: 'Hostile' },
+        [CONST.TOKEN_DISPOSITIONS.NEUTRAL]:  { color: '#f9a825', label: 'Neutral' },
+        [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
+        [CONST.TOKEN_DISPOSITIONS.SECRET]:   { color: '#7e57c2', label: 'Secret' },
+    };
+    const fallback = dispMap[disp] ?? { color: '#888', label: 'Unknown' };
+    let color = fallback.color;
+    let label = fallback.label;
+    try {
+        const tf = game.modules.get('token-factions');
+        if (tf?.active) {
+            let tfColor = /** @type {any} */ (tf).api?.getFactionColor?.(token.id)?.INT_S;
+            if (!tfColor) {
+                const helper = /** @type {any} */ (globalThis).__tokenFactionsHelpers?.colorBorderFaction;
+                tfColor = helper?.(token)?.INT_S;
+            }
+            if (tfColor)
+                color = tfColor;
+            if (game.settings.get('token-factions', 'color-from') === 'advanced-factions') {
+                const teamId = token.document.getFlag?.('token-factions', 'team')
+                    || token.actor?.prototypeToken?.flags?.['token-factions']?.team;
+                if (teamId) {
+                    const teams = game.settings.get('token-factions', 'team-setup') || [];
+                    const team = teams.find(/** @type {any} */ t => t.id === teamId);
+                    if (team)
+                        label = team.name;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+    return { color, label };
+}
+
 export function getActorActionItems(actor, activationType) {
     const results = [];
 
@@ -1239,18 +1278,17 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         return size.toLowerCase() === 'superheavy';
     };
 
-    // 2. Weapon Selection Validator
-    // 1 mount = valid if superheavy weapon equipped
-    // 2 mounts = valid if both DO NOT have superheavy weapons (and they must be different mounts, which the interface enforces)
     const barrageValidator = (selected) => {
         if (selected.length === 0)
-            return { valid: false, message: "Select 1 Superheavy mount or 2 different mounts.", level: "info" };
+            return { valid: false, message: "Select 1 or 2 mounts.", level: "info" };
 
         if (selected.length === 1) {
             const isSH = hasSuperheavy(selected[0]);
-            return isSH
-                ? { valid: true, message: "Superheavy weapon selected.", level: "success" }
-                : { valid: false, message: "Single mount must have a Superheavy weapon. Or select 2 mounts.", level: "error" };
+            return {
+                valid: true,
+                message: isSH ? "Superheavy weapon selected." : "1 mount selected.",
+                level: "success",
+            };
         }
 
         if (selected.length === 2) {

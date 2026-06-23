@@ -8,6 +8,7 @@ import {
     isTokenVisible,
 } from '../utils/lancer-token.js';
 import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
+import { getTokenDispositionInfo } from '../tools/misc-tools.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
@@ -165,35 +166,6 @@ function resolveViewMode(actor) {
     if (isScannedByUser(actor, game.user))
         return 'scanned';
     return 'unknown';
-}
-
-// Mirrors TAH's logic in hud.js:268-299.
-function getDispositionInfo(token) {
-    if (!token?.document)
-        return null;
-    try {
-        const tfActive = game.modules.get('token-factions')?.active;
-        const tfAdvanced = tfActive
-            && game.settings.get('token-factions', 'color-from') === 'advanced-factions';
-        if (tfAdvanced) {
-            const teamId = token.document.getFlag?.('token-factions', 'team')
-                || token.actor?.prototypeToken?.flags?.['token-factions']?.team;
-            if (teamId) {
-                const teams = game.settings.get('token-factions', 'team-setup') || [];
-                const team = teams.find(t => t.id === teamId);
-                if (team)
-                    return { color: team.color, label: team.name };
-            }
-        }
-    } catch { /* ignore */ }
-    const disp = token.document.disposition;
-    const map = {
-        [CONST.TOKEN_DISPOSITIONS.HOSTILE]:  { color: '#e53935', label: 'Hostile' },
-        [CONST.TOKEN_DISPOSITIONS.NEUTRAL]:  { color: '#f9a825', label: 'Neutral' },
-        [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
-        [CONST.TOKEN_DISPOSITIONS.SECRET]:   { color: '#7e57c2', label: 'Secret' },
-    };
-    return map[disp] ?? { color: '#888', label: 'Unknown' };
 }
 
 function effectiveHpMax(actor) {
@@ -368,11 +340,16 @@ function buildHeaderHtml(token, mode) {
             }
         }
         let unknownSub = '';
+        let unknownInline = '';
         const subText = getActorSubtitleText(actor);
         if (subText && !hideClassWhenUnknown()) {
-            unknownSub = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
+            if (actor?.type === 'mech') {
+                unknownInline = `<span class="la-stat-hint-frame">${esc(subText)}</span>`;
+            } else {
+                unknownSub = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
+            }
         }
-        return `<div class="la-stat-hint-header la-unknown"><div class="la-stat-hint-title">${unknownTier}<s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s></div>${unknownSub}</div>`;
+        return `<div class="la-stat-hint-header la-unknown"><div class="la-stat-hint-title">${unknownTier}<s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s>${unknownInline}</div>${unknownSub}</div>`;
     }
 
     let subtitle = '';
@@ -770,7 +747,7 @@ function buildPopupDom(token) {
     popup.className = 'la-stat-hint-popup';
     const anim = document.createElement('div');
     anim.className = 'la-stat-hint-anim';
-    const disp = getDispositionInfo(token);
+    const disp = getTokenDispositionInfo(token);
     const stripeHtml = disp
         ? `<div class="la-stat-hint-stripe" style="background:${esc(disp.color)};" title="${esc(disp.label)}"></div>`
         : '';

@@ -844,7 +844,8 @@ interface LancerAutomationsAPI {
     ): Promise<number | null>;
     /**
      * Create a new extra bar by overlaying `partial` on the default shape.
-     * API-created entries default to ownerOnly: true; pass `ownerOnly: false` to make public.
+     * API-created entries default to visibility: 'scanned' (visible to owners, GM, and users who scanned the actor).
+     * Pass `visibility: 'owner' | 'scanned' | 'all'` to override.
      * The default value/max bind to `system.hp.value` / `system.hp.max`.
      * Returns the created entry id, or null on failure.
      */
