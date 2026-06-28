@@ -15,6 +15,8 @@ const SETTING_FX_CONFIG = 'statusFXConfig';
 const FX_DEFAULTS = {
     // Master toggle
     master: true,
+    // Swap heavy bloom/glow presets for outline-only variants.
+    lowQuality: false,
     // TokenMagic visual effects
     fx_dangerZone:  true,
     fx_burn:        true,
@@ -108,6 +110,7 @@ export class StatusFXConfig extends FormApplication {
         const hasWeaponFX = !!game.modules.get('lancer-weapon-fx')?.active;
         return {
             master: config.master,
+            lowQuality: !!config.lowQuality,
             additionalStatuses,
             actionFX: config.actionFX !== false,
             hasWeaponFX,
@@ -218,14 +221,14 @@ const dangerZoneEffect = [
     {
         filterType: "glow",
         filterId: "DangerZoneGlow",
-        outerStrength: 4,
-        innerStrength: 2,
+        outerStrength: 3,
+        innerStrength: 1.5,
         color: 0xff9633,
         quality: 0.5,
         padding: 10,
         animated: {
             color: { active: true, loopDuration: 6000, animType: "colorOscillation", val1: 0xEE5500, val2: 0xff9633 },
-            outerStrength: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 2, val2: 5 }
+            outerStrength: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 1.5, val2: 2.5 }
         }
     },
     {
@@ -236,7 +239,7 @@ const dangerZoneEffect = [
         brightness: 1,
         blur: 0.1,
         padding: 10,
-        quality: 15,
+        quality: 4,
         blendMode: 0,
         animated: { bloomScale: { active: true, loopDuration: 6000, animType: "sinOscillation", val1: 0.4, val2: 1.0 } }
     }
@@ -246,14 +249,14 @@ const enkiduDangerZoneEffect = [
     {
         filterType: "glow",
         filterId: "DangerZoneGlow",
-        outerStrength: 4,
-        innerStrength: 2,
+        outerStrength: 3,
+        innerStrength: 1.5,
         color: 0x9c24f2,
         quality: 0.5,
         padding: 10,
         animated: {
             color: { active: true, loopDuration: 6000, animType: "colorOscillation", val1: 0xf224cc, val2: 0x9c24f2 },
-            outerStrength: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 2, val2: 5 }
+            outerStrength: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 1.5, val2: 2.5 }
         }
     },
     {
@@ -264,7 +267,7 @@ const enkiduDangerZoneEffect = [
         brightness: 1,
         blur: 0.1,
         padding: 10,
-        quality: 15,
+        quality: 4,
         blendMode: 0,
         animated: { bloomScale: { active: true, loopDuration: 6000, animType: "sinOscillation", val1: 0.4, val2: 1.0 } }
     }
@@ -381,10 +384,10 @@ const jammedEffect = [
         filterType: "shadow",
         filterId: "jammedShadow",
         blur: 2,
-        quality: 5,
+        quality: 3,
         distance: 0,
         alpha: 1,
-        padding: 100,
+        padding: 20,
         color: 0xFFFFFF,
         animated: {
             blur: { active: true, loopDuration: 500, animType: "syncCosOscillation", val1: 2, val2: 4 }
@@ -866,7 +869,7 @@ const corePowerEffect = [
         brightness: 1,
         blur: 0.1,
         padding: 10,
-        quality: 15,
+        quality: 4,
         blendMode: 0,
         animated: {
             bloomScale: {
@@ -879,6 +882,73 @@ const corePowerEffect = [
         }
     }
 ];
+
+// ---------------------------------------------------------------------------
+// Low-quality variants
+// Used when statusFXConfig.lowQuality is on. Outline-only swaps for the
+// expensive bloom/glow presets. Filter ids kept identical so add/remove logic
+// in EFFECT_MAP keeps matching.
+// ---------------------------------------------------------------------------
+
+const dangerZoneEffectLite = [
+    {
+        filterType: "outline",
+        filterId: "DangerZoneGlow",
+        color: 0xff9633,
+        thickness: 2,
+        quality: 3,
+        padding: 4,
+        animated: {
+            color: { active: true, loopDuration: 6000, animType: "colorOscillation", val1: 0xEE5500, val2: 0xff9633 },
+            thickness: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 1.5, val2: 3 }
+        }
+    }
+];
+
+const enkiduDangerZoneEffectLite = [
+    {
+        filterType: "outline",
+        filterId: "DangerZoneGlow",
+        color: 0x9c24f2,
+        thickness: 2,
+        quality: 3,
+        padding: 4,
+        animated: {
+            color: { active: true, loopDuration: 6000, animType: "colorOscillation", val1: 0xf224cc, val2: 0x9c24f2 },
+            thickness: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 1.5, val2: 3 }
+        }
+    }
+];
+
+const corePowerEffectLite = [
+    {
+        filterType: "outline",
+        filterId: "CorePowerBloom",
+        color: 0xffe080,
+        thickness: 2.5,
+        quality: 3,
+        padding: 4,
+        animated: { thickness: { active: true, loopDuration: 3500, animType: "syncCosOscillation", val1: 1, val2: 3 } }
+    }
+];
+
+const jammedEffectLite = [
+    {
+        filterType: "electric",
+        filterId: "jammedElectric",
+        color: 0x0033FF,
+        time: 0,
+        blend: 2,
+        intensity: 1,
+        animated: { time: { active: true, speed: 0.0020, animType: "move" } }
+    }
+];
+
+const LOW_QUALITY_PRESETS = {
+    dangerZone: dangerZoneEffectLite,
+    corePower: corePowerEffectLite,
+    jammed: jammedEffectLite,
+};
 
 // ---------------------------------------------------------------------------
 // Effect Map
@@ -964,6 +1034,18 @@ async function autoStatusCascading(actor) {
         return;
     const hasCascading = actor.items?.some?.(i => i.system?.cascading === true) ?? false;
     await actor.toggleStatusEffect('cascading', { active: hasCascading });
+}
+
+async function autoStatusCorePowerOn(actor) {
+    if (actor.statuses?.has('core_power_active'))
+        return;
+    await actor.toggleStatusEffect('core_power_active', { active: true });
+}
+
+async function autoStatusCorePowerOff(actor) {
+    if (!actor?.statuses?.has('core_power_active'))
+        return;
+    await actor.toggleStatusEffect('core_power_active', { active: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -1116,7 +1198,29 @@ async function _doReconcileStatusFX(actor) {
                         : flyingEffectIso;
                     preset = base;
                 }
+                if (getConfig().lowQuality && LOW_QUALITY_PRESETS[entry.key]) {
+                    preset = (entry.key === 'dangerZone' && isEnkiduFrame(actor))
+                        ? enkiduDangerZoneEffectLite
+                        : LOW_QUALITY_PRESETS[entry.key];
+                }
                 await token.TMFXaddUpdateFilters(preset);
+                // TMFX duplicates each filter on this call path (same class of bug as the
+                // chains/fracture workaround above). Keep only the first of each filterId.
+                const mesh = token.mesh;
+                if (mesh?.filters?.length) {
+                    const seen = new Set();
+                    mesh.filters = mesh.filters.filter(f => {
+                        const id = f.filterId;
+                        if (!id) {
+                            return true;
+                        }
+                        if (seen.has(id)) {
+                            return false;
+                        }
+                        seen.add(id);
+                        return true;
+                    });
+                }
             } else if (!wantFilter && hasFilter) {
                 for (const filterId of entry.filterIds) {
                     if (TokenMagic.hasFilterId(token, filterId)) {
@@ -1170,7 +1274,30 @@ export function initStatusFX() {
         }
     });
 
+    // Core Power Active: remove on combat end / combatant removed.
+    // (Activation registration is at module load time — see bottom of file.)
+    Hooks.on('preDeleteCombatant', (combatant) => {
+        if (combatant.actor) {
+            autoStatusCorePowerOff(combatant.actor);
+        }
+    });
+    Hooks.on('preDeleteCombat', (combat) => {
+        for (const c of combat.combatants ?? []) {
+            if (c.actor) {
+                autoStatusCorePowerOff(c.actor);
+            }
+        }
+    });
+
     blockQoLEffects();
 
     console.log(`${MODULE_ID} | StatusFX initialized`);
 }
+
+Hooks.once('lancer.registerFlows', (steps, flows) => {
+    steps.set('addCorePowerSE', async ({ actor }) => {
+        await autoStatusCorePowerOn(actor);
+        return true;
+    });
+    flows.get('CoreActiveFlow')?.insertStepAfter('consumeCorePower', 'addCorePowerSE');
+});

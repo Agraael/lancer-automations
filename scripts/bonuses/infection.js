@@ -53,8 +53,6 @@ export async function injectInfectionDamageType() {
     // On Forge VTT, relative imports resolve to a different origin than the original script tag's CDN URL,
     // causing a duplicate module. Find the entry script's actual URL and import relative to that.
     try {
-        let bundleUrl = null;
-
         const lancerScript = /** @type {HTMLScriptElement} */ (document.querySelector('script[type="module"][src$="/lancer.mjs"]'));
         const baseUrl = lancerScript
             ? lancerScript.src.replace(/lancer\.mjs$/, '')
@@ -62,29 +60,26 @@ export async function injectInfectionDamageType() {
 
         const entryResp = await fetch(`${baseUrl}lancer.mjs`);
         const entryText = await entryResp.text();
-        const match = entryText.match(/import\s+["']\.\/([^"']+)["']/);
-        if (match) {
-            bundleUrl = `${baseUrl}${match[1]}`;
-        }
+        // Walk every `./*.mjs` import; the bundle order changed in newer Lancer.
+        const imports = [...entryText.matchAll(/import\s+(?:[^"']+from\s+)?["']\.\/([^"']+)["']/g)].map(m => m[1]);
 
-        if (bundleUrl) {
-            const bundle = await import(bundleUrl);
-            // Minified export name varies per build; find by shape match instead of by name.
-            const isDamageTypeEnum = (obj) =>
-                obj && typeof obj === 'object' && obj.Kinetic === 'Kinetic' && obj.Energy === 'Energy' && obj.Heat === 'Heat';
-            let damageTypeEnum = null;
-            for (const exp of Object.values(bundle)) {
-                if (isDamageTypeEnum(exp)) {
-                    damageTypeEnum = exp;
-                    break;
+        const isDamageTypeEnum = (obj) =>
+            obj && typeof obj === 'object' && obj.Kinetic === 'Kinetic' && obj.Energy === 'Energy' && obj.Heat === 'Heat';
+        let damageTypeEnum = null;
+        for (const rel of imports) {
+            try {
+                const bundle = await import(`${baseUrl}${rel}`);
+                for (const exp of Object.values(bundle)) {
+                    if (isDamageTypeEnum(exp)) { damageTypeEnum = exp; break; }
                 }
-            }
-            if (damageTypeEnum && !damageTypeEnum.Infection) {
-                damageTypeEnum.Infection = "Infection";
-                console.log(`${MODULE_ID} | Added "Infection" to DamageType enum via bundle export`);
-            } else if (!damageTypeEnum) {
-                console.warn(`${MODULE_ID} | Could not locate DamageType enum in lancer bundle exports.`);
-            }
+                if (damageTypeEnum) break;
+            } catch { /* try next */ }
+        }
+        if (damageTypeEnum && !damageTypeEnum.Infection) {
+            damageTypeEnum.Infection = "Infection";
+            console.log(`${MODULE_ID} | Added "Infection" to DamageType enum via bundle export`);
+        } else if (!damageTypeEnum) {
+            console.warn(`${MODULE_ID} | Could not locate DamageType enum in lancer bundle exports.`);
         }
     } catch (e) {
         console.warn(`${MODULE_ID} | Could not patch DamageType enum:`, e);
@@ -112,10 +107,21 @@ export async function injectInfectionDamageType() {
                 field.choices.push('Infection');
                 patched++;
             }
+            // DamageTypeChecklistField: SchemaField with one BooleanField per damage type.
+            if (field instanceof foundry.data.fields.SchemaField &&
+                field.fields?.Kinetic instanceof foundry.data.fields.BooleanField &&
+                !field.fields?.Infection) {
+                field.fields.Infection = new foundry.data.fields.BooleanField({ initial: true });
+                patched++;
+            }
         }
     }
 
     for (const model of Object.values(CONFIG.Item.dataModels ?? {})) {
+        if (model?.schema?.fields)
+            traverseFields(model.schema.fields);
+    }
+    for (const model of Object.values(CONFIG.Actor.dataModels ?? {})) {
         if (model?.schema?.fields)
             traverseFields(model.schema.fields);
     }
@@ -389,9 +395,7 @@ export function initInfectionHooks() {
 
     Hooks.on('updateCombat', onUpdateCombatInfection);
 
-    // Per-client running snapshot. updateActor fires on every client (the hook
-    // arg `change` contains the NEW value, the actor itself already reflects it
-    // by hook time, so we need our own prev).
+    // Per-client snapshot so the floating text fires for players too.
     const _prevInfection = new Map();
     const _seedInfection = () => {
         for (const a of game.actors ?? []) {

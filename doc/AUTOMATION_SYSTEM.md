@@ -100,6 +100,7 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 - Engine checks: *does this reactor's actor own an item whose `system.lid === <registered LID>`?* If yes, run filters.
 - The matched item is passed to your callbacks as the `item` argument.
 - `onlyOnSourceMatch: true` means: *the activation only fires if the item that triggered the event has the same LID as the activation's LID*. In practice this is what makes "react when **this** weapon is used" work. Without it, your activation would also try to fire when the user activates an unrelated item or moves.
+- When a reactor owns several items sharing the triggering LID, only the exact triggering document fires (same-LID dedupe), so duplicate copies of the same item don't each react.
 
 ### General activation
 
@@ -116,7 +117,28 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 - `triggerData.deployable = { actor, lid }` is also set, providing the explicit deployable identity.
 - `triggerData.actionData.action.name` is the action's name (e.g. `"Move"`, `"Combine"`); for the top-level deploy click it's the deployable actor's name. `triggerData.actionData.action.activation` is the activation type (`"Protocol"`, `"Quick"`).
 - `onlyOnSourceMatch: true` means: *only fire when the activation source is the matching deployable* - i.e. one of this exact deployable's actions was the trigger.
-- `reactionPath`: empty string matches the top-level deploy itself (`actor.system.activation`); `"actions.<name>"` matches a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern).
+- `reactionPath`: empty string matches the top-level deploy itself (`actor.system.activation`); `"actions.<name>"` matches a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern). The deployable surrogate carries the deployable actor's `system.actions[]`, so these resolve by **name** (deployable actions often have empty LIDs).
+
+#### Self-deployable: reacting to your own deploy
+
+The `onDeploy` trigger fires when a deployable or a thrown weapon is placed. Its payload is `{ triggeringToken, item, deployedTokens, deployType }`: `triggeringToken` is the deploying token, `item` is the source system item, `deployedTokens` are the freshly placed tokens, and `deployType` is `"deployable"` or `"throw"`.
+
+To react when *you* deploy something, register an **item** activation on the feature or system LID that grants the deployable, and set:
+
+- `triggers: ["onDeploy"]`
+- `triggerSelf: true` (the deploying token is the reactor, so it counts as self)
+- `onlyOnSourceMatch: true` (only fire for this exact source item)
+
+The Restock Drone NPC feature (`startups/itemActivations.js`) is the reference: on deploy it reads `triggerData.deployedTokens[0]` and drops an aura on it with `api.createAura(...)`. Note this is a normal **item** reaction firing on self, not the actor-UUID path below.
+
+### Actor UUID activation
+
+Alongside item LIDs and deployable LIDs, an activation can be registered against a single **Actor UUID** (e.g. `"Actor.qe5wEevLrMN6ki44"`, or a `"Compendium.<pack>.Actor.<id>"` path). The engine synthesizes an `actor_surrogate` for every actor, keyed by its `actor.uuid`, so a reaction keyed by a UUID matches **only that one actor instance**.
+
+Use this when an item or deployable LID is too broad: a LID-keyed reaction fires for *every* actor that owns the item or *every* deployable of that type, while a UUID-keyed reaction is bound to exactly one actor. Typical case: a specific named deployable or NPC that should react only as itself.
+
+- `onlyOnSourceMatch: true` also compares the triggering token's `actor.uuid` against the registered key (alongside item and deployable LIDs), so a UUID reaction with source-match only fires when that actor was the source of the event.
+- In the Activation Manager, paste the Actor UUID into the LID field. The deployable browser can pick an actor and fill it in for you.
 
 ### Picking one
 
@@ -127,6 +149,8 @@ The key thing to internalize: filters and `evaluate` run for every reactor on th
 | Apply a passive effect at scene-load to anyone with a feature | Item, `onInit` only (no triggers) |
 | Build a one-off rule that applies to all tokens | General |
 | React on a specific deployable's action (or its deploy) | Deployable LID (`actor.system.lid`), with `onlyOnSourceMatch: true` |
+| React only as one specific actor or deployable instance | Actor UUID (`actor.uuid`) in the LID field, with `onlyOnSourceMatch: true` |
+| React when you deploy something yourself | Item LID that grants the deployable, `triggers: ["onDeploy"]`, `triggerSelf: true` |
 
 ---
 
@@ -138,7 +162,7 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 |---|---|---|
 | 1 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
 | 2 | `triggerSelf` / `triggerOther` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: require `triggerOther: true`. (Default both `false`, you must opt in.) |
-| 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning between item and general. |
+| 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning across item, general, deployable, and Actor-UUID reactions. The engine matches the triggering item LID, deployable LID, or triggering actor UUID against the registered key. |
 | 4 | Reaction availability | If the reaction config consumes a reaction (`consumeReaction`/`consumesReaction`), skip if the reactor has no reaction left. |
 | 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed; otherwise `CONST.TOKEN_DISPOSITIONS`. |
 | 6 | `distanceFilter` | Compares the precomputed `distanceToTrigger` against the configured max range. |

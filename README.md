@@ -23,15 +23,21 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 ---
 
-Started by tweaking existing modules for the [Lancer system](https://foundryvtt.com/packages/lancer) and grew from there. Inspired by [Lancer QoL](https://github.com/BoltsJ/lancer-weapon-fx) and borrows some of its code.
+Welcome to Lancer Automations. What began as a tiny Lancer QoL tweak for my own games grew into something much bigger: a way to play Lancer on Foundry VTT with a deep layer of automation, UI, and quality-of-life on top.
 
-A Lancer system extension for Foundry v13: QoL and UI fixes, custom token stat bars, HUD, ruler, isometric handling, interactive tools, and an event-driven automation engine to wire anything together.
+At its heart is a powerful automation engine that can automate almost any item from any LCP, plus a large toolbox for picking tokens, spawning tokens, handling network messages, asking players for choices, and much more.
 
-> **Before you install, please read.**
+A lot of it weaves right into the interface, so if you aren't deep in the Lancer Foundry ecosystem you might assume some of these features are vanilla. They aren't, they just feel like they were always part of Lancer.
+
+### ⚠️ Please read before you install
+
+> This is a very dense, heavy module with hundreds of features. Think of it as a game-system extension, not a simple add-on: it overlaps with, and in many ways replaces, two of the most-used Lancer modules (Token Action HUD and Lancer QoL), and some of its changes reach as deep as GPU performance. You'll meet options and tweaks in every corner, so it helps to already know Foundry VTT and the Lancer system well. If you're new to Foundry, hold off and get comfortable with the platform first, or you risk losing a lot of time.
 >
-> This is a very dense and heavy module with hundreds of features. A few features overlap with the Lancer QOL module. If you're new to Foundry VTT, I'd hold off on this one for now and get familiar with the platform first, otherwise you risk losing a lot of time.
+> **The default setup is more than enough for most Lancer GMs.** The engine underneath is extremely powerful but genuinely complex, and writing your own custom activations and effects takes real coding know-how. If you want to go there and get stuck, ask me on Discord, I'm happy to help.
 >
-> **The README below is a bit old and doesn't cover everything.** Writing docs takes time and energy. The best way to keep up with new additions is the blog posts on my [Patreon](https://www.patreon.com/cw/LaSossis), where I explain new features with illustrations (e.g. isometric handling, and other recent additions).
+> **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, but that's the extent of it for now. The optional personal activation set is a separate thing: it's literally my own automations for my own games (my NPCs, my items), shared as-is. Do not treat that list as part of the core module, and don't install expecting your NPCs to be automated out of the box. People keep assuming otherwise.
+>
+> **Docs are split in two:** feature guides (this README links to each) explain what a feature does and how to reach it, and the `doc/API_*.md` files cover the code side. Writing docs takes time, so for the very latest additions, the blog posts on my [Patreon](https://www.patreon.com/cw/LaSossis) are still the fastest way to keep up (with illustrations).
 >
 > **Before asking questions** about Lancer Automations or any of my other modules, please inform yourself, explore, try stuff. It's a lot easier on me if I don't have to answer the same obvious questions all the time. That can also mean I haven't properly informed you yet, so be curious and explore before asking. Thanks.
 
@@ -45,25 +51,42 @@ Trigger schemas, function signatures, every option. Split across `doc/API_*.md` 
 
 ---
 
-## Table of Contents
+## Documentation
 
-- [Installation](#installation)
-- [Features Overview](#features-overview)
-- [Effect Manager](#effect-manager)
-- [Bonuses](#bonuses)
-- [Interactive Tools](#interactive-tools)
-- [TemplateMacro: Lancer Tools](#templatemacro-lancer-tools)
-- [Item Flags & Injection](#item-flags--injection)
-- [Extra Actions](#extra-actions)
-- [Automation System](#automation-system)
-- [Optional Features](#optional-features)
-  - [Lancer Automations HUD (Beta)](#lancer-automations-hud-beta)
-  - [Alternative Structure Automations](#alternative-structure-automations)
-- [Built-in Macros](#built-in-macros)
-- [API Reference](#api-reference)
-- [NPC Implementation Examples](#npc-implementation-examples)
-- [Lancer System Additions](#lancer-system-additions)
-- [Support](#support)
+This README is the hub. The detailed guides live under `doc/`.
+
+**Feature guides** (what each system does and how to use it). These are being written; links go live as each lands:
+
+| Guide | Covers |
+|-------|--------|
+| [`doc/feature/AUTOMATION_ENGINE.md`](doc/feature/AUTOMATION_ENGINE.md) | The Activation Manager, reaction config, how activations run, the popup, and startup scripts |
+| [`doc/feature/EFFECTS_AND_BONUSES.md`](doc/feature/EFFECTS_AND_BONUSES.md) | Effect Manager, the bonus types, consumption, immunity |
+| [`doc/feature/HUD.md`](doc/feature/HUD.md) | The Token Action HUD: panels, action menus, search, favorites, range previews |
+| [`doc/feature/TOKEN_DISPLAY.md`](doc/feature/TOKEN_DISPLAY.md) | Custom token stat bars (Bar Brawl replacement), extra bars, and the token stat hint |
+| [`doc/feature/MOVEMENT.md`](doc/feature/MOVEMENT.md) | The Lancer ruler, movement cost, elevation, movement types, the wheel, keybinds, history and revert |
+| [`doc/feature/MOVEMENT_ADVANCED.md`](doc/feature/MOVEMENT_ADVANCED.md) | Advanced/beta: boost detection, the movement cap and offer cards, trigger-boundary splits, debug |
+| [`doc/feature/ISOMETRIC.md`](doc/feature/ISOMETRIC.md) | Isometric compatibility: elevation animation and the `iso.*` display toggles |
+| [`doc/feature/INTERACTIVE_TOOLS.md`](doc/feature/INTERACTIVE_TOOLS.md) | Choice and vote cards, the canvas tools, deployables, selectors |
+| [`doc/feature/GAMEPLAY_AUTOMATION.md`](doc/feature/GAMEPLAY_AUTOMATION.md) | Built-in actions/reactions, overwatch, grapple, stabilize, action limits, usage tracking, alt structure, scan, rest, downtime, reserves |
+| [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md) | Status visual effects, action FX, the JB2A free-pack fallback, and the sound system |
+| [`doc/feature/VISION.md`](doc/feature/VISION.md) | Vision from edge, token-blocks-LOS, the Lancer detection modes |
+| [`doc/feature/WRECK.md`](doc/feature/WRECK.md) | The wreck system: spawning, per-category, per-token config, terrain, resurrect |
+| [`doc/feature/SYSTEM_ADDITIONS.md`](doc/feature/SYSTEM_ADDITIONS.md) | Item disabled, ammo, extra status effects, permanent statuses, trackable attributes |
+| [`doc/feature/SETUP_AND_TOOLS.md`](doc/feature/SETUP_AND_TOOLS.md) | Content packs, actor↔token sync, maintenance and repair, news, tours, scene-config tools |
+| [`doc/feature/INFECTION.md`](doc/feature/INFECTION.md) | The Infection damage type: damage, the end-of-turn check, the sheet card |
+| [`doc/feature/NPC_EXAMPLES.md`](doc/feature/NPC_EXAMPLES.md) | Worked NPC automation examples (Dispersal Shield, Smoke Launcher, and more) |
+| [`doc/MACROS.md`](doc/MACROS.md) | The built-in `L.A -` macro compendium |
+
+**API and engine reference** (for writing automation code):
+
+| Doc | Covers |
+|-----|--------|
+| [`doc/AUTOMATION_SYSTEM.md`](doc/AUTOMATION_SYSTEM.md) | How the automation engine works end to end |
+| [`doc/API_REFERENCE.md`](doc/API_REFERENCE.md) | API hub, fundamentals, trigger data schemas |
+| [`doc/API_COMBAT.md`](doc/API_COMBAT.md) | Combat, attacks, structure, disposition helpers |
+| [`doc/API_EFFECTS.md`](doc/API_EFFECTS.md) | Effects, bonuses, immunity, flow injection |
+| [`doc/API_INTERACTIVE.md`](doc/API_INTERACTIVE.md) | Cards, tokens, zones, deployables, movement tracking |
+| [`doc/API_HOWTO.md`](doc/API_HOWTO.md) | Recipes: registering activations, helpers, GAA wrapper |
 
 ---
 
@@ -100,6 +123,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
 | [Lancer Weapon FX](https://github.com/BoltsJ/lancer-weapon-fx) | Visual/audio effects on attacks and built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) |
 | [Wall Height](https://foundryvtt.com/packages/wall-height) | Required for elevation-aware Token Blocks Line of Sight (Bulwark / per-token blocker): walls inherit the token's height, letting same-height observers peek over. Without it, blocking is purely 2D. |
+| [Force Client Settings](https://gitlab.com/kimitsu_desu/force-client-settings) | Push client-scoped settings to all your players, so your whole table shares one baseline config instead of each player setting their own. |
 
 ### Recommended
 
@@ -110,973 +134,197 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ---
 
+## Settings
+
+<img src="doc/img/settings-access.png" width="50%"/>
+
+Almost everything in the module is configured from one place: **Game Settings > Configure Settings > Lancer Automations**. This is the hub the rest of the module hangs off of. Every feature has its toggles here, and a handful of buttons open dedicated tools: the Activation Manager, export and import, the guided tour, the news popup, and a full reset.
+
+There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting carries an inline hint in the config window itself.
+
+> [!TIP]
+> Go through the settings before your first session and set a baseline; the module is largely opt-in. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
+
+### Export & Import
+
+<img align="right" src="doc/img/ae-import-review.png" width="35%"/>
+
+Export your whole setup (automations, startup scripts, settings, and keybindings) to a JSON file for a backup or to share a build, then import it back through a review dialog that lets you pick exactly what comes in. A full reset is here too, for starting clean.
+
+<br clear="right"/>
+
+---
+
 ## Features Overview
 
-- **Automation System**: event-driven engine that fires on gameplay triggers (`onMove`, `onHit`, `onDamage`, and ~25 more) and runs reactions tied to items or global rules
-- **Effect Manager**: status effects with turn-based duration and consumable stacks
-- **Bonus System**: accuracy, difficulty, damage, stat, immunity, and tag bonuses that attach to active effects
-- **Interactive Tools**: knockback, token picker, zone placement, deploy/throw weapons, choice cards, movement history and revert
-- **TemplateMacro Integration**: Lancer-specific zone tools: effect zones, dangerous zones, difficult terrain
-- **Item Flags & Injection**: attach deployables to any item, add custom flags read by the automation system
-- **Built-in Activations**: Overwatch, Brace, Flight, Fall, ready to use out of the box
-- **Built-in Macros**: Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, Reinforcement, and more
+- **Automation Engine**: event-driven engine that fires on gameplay triggers (`onMove`, `onHit`, `onDamage`, and many more) and runs reactions tied to items or global rules
+- **Effect Manager & Bonuses**: status effects with duration and consumable stacks, plus accuracy, difficulty, damage, stat, tag, range, immunity, target-modifier, and reroll bonuses that plug into Lancer's roll flows
+- **Token Action HUD**: a cascading action menu on your token for weapons, systems, frame abilities, skills, statuses, history, favorites, search, and range previews
+- **Custom Token Stat Bars**: Lancer-tailored token bars that replace Bar Brawl, with per-token visibility, extra bars, and auto-injected talent counters
+- **Movement & the Lancer Ruler**: a detailed movement-cost ruler with elevation, movement types, boost detection, and movement history and revert
+- **Isometric handling**: elevation animation and UI adaptation so the module's features line up correctly in isometric scenes
+- **Interactive Tools**: knockback, token pickers, zone placement, deployables, throw weapons, and choice and vote cards
+- **Gameplay Automation**: overwatch, grapple, reinforcement, action limits, per-turn/round/scene usage tracking, alt structure, and the scan, rest, downtime, and reserve flows
+- **FX & Sounds**: action animations and status overlays with sound, on top of JB2A and Lancer Weapon FX, with a free-pack fallback
+- **Vision**: vision from edge, token-blocks-line-of-sight with Bulwark, and the Lancer sensor and awareness detection modes
+- **Wrecks**: spawns a dedicated wreck actor on death, with resurrect and optional difficult terrain
+- **System Additions**: item-disabled gear, the ammo system, extra status effects, permanent statuses, and extra trackable attributes
+- **Setup & Tools**: optional content packs, actor-to-token sync, data repair, news and releases, guided tours, and scene-sizing helpers
+- **Infection damage type**: the Infection mechanic from HORUS: Thy Hubris Manifest, fully integrated with checks, a sheet card, and visuals
+- **Built-in Macros**: Skirmish, Barrage, Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, Reinforcement, and more
 
 ---
 
-## Effect Manager
+## Feature guides
 
-<img align="right" src="doc/img/effect-manager-hud-button.png" width="30%"/>
+Short pitches below. Each links to its full guide (being written).
 
-The Effect Manager is the main interface for creating and managing status effects on a token. You can open it directly from the token HUD. It's also fully accessible from automation code via the API: see [doc/API_EFFECTS.md](doc/API_EFFECTS.md) for `applyEffectsToTokens`, `removeEffectsByNameFromTokens`, `findEffectOnToken`, and the consumption / duration options.
+### Automation Engine
+
+<img align="right" src="doc/img/feature-automation-engine.png" width="28%"/>
+
+The core feature of Lancer Automations, and the hardest to grasp. The engine is a powerful framework for automating almost any item, effect, or event tied to Lancer gameplay. Many of Lancer's base actions, plus some items and simple NPC automations, are handled out of the box. I also ship my personal set of activations, but that's separate: just my own games' stuff shared as-is, not part of the core module, there for you to use, inspect, or modify to dip your toes into the engine.
+
+→ Full guide: [`doc/feature/AUTOMATION_ENGINE.md`](doc/feature/AUTOMATION_ENGINE.md) ・ engine internals: [`doc/AUTOMATION_SYSTEM.md`](doc/AUTOMATION_SYSTEM.md)
 
 <br clear="right"/>
 
----
+### Effect Manager & Bonuses
 
-### Standard Tab
+<img align="right" src="doc/img/feature-effect-manager.png" width="28%"/>
 
-<img align="right" src="doc/img/effect-manager-standard.png" width="40%"/>
+The Effect Manager can be driven from automation code through the API, but it's also fully available by hand during play. It manages effects, custom effects, and a wide variety of bonuses and status effects so you can apply almost anything you want: custom effects that grant charges, weapon range bonuses, a single reroll, and more.
 
-The standard tab works with the built-in FoundryVTT status icons plus any extras added by the Lancer system. From here you can:
-
-- Apply an effect with a **duration**: the countdown starts at either the beginning or end of the token's turn, or you can set it to indefinite
-- Set a **stack count** (number of charges)
-- Set a **consumption trigger**: the event that burns one stack. On attack, on hit, on damage, on move, on activation, and more
-- Add a **consumption filter**: for example, only consume when a specific item is used
-
-When a stack reaches zero, the effect is removed automatically.
+→ Full guide: [`doc/feature/EFFECTS_AND_BONUSES.md`](doc/feature/EFFECTS_AND_BONUSES.md)
 
 <br clear="right"/>
 
----
+### Token Action HUD
 
-### Custom Tab
+<img align="right" src="doc/img/feature-tah.png" width="38%"/>
 
-<img align="right" src="doc/img/effect-manager-custom.png" width="40%"/>
+The TAH, or Token Action HUD, is a custom-built action menu that gives you everything you need and more, attached right to your token: your items, skills, stats, scans, history, favorites, a search tool, range preview, and more.
 
-Available when [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) is installed.
-
-The custom tab lets you create effects with any name and icon, not limited to the predefined status list. This is especially useful for automating specific items: markers, counters, item-specific state tracking. All the same duration and consumption options apply.
-
-Custom effect templates can be saved in module settings and reused across sessions.
-
-One thing to note: effects that share the same name but have different conditions are grouped under the same icon with a blue stack number. This is separate from the Status Icon Counter module's display. If an effect has both, the numbers may overlap.
+→ Full guide: [`doc/feature/HUD.md`](doc/feature/HUD.md)
 
 <br clear="right"/>
-
----
-
-### Bonuses Tab
-
-<img align="right" src="doc/img/effect-manager-bonuses.png" width="40%"/>
-
-The Bonuses tab gives you access to general bonuses (accuracy, difficulty, damage, stat). These are documented in the next section.
-
-## Bonuses
-
-Bonuses let you attach mechanical effects to tokens that integrate directly into Lancer's roll flows. There are three persistence modes.
-
-> Full API reference (all bonus types, options, immunity queries, and flow-state injection): [doc/API_EFFECTS.md](doc/API_EFFECTS.md).
-
-### General Bonuses
-
-General bonuses behave like standard status effects: they're visible on the token, have optional duration and stack consumption, and integrate into rolls automatically.
-
-**Types:**
-- **Accuracy**: adds accuracy dice to the next matching roll
-- **Difficulty**: adds difficulty dice
-- **Damage**: adds bonus damage (by type, e.g. +2 Energy) applied on the next damage roll
-- **Stat**: modifies an actor stat directly (HP, Heat Cap, Speed, Evasion, E-Defense, Save, etc.)
-- **Tag**: injects or modifies tags on weapons (e.g. adding Armor Penetration, changing range)
-- **Range**: increases or overrides a weapon's range value for a specific range category (Range, Threat, Line, Blast, Burst, Cone).
-- **Immunity**: grants immunity to a damage type or effect category
-
-<br clear="right"/>
-
----
-
-<table>
-<tr>
-<td>
-
-Accuracy and difficulty bonuses are injected into the Lancer roll HUD so you can see them before confirming.
-
-![Accuracy bonus in roll dialog](doc/img/accuracy-bonus-in-roll.png)
-
-</td>
-<td>
-
-Damage bonuses appear in the damage roll output.
-
-![Damage bonus in roll](doc/img/damage-bonus-in-roll.png)
-
-</td>
-</tr>
-</table>
-
-### Flow Bonuses
-
-Flow bonuses are short-lived by design. They can be injected into the current flow state using `triggerData.flowState.injectBonus(...)`.
-
-They stay in the flow until the very end, including the damage roll. For example, a bonus damage injected during the attack roll will still apply to the damage chat card it produces. See [Flow Data Injection](#flow-data-injection) below.
-
-### Constant Bonuses
-
-Constant bonuses are invisible to the player and persist until manually removed. They are used for baseline stat modifications and immunities, things that need to always be active but shouldn't clutter the token's status display.
-
-Use case: the Veterancy talent gives +1 accuracy on stat checks. Apply it with `api.addConstantBonus(...)` in the `onInit` code, and it silently adds to every stat roll without cluttering the token's status display.
-
-### Immunity System
-
-When an immunity bonus is active on a token, any incoming damage of that type triggers a **choice card** asking whether to apply the immunity.
-
-<table>
-<tr>
-<td>
-
-![Damage immunity integration](doc/img/damage-immunity.png)
-
-</td>
-<td>
-
-![Immunity choice card](doc/img/immunity-choice-card.png)
-
-</td>
-</tr>
-</table>
-
-### Tag Injection
-
-Tag bonuses let you inject or modify tags on a weapon mid-flow. Useful for abilities that temporarily grant a property, for example adding the `Armor Penetration` tag before an attack. You can also remove existing tags.
-
-> For permanent tag changes (not flow-scoped), use `addItemTag` / `removeItemTag`, documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-### Flow Data Injection
-
-While a flow is running (attack, damage, check, activation), you can stash data on the `flowState` and read it back from any later trigger in that same flow. Two functions:
-
-- `triggerData.flowState.injectBonus(...)`: injects a bonus into the flow state
-- `triggerData.flowState.injectData(...)`: injects any data into the flow state
-
-<br clear="right"/>
-
----
-
-## Interactive Tools
-
-These are the building blocks for complex automation flows. Most are available from macros and from activation code via the API.
-
-> Full API reference for every function below (signatures, options, return values): [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-### Knockback
-
-![Knockback checkbox in damage roll](doc/img/knockback-in-damage.png)
-
-When the knockback feature is enabled, a **Knockback** checkbox appears in the damage roll dialog. If checked, the module reads the Knockback tag from the attacking item and automatically triggers the knockback interaction after damage resolves.
-
-![Knockback interactive tool](doc/img/knockback-interactive.png)
-
-`api.knockBackToken(tokens, distance, options)`: you can also call this directly. It pushes or pulls a token along the grid, respecting obstacles.
-
-### Choice Card
-
-<img align="right" src="doc/img/choice-card.png" width="40%"/>
-
-`api.startChoiceCard(options)`: displays a popup card with multiple options. Supports:
-- **OR mode**: the player picks exactly one option
-- **AND mode**: all options are shown and each can be confirmed or skipped individually
-
-Multiple cards can be spawned simultaneously. The card system serializes them in a queue and shows a pending count so nothing gets lost.
-
-<br clear="right"/>
-
----
-
-### Choose Token
-
-![Choose token picker](doc/img/choose-token.png)
-
-`api.chooseToken(token, options)`: highlights valid tokens in range and asks the user to select one or more. Options include:
-- `count`: how many tokens to select
-- `range`: maximum distance (highlights eligible tokens)
-- `includeSelf`: whether the caster can target itself
-- `filter`: a callback to restrict valid targets (e.g. `api.isFriendly(reactor, t)`)
-
-### Place Zone
-
-![Zone placement tool](doc/img/place-zone.png)
-
-`api.placeZone(token, options, duration)`: interactive zone placement using the [TemplateMacro](https://github.com/Agraael/templatemacro) module. Supports Blast, Cone, Line, and other template types.
-
-Zones can have `statusEffects` assigned so any token inside automatically gains those effects: soft cover, difficult terrain, damage zones, etc. See the [TemplateMacro section](#templatemacro-lancer-tools) for the full Lancer-specific zone tools.
-
-### Deploy Token / Throw Weapon
-
-![Deploy token](doc/img/deploy-token.png)
-
-Several functions handle deploying tokens or weapons onto the scene:
-
-- `api.placeDeployable(options)`: interactive placement of a deployable token (compendium lookup, use counter, visual preview)
-- `api.beginDeploymentCard(options)`: shows a card for choosing which deployable to place from an item
-- `api.openDeployableMenu(actor)`: dialog listing all of an actor's deployables
-- `api.recallDeployable(ownerToken)`: removes a deployed token from the scene
-- `api.deployWeaponToken(weapon, actor, token, options)`: places a thrown weapon as a token on the ground
-- `api.pickupWeaponToken(ownerToken)`: retrieves a thrown weapon token
-- `api.beginThrowWeaponFlow(weapon)`: starts a weapon attack flow pre-configured for throwing
-- `api.openThrowMenu(actor)`: dialog listing all throwable weapons for an actor
-- `api.delayedTokenAppearance()`: handles delayed token appearance in combat, using placeholders and automatic reveal on a target round
-
-### Movement History & Revert
-
-The module tracks each token's movement path during combat using Foundry v13's native movement history. Movement-tracking API (`getMovementHistory`, `getCumulativeMoveData`, `clearMoveData`, etc.) is documented in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
-
-To open the movement history dialog, press **H** (default keybinding, configurable in FoundryVTT's keybinding settings) with a token selected, or right-click the revert button in the token HUD.
-
-![Movement history dialog](doc/img/movement-history-dialog.png)
-
-The dialog gives you two options:
-- **Reset History**: wipes the stored path without moving the token
-- **Reset & Revert Movement**: wipes the path and teleports the token back to where it started that turn
-
-You can also call these directly:
-- `api.revertMovement(token)`: moves the token back to its turn-start position
-- `api.clearMovementHistory(token)`: clears the stored path
-
----
-
-## TemplateMacro: Lancer Tools
-
-[TemplateMacro](https://github.com/Agraael/templatemacro) started as a fork of a dead module but has since been almost entirely rewritten and refactored for FoundryVTT v13. On top of the base template scripting functionality, I've added Lancer-specific zone tools.
-
-> All three zone tools below are also available from code via `api.placeZone(...)`. See [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md) for the `placeZone` options (`statusEffects`, `dangerous`, `difficultTerrain`, `fillColor`, etc.).
-
-<img align="right" src="doc/img/templateMacro-lancer-tools.png" width="40%"/>
-
-### Place Effect Zone
-
-A measurement template that applies one or more status effects to any token inside it. When a token enters or the zone is placed, the effects are applied automatically. Effects are removed when the token leaves.
-
-### Dangerous Zone
-
-A zone that deals damage to tokens on entry or at specific trigger points (e.g. turn start). Configurable damage type and amount. Used for things like fire fields, electrical zones, or area denial.
-
-### Difficult Terrain
-
-A zone that imposes a movement penalty on tokens moving through it. The penalty is factored into the built-in Lancer Automations Ruler's movement cost display in real time, so you can see exactly how much movement is consumed.
-
-<br clear="right"/>
-
----
-
-## Item Flags & Injection
-
-Beyond the bonus system, you can attach custom data directly to items. The module reads certain flags by default and uses them in macros and automation flows.
-
-> Flag-related deployment helpers (`placeDeployable`, `beginDeploymentCard`, `recallDeployable`, `pickItem`, `findItemByLid`) are documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-### Built-in Flags
-
-| Flag | Effect |
-|------|--------|
-| `deployRange` | Max range for placing a deployable from this item |
-| `deployCount` | Number of uses before the deployable is exhausted |
-| `activeState` | Marks the item as having an active/inactive toggle. When activated, the "End Activation" flow lets you pick this item to deactivate. You can also specify which action type is required (quick, full, free, etc.) |
-
-> Set or read these flags via `api.addItemFlags(item, flags)` and `api.getItemFlags(item, flagName?)`, documented in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-### Extra Deployables
-
-The module lets you attach additional deployables to any item, including NPC features. This is useful when an NPC ability should spawn something on the field but the base Lancer system doesn't natively support it on that item type.
-
-These deployables are recognized and read by the deploy macro just like native ones.
-
-![Deployable finder tool](doc/img/deployable-finder.png)
-
-> API: `api.addExtraDeploymentLids(item, lids)` and `api.getItemDeployables(item, actor)` (returns the merged list with NPC tier resolution). See [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-## Extra Actions
-
-The Extra Actions system lets you attach additional action buttons to items, tokens, or actors at runtime. Actions added this way appear alongside an item's native `system.actions` and can be triggered from the chat card or sheet just like built-in actions. They survive across reloads (stored as flags) and can be removed or filtered later.
-
-This is the mechanism behind features like NPC abilities that grant a temporary "Fall Prone" action, the Citadel Terraformer's print sub-actions, or any homebrew effect that needs to inject a one-off action onto a target.
-
-**Storage**
-
-- When the target is an **item**, actions are stored on the item's `extraActions` flag and merged with `system.actions` whenever the item is rendered.
-- When the target is a **token or actor**, actions are stored on the actor and exposed via `getActorActions(target)`.
-
-**API surface** (available on `game.modules.get('lancer-automations').api`):
-
-| Function | Purpose |
-|---|---|
-| `addExtraActions(target, actions)` | Add one or more action objects to an item, token, or actor. |
-| `getItemActions(item)` | Return the merged list of `system.actions` plus any extra actions stored on an item. |
-| `getActorActions(tokenOrActor)` | Return the extra actions attached to an actor or token. |
-| `removeExtraActions(target, filter?)` | Remove extra actions. `filter` may be a predicate, an action name, an array of names, or omitted to clear all. |
-
-The Automation System exposes a matching `reactionPath` selector, for example `"extraActions.Fall Prone"`, so reactions can fire specifically when an extra action is activated. See [Trigger Reference](#trigger-reference) and the full Extra Actions API in [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-## Automation System
-
-This is the core of the module. Everything else can plug into it.
-
-> For a deep walkthrough of the engine (trigger lifecycle, filters, the four callbacks, activation modes, client/socket execution, cancel/modify, flow injection, registration, caches), see **[doc/AUTOMATION_SYSTEM.md](doc/AUTOMATION_SYSTEM.md)**.
-
-### How It Works
-
-**1. Event fanout and filtering**
-
-```mermaid
-flowchart LR
-    A["Game Trigger fired<br/>with event data payload"] --> C["Collect tokens<br/>in scene"]
-    C --> D{"Item or General<br/>activation match?"}
-    D -- No --> Skip
-    D -- Yes --> E{"onlyOnSourceMatch<br/>passes?"}
-    E -- No --> Skip
-    E -- Yes --> F{"Disposition /<br/>Distance<br/>filters pass?"}
-    F -- No --> Skip
-    F -- Yes --> G["Run evaluate()"]
-```
-
-**2. Evaluate to execution**
-
-```mermaid
-flowchart LR
-    G["evaluate()"] -- false --> Skip
-    G -- true --> H{"autoActivate?"}
-    H -- Yes --> I["Run activation<br/>code immediately"]
-    H -- No --> J["Queue for popup"]
-    J --> K["Activation Popup<br/>(GM + optional players)"]
-    K --> L["User clicks Activate"]
-    L --> I
-```
-
-
-> **Client execution note:** `activationCode` does **not** always run on the GM's client.
-> - **Auto activations** run on the client of the triggering token's owner - the player whose action fired the trigger (or the GM if that token has no online owner).
-> - **Manual activations (popup)** run on whichever client clicks the Activate button. The popup is routed via socket to the reactor's token owner and/or GM depending on the `reactionNotificationMode` setting (`'owner'`, `'gm'`, or `'both'`).
->
-> Because of this, `activationCode` may execute on a non-GM client. If your code needs GM-only permissions (creating tokens, modifying actors you don't own, etc.), you must delegate those operations via socket or use API helpers that already handle delegation internally.
-
-### Trigger Reference
-
-<details>
-<summary>Expand trigger table</summary>
-
-| Trigger | When it fires |
-|---------|---------------|
-| `onMove` | After a token finishes moving |
-| `onPreMove` | Before movement executes, can cancel or redirect |
-| `onAttack` | When an attack is initiated |
-| `onInitAttack` | At the very start of an attack flow (before the HUD), can cancel |
-| `onInitTechAttack` | At the very start of a tech attack flow, can cancel |
-| `onHit` | After a hit is confirmed |
-| `onMiss` | After a miss is confirmed |
-| `onTechAttack` | When a tech attack is initiated |
-| `onTechHit` | After a tech attack hits |
-| `onTechMiss` | After a tech attack misses |
-| `onDamage` | After damage is rolled |
-| `onPreStructure` | Before structure roll, can cancel |
-| `onStructure` | After a structure roll |
-| `onPreStress` | Before overheat roll, can cancel |
-| `onStress` | After an overheat roll |
-| `onCheck` | After a stat check resolves (HULL, AGI, SYS, ENG) |
-| `onInitCheck` | At the very start of a stat check flow, can cancel |
-| `onInitActivation` | Before an item or action is activated, can cancel |
-| `onActivation` | When an item or action is activated |
-| `onTurnStart` | At the start of a token's turn |
-| `onTurnEnd` | At the end of a token's turn |
-| `onRoundStart` | At the start of every round (including round 1). Data includes `round` number |
-| `onEnterCombat` | When a token joins combat |
-| `onExitCombat` | When a token leaves combat |
-| `onPreStatusApplied` | Before a status is applied, can cancel |
-| `onPreStatusRemoved` | Before a status is removed, can cancel |
-| `onStatusApplied` | When a status effect is applied to a token |
-| `onStatusRemoved` | When a status effect is removed from a token |
-| `onPreHpChange` | Before HP changes, can cancel or modify |
-| `onPreHeatChange` | Before heat changes, can cancel or modify |
-| `onHeatGain` | When a token gains heat |
-| `onHeatLoss` | When a token's heat is cleared |
-| `onHpGain` | When a token regains HP |
-| `onHpLoss` | When a token loses HP |
-| `onDestroyed` | When a token is destroyed (struct/stress hit 0) |
-| `onTokenCreated` | When any token is placed on the canvas |
-| `onTokenRemoved` | When any token is removed from the canvas |
-| `onTokenVisibility` | When a token's GM-hidden flag is toggled |
-| `onDeploy` | When a deployable is placed |
-
-![Trigger list](doc/img/trigger-list.png)
-
-</details>
-
-Each trigger carries a data payload. The full schema for each trigger is in the [API Reference](doc/API_REFERENCE.md).
-
-### Activation Types
-
-There are two ways to set up an activation:
-
-- **Item-based (LID):** Tied to a specific Lancer item by its LID. Only tokens that own that item can react.
-- **General:** Not tied to any item. Any token in the scene can react, filtered by the rules you set up.
-
-### Filters
-
-<table>
-<tr>
-<td>
-
-**Only On Source Match**
-
-For Item activations: the activation only fires if the token that triggered the event also owns the item.
-
-For General activations: the activation only fires if the triggering action's name matches the activation name.
-
-**Disposition Filter**
-
-Restricts the reactor's valid relationship to the triggering token: Friendly, Hostile, Neutral, or any combination. Uses Token Factions if available for multi-team support.
-
-**Distance Filter**
-
-Only activates if the triggering event occurred within a set distance from the reactor.
-
-**Action Path**
-
-Points to a specific action inside an item. Useful when you want to associate the activation with one weapon reaction or a specific talent rank rather than the whole item.
-
-Format: `system.actions.0` or `ranks[0].actions[0]`
-
-**Action Type**
-
-Controls how the activation is labeled in the popup (Reaction, Quick Action, Full Action, Protocol, etc.).
-
-![Action type selector](doc/img/action-types.png)
-
-</td>
-<td>
-
-**Trigger / Effect Description**
-
-Lets you override the description text shown in the activation popup.
-
-**Frequency**
-
-How often the activation can fire: Unlimited, 1/combat, or per-round via `usesPerRound`. For now, frequency tracking in the popup is only available for reactions, using the "consume reaction" option.
-
-**Out of Combat**
-
-By default, some triggers only fire during combat. Enable this flag to allow the activation to fire outside of combat too.
-
-**Item LID Finder**
-
-A built-in tool in the activation config that lets you browse your world's compendiums and copy an item's LID directly.
-
-![Item LID finder](doc/img/item-finder.png)
-
-</td>
-</tr>
-</table>
-
-### Evaluate, Activate & Init
-
-**Evaluate function**
-
-A code block that validates whether the activation should proceed. For timing-sensitive triggers, this should be synchronous (see Await Activation Completion below). Return `true` to allow, `false` to skip.
-
-```javascript
-function(triggerType, triggerData, reactorToken, item, activationName, api) {
-    return triggerData.target?.id === reactorToken.id;
-}
-```
-
-**Activation code**
-
-Runs when the activation is confirmed, either automatically or after the user clicks Activate in the popup. Can be async. Has full access to the `api`.
-
-**onInit code**
-
-Runs once when a token is created in the scene. Useful for applying initial constant bonuses, creating auras, or setting up baseline state.
-
-### Auto Mode vs Popup Mode
-
-**Popup mode (default):** Non-auto activations are queued and displayed in a summary popup showing all triggered activations for the current event. Each entry shows which token can react and what the activation is.
-
-![Activation popup](doc/img/activation-popup.png)
-
-Click an entry to expand its details, then click Activate to run it. In module settings, you can allow players (not just the GM) to see and interact with popups for tokens they own.
-
-**Auto mode:** When enabled, the activation code runs immediately when the trigger fires, with no popup or confirmation. Use this for things that should always happen automatically (applying a status on hit, for example).
-
-By default, activating an LID-based activation prints the item card to chat and then runs your code. Setting the mode to **instead** skips the chat card entirely.
-
-### Await Activation Completion
-
-For `onPreMove`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`, `onInitActivation`, `onPreStatusApplied`, and `onPreStatusRemoved` triggers: any code that calls `cancelTriggeredMove`, `changeTriggeredMove`, `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, or `triggerData.flowState.injectBonus` **must not be async**. If you write an async function without enabling the **Await Activation Completion** flag, the module will warn you and the timing-sensitive block will likely fail silently.
-
-### Movement Cancel & Redirect (onPreMove)
-
-`onPreMove` fires before movement is executed. From inside the evaluate or activation code, you can:
-
-- `triggerData.cancelTriggeredMove()`: stop the movement entirely
-- `triggerData.changeTriggeredMove(newPos)`: redirect the token to a different destination
-
-For example, when a token tries to move away, check if it's within an enemy's engagement range and cancel or redirect the move.
-
-![Movement cancel example](doc/img/movement-cancel.png)
-
-### Action & Status Cancellation (onInit / onPreStatus)
-
-Several other triggers allow you to cancel an operation before it completes. Any code that uses these functions **must not be async** (use **Await Activation Completion**).
-
-- `triggerData.cancelAction(...)`: stop an item activation in `onInitActivation`
-- `triggerData.cancelAttack(...)`: stop an attack in `onInitAttack`
-- `triggerData.cancelTechAttack(...)`: stop a tech attack in `onInitTechAttack`
-- `triggerData.cancelCheck(...)`: stop a stat check in `onInitCheck`
-- `triggerData.cancelChange(...)`: stop a status effect in `onPreStatusApplied` / `onPreStatusRemoved`
-- `triggerData.cancelStructure(...)`: prevent structure roll in `onPreStructure`
-- `triggerData.cancelStress(...)`: prevent overheat roll in `onPreStress`
-- `triggerData.cancelStructureOutcome(...)`: stop structure outcome after the roll in `onStructure`
-- `triggerData.cancelStressOutcome(...)`: stop stress outcome after the roll in `onStress`
-- `triggerData.cancelHpChange(...)`: block HP change in `onPreHpChange`
-- `triggerData.cancelHeatChange(...)`: block heat change in `onPreHeatChange`
-
-All cancel functions accept `(reasonText?, title?, allowConfirm?, userIdControl?)`.
-
-`onStructure` and `onStress` also expose:
-- `triggerData.rollResult`: the roll total
-- `triggerData.rollDice`: array of individual die results (e.g. `[3, 3]` for doubles)
-- `triggerData.modifyRoll(newTotal)`: override the roll total before outcome steps run
-
-### HP & Heat Modification (onPreHpChange / onPreHeatChange)
-
-In addition to cancelling, you can modify the value being applied:
-
-- `triggerData.modifyHpChange(newValue)`: change the HP value in `onPreHpChange`
-- `triggerData.modifyHeatChange(newValue)`: change the heat value in `onPreHeatChange`
-
-For example, reduce incoming damage by half, or cap heat gain at a certain threshold.
-
-![Choice card GM control](doc/img/choice-gm-control.png)
-
-## Choice Cards
-
-> Full API for `startChoiceCard` (all modes, choice object shape, broadcast routing) and `openChoiceMenu`: [doc/API_INTERACTIVE.md](doc/API_INTERACTIVE.md).
-
-`api.startChoiceCard(options)` shows an interactive HUD card that pauses execution and waits for a user to pick. Cards queue automatically so multiple calls never overlap.
-
-The `userIdControl` parameter routes the card to a specific user or a list of users. When an array is given, the **first to respond wins** and the card is dismissed for everyone else.
-
-Three modes are available:
-- **OR** - pick exactly one option, card closes immediately.
-- **AND** - every option must be clicked before the card closes; each callback fires as soon as its button is clicked.
-- **Vote / Hidden Vote** - the card is broadcast to all recipients simultaneously. The creator monitors a live tally and clicks **Confirm** to finalize. Ties are broken by the creator. In hidden mode, voters cannot see each other's choices until the vote is confirmed.
-
-![Vote card](doc/img/vote-card.png)
-
-### openChoiceMenu
-
-A built-in GM macro tool that opens a configuration dialog to build and send a choice card without writing any code. Set the title, description, mode, recipients, and options, then click **Send**.
-
-![Choice Menu](doc/img/choice-menu.png)
-
-
-
-### Built-in Activations
-
-| Name | Trigger | What it does |
-|------|---------|--------------|
-| **Overwatch** | `onMove` | A hostile starts movement inside your weapon THREAT, prompts a Skirmish reaction |
-| **Brace** | `onDamage` | Damage would kill you or deal 50%+ of your current HP, prompts a Brace reaction |
-| **Flight** | `onStatusApplied` / `onStructure` / `onStress` | Handles flying immunity and fall save logic |
-| **Fall** | `onTurnEnd` | Checks if an airborne token should begin falling |
-
-> The actions these reactions trigger (`executeSkirmish`, `executeBasicAttack`, `executeFall`, `executeStandingUp`, etc.) are documented in [doc/API_COMBAT.md](doc/API_COMBAT.md).
-
-### Startups
-
-Startups allow you to add code upon VTT Foundry initiation. This allows for mainly registering your own helper functions that you can use in your activations, or even outside in macros and stuff. Helper-registration API (`registerUserHelper` / `getUserHelper`) and registration patterns are documented in [doc/API_HOWTO.md](doc/API_HOWTO.md).
-
-![Startup Tab](doc/img/startup-tab.png)
-
-### Personal Activation Set
-
-In the module configuration, there is an option to activate my personal set of item activations. These are the ones I use and make for my games; here's my way to share them. Not all items are included, in no particular order. This list will grow as I implement stuff I need.
-
-### Export / Import
-
-In **Module Settings > Lancer Automations**, you can export and import your full activation setup as JSON. Useful for sharing builds with other GMs or keeping backups.
-
-### Code Editor Tips
-
-In any code block (evaluate, activate, init), you can write a full function signature instead of just the body:
-
-```javascript
-async function(triggerType, triggerData, reactorToken, item, activationName, api) {
-    // your code here
-}
-```
-
-The module strips the wrapper automatically. Much more readable, especially with CodeMirror installed.
-
-You can also register default activations by code instead of through the UI. See [API Reference: Registering Default Activations](doc/API_HOWTO.md#how-to-register-activations).
-
----
-
-## Optional Features
-
-### Boost Detection (Experimental)
-
-Uses the built-in Lancer Automations Ruler. Enable both the ruler and boost detection in module settings.
-
-The module tracks cumulative drag movement for each token during their turn. When movement exceeds the token's base Speed, a boost is detected. The `onMove` trigger data gains:
-
-- `moveInfo.isBoost`: `true` if this move crossed a boost threshold
-- `moveInfo.boostSet`: array of boost numbers crossed (e.g. `[1]` for first boost)
-
-Cumulative movement resets automatically at the start of each token's turn. You can also reset it manually: `api.clearMoveData(tokenDocumentId)`. Full movement-tracking API in [doc/API_INTERACTIVE.md#movement-tracking](doc/API_INTERACTIVE.md#movement-tracking).
-
-### Movement & Distance
-
-A few toggles that change how movement and distance are computed: a **built-in speed provider** (replaces `lancer-speed-provider`), **3D distance counting**, **path hex calculation**, and a **one-struct NPC** houserule. Each is documented in-tab.
-
-### Stat Roll Targeting
-
-Enable in **Module Settings > Lancer Automations > Enable Stat Roll Target Selection**.
-
-When enabled, any Stat Roll (HULL, AGI, SYS, ENG) prompts you to optionally pick a target before rolling:
-
-- **Difficulty**: uses the target's Save (for NPCs) or the same stat (for Mechs) as the roll difficulty
-- **Automation**: the target token is passed into the flow data for other automations to use
-- **Self-targeting**: you can target yourself if needed
-
-> To start a stat roll from code, use `api.executeStatRoll(actor, stat, title, target, extraData)`. See [doc/API_COMBAT.md](doc/API_COMBAT.md).
-
-### Token Factions Integration
-
-When [Token Factions (my fork)](https://github.com/Agraael/token-factions) is installed, the disposition filter in activations uses the full faction matrix instead of the standard three-way friendly/neutral/hostile. This lets you have multiple teams with custom disposition relationships between them.
-
-> The disposition helpers `api.isHostile(reactor, mover)` and `api.isFriendly(token1, token2)` are Token-Factions-aware and documented in [doc/API_COMBAT.md](doc/API_COMBAT.md).
-
-### Grid-Aware Auras Integration
-
-When [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) is installed, the following API functions are available:
-
-- `api.createAura(owner, config)`: creates an aura on a token. Accepts lambda functions as macro callbacks, the module intercepts and routes them transparently with no need to create actual macro documents.
-- `api.deleteAuras(owner)`: removes all auras from a token
-
-> Full wrapper reference (config shape, lambda callback semantics): [doc/API_HOWTO.md#grid-aware-auras-wrapper](doc/API_HOWTO.md#grid-aware-auras-wrapper).
-
-### Lancer Automations HUD (Beta)
-
-<img align="right" src="doc/img/lancer-automations-hud.png" width="40%"/>
-
-For a while I ran a heavily modified version of Token Action HUD for my own sessions. I've now rebuilt it directly into the module. It's still what I'd call a beta, but it's available.
-
-The HUD gives you quick access to all your mech's actions, weapons, systems, frame abilities, talents, skills, and statuses from a single cascading menu attached to your token. If you have [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) installed, hovering weapon or skill entries will display their range or threat aura directly on the canvas.
-
-It is available as an optional setting in Module Settings > Lancer Automations.
-
-The TAH tab in module settings controls behavior (click vs hover, range preview, aura Alt-key toggle, team/disposition stripe) and exposes utility buttons to reset position and rebuild auras.
-
-<br clear="right"/>
-
----
-
-### Alternative Structure Automations
-
-I use an alternative structure system in my games. The automation for it is built into the module and available as an optional setting.
-
-Enable it in Module Settings > Lancer Automations.
-
----
-
-### Vision
-
-The Vision tab gathers everything that affects how tokens see and block sight.
-
-![Vision from edge](doc/img/vision-from-edge.png)
-
-- **Vision From Edge (experimental)**: spawns perimeter vision sources to imitate Lancer's edge-of-token LOS instead of Foundry's center-only source.
-
-![Token blocks line of sight](doc/img/token-blocks-vision.png)
-
-- **Token Blocks Line of Sight + Bulwark**: per-token "blocks LoS" flag, Bulwark auto-blocks. With [Wall Height](https://foundryvtt.com/packages/wall-height) installed, blocking is elevation-aware.
-
-![Lancer vision modes](doc/img/lancer-vision-modes.png)
-
-- **Lancer Vision Modes**: auto-applies Sensor / Awareness vision modes to mech and NPC tokens.
-- **Drag Vision**: shrinks the vision radius while a token is being dragged, so you don't reveal new map area mid-drag.
-
----
-
-### Keybindings
-
-All keybindings (movement history reset, TAH search, and the Lancer Automations Ruler bindings: free movement, debug movement, flying mode, elevation up/down, etc.) are listed under **Configure Controls > Lancer Automations**.
-
----
-
-## Built-in Macros
-
-The module ships with a compendium of macros for common Lancer actions (All macro starts with "L.A -"):
-
-<details>
-<summary>Expand macro list</summary>
-
-| Macro | What it does |
-|-------|-------------|
-| **Skirmish** | Open a menu to select a weapon and execute a Skirmish action |
-| **Barrage** | Open a menu to select weapons and execute a Barrage action |
-| **Invade** | Open a menu to select an option and execute an Invade action |
-| **Overwatch** | Declare Overwatch |
-| **Brace** | Declare Brace |
-| **Knockback** | Interactive knockback tool |
-| **Ram** | Execute a Ram action |
-| **Grapple** | Execute a Grapple action |
-| **Disengage** | Execute a Disengage |
-| **Eject** | Execute an Eject |
-| **Lock On** | Apply Lock On to a target |
-| **Reload One Weapon** | Reload a single weapon |
-| **End Activation** | Open a menu to end an active item effect |
-| **Throw Weapon** | Open the throw weapon menu for the selected token |
-| **Deploy Item** | Open the deployable menu for the selected token |
-| **Pickup Weapon** | Retrieve a thrown weapon from the scene |
-| **Boot Up / Shut Down** | Handle mech boot and shutdown flows |
-| **Scan** | Perform a System Scan on an NPC |
-| **Reinforcement** | Delayed token appearance for combat. Hides selected tokens and places placeholders that countdown to appearance. Will use tokens named "Size X" (e.g., "Size 1", "Size 2") as placeholders if they exist in the actor directory. |
-| **Aid / Bolster / Search / Handle / Interact / Squeeze / Hide / Dismount** | Standard pilot and mech actions |
-| **Reactor Explosion / Meltdown** | NPC and scenario tools |
-| **Downtime** | Downtime activity card |
-| **Frag Signal** | Scenario-specific macro |
-| **Suicide** | Instantly destroy a token (GM tool) |
-| **openChoiceMenu** | Open a menu to trigger choice event, like votes |
-
-</details>
-
----
-
-## API Reference
-
-All API functions are accessible at:
-
-```javascript
-const api = game.modules.get('lancer-automations').api;
-```
-
-For full function signatures, trigger data schemas, bonus types, and code examples, see the [API Reference](doc/API_REFERENCE.md).
-
----
-
-## NPC Implementation Examples
-
-
-### Dispersal Shield (Priest)
-
-Grants all-damage resistance for the next `1d3` attacks to a friendly target in sensor range.
-
-<details>
-<summary>Expand code</summary>
-
-```javascript
-"npcf_dispersal_shield_priest": {
-    itemType: "npc_feature",
-    reactions: [{
-        triggers: ["onActivation"],
-        triggerSelf: true,
-        triggerOther: false,
-        outOfCombat: true,
-        actionType: "Quick Action",
-        frequency: "Unlimited",
-        onlyOnSourceMatch: true,
-        autoActivate: true,
-        activationType: "code",
-        activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const targets = await api.chooseToken(reactorToken, {
-                count: 1,
-                range: reactorToken.actor.system.sensor_range,
-                includeSelf: true,
-                filter: (t) => api.isFriendly(reactorToken, t)
-            });
-            const target = targets?.[0] || reactorToken;
-            const roll = await new Roll("1d3").evaluate();
-            await roll.toMessage({
-                speaker: ChatMessage.getSpeaker({ token: reactorToken.document }),
-                flavor: `${activationName} - Resistance charges`
-            });
-            const charges = roll.total;
-            const resistances = [
-                "lancer.statusIconsNames.resistance_heat",
-                "lancer.statusIconsNames.resistance_kinetic",
-                "lancer.statusIconsNames.resistance_explosive",
-                "lancer.statusIconsNames.resistance_burn",
-                "lancer.statusIconsNames.resistance_energy"
-            ];
-            await api.applyFlaggedEffectToTokens({
-                tokens: [target],
-                effectNames: resistances,
-                note: `Dispersal Shield (${charges} charges)`,
-                duration: { label: 'indefinite', turns: null, rounds: null, overrideTurnOriginId: reactorToken.id },
-            }, {
-                stack: charges,
-                consumption: {
-                    trigger: "onDamage",
-                    originId: target.id,
-                    grouped: true
-                }
-            });
-        }
-    }]
-}
-```
-
-</details>
-
-### Sapper Kit: Smoke Launcher (Strider)
-
-Places a smoke zone (soft cover) that persists until the start of the Strider's next turn.
-
-<details>
-<summary>Expand code</summary>
-
-```javascript
-"nrfaw-npc_carrier_SmokeLaunchers": {
-    itemType: "npc_feature",
-    reactions: [{
-        triggers: ["onActivation"],
-        triggerSelf: true,
-        triggerOther: false,
-        outOfCombat: true,
-        actionType: "Quick Action",
-        usesPerRound: 1,
-        onlyOnSourceMatch: true,
-        autoActivate: true,
-        activationType: "code",
-        activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const result = await api.placeZone(reactorToken, {
-                range: 5,
-                size: 2,
-                type: "Blast",
-                fillColor: "#808080",
-                borderColor: "#ffffff",
-                statusEffects: ["cover_soft"]
-            }, 2);
-            if (result?.template) {
-                const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
-                existing.push(result.template.id);
-                await reactorToken.actor.setFlag("lancer-automations", "smokeTemplates", existing);
-            }
-        }
-    }, {
-        triggers: ["onTurnStart"],
-        triggerSelf: true,
-        triggerOther: false,
-        autoActivate: true,
-        activationType: "code",
-        activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const templates = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
-            if (!templates.length) return;
-            for (const id of templates) {
-                const template = canvas.scene.templates.get(id);
-                if (template) await template.delete();
-            }
-            await reactorToken.actor.unsetFlag("lancer-automations", "smokeTemplates");
-        }
-    }]
-}
-```
-
-</details>
-
----
-
-## Lancer System Additions
-
-These features extend the Lancer system without modifying the system itself, so anyone using your world only needs to install this module.
-
-### Melee Cover Fix
-
-Melee attacks won't register cover by default, like in the core book. Using throw attack from Lancer Automations is considered a ranged attack.
-
-### Item Disabled
-
-Items can be marked as disabled. Works similarly to destroyed, but it is used for example for thrown weapons (they become disabled since they're on the ground).
-
-### Trackable Attributes
-
-Move and Reaction are trackable attributes. Useful for token bars: you can wire one to Reaction so you can see at a glance whether a unit still has its reaction.
-
-### Token Tooltip Alt Config
-
-A custom [Token Tooltip Alt](https://foundryvtt.com/packages/token-tooltip-alt) configuration is included at [`misc/lancer-automations-tta.json`](misc/lancer-automations-tta.json). It is based on eranziel's Lancer TTA config with Infection and Reaction added. Import it from the TTA settings.
 
 ### Custom Token Stat Bars
 
-![custom_bar_brawl](doc/img/custom_bar_brawl.png)
+<img align="right" src="doc/img/feature-token-display.png" width="38%"/>
 
-A bespoke token stat bar tailored to Lancer. Replaces Bar Brawl on Lancer tokens, you'll need to deactivate Bar Brawl for it to render. Per-token visibility (combat / out-of-combat / hidden / GM / owner), icon scale, row height, and a scene-wide "apply defaults" button are configurable.
+Lancer Automations draws its own token bars, tailored to Lancer and meant to replace Bar Brawl (turn Bar Brawl off on your tokens for these to show). They show the stats that matter, with per-token control over when they're visible (in combat, out of combat, hidden, GM only, owner only), icon scale, and row height. You can add extra custom bars per token, and talent counters can be injected automatically.
 
-### Sounds
+→ Full guide: [`doc/feature/TOKEN_DISPLAY.md`](doc/feature/TOKEN_DISPLAY.md)
 
-The module ships its own audio layer for UI feedback, damage stings, action FX, and wreck explosions, with master sliders and per-category mute toggles. Configure under **Module Settings > Sounds**.
+<br clear="right"/>
 
-### Wreck System
+### Movement & the Lancer Ruler
 
-Unlike Lancer QoL's wreck system which swaps the token image, this one spawns a new deployable actor token on death. That wreck token can be resurrected from the TAH (Utility > Combat > Resurrect), which deletes the wreck and respawns the original unit.
+<img align="right" src="doc/img/feature-ruler.png" width="38%"/>
 
-Per-category wreck mode (Token or Tile) and terrain spawning can be configured independently for Mech, Human, Monstrosity, and Biological types. Wrecks can optionally spawn difficult terrain at the death location (requires Terrain Height Tools), with the terrain height matching the token's wall-height. The wreck image/effect scale is adjustable per token via the L.A tab.
+Lancer Automations ships its own Lancer ruler, built to be as detailed as possible. There's still more work to do, but if you want accurate, detailed information about movement in Lancer, this ruler is for you. The same system powers boost detection, cancelling movement through engagement, and more, all wired into the automation engine.
 
-On each prototype token's L.A tab, you can override the wreck mode, terrain spawning, wreck image, effect, sound, and scale - if left empty, assets are resolved automatically from the wreck folder based on category and size, with a fallback chain (squad → human → biological).
+→ Full guide: [`doc/feature/MOVEMENT.md`](doc/feature/MOVEMENT.md) ・ advanced/beta: [`MOVEMENT_ADVANCED.md`](doc/feature/MOVEMENT_ADVANCED.md)
 
-You can point to your own custom wreck assets folder in the Wreck Automation settings. The expected directory structure is:
+<br clear="right"/>
 
-```
-wrecks/
-├── s1/                    # Size 1 wreck images
-│   ├── human/             # Human-specific
-│   └── monstrosity/       # Monstrosity-specific
-├── s2/                    # Size 2 wreck images
-│   └── squad/
-├── s3/                    # Size 3 wreck images
-├── effects/               # Explosion effects
-│   └── biological/        # Biological-specific
-└── audio/                 # Explosion sounds
-    ├── biological/
-    ├── human/
-    └── monstrosity/
-```
+### Isometric handling
 
-The built-in folder ships with more sounds and effects than the original Lancer QoL set.
+<img align="right" src="doc/img/feature-isometric.png" width="38%"/>
 
-### StatusFX
+If you run an isometric game, Lancer Automations plays nicely with the isometric modules. It animates token elevation in iso view and adapts its own UI (stat bars, tactical distance labels, waypoint labels, the target reticle, click zones, the selection marquee, scrolling text, and more) so the module's additions line up correctly in an isometric scene. Each piece can be toggled from the Isometric settings tab.
 
-Lancer Automations handles StatusFX like Lancer QoL. They are almost the same for now, except some additions like Infection and Brace, and more to come. You can choose either of them.
+→ Full guide: [`doc/feature/ISOMETRIC.md`](doc/feature/ISOMETRIC.md)
 
-### LCP Data Repair
+<br clear="right"/>
 
-Some fixes I personally made on the Lancer system cannot be shared easily, but now you have in the configuration a tool to fix LCP items with a few issues I found (for example ammos in Ammo Case).
+### Interactive Tools
 
-### Ammo System
+<img align="right" src="doc/img/feature-interactive.png" width="38%"/>
 
-![ammo_list](doc/img/ammo_list.png)
+Interactive tools are meant to be used with the automation engine, and elsewhere too. Lancer Automations provides a wide variety of them to build multi-step actions: applying knockback, choosing targets, picking tokens within a defined range, spawning tokens, running votes, and more.
 
-Ammo for things like Ammo Case are now listed in the sheet. The main Lancer sheet and Annoying's Lancer Alternative Sheets are both patched with injection.
+→ Full guide: [`doc/feature/INTERACTIVE_TOOLS.md`](doc/feature/INTERACTIVE_TOOLS.md)
 
-![ammo_message](doc/img/ammo_message.png)
+<br clear="right"/>
 
-Ammo can be clicked to run the AmmoFlow and display a chat message with the details, it also consumes charges. Some LCP data leaves the ammo cost blank; in that case the cost defaults to 1.
+### Gameplay Automation
 
-### Infection Damage Type
+<img align="right" src="doc/img/feature-gameplay.png" width="38%"/>
 
-Pretty tricky to do, I hope it works well.
+Through the automation engine and many tweaks to the Lancer system, Lancer Automations runs Lancer's actions and reactions for you, from combat to the out-of-combat flows: scanning, rest, downtime, and reserves. It also handles skill checks and contests, and tracks usage on a per-turn, per-round, or per-scene basis.
 
-So [HORUS: Thy Hubris Manifest](https://cornylius.itch.io/thy-hubris-manifest) introduces the Infection damage type, and I really like it, so I decided to try to integrate it fully into Lancer.
+→ Full guide: [`doc/feature/GAMEPLAY_AUTOMATION.md`](doc/feature/GAMEPLAY_AUTOMATION.md)
 
-![infection_damage_sheet](doc/img/infection_damage_sheet.png)
+<br clear="right"/>
 
-Basically it works like Burn damage but for Heat. Check out https://cornylius.itch.io/thy-hubris-manifest for more. It asks for a Systems check instead of Engineering.
+### FX and Sounds
 
-![infection_damage_card](doc/img/infection_damage_card.png)
-![infection_roll](doc/img/infection_roll.png)
+<img align="right" src="doc/img/feature-fx.png" width="38%"/>
+
+There's a lot more flavor in Lancer Automations than just JB2A and Lancer Weapon FX. You get many sounds and graphical effects throughout the module that feel good and break up the plain Foundry VTT experience. Almost all of them can be tweaked or disabled.
+
+→ Full guide: [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md)
+
+<br clear="right"/>
+
+### Vision
+
+<img align="right" src="doc/img/feature-vision.png" width="38%"/>
+
+Lancer doesn't really have a concept of fog of war or vision, but personally, for immersion, I still like to play with light. To stay within the rules, Lancer Automations gives you a way to do that: two vision modes, one for units visible on sensors and one for units seen anywhere through Battlefield Awareness. A per-token "blocks line of sight" option (with Bulwark support, elevation-aware via Wall Height) lets units actually break sight. There are also performance tools for light and movement, and a system that emulates Lancer's true edge-of-token line of sight (visually only).
+
+→ Full guide: [`doc/feature/VISION.md`](doc/feature/VISION.md)
+
+<br clear="right"/>
+
+### Wrecks
+
+<img align="right" src="doc/img/feature-wreck.png" width="38%"/>
+
+When a unit is destroyed, Lancer Automations doesn't just swap its art: it spawns a dedicated wreck actor on the field. Wrecks come in flavors for mechs, humans, monstrosities, and biologicals, each with their own art, explosion FX, and sound. A wreck can optionally drop difficult terrain at the death site (with Terrain Height Tools), and any wreck can be resurrected straight from the HUD, which deletes the wreck and brings the original unit back. Assets resolve automatically from the wreck folder by category and size, and you can override art, FX, sound, and scale per token.
+
+→ Full guide: [`doc/feature/WRECK.md`](doc/feature/WRECK.md)
+
+<br clear="right"/>
+
+### System Additions
+
+<img align="right" src="doc/img/feature-system.png" width="38%"/>
+
+Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry so your whole table benefits without installing anything extra: an item-disabled state for dropped or jammed gear, an ammo system for mech systems, extra status effects, and extra trackable attributes for token bars (Move, Reaction). The GM setup and maintenance tools have their own guide.
+
+→ Full guide: [`doc/feature/SYSTEM_ADDITIONS.md`](doc/feature/SYSTEM_ADDITIONS.md) ・ setup & tools: [`doc/feature/SETUP_AND_TOOLS.md`](doc/feature/SETUP_AND_TOOLS.md)
+
+<br clear="right"/>
+
+### Infection damage type
+
+<img align="right" src="doc/img/feature-infection.png" width="38%"/>
+
+HORUS: Thy Hubris Manifest introduces an Infection damage type, and I liked it enough to wire it into Lancer properly. It works like Burn, but for Heat, and it asks for a Systems check instead of Engineering. You get the damage type itself, the turn-end check flow, an Infection card on the sheet, and the matching visual effects.
+
+→ Full guide: [`doc/feature/INFECTION.md`](doc/feature/INFECTION.md)
+
+<br clear="right"/>
+
+---
+
+## Optional integrations
+
+Lancer Automations works on its own, but a few features unlock or improve when these optional modules are present. Install details are in the tables above.
+
+| Feature | Needs |
+|---------|-------|
+| Range, threat, and custom auras (HUD hover previews, `createAura` API) | Grid-Aware Auras (or my fork) |
+| Difficult terrain on wrecks, 3D terrain height and line of sight | Terrain Height Tools (or my fork) |
+| Elevation-aware token-blocks-line-of-sight (peek over same-height tokens) | Wall Height |
+| Built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) | Lancer Weapon FX |
+| Multi-team disposition matrix in activation filters | Token Factions (my fork) |
+| Zone placement tools (effect, dangerous, difficult-terrain zones) | TemplateMacro |
+| Syntax highlighting in the code editors | CodeMirror |
+| Stack counts shown on effect icons | Status Icon Counter |
 
 ---
 

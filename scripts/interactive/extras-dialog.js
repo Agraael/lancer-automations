@@ -61,11 +61,21 @@ export function openExtrasDialog(actor) {
                 const m = a.uses?.max ?? 0;
                 parts.push(`<span style="color:${v <= 0 ? '#c33' : '#3a9e6e'};">${v}/${m}</span>`);
             }
+            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_turn')) {
+                const v = a.usesPerTurn?.value ?? 0;
+                const m = a.usesPerTurn?.max ?? 0;
+                parts.push(`<span style="color:${v <= 0 ? '#c33' : '#3a9e6e'};" title="Per turn">↻${v}/${m}T</span>`);
+            }
+            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_round')) {
+                const v = a.usesPerRound?.value ?? 0;
+                const m = a.usesPerRound?.max ?? 0;
+                parts.push(`<span style="color:${v <= 0 ? '#c33' : '#3a9e6e'};" title="Per round">↻${v}/${m}R</span>`);
+            }
             return parts.length ? `<span style="font-size:0.82em;margin-right:4px;">${parts.join(' ')}</span>` : '';
         };
         const hasResetable = (/** @type {any} */ a) => {
             const tags = a.tags ?? [];
-            return tags.some((/** @type {any} */ t) => ['tg_loading', 'tg_recharge', 'tg_limited'].includes(t.lid));
+            return tags.some((/** @type {any} */ t) => ['tg_loading', 'tg_recharge', 'tg_limited', 'tg_turn', 'tg_round'].includes(t.lid));
         };
         const actionRows = uiActions.length
             ? uiActions.map((/** @type {any} */ a) => `
@@ -121,6 +131,8 @@ export function openExtrasDialog(actor) {
                 <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="la-extras-act-loading"> Loading</label>
                 <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Limited <input type="number" class="la-extras-act-uses" placeholder="—" min="1" max="99" style="width:46px;height:22px;font-size:0.85em;"></label>
                 <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Recharge <input type="number" class="la-extras-act-recharge" placeholder="—" min="2" max="6" style="width:42px;height:22px;font-size:0.85em;"></label>
+                <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Per Turn <input type="number" class="la-extras-act-perturn" placeholder="—" min="1" max="9" style="width:42px;height:22px;font-size:0.85em;"></label>
+                <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Per Round <input type="number" class="la-extras-act-perround" placeholder="—" min="1" max="9" style="width:42px;height:22px;font-size:0.85em;"></label>
                 <button class="la-extras-act-add" style="margin-left:auto;background:var(--primary-color);color:#fff;border:none;padding:4px 12px;cursor:pointer;font-size:0.85em;font-weight:bold;">Add Action</button>
             </div>
             <div style="margin-top:14px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:#666;font-weight:bold;">Extra Deployment Actors</div>
@@ -193,6 +205,10 @@ export function openExtrasDialog(actor) {
                     const usesMax = usesRaw ? Math.max(1, Number(usesRaw)) : 0;
                     const rechargeRaw = html.find('.la-extras-act-recharge').val();
                     const recharge = rechargeRaw ? Math.min(6, Math.max(2, Number(rechargeRaw))) : 0;
+                    const perTurnRaw = html.find('.la-extras-act-perturn').val();
+                    const perTurn = perTurnRaw ? Math.max(1, Number(perTurnRaw)) : 0;
+                    const perRoundRaw = html.find('.la-extras-act-perround').val();
+                    const perRound = perRoundRaw ? Math.max(1, Number(perRoundRaw)) : 0;
                     /** @type {any} */
                     const entry = { name, activation, detail, icon: actIcon, _addedViaExtrasUI: true };
                     const tags = [];
@@ -208,6 +224,14 @@ export function openExtrasDialog(actor) {
                         tags.push({ lid: 'tg_recharge', name: 'Recharge {VAL}+', val: String(recharge) });
                         entry.charged = true;
                         entry.recharge = recharge;
+                    }
+                    if (perTurn > 0) {
+                        tags.push({ lid: 'tg_turn', name: '{VAL}/turn', val: String(perTurn) });
+                        entry.usesPerTurn = { value: perTurn, max: perTurn };
+                    }
+                    if (perRound > 0) {
+                        tags.push({ lid: 'tg_round', name: '{VAL}/round', val: String(perRound) });
+                        entry.usesPerRound = { value: perRound, max: perRound };
                     }
                     if (tags.length)
                         entry.tags = tags;

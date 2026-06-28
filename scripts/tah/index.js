@@ -67,7 +67,7 @@ Hooks.on('init', () => {
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         requiresReload: true,
         onChange: en => {
             if (!en)
@@ -133,6 +133,14 @@ Hooks.on('init', () => {
         config: false,
         type: String,
         default: '',
+    });
+    game.settings.register(MODULE, 'tah.areaElevationAware', {
+        name: 'Area Elevation Aware (default)',
+        hint: 'Default for the `elevationAware` option of chooseToken area pickers (blast, cone, line, ...). When on, areas become 3D volumes that clip to terrain.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true,
     });
     game.settings.register(MODULE, 'tah.hoverCloseDelay', {
         name: 'Hover Close Delay (seconds)',
@@ -524,6 +532,8 @@ Hooks.on('updateActor', (actor, change) => {
         return;
     if (change?.flags?.['lancer-automations']?.lockedActions !== undefined)
         hud.scheduleRefresh();
+    else if (change?.system?.core_energy !== undefined)
+        hud.scheduleRefresh();
     else
         hud.updateStatsInPlace();
 });
@@ -624,7 +634,7 @@ Hooks.on('deleteCombat', () => {
 
 // ── Persistent range auras — combat auto-toggle + data refresh ─────────────
 
-import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview, getAttackRange } from './hover.js';
+import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview, getAttackRange, FIXED_MELEE_ACTIONS } from './hover.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
 import { createPulsingRangeHighlight } from '../interactive/canvas.js';
 
@@ -768,7 +778,7 @@ Hooks.once('ready', () => {
                     const actor = state.actor;
                     const actionName = state.data?.action?.name ?? state.data?.title ?? '';
                     const token = actor?.getActiveTokens?.()[0];
-                    if (token && actionName) {
+                    if (token && actionName && !FIXED_MELEE_ACTIONS.has(actionName.toLowerCase().trim())) {
                         const range = await getAttackRange(actionName, actor, null);
                         if (range != null && range > 0) {
                             const destroy = createPulsingRangeHighlight(token, range, { includeSelf: true });

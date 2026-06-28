@@ -9,6 +9,7 @@ import { playUiSound } from './sound.js';
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 import { getActivationIcon } from '../tools/misc-tools.js';
+import { getPerSceneLimit, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
@@ -107,8 +108,12 @@ export function getItemStatus(itemOrAction, extraAction = null) {
     if (perFreqOn) {
         const perRound = Number(itemTags.find(t => t.lid === 'tg_round')?.val ?? 0);
         const perTurn = Number(itemTags.find(t => t.lid === 'tg_turn')?.val ?? 0);
+        let perScene = 0;
+        if (extraAction) perScene = getPerSceneLimitFromSub(extraAction);
+        else if (isItem && itemOrAction.type !== 'frame') perScene = getPerSceneLimit(itemOrAction);
         if (perRound > 0) pushPerFreq(perRound, Number(sys.uses_per_round?.value ?? 0), 'mdi-restart', 'mdi-restart-off');
         if (perTurn > 0) pushPerFreq(perTurn, Number(sys.uses_per_turn?.value ?? 0), 'mdi-circle-slice-8', 'mdi-circle-outline');
+        if (perScene > 0) pushPerFreq(perScene, Number(sys.uses_per_scene?.value ?? 0), 'mdi-cog', 'mdi-cog-off');
     }
 
     // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
@@ -240,10 +245,11 @@ export function laHudItemChildren(item, opts = {}) {
  * Does nothing if the item has none of those tags.
  * @param {any} item   Foundry Item document
  * @param {any} popup  jQuery popup element (from laDetailPopup)
- * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge
+ * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any, subData?: any }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge + optional sub-entry (trait/core_system) to restrict per-scene detection
  */
 export function appendItemPips(item, popup, depthCallbacks) {
     const action = depthCallbacks?.action;
+    const subData = depthCallbacks?.subData;
     const isActorExtra = item?.documentName === 'Actor' && action?._addedViaExtrasUI === true;
     const sys = item?.system;
     const allTags = isActorExtra
@@ -255,8 +261,17 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
     const perRoundMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_round')?.val ?? 0) : 0;
     const perTurnMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_turn')?.val ?? 0) : 0;
+    const sub = subData ?? action;
+    const perSceneMax = !perFreqOn || isActorExtra ? 0
+        : sub ? getPerSceneLimitFromSub(sub)
+        : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
-    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax)
+    const isCoreActive = !!action && item?.type === 'frame' && (
+        (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ a => a === action || a?.name === action?.name)
+        || action?.name === item.system?.core_system?.active_name
+        || action?.name === item.system?.core_system?.name
+    );
+    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax && !perSceneMax && !isCoreActive)
         return;
 
     const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
@@ -331,9 +346,9 @@ export function appendItemPips(item, popup, depthCallbacks) {
                 pipsWrap.append(usesRow);
             }
         }
-        const perFreqDim = !game.combat?.started ? 'opacity:0.5;' : '';
-        const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed) => {
-            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${perFreqDim}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
+        const inCombat = !!game.combat?.started;
+        const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) => {
+            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
             for (let i = 1; i <= max; i++) {
                 const n = i;
                 const consumed = n <= used;
@@ -349,9 +364,26 @@ export function appendItemPips(item, popup, depthCallbacks) {
             pipsWrap.append(usesRow);
         };
         if (perRoundMax > 0)
-            renderFreqRow('Per round', perRoundMax, Number(s.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off');
+            renderFreqRow('Per round', perRoundMax, Number(s.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off', !inCombat);
         if (perTurnMax > 0)
-            renderFreqRow('Per turn', perTurnMax, Number(s.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline');
+            renderFreqRow('Per turn', perTurnMax, Number(s.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline', !inCombat);
+        if (perSceneMax > 0)
+            renderFreqRow('Per scene', perSceneMax, Number(s.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
+        if (isCoreActive) {
+            const actor = item.parent ?? item.actor;
+            const charged = (actor?.system?.core_energy ?? 0) > 0;
+            const row = $(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Core Power</span>`));
+            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`);
+            pip.on('click', async (ev) => {
+                ev.stopPropagation();
+                playUiSound('toggle');
+                const live = (actor?.system?.core_energy ?? 0) > 0;
+                await actor?.update({ 'system.core_energy': live ? 0 : 1 });
+                rebuild();
+            });
+            row.append(pip);
+            pipsWrap.append(row);
+        }
     };
     rebuild();
 

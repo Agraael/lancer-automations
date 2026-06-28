@@ -757,8 +757,12 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         if (consumeUse) {
             const uses = systemItem.system?.uses;
             if (uses && typeof uses.value === 'number') {
+                // Match Lancer 3.1.2+ behaviour: deduct the deploy action's cost (defaults to 1).
+                const actions = systemItem.system?.actions ?? [];
+                const deployAction = actions.find(/** @type {any} */ a => Array.isArray(a?.deployables) && a.deployables.length);
+                const cost = Math.max(1, Number(deployAction?.cost) || 1);
                 const minUses = uses.min ?? 0;
-                updates["system.uses.value"] = Math.max(uses.value - 1, minUses);
+                updates["system.uses.value"] = Math.max(uses.value - cost, minUses);
             }
             if (systemItem.system?.charged) {
                 updates["system.charged"] = false;
@@ -1139,8 +1143,10 @@ export function getItemActions(item) {
     if (!item)
         return [];
     const systemActions = item.system?.actions ?? [];
+    // Multi-profile weapons (e.g. Dynamo Blade) keep per-profile actions here.
+    const profileActions = item.system?.active_profile?.actions ?? [];
     const extraActions = item.getFlag?.('lancer-automations', 'extraActions') || [];
-    return [...systemActions, ...extraActions];
+    return [...systemActions, ...profileActions, ...extraActions];
 }
 
 /**
@@ -1272,6 +1278,8 @@ export async function consumeExtraAction(actor, actionName) {
     const hasLoading = tags.some(t => t.lid === 'tg_loading');
     const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
     const hasLimited = tags.some(t => t.lid === 'tg_limited');
+    const hasPerTurn = tags.some(t => t.lid === 'tg_turn');
+    const hasPerRound = tags.some(t => t.lid === 'tg_round');
     let needsWrite = false;
 
     if (hasLoading) {
@@ -1297,6 +1305,24 @@ export async function consumeExtraAction(actor, actionName) {
             return false;
         }
         entry.uses = { ...entry.uses, value: cur - 1 };
+        needsWrite = true;
+    }
+    if (hasPerTurn) {
+        const cur = entry.usesPerTurn?.value ?? 0;
+        if (cur <= 0) {
+            ui.notifications.warn(`${entry.name}: per-turn limit reached.`);
+            return false;
+        }
+        entry.usesPerTurn = { ...entry.usesPerTurn, value: cur - 1 };
+        needsWrite = true;
+    }
+    if (hasPerRound) {
+        const cur = entry.usesPerRound?.value ?? 0;
+        if (cur <= 0) {
+            ui.notifications.warn(`${entry.name}: per-round limit reached.`);
+            return false;
+        }
+        entry.usesPerRound = { ...entry.usesPerRound, value: cur - 1 };
         needsWrite = true;
     }
 
@@ -1329,6 +1355,14 @@ export async function reloadExtraAction(actor, actionName) {
     }
     if (tags.some(t => t.lid === 'tg_limited') && entry.uses?.max != null && entry.uses?.value !== entry.uses.max) {
         entry.uses = { ...entry.uses, value: entry.uses.max };
+        changed = true;
+    }
+    if (entry.usesPerTurn?.max != null && entry.usesPerTurn?.value !== entry.usesPerTurn.max) {
+        entry.usesPerTurn = { ...entry.usesPerTurn, value: entry.usesPerTurn.max };
+        changed = true;
+    }
+    if (entry.usesPerRound?.max != null && entry.usesPerRound?.value !== entry.usesPerRound.max) {
+        entry.usesPerRound = { ...entry.usesPerRound, value: entry.usesPerRound.max };
         changed = true;
     }
     if (changed) {
@@ -1385,18 +1419,21 @@ export async function rechargeExtraActionsForActor(actor) {
     const rollFor = (list) => {
         let mutated = false;
         const next = list.map(entry => {
+            let e = entry;
             const tags = entry?.tags ?? [];
-            if (!tags.some(t => t.lid === 'tg_recharge'))
-                return entry;
-            if (entry.charged !== false)
-                return entry;
-            const threshold = Number(entry.recharge ?? 6);
-            const roll = 1 + Math.floor(Math.random() * 6);
-            if (roll >= threshold) {
-                mutated = true;
-                return { ...entry, charged: true };
+            if (tags.some(t => t.lid === 'tg_recharge') && e.charged === false) {
+                const threshold = Number(e.recharge ?? 6);
+                if (1 + Math.floor(Math.random() * 6) >= threshold) {
+                    e = { ...e, charged: true };
+                    mutated = true;
+                }
             }
-            return entry;
+            // Per-turn usage resets at the actor's turn start.
+            if (e.usesPerTurn?.max != null && e.usesPerTurn.value !== e.usesPerTurn.max) {
+                e = { ...e, usesPerTurn: { ...e.usesPerTurn, value: e.usesPerTurn.max } };
+                mutated = true;
+            }
+            return e;
         });
         return { next, mutated };
     };
@@ -1411,6 +1448,37 @@ export async function rechargeExtraActionsForActor(actor) {
         if (!itemList.length)
             continue;
         const { next, mutated } = rollFor(itemList);
+        if (mutated)
+            await item.setFlag('lancer-automations', 'extraActions', next);
+    }
+}
+
+// Reset per-round usage (tg_round) on an actor's + items' extra actions. Called at round start.
+export async function resetPerRoundExtraActionsForActor(actor) {
+    if (!actor)
+        return;
+    const resetList = (list) => {
+        let mutated = false;
+        const next = list.map(entry => {
+            if (entry?.usesPerRound?.max != null && entry.usesPerRound.value !== entry.usesPerRound.max) {
+                mutated = true;
+                return { ...entry, usesPerRound: { ...entry.usesPerRound, value: entry.usesPerRound.max } };
+            }
+            return entry;
+        });
+        return { next, mutated };
+    };
+    const actorList = actor.getFlag('lancer-automations', 'extraActions') || [];
+    if (actorList.length) {
+        const { next, mutated } = resetList(actorList);
+        if (mutated)
+            await actor.setFlag('lancer-automations', 'extraActions', next);
+    }
+    for (const item of (actor.items ?? [])) {
+        const itemList = item.getFlag?.('lancer-automations', 'extraActions') || [];
+        if (!itemList.length)
+            continue;
+        const { next, mutated } = resetList(itemList);
         if (mutated)
             await item.setFlag('lancer-automations', 'extraActions', next);
     }

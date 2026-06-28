@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "3.3.1",
+    "version": "3.3.5",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -11,7 +11,7 @@
     ],
     "url": "https://github.com/Agraael/lancer-automations",
     "manifest": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.3.1/module.zip",
+    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.3.5/module.zip",
     "esmodules": [
         "scripts/combat/overwatch.js",
         "scripts/main.js",
@@ -128,6 +128,11 @@
             {
                 "id": "JB2A_DnD5e",
                 "type": "module"
+            },
+            {
+                "id": "force-client-settings",
+                "type": "module",
+                "manifest": "https://gitlab.com/kimitsu_desu/force-client-settings/-/raw/main/module.json"
             }
         ]
     },

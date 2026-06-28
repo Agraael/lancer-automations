@@ -38,24 +38,40 @@ function hasGAA() {
 }
 
 const _rangePreviewDestroyByTokenId = new Map();
+const _rangePreviewOwnerByTokenId = new Map();
 
-export async function activateRangePreview(token, range) {
+export async function activateRangePreview(token, range, ownerEl = null) {
     if (!token || range == null)
         return;
     deactivateRangePreview(token);
     const radius = Math.max(1, range);
     const destroy = createPulsingRangeHighlight(token, radius, { includeSelf: false });
     _rangePreviewDestroyByTokenId.set(token.id, destroy);
+    if (ownerEl)
+        _rangePreviewOwnerByTokenId.set(token.id, ownerEl);
 }
 
 export function deactivateRangePreview(token) {
     if (!token)
         return;
+    _rangePreviewOwnerByTokenId.delete(token.id);
     const destroy = _rangePreviewDestroyByTokenId.get(token.id);
     if (!destroy)
         return;
     try { destroy(); } catch { /* ignore */ }
     _rangePreviewDestroyByTokenId.delete(token.id);
+}
+
+// Drop previews whose source row left the DOM (its column closed).
+export function cleanupDetachedRangePreviews() {
+    for (const [tokenId, ownerEl] of _rangePreviewOwnerByTokenId) {
+        if (ownerEl?.isConnected)
+            continue;
+        const destroy = _rangePreviewDestroyByTokenId.get(tokenId);
+        try { destroy?.(); } catch { /* ignore */ }
+        _rangePreviewDestroyByTokenId.delete(tokenId);
+        _rangePreviewOwnerByTokenId.delete(tokenId);
+    }
 }
 
 // ── Range computation ──────────────────────────────────────────────────────────
@@ -68,6 +84,9 @@ function getSensorRange(actor) {
         return 5;
     return actor.system?.sensor_range ?? 10;
 }
+
+// Fixed range-1 melee/utility actions; no card range preview for these.
+export const FIXED_MELEE_ACTIONS = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pick up weapon', 'pickup weapon']);
 
 /**
  * Compute the range to preview for an attack action.
@@ -85,8 +104,7 @@ export async function getAttackRange(actionName, actor, item) {
         return null;
 
     // Fixed range 1
-    if (name === 'ram' || name === 'ramming speed' || name === 'grapple' ||
-        name === 'improvised attack' || name === 'pick up weapon' || name === 'pickup weapon')
+    if (FIXED_MELEE_ACTIONS.has(name))
         return 1;
 
     // Skirmish / Barrage / Thrown — max weapon reach (includes throw tag) with bonuses
@@ -550,9 +568,9 @@ Hooks.on('updateSetting', async (setting) => {
 
 /**
  * Called by _openCol for every row that carries hoverData.
- * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, profile?: any, token?: any, isEntering: boolean, isLeaving: boolean }} data
+ * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, profile?: any, token?: any, isEntering: boolean, isLeaving: boolean, el?: any }} data
  */
-export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering }) {
+export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering, el }) {
     if (!token)
         return;
     if (!game.settings.get('lancer-automations', 'tah.rangePreview'))
@@ -561,7 +579,7 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
     if (isEntering) {
         const range = await computePreviewRange(category, action?.name, actor, item ?? null, profile ?? null);
         if (range != null)
-            await activateRangePreview(token, range);
+            await activateRangePreview(token, range, el);
     } else {
         deactivateRangePreview(token);
     }

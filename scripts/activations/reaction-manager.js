@@ -1697,8 +1697,30 @@ export class StartupScriptEditor extends FormApplication {
                 });
                 installLancerHints(this._codeEditor, 'startup');
             }
-            setTimeout(() => this._codeEditor.refresh(), 100);
+            const fit = () => {
+                if (!this._codeEditor || !host?.isConnected)
+                    return;
+                const h = host.clientHeight;
+                if (h <= 0)
+                    return;
+                this._codeEditor.setSize('100%', h);
+                const cmEl = host.querySelector('.CodeMirror');
+                if (cmEl)
+                    cmEl.style.setProperty('height', h + 'px', 'important');
+                this._codeEditor.refresh();
+            };
+            requestAnimationFrame(() => requestAnimationFrame(fit));
+            const ro = new ResizeObserver(fit);
+            ro.observe(host);
+            this._codeEditorRO = ro;
         }
+    }
+
+    async close(options) {
+        try {
+            this._codeEditorRO?.disconnect?.();
+        } catch { /* ignore */ }
+        return super.close(options);
     }
 
     async _updateObject(event, formData) {

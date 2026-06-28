@@ -1120,8 +1120,10 @@ function _shrinkEffectIcons(token) {
 
     for (let i = 0; i < sprites.length; i++) {
         const s = sprites[i];
-        s.width = size;
-        s.height = size;
+        // Scale direct to dodge .width setter dividing by a 0/stale texture size.
+        const tw = s.texture?.orig?.width || s.texture?.width || size;
+        const th = s.texture?.orig?.height || s.texture?.height || size;
+        s.scale.set(size / tw, size / th);
         s.x = Math.floor(i / rows) * size;
         s.y = (i % rows) * size;
     }

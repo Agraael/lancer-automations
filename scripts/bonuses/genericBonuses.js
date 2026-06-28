@@ -1491,13 +1491,14 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
             $myContainer.append('<h3 class="damage-hud-section lancer-border-primary svelte-1tnd08e" style="font-size: 0.9em; margin-bottom: 5px;">Global Bonuses</h3>');
             $configGrid.append($myContainer);
 
-            setTimeout(() => {
-                bonusStates.forEach(b => {
-                    const $bonusSection = $form.find('.bonus-damage');
-                    const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
-                    if ($addBtn.length > 0)
-                        syncBonusToForm(b, $bonusSection, $addBtn);
-                });
+            setTimeout(async () => {
+                // Must be serial; parallel calls race on .last() and leak default 1d6 Kin rows.
+                const $bonusSection = $form.find('.bonus-damage');
+                const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+                if (!$addBtn.length) return;
+                for (const b of bonusStates) {
+                    await syncBonusToForm(b, $bonusSection, $addBtn);
+                }
             }, 200);
         } else {
             $myContainer.find('.csm-bonus-config-row').remove();
@@ -1712,6 +1713,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
         if (!$bonusSection.length)
             return;
 
+        const initialSyncs = [];
         matchingBonuses.forEach((bonus, localIdx) => {
             const guardClass = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
             if ($card.find(`.${guardClass}`).length > 0)
@@ -1782,8 +1784,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
                 }
             };
 
-            // Apply immediately
-            setTimeout(() => syncToCard(true), 200);
+            initialSyncs.push(() => syncToCard(true));
 
             $row.find('.csm-tgt-dmg-checkbox').on('change', function() {
                 enabled = $(this).is(':checked');
@@ -1791,6 +1792,13 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
                 syncToCard(enabled);
             });
         });
+
+        if (initialSyncs.length) {
+            setTimeout(async () => {
+                // Serial; parallel calls race on .last() and leak default 1d6 Kin rows.
+                for (const fn of initialSyncs) await fn();
+            }, 200);
+        }
     });
 }
 

@@ -100,8 +100,8 @@ export function registerSettings() {
     });
 
     game.settings.register('lancer-automations', 'enablePerRoundTurnTags', {
-        name: 'Per-Round / Per-Turn Tag Enforcement',
-        hint: 'Enforce the tg_round and tg_turn tags: block attacks/activations when the limit is reached, reset on round/turn. Requires reload.',
+        name: 'Per-Round / Per-Turn / Per-Scene Enforcement',
+        hint: 'Enforce per-round and per-turn tags (tg_round, tg_turn) and per-scene frequencies ("N/scene", use="Encounter"). Blocks attacks/activations at the limit and auto-resets on round/turn/combat. Requires reload.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -144,6 +144,15 @@ export function registerSettings() {
         config: false,
         type: Boolean,
         default: false
+    });
+
+    game.settings.register('lancer-automations', 'enableAttackTargeting', {
+        name: 'LA Attack Targeting',
+        hint: 'Adds an LA target/range picker to the attack HUD; hold Shift to target multiple.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
     });
 
     game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {

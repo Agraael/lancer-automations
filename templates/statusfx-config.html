@@ -10,6 +10,12 @@
     <fieldset id="la-statusfx-rest" style="border: none; padding: 0; margin: 0;" {{#unless master}}disabled{{/unless}}>
         <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label style="font-weight: bold;">Low-quality mode</label>
+                <input type="checkbox" name="lowQuality" {{#if lowQuality}}checked{{/if}} />
+            </div>
+        </div>
+        <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
                 <label style="font-weight: bold;">Additional Statuses &amp; Effects</label>
                 <input type="checkbox" name="additionalStatuses" {{#if additionalStatuses}}checked{{/if}} />
             </div>

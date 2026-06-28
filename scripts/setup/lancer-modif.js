@@ -256,7 +256,7 @@ export function onRenderActorSheet(app, html, _data) {
             return;
 
         const $header = $(this).find('.lancer-header').first();
-        $header.addClass('disabled');
+        $header.addClass('la-disabled');
 
         // Swap icon to power-off (skip if already showing destroyed icon)
         const $icon = $header.find('> i, > .lancer-hit-icon > i').first();
@@ -667,11 +667,11 @@ export function injectDisabledCSS() {
     const style = document.createElement('style');
     style.id = 'la-item-disabled-css';
     style.textContent = `
-        .lancer-header.disabled {
+        .lancer-header.la-disabled {
             opacity: 0.5;
             filter: grayscale(0.4);
         }
-        .lancer-header.disabled:hover {
+        .lancer-header.la-disabled:hover {
             opacity: 0.7;
         }
         .la-disabled-context-menu {

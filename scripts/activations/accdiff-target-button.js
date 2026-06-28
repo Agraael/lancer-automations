@@ -1,6 +1,6 @@
 /* global game, Hooks, $ */
 
-import { pickSingleTargetToggle } from '../interactive/canvas.js';
+import { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from '../interactive/canvas.js';
 
 function maxSimpleRange(lancerItem) {
     if (!lancerItem || typeof lancerItem.rangesFor !== 'function')
@@ -58,6 +58,10 @@ function injectWhenReady(state) {
 }
 
 function injectButton(state, $form) {
+    try {
+        if (!game.settings.get('lancer-automations', 'enableAttackTargeting'))
+            return;
+    } catch { /* settings not ready */ }
     $form = $form || $('form[id^="accdiff"]');
     if (!$form.length)
         return;
@@ -83,6 +87,11 @@ function injectButton(state, $form) {
     $btn.on('click', async (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
+        // Re-clicking while the picker is open cancels it (same as Escape).
+        if (isSingleTargetPickerActive()) {
+            cancelSingleTargetPicker();
+            return;
+        }
         await pickSingleTargetToggle();
     });
     $row.append($btn);

@@ -1961,3 +1961,18 @@ h2.la-collapsible:hover {
     opacity: 0.85;
     line-height: 1.2;
 }
+
+/* Acc/diff HUD: wrap long roll titles; span max-width sets the line length. */
+#accdiff-hud .lancer-header {
+    height: auto;
+    min-height: 2em;
+    flex: 0 0 auto;
+}
+#accdiff-hud .lancer-header span,
+#accdiff-hud .lancer-header input {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    line-height: 1.15;
+    max-width: 400px;
+}

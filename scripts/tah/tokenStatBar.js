@@ -2295,8 +2295,9 @@ function drawElevationBadge(token) {
         token.tooltip.visible = false;
     }
 
-    // Round so mid-animation interpolated values don't show as long floats.
-    const raw = token.document?.elevation;
+    const srcRaw = token.document?._source?.elevation;
+    const derRaw = token.document?.elevation;
+    const raw = Number.isFinite(srcRaw) && srcRaw !== derRaw ? srcRaw : derRaw;
     const elevation = Number.isFinite(raw) ? Math.round(raw) : raw;
     if (!Number.isFinite(elevation) || elevation === 0) {
         return;
@@ -3431,16 +3432,22 @@ export function initTokenStatBar() {
         if (!isLancerCombatant(tokenDoc?.actor)) {
             return;
         }
-        if (!foundry.utils.hasProperty(change, `flags.${MODULE_ID}`)) {
+        const touchesFlags = foundry.utils.hasProperty(change, `flags.${MODULE_ID}`);
+        const touchesElevation = change.elevation !== undefined;
+        if (!touchesFlags && !touchesElevation) {
             return;
         }
         const tok = tokenDoc.object;
         if (!tok) {
             return;
         }
+        if (touchesElevation) {
+            try { drawElevationBadge(tok); } catch { /* ignore */ }
+        }
         // Manual-value edits to extras: diff vs the seeded snapshot, then redraw.
         const extrasTouched = foundry.utils.hasProperty(change, `flags.${MODULE_ID}.${FLAG_EXTRAS}`);
         const prev = _lastValues.get(tok.id) ?? { extras: {} };
+        if (!touchesFlags) return;
         try {
             tok.drawBars();
         } catch (e) {

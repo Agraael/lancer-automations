@@ -256,7 +256,7 @@ function ocColorCss(value, max) {
 function corePowerColor(energy, active) {
     if (energy > 0)
         return active ? '#a855f7' : '#3a9e6e';
-    return '#555';
+    return '#c33';
 }
 function signed(n) {
     return n >= 0 ? `+${n}` : `${n}`;

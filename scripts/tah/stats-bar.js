@@ -124,7 +124,7 @@ export function buildStatsHtml(actor, token = null) {
     const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
     const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
     const coreHtml = hasCoreSystem
-        ? `${SEP}<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#555'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
+        ? `${SEP}<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#c33'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
         : '';
 
     const expanded = _statsExpanded ? 'display:flex;flex-direction:column' : 'display:none';

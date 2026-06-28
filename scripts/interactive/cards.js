@@ -212,8 +212,34 @@ export function _createInfoCard(type, opts) {
                 <input type="checkbox" data-role="selection-toggle" checked style="margin:0;" />
                 <span>Restrict to selection</span>
             </label>` : '';
+        const isAreaPattern = opts.pattern === 'blast' || opts.pattern === 'burst' || opts.pattern === 'cone' || opts.pattern === 'line';
+        const showAutoElev = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line'; // burst pins elevation to its host token
+        const showQEHint = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line';
+        const showRotateHint = opts.pattern === 'cone' || opts.pattern === 'line';
+        const blastSection = isAreaPattern ? `
+            <h3 class="la-section-header lancer-border-primary">Placed Areas</h3>
+            <div class="la-area-modes" data-role="area-modes" style="display:flex;gap:14px;align-items:center;padding:4px 4px 6px 4px;border-bottom:1px solid #ccc;margin-bottom:6px;color:#fff;font-size:11.5px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="checkbox" data-role="elevation-aware-toggle" style="margin:0;">
+                    <span>Elevation aware</span>
+                </label>
+                ${showAutoElev ? `<label data-role="auto-elevation-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="checkbox" data-role="auto-elevation-toggle" style="margin:0;">
+                    <span>Auto elevation</span>
+                </label>` : ''}
+                <label data-role="propagation-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Area spreads cell-to-cell from its origin; terrain taller than the area blocks the spread">
+                    <input type="checkbox" data-role="propagation-toggle" style="margin:0;">
+                    <span>Propagation</span>
+                </label>
+                ${showQEHint ? `<span style="margin-left:auto;color:#666;font-size:10.5px;font-style:italic;">Q/E: shift elevation</span>` : ''}
+                ${showRotateHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">Ctrl+wheel: rotate</span>` : ''}
+            </div>
+            <div class="la-placed-areas" data-role="area-list">
+                <div class="la-empty-state">No areas placed</div>
+            </div>` : '';
         dynamicHtml = `
             ${selectionCheckbox}
+            ${blastSection}
             <h3 class="la-section-header lancer-border-primary">Selected Targets</h3>
             <div class="la-selected-targets" data-role="target-list">
                 <div class="la-empty-state">No targets selected</div>
@@ -252,6 +278,9 @@ export function _createInfoCard(type, opts) {
     } else {
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Placed Zones</h3>
+            <button type="button" data-role="place-more" style="width:100%;margin-bottom:6px;padding:5px;cursor:pointer;background:#3a9e6e;color:#fff;border:none;border-radius:3px;font-weight:600;">
+                <i class="fas fa-plus"></i> Place Zone
+            </button>
             <div class="la-placed-zones" data-role="zone-list">
                 <div class="la-empty-state">No zones placed</div>
             </div>`;
@@ -264,7 +293,7 @@ export function _createInfoCard(type, opts) {
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
         <div class="lancer lancer-hud window-content">
             <div class="lancer-header ${headerClass} medium">
-                ${/[./]/.test(icon) ? `<img src="${icon}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border:none;transform:scale(1.5);transform-origin:center;${isWhiteSvgIcon(icon) ? 'filter:invert(1);' : ''}">` : `<i class="${icon} i--m" style="color:#000;"></i>`}
+                ${/[./]/.test(icon) ? `<img src="${icon}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border:none;transform:scale(1.5);transform-origin:center;${opts.iconInvert ? 'filter:invert(1);' : ''}">` : `<i class="${icon} i--m" style="color:#fff;"></i>`}
                 <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden; flex:1;">
                     <span>${title}</span>
                     ${origin ? `<span style="font-size:0.7em; font-weight:normal; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${origin}</span>` : ''}
@@ -351,6 +380,102 @@ export function _updateInfoCard(cardEl, type, data) {
         return;
 
     if (type === "chooseToken") {
+        // ── Placed Areas section (blast mode only) ──
+        if (data.pattern === 'blast' || data.pattern === 'burst' || data.pattern === 'cone' || data.pattern === 'line') {
+            // Sync global mode toggles (elevation aware + auto elevation).
+            const modesEl = cardEl.find('[data-role="area-modes"]');
+            if (modesEl.length) {
+                const elevAware = !!data.elevationAware;
+                const autoElev = !!data.autoElevation;
+                const $elevAware = modesEl.find('[data-role="elevation-aware-toggle"]');
+                const $autoElev = modesEl.find('[data-role="auto-elevation-toggle"]');
+                $elevAware.prop('checked', elevAware);
+                $autoElev.prop('checked', autoElev).prop('disabled', !elevAware);
+                modesEl.find('[data-role="auto-elevation-wrap"]').css('opacity', elevAware ? 1 : 0.5);
+                $elevAware.off('change').on('change', () => data.onToggleElevationAware?.());
+                $autoElev.off('change').on('change', () => data.onToggleAutoElevation?.());
+                const $prop = modesEl.find('[data-role="propagation-toggle"]');
+                $prop.prop('checked', !!data.propagation).prop('disabled', !elevAware);
+                modesEl.find('[data-role="propagation-wrap"]').css('opacity', elevAware ? 1 : 0.5);
+                $prop.off('change').on('change', () => data.onTogglePropagation?.());
+            }
+            const areaEl = cardEl.find('[data-role="area-list"]');
+            areaEl.empty();
+            const placements = data.placements ?? [];
+            if (placements.length === 0) {
+                areaEl.html('<div class="la-empty-state">No areas placed</div>');
+            } else {
+                const aoeIconSrc = data.pattern === 'burst'
+                    ? 'systems/lancer/assets/icons/aoe_burst.svg'
+                    : data.pattern === 'cone' ? 'systems/lancer/assets/icons/aoe_cone.svg'
+                    : data.pattern === 'line' ? 'systems/lancer/assets/icons/aoe_line.svg'
+                    : 'systems/lancer/assets/icons/aoe_blast.svg';
+                for (const p of placements) {
+                    const tokensHtml = p.candidates.map(c => {
+                        const dimmed = !c.eligible;
+                        const checked = c.included ? 'checked' : '';
+                        const disabled = dimmed ? 'disabled' : '';
+                        return `
+                            <label class="la-area-token-row" data-token-id="${c.id}" style="display:flex;align-items:center;gap:6px;padding:2px 4px;cursor:${dimmed ? 'not-allowed' : 'pointer'};opacity:${dimmed ? 0.45 : 1};font-size:11px;">
+                                <input type="checkbox" data-role="area-token-toggle" ${checked} ${disabled} style="margin:0;">
+                                <img src="${c.img}" alt="${c.name}" style="width:18px;height:18px;object-fit:contain;border:1px solid #555;border-radius:2px;">
+                                <span style="${c.filtered ? 'text-decoration:line-through;' : ''}">${c.name}</span>
+                            </label>`;
+                    }).join('');
+                    const filterToggleHtml = p.hasFiltered ? `
+                        <label style="display:flex;align-items:center;gap:4px;padding:2px 4px;font-size:10.5px;color:#666;cursor:pointer;">
+                            <input type="checkbox" data-role="area-filter-toggle" ${p.ignoreFilter ? 'checked' : ''} style="margin:0;">
+                            <span>Ignore filter</span>
+                        </label>` : '';
+                    const candidatesHtml = p.candidates.length === 0
+                        ? '<div style="font-size:10.5px;color:#888;font-style:italic;padding:2px 4px;">No tokens caught</div>'
+                        : tokensHtml;
+                    const oorWarn = p.centerOutOfRange
+                        ? `<div style="font-size:10.5px;color:#b34700;font-style:italic;margin-bottom:3px;"><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>Area center out of range</div>`
+                        : '';
+                    const elevBadge = data.elevationAware
+                        ? `<span style="font-size:10.5px;color:#555;padding:0 4px;" title="Q/E to adjust">Elev ${p.elevation}${p.elevationOffset ? ` (${p.elevationOffset > 0 ? '+' : ''}${p.elevationOffset})` : ''}</span>`
+                        : '';
+                    areaEl.append(`
+                        <div class="la-placed-area" data-area-id="${p.id}" style="border:1px solid ${p.centerOutOfRange ? '#ffaa00' : '#aaa'};border-radius:3px;padding:4px;margin-bottom:4px;background:${p.centerOutOfRange ? '#fff6e0' : '#fafafa'};color:#111;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                                <img src="${aoeIconSrc}" alt="${data.pattern}" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;">
+                                <span style="flex:1;font-weight:600;font-size:12px;color:#111;">${p.label}</span>
+                                ${elevBadge}
+                                <span style="font-size:10.5px;color:#555;">(${p.count} target${p.count === 1 ? '' : 's'})</span>
+                                <span class="la-area-remove" style="cursor:pointer;color:#a00;padding:0 4px;" title="Remove area"><i class="fas fa-times"></i></span>
+                            </div>
+                            ${oorWarn}
+                            <div class="la-area-tokens" style="color:#111;">${candidatesHtml}</div>
+                            ${filterToggleHtml}
+                        </div>`);
+                }
+                areaEl.find('.la-placed-area').each(function () {
+                    const $area = $(this);
+                    const areaId = Number($area.data('area-id'));
+                    $area.find('.la-area-remove').on('click', (e) => {
+                        e.stopPropagation();
+                        data.onRemoveArea?.(areaId);
+                    });
+                    $area.find('[data-role="area-token-toggle"]').on('change', function (e) {
+                        e.stopPropagation();
+                        const tokenId = $(this).closest('.la-area-token-row').data('token-id');
+                        data.onToggleAreaToken?.(areaId, String(tokenId));
+                    });
+                    $area.find('[data-role="area-filter-toggle"]').on('change', (e) => {
+                        e.stopPropagation();
+                        data.onToggleAreaFilter?.(areaId);
+                    });
+                    $area.find('.la-area-token-row').each(function () {
+                        const $row = $(this);
+                        const tokenId = String($row.data('token-id') ?? '');
+                        $row.on('mouseenter', () => data.onHoverToken?.(tokenId));
+                        $row.on('mouseleave', () => data.onUnhoverToken?.());
+                    });
+                });
+            }
+        }
+
         const listEl = cardEl.find('[data-role="target-list"]');
         listEl.empty();
 
@@ -380,8 +505,20 @@ export function _updateInfoCard(cardEl, type, data) {
                 if (data.onDeselect)
                     data.onDeselect(tokenId);
             });
+            listEl.find('.la-selected-target').each(function () {
+                const $row = $(this);
+                const tokenId = String($row.data('token-id') ?? '');
+                $row.on('mouseenter', () => data.onHoverToken?.(tokenId));
+                $row.on('mouseleave', () => data.onUnhoverToken?.());
+            });
         }
     } else if (type === "placeZone") {
+        const placeBtn = cardEl.find('[data-role="place-more"]');
+        if (placeBtn.length) {
+            const can = data.canPlaceMore !== false;
+            placeBtn.prop('disabled', !can).css({ opacity: can ? 1 : 0.45, cursor: can ? 'pointer' : 'not-allowed' });
+            placeBtn.off('click').on('click', () => { if (data.canPlaceMore !== false) data.onPlaceMore?.(); });
+        }
         const listEl = cardEl.find('[data-role="zone-list"]');
         listEl.empty();
 

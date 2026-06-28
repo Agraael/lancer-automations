@@ -162,18 +162,6 @@ Hooks.once('init', () => {
     registerSettings();
 });
 
-Hooks.once('lancer.registerFlows', (steps, flows) => {
-    if (!isEnabled() || conflictModuleActive())
-        return;
-    steps.set('addCorePowerSE', async ({ actor }) => {
-        if (actor.statuses?.has('core_power_active'))
-            return true;
-        actor.toggleStatusEffect('core_power_active', { active: true });
-        return true;
-    });
-    flows.get('CoreActiveFlow')?.insertStepAfter('consumeCorePower', 'addCorePowerSE');
-});
-
 Hooks.on('preCreateActiveEffect', (effect) => {
     if (!isEnabled() || conflictModuleActive())
         return;

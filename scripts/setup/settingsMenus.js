@@ -35,6 +35,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
+    { key: 'enableAttackTargeting', type: 'boolean' },
     { key: 'enablePathHexCalculation', type: 'boolean' },
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
@@ -252,6 +253,7 @@ const TAH_FIELDS = [
     { type: 'section', label: 'Token Action HUD' },
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
     { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' },
+    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware (default)', hint: 'Default for area pickers (blast etc.). When on, areas become 3D volumes that clip to terrain.' },
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.maxColumnItems', type: 'number' },
@@ -461,6 +463,7 @@ const STATUSES_FIELDS = [
 
     { type: 'section', label: 'Effects Configuration' },
     { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Disable to suppress all visual + auto-status effects.' },
+    { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
     { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'Remove Statuses on Death' },
 
@@ -513,7 +516,6 @@ const VISION_FIELDS = [
 
     { type: 'section', label: 'Basic Vision' },
     { key: 'basicSightTo999', type: 'boolean' },
-    { key: 'forceFullDarkvision', type: 'boolean' },
 
     { type: 'section', label: 'Drag Vision' },
     { key: 'dragVisionMode', type: 'select' },
@@ -721,12 +723,12 @@ function _isLockedForUser(key) {
 }
 
 /** @param {string} sub */
-function _readStatusFx(sub) {
+function _readStatusFx(sub, fallback = true) {
     try {
         const cfg = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
-        return cfg[sub] !== undefined ? cfg[sub] : true;
+        return cfg[sub] !== undefined ? cfg[sub] : fallback;
     } catch {
-        return true;
+        return fallback;
     }
 }
 
@@ -842,12 +844,13 @@ function _buildItem(f) {
     }
     if (f.type === 'statusFx') {
         // _sfx. prefix routes the value back into statusFXConfig on save.
+        const fallback = f.default ?? true;
         return {
             key: `_sfx.${f.sub}`,
             type: 'boolean',
             label: f.label,
             hint: f.hint ?? '',
-            value: _readStatusFx(f.sub) !== false,
+            value: _readStatusFx(f.sub, fallback) !== false,
             isBoolean: true,
             choices: [],
             isLocked: !game.user.isGM
@@ -930,6 +933,9 @@ async function _toggleFCSForce(key, fcs) {
         delete forced[key];
     await game.settings.set('force-client-settings', 'forced', forced);
     fcs.forced = new Map(Object.entries(forced));
+    // Refresh FCS's in-memory map so the lock applies without a reload.
+    const FCS = /** @type {any} */ (globalThis).ForceClientSettings;
+    if (FCS?.forced) FCS.forced = new Map(Object.entries(forced));
 }
 
 /** @param {any} html @param {any[]} fields @param {any} _app */
@@ -1115,6 +1121,8 @@ function _toggleSection($header, collapsed) {
     }
 }
 
+let _laConfigState = null;
+
 export class LancerAutomationsConfig extends FormApplication {
     constructor(...args) {
         super(...args);
@@ -1124,16 +1132,19 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     static get defaultOptions() {
+        const saved = _laConfigState;
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'lancer-automations-config',
             title: 'Lancer Automations Configuration',
             template: TEMPLATE_PATH,
-            width: 860,
-            height: 720,
+            width: saved?.width ?? 860,
+            height: saved?.height ?? 720,
+            top: saved?.top ?? undefined,
+            left: saved?.left ?? undefined,
             resizable: true,
             closeOnSubmit: true,
             classes: [...super.defaultOptions.classes, 'lancer-dialog-base', 'lancer-no-title'],
-            tabs: [{ navSelector: '.tabs', contentSelector: '.content', initial: 'activations' }],
+            tabs: [{ navSelector: '.tabs', contentSelector: '.content', initial: saved?.tab ?? 'activations' }],
         });
     }
 
@@ -1151,6 +1162,11 @@ export class LancerAutomationsConfig extends FormApplication {
     activateListeners(html) {
         super.activateListeners(html);
         const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
+        if (_laConfigState?.scroll != null) {
+            const scroller = $html.find('.content .tab.active')[0] ?? $html.find('.content')[0];
+            if (scroller)
+                requestAnimationFrame(() => { scroller.scrollTop = _laConfigState.scroll; });
+        }
         const captureKey = (onDone) => {
             const km = /** @type {any} */ (globalThis).KeyboardManager;
             const protectedKeys = new Set(km?.PROTECTED_KEYS ?? ['F5', 'F11', 'F12', 'PrintScreen', 'ScrollLock', 'NumLock', 'CapsLock', 'Pause', 'Break', 'Insert', 'Home', 'PageUp', 'PageDown', 'End', 'ContextMenu']);
@@ -1602,6 +1618,20 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     async close(options) {
+        try {
+            const root = this.element?.[0];
+            const activeNav = /** @type {any} */ (root?.querySelector('.tabs .item.active'));
+            const scroller = root?.querySelector('.content .tab.active') ?? root?.querySelector('.content');
+            const pos = /** @type {any} */ (this.position ?? {});
+            _laConfigState = {
+                tab: activeNav?.dataset?.tab ?? null,
+                scroll: scroller?.scrollTop ?? 0,
+                top: pos.top ?? null,
+                left: pos.left ?? null,
+                width: pos.width ?? null,
+                height: pos.height ?? null,
+            };
+        } catch { /* ignore */ }
         const r = await super.close(options);
         if (this._needsReload) {
             this._needsReload = false;

@@ -29,7 +29,8 @@ import { cancelRulerDrag ,
     getActiveGMId, getTokenOwnerUserId,
     handleManualDeployLink, startWaitCard,
     resolveDeployableSourceItem,
-    rechargeExtraActionsForActor
+    rechargeExtraActionsForActor,
+    resetPerRoundExtraActionsForActor
 } from './interactive/index.js';
 import {
     EffectsAPI,
@@ -949,6 +950,7 @@ Hooks.on('renderActorSheet', (app, html, data) => {
 });
 
 Hooks.on('renderActorSheet', (app, html) => onRenderActorSheetPerFrequency(app, html));
+Hooks.on('renderActorSheetV2', (app, html) => onRenderActorSheetPerFrequency(app, html));
 
 Hooks.on('renderItemSheet', onRenderItemSheet);
 
@@ -1174,13 +1176,18 @@ Hooks.on('combatStart', async (combat) => {
         return;
     }
     await handleTrigger('onRoundStart', { combat, round: combat.round ?? 1 });
+    for (const cb of combat.combatants)
+        if (cb.actor) await resetPerRoundExtraActionsForActor(cb.actor);
 });
 
-Hooks.on('combatRound', async (combat, updateData) => {
+Hooks.on('combatRound', async (combat, updateData, opts) => {
     if (!game.users.activeGM?.isSelf) {
         return;
     }
     await handleTrigger('onRoundStart', { combat, round: updateData?.round ?? combat.round });
+    if (opts?.direction !== -1)
+        for (const cb of combat.combatants)
+            if (cb.actor) await resetPerRoundExtraActionsForActor(cb.actor);
 });
 
 // boost offer + cap detection both read the cap, so seed it for everyone at start

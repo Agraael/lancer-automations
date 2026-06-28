@@ -2,6 +2,7 @@
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup } from '../interactive/detail-renderers.js';
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
+import { getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction } from '../interactive/deployables.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
@@ -9,7 +10,7 @@ import { knockBackToken } from '../interactive/canvas.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, isStaleStatusSource, getActionLockInfo } from '../combat/action-limits.js';
 import { laHudRenderIcon, getActivationIcon, laHudItemChildren, getItemStatus, activationTheme, appendItemPips, rechargeIcon } from './item-helpers.js';
-import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview } from './hover.js';
+import { onHudRowHover, togglePersistentAura, isPersistentAuraActive, setPersistentAura, AURA_DEFS, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
 import { resurrect } from '../tools/wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
 import { buildCombatBar } from './combat-bar.js';
@@ -55,6 +56,7 @@ const TEXT_ACTIVE  = '#fff';
 function closeCol(col, duration = 90) {
     col.stop(true).animate({ opacity: 0, marginLeft: -10 }, duration, function () {
         $(this).hide().css('marginLeft', '').children(':not(.la-hud-col-label)').remove();
+        cleanupDetachedRangePreviews();
     });
 }
 
@@ -1081,6 +1083,12 @@ export class LancerHUD {
             const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
+            if (item.onBadgeClick) {
+                row.find('.la-hud-badge').css('cursor', 'pointer').on('click', (ev) => {
+                    ev.stopPropagation();
+                    item.onBadgeClick();
+                });
+            }
             const isFavoritable = !item.isSectionLabel && !!item.onClick && !!this._favKey(item);
             if (isFavoritable && this._isFavorite(item))
                 this._applyFavStyle(row);
@@ -1244,6 +1252,7 @@ export class LancerHUD {
             if (item.onClick) {
                 row.on('click', async () => {
                     playUiSound('open');
+                    for (const t of this._tokens ?? []) deactivateRangePreview(t);
                     if (!item.keepOpen) {
                         row.trigger('mouseleave');
                         closeCol(this._c2);
@@ -1293,8 +1302,8 @@ export class LancerHUD {
             if (item.hoverData) {
                 const hd = item.hoverData;
                 const token = this._token;
-                row.on('mouseenter', () => onHudRowHover({ ...hd, token, isEntering: true,  isLeaving: false }));
-                row.on('mouseleave', () => onHudRowHover({ ...hd, token, isEntering: false, isLeaving: true  }));
+                row.on('mouseenter', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: true,  isLeaving: false }));
+                row.on('mouseleave', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: false, isLeaving: true  }));
             }
             if (hasChildren && !item.isLogPanel && !item.isGlossaryPanel) {
                 const openChild = () => {
@@ -2325,7 +2334,8 @@ export class LancerHUD {
                         onRightClick: (row) => {
                             const actionsHtml = (sys.actions ?? []).map(/** @type {any} */ a => {
                                 const det = a.detail ? `<div style="font-size:0.77em;color:#bbb;margin-top:2px;">${laFormatDetailHtml(a.detail)}</div>` : '';
-                                return `<div style="margin-top:6px;padding:4px;background:rgba(255,255,255,0.04);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#e8a020;">[${a.activation}] ${a.name}</div>${det}</div>`;
+                                const cost = Number(a.cost) || 1;
+                                return `<div style="margin-top:6px;padding:4px;background:rgba(255,255,255,0.04);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#e8a020;">[${a.activation}] ${a.name} <span style="color:#888;font-weight:normal;">Cost: ${cost}</span></div>${det}</div>`;
                             }).join('');
                             const depLids = getItemDeployables(item, actor);
                             const depActors = depLids.map(lid => getDeployableInfoSync(lid, actor)).filter(Boolean);
@@ -2521,7 +2531,7 @@ export class LancerHUD {
                         label: frame.name,
                         icon: 'systems/lancer/assets/icons/frame.svg',
                         onClick: () => /** @type {any} */ (frame).sheet.render(true),
-                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row }),
+                        onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row, postRender: /** @type {any} */ p => appendItemPips(frame, p) }),
                     },
                     { label: 'Core Power',  childColLabel: 'Core Power',  getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
                     { label: 'Traits',      childColLabel: 'Traits',      getChildren: () => this._frameTraitItems(frame, actor) },
@@ -2925,7 +2935,10 @@ export class LancerHUD {
                         const npcRightClick = (/** @type {any} */ row) => {
                             const trigger = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
                             const effect  = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
-                            const bodyHtml = laRenderTags(sys.tags ?? []) + trigger + effect;
+                            const npcAction = /** @type {any} */ ((sys.actions ?? []).find(/** @type {any} */ a => Number(a?.cost) > 0)) ?? null;
+                            const cost = Number(npcAction?.cost) || 1;
+                            const costLine = `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Cost:</b> ${cost}</div>`;
+                            const bodyHtml = laRenderTags(sys.tags ?? []) + costLine + trigger + effect;
                             if (!bodyHtml)
                                 return;
                             this._showItemPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: this._joinSubtitle(actLabel ?? sys.type, origin), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row, postRender: /** @type {any} */ p => appendItemPips(item, p) });
@@ -2980,7 +2993,10 @@ export class LancerHUD {
                             const trigger  = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
                             const effect   = sys.effect  ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(sys.effect)}</div>` : '';
                             const tagsHtml = laRenderTags(sys.tags ?? []);
-                            const bodyHtml = tagsHtml + trigger + effect;
+                            const npcAction = /** @type {any} */ ((sys.actions ?? []).find(/** @type {any} */ a => Number(a?.cost) > 0)) ?? null;
+                            const cost = Number(npcAction?.cost) || 1;
+                            const costLine = `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Cost:</b> ${cost}</div>`;
+                            const bodyHtml = tagsHtml + costLine + trigger + effect;
                             if (!bodyHtml)
                                 return;
                             this._showItemPopup({
@@ -3068,9 +3084,17 @@ export class LancerHUD {
         const traits = frame.system?.traits ?? [];
         if (!traits.length)
             return [];
-        return traits.map(/** @type {any} */ (trait) => ({
+        return traits.map(/** @type {any} */ (trait) => {
+            const sceneMax = getPerSceneLimitFromSub(trait);
+            const sceneUsed = Number(frame.system?.uses_per_scene?.value ?? 0);
+            const sceneReady = sceneMax > 0 && sceneUsed < sceneMax;
+            return ({
             label: trait.name,
             icon: 'systems/lancer/assets/icons/trait.svg',
+            ...(sceneMax > 0 ? {
+                badge: `<i class="mdi ${sceneReady ? 'mdi-cog' : 'mdi-cog-off'}"></i>`,
+                badgeColor: sceneReady ? '#3a9e6e' : '#c33',
+            } : {}),
             hoverData: { actor, item: trait, category: 'Frame Traits' },
             onClick: () => {
                 const F = /** @type {any} */ (game).lancer?.flows?.get('SimpleTextFlow'); if (F)
@@ -3126,9 +3150,10 @@ export class LancerHUD {
                 const bodyHtml = trait.description
                     ? `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(trait.description)}</div>`
                     : '<div style="font-size:0.82em;color:#888;">No description.</div>';
-                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', item: frame, row });
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-trait-popup', dataKey: 'trait-name', dataValue: trait.name, title: trait.name, subtitle: `${frame.name} · Trait`, bodyHtml, theme: 'trait', item: frame, row, postRender: /** @type {any} */ p => appendItemPips(frame, p, { subData: trait }) });
             },
-        }));
+            });
+        });
     }
 
     _coreBonusItems(/** @type {any} */ actor) {
@@ -4049,12 +4074,20 @@ export class LancerHUD {
                 if (!charged)
                     status.unavailable = true;
             }
+            // Core power: battery badge mirroring system.core_energy. Click toggles.
+            if (_coreActive && !status.destroyed) {
+                const charged = !coreUsed;
+                const batt = `<i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}" title="Core Power: ${charged ? 'available' : 'spent'}"></i>`;
+                status.badge = (status.badge ? status.badge + ' ' : '') + batt;
+                status.badgeColor = charged ? '#3a9e6e' : '#c33';
+            }
             return {
                 label: status.destroyed ? this._destroyedLabel(action.name)
                     : ((action._sourceItemId || action._addedViaExtrasUI) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
+                ...(_coreActive ? { onBadgeClick: async () => { await actor.update({ 'system.core_energy': coreUsed ? 1 : 0 }); } } : {}),
                 ...this._statusColors(status),
                 onClick: async () => {
                     const si = /** @type {any} */ (sourceItem);
