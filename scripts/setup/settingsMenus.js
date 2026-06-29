@@ -377,7 +377,7 @@ const ACTION_FX_KEYS = [
 ];
 const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover'];
 const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
-    'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey'];
+    'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
 const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];

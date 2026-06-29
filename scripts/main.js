@@ -16,6 +16,7 @@ import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybinding
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
 import { refreshActionLimits, registerActionLimitsHooks } from "./combat/action-limits.js";
 import { laDetailPopup } from "./interactive/detail-renderers.js";
+import { registerElevTiltKeybindings } from "./interactive/keybindings.js";
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
 import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
@@ -442,6 +443,7 @@ Hooks.on('init', () => {
     injectPerFrequencySchemaFields();
     patchStatRollCardTemplate();
 
+    registerElevTiltKeybindings(); // Rebindable Q/E elevation + W/S line tilt
     game.keybindings.register('lancer-automations', 'resetMovement', {
         name: 'Reset Movement',
         hint: 'Open the movement history reset dialog for the selected token.',

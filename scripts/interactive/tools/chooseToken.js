@@ -17,6 +17,9 @@ import {
     makeSafe, createCursorPreview, drawRangeHighlight,
     _paintCells, _groupCellsByDistance, _makeRangePulseTick,
 } from "../canvas-helpers.js";
+import { computeArea } from "../area-geometry.js";
+import { keyCodesFor } from "../keybindings.js";
+import { playUiSound, playTargetingMove } from "../../tah/sound.js";
 
 /**
  * Prompts the user to select one or more tokens on the canvas.
@@ -84,13 +87,15 @@ export function chooseToken(casterToken, options = {}) {
         const selectedTokens = new Set();
         const selectionHighlights = [];
 
-        /** @type {Array<{id:number, center:{x:number,y:number}, graphics:any, candidates:Token[], included:Set<string>, ignoreFilter:boolean, elevation:number, elevationOffset:number, hostToken?:any, rotation?:number}>} */
+        /** @type {Array<{id:number, center:{x:number,y:number}, graphics:any, candidates:Token[], included:Set<string>, ignoreFilter:boolean, elevation:number, elevationOffset:number, hostToken?:any, rotation?:number, tilt?:number}>} */
         const placements = [];
         let placementSeq = 0;
         // Live offset for cursor preview + the most-recent placement. Frozen on each previously-placed area.
         let pendingElevationOffset = 0;
         // Live rotation for the cone/line preview + the most-recent placement. Frozen on older ones.
         let pendingRotation = 0;
+        // Live line tilt (W/S): end-elevation delta. Frozen per placement like rotation.
+        let pendingTilt = 0;
         // Cone rotates in 12 angular steps; a line steps around its endpoint ring (6×length on hex,
         // 8×length on square) so every tick is a distinct facing — far finer than the cone.
         const lineRadius = Math.max(1, Math.round(Number(areaRange) || 1));
@@ -227,11 +232,18 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const cursorElevLabel = new PIXI.Text('', {
-            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold', align: 'center',
         });
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
         canvas.stage.addChild(cursorElevLabel);
+        // live per-cell elevation numbers (tilted lines)
+        const cellLabelLayer = new PIXI.Container();
+        canvas.stage.addChild(cellLabelLayer);
+        const clearCellLabels = () => {
+            for (const ch of cellLabelLayer.removeChildren())
+                ch.destroy();
+        };
 
         const previewSelectHighlight = new PIXI.Graphics();
         canvas.stage.addChild(previewSelectHighlight);
@@ -293,6 +305,8 @@ export function chooseToken(casterToken, options = {}) {
             canvas.app.ticker.remove(areaPulseTick);
             destroyGraphics(hoverPulseGraphic);
             destroyGraphics(cursorElevLabel);
+            clearCellLabels();
+            destroyGraphics(cellLabelLayer);
             destroyGraphics(previewSelectHighlight);
             if (wavePulse)
                 canvas.app.ticker.remove(wavePulse);
@@ -422,27 +436,14 @@ export function chooseToken(casterToken, options = {}) {
             return caught;
         };
 
-        const tokensInBlast = (centerPt, radius, areaElev = 0) => {
-            const areaTop = areaElev + radius;
-            let affected = elevationAware
-                ? getInRangeOffsets({ x: centerPt.x, y: centerPt.y, elevation: areaElev }, radius, { includeSelf: true, elevationAware: true })
-                : getInRangeOffsets(centerPt, radius, { includeSelf: true, elevationAware: false });
-            affected = trimByTerrain(affected, areaTop);
-            affected = propagate(affected, originSeed(centerPt));
-            return { caught: catchTokens(affected, areaElev, areaTop), affected };
-        };
+        // Shared geometry (area-geometry.js). ctx carries the runtime toggles + token filters.
+        const aoeCtx = () => ({ elevationAware, propagation, includeHidden, includeSelf, casterToken });
+        const tokensInBlast = (centerPt, radius, areaElev = 0) =>
+            computeArea({ pattern: 'blast', centerPt, areaRange: radius, areaElev }, aoeCtx());
 
-        // Burst: centered on a HOST token. Vertical extent symmetric: [tokenElev - radius, tokenElev + radius].
-        // Host elevation drives everything; no offset, no Q/E.
-        const tokensInBurst = (hostToken, radius) => {
-            const tokenElev = Number(hostToken?.document?.elevation) || 0;
-            const burstTop = tokenElev + radius;
-            const burstBot = tokenElev - radius;
-            let affected = getInRangeOffsets(hostToken, radius, { includeSelf: false, elevationAware });
-            affected = trimByTerrain(affected, burstTop);
-            affected = propagate(affected, getOccupiedOffsets(hostToken).map(o => `${o.col},${o.row}`));
-            return { caught: catchTokens(affected, burstBot, burstTop, hostToken.id), affected, hostElev: tokenElev };
-        };
+        // Burst: centered on a HOST token, symmetric [tokenElev - radius, tokenElev + radius].
+        const tokensInBurst = (hostToken, radius) =>
+            computeArea({ pattern: 'burst', hostToken, areaRange: radius }, aoeCtx());
 
         // Cone: hex grid uses generative cube-coord algorithm (matches Foundry MeasuredTemplate cone exactly).
         //   - Aim direction in degrees, range in hex distance.
@@ -668,16 +669,26 @@ export function chooseToken(casterToken, options = {}) {
             return { caught: catchTokens(affected, areaElev, areaTop), affected };
         };
 
-        // caught/affected for an aimed placement (cone or line); blast falls through, rotation unused.
-        const computeAreaFor = (center, elevation, rotation) =>
-            isLineMode ? tokensInLine(center, areaRange, elevation, rotation, size)
-                : isConeMode ? tokensInCone(center, areaRange, elevation, rotation)
-                    : tokensInBlast(center, areaRange, elevation);
+        // caught/affected for a placement. tilt only matters for line; frozen placements pass theirs.
+        const computeAreaFor = (center, elevation, rotation, tilt = pendingTilt) => computeArea({
+            pattern: isLineMode ? 'line' : isConeMode ? 'cone' : 'blast',
+            centerPt: center,
+            areaRange,
+            size,
+            rotation,
+            areaElev: elevation,
+            tilt,
+        }, aoeCtx());
 
+        // One elevation: ↑ positive / ↓ negative / ↕ for 0.
+        const elevArrow = (e) => {
+            const v = Math.round(Number(e) || 0);
+            return v > 0 ? `↑ ${v}` : v < 0 ? `↓ ${-v}` : `↕ 0`;
+        };
+        // Top/bottom band ±areaRange around e (blast/cone/burst reach).
+        const bandStr = (e) => `↑ ${Math.round((Number(e) || 0) + areaRange)}\n↓ ${Math.round((Number(e) || 0) - areaRange)}`;
         const makeElevationLabel = (elev, center, gridSize) => {
-            const e = Math.round(Number(elev) || 0);
-            const txt = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
-            const label = new PIXI.Text(txt, {
+            const label = new PIXI.Text(elevArrow(elev), {
                 fontFamily: 'Arial',
                 fontSize: Math.max(14, gridSize * 0.22),
                 fill: 0xffffff,
@@ -690,8 +701,47 @@ export function chooseToken(casterToken, options = {}) {
             label.y = center.y;
             return label;
         };
+        // Two-line ↑top/↓bot label.
+        const makeBandLabel = (top, bot, center) => {
+            const label = new PIXI.Text(`↑ ${Math.round(top)}\n↓ ${Math.round(bot)}`, {
+                fontFamily: 'Arial',
+                fontSize: Math.max(14, canvas.grid.size * 0.22),
+                fill: 0xffffff,
+                stroke: 0x000000,
+                strokeThickness: 4,
+                fontWeight: 'bold',
+                align: 'center',
+            });
+            label.anchor.set(0.5);
+            label.x = center.x;
+            label.y = center.y;
+            return label;
+        };
+        // Arrow label on one cell (tilted line).
+        const makeCellNumber = (e, col, row) => {
+            const c = getHexCenter(col, row);
+            const label = new PIXI.Text(elevArrow(e), {
+                fontFamily: 'Arial',
+                fontSize: Math.max(11, canvas.grid.size * 0.18),
+                fill: 0xffffff,
+                stroke: 0x000000,
+                strokeThickness: 3,
+                fontWeight: 'bold',
+            });
+            label.anchor.set(0.5);
+            label.x = c.x;
+            label.y = c.y;
+            return label;
+        };
+        // A line is "tilted" only when its cells span more than one elevation.
+        const cellsAreTilted = (elevByCell) => {
+            if (!elevByCell)
+                return false;
+            const vals = [...elevByCell.values()];
+            return vals.some(e => e !== vals[0]);
+        };
 
-        const drawBlastHighlight = (affected, { color = 0xffd84a, fillAlpha = 0.22, lineAlpha = 0.7, elevation = null, center = null } = {}) => {
+        const drawBlastHighlight = (affected, { color = 0xffd84a, fillAlpha = 0.22, lineAlpha = 0.7, elevation = null, center = null, elevByCell = null } = {}) => {
             const container = new PIXI.Container();
             const g = new PIXI.Graphics();
             if (lineAlpha > 0)
@@ -702,8 +752,18 @@ export function chooseToken(casterToken, options = {}) {
             if (fillAlpha > 0)
                 g.endFill();
             container.addChild(g);
-            if (elevationAware && center)
-                container.addChild(makeElevationLabel(elevation, center, canvas.grid.size));
+            if (elevationAware && cellsAreTilted(elevByCell)) {
+                // tilted line: an arrow label per cell
+                for (const [key, e] of elevByCell) {
+                    const [col, row] = key.split(',').map(Number);
+                    container.addChild(makeCellNumber(e, col, row));
+                }
+            } else if (elevationAware && center) {
+                // flat line -> single arrow; blast/cone/burst -> top/bottom band
+                container.addChild(elevByCell
+                    ? makeElevationLabel(elevation, center, canvas.grid.size)
+                    : makeBandLabel(elevation + areaRange, elevation - areaRange, center));
+            }
             addGraphicsBelowTokens(container);
             return container;
         };
@@ -795,17 +855,19 @@ export function chooseToken(casterToken, options = {}) {
             const elevationOffset = pendingElevationOffset;
             const elevation = (autoElevation ? groundAtCenter(center) : 0) + elevationOffset;
             const rotation = pendingRotation;
-            const { caught, affected } = computeAreaFor(center, elevation, rotation);
+            const tilt = pendingTilt;
+            const { caught, affected, elevByCell } = computeAreaFor(center, elevation, rotation, tilt);
             const placement = {
                 id: ++placementSeq,
                 center,
-                graphics: drawBlastHighlight(affected, { elevation, center }),
+                graphics: drawBlastHighlight(affected, { elevation, center, elevByCell }),
                 candidates: caught,
                 included: new Set(),
                 ignoreFilter: false,
                 elevation,
                 elevationOffset,
                 rotation,
+                tilt,
             };
             for (const t of caught) {
                 if (!filter || filter(t))
@@ -820,16 +882,16 @@ export function chooseToken(casterToken, options = {}) {
         // Re-derive every placement from scratch (used when toggles change or Q/E is pressed).
         const recomputeAllPlacements = () => {
             for (const p of placements) {
-                let caught, affected;
+                let caught, affected, elevByCell;
                 if (p.hostToken) {
                     p.elevation = Number(p.hostToken.document?.elevation) || 0;
                     ({ caught, affected } = tokensInBurst(p.hostToken, areaRange));
                 } else {
                     p.elevation = resolvePlacementElevation(p);
-                    ({ caught, affected } = computeAreaFor(p.center, p.elevation, p.rotation));
+                    ({ caught, affected, elevByCell } = computeAreaFor(p.center, p.elevation, p.rotation, p.tilt));
                 }
                 destroyGraphics(p.graphics);
-                p.graphics = drawBlastHighlight(affected, { elevation: p.elevation, center: p.center });
+                p.graphics = drawBlastHighlight(affected, { elevation: p.elevation, center: p.center, elevByCell });
                 const oldIncluded = p.included;
                 p.candidates = caught;
                 // Preserve manual inclusions for tokens still in candidates; default-include new ones that pass filter.
@@ -1136,8 +1198,7 @@ export function chooseToken(casterToken, options = {}) {
             }
             previewSelectHighlight.endFill();
             if (elevationAware) {
-                const e = Math.round(previewElev || 0);
-                cursorElevLabel.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+                cursorElevLabel.text = bandStr(previewElev);
                 cursorElevLabel.style.fontSize = Math.max(14, canvas.grid.size * 0.22);
                 cursorElevLabel.x = centerPt.x;
                 cursorElevLabel.y = centerPt.y;
@@ -1219,8 +1280,7 @@ export function chooseToken(casterToken, options = {}) {
             previewSelectHighlight.endFill();
 
             if (elevationAware) {
-                const e = Math.round(tokenElev);
-                cursorElevLabel.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+                cursorElevLabel.text = bandStr(tokenElev);
                 cursorElevLabel.style.fontSize = Math.max(14, canvas.grid.size * 0.22);
                 cursorElevLabel.x = hovered.center.x;
                 cursorElevLabel.y = hovered.center.y;
@@ -1245,6 +1305,7 @@ export function chooseToken(casterToken, options = {}) {
         const drawConeCursor = (tx, ty) => {
             cursorPreview.clear();
             previewSelectHighlight.clear();
+            clearCellLabels();
             const off = pixelToOffset(tx, ty);
             const centerPt = getHexCenter(off.col, off.row);
             const outOfRange = range !== null && casterToken
@@ -1253,7 +1314,7 @@ export function chooseToken(casterToken, options = {}) {
             const previewElev = elevationAware
                 ? (autoElevation ? groundAtCenter({ x: centerPt.x, y: centerPt.y }) : 0) + pendingElevationOffset
                 : 0;
-            const { caught: previewCaught, affected } = computeAreaFor(
+            const { caught: previewCaught, affected, elevByCell } = computeAreaFor(
                 { x: centerPt.x, y: centerPt.y }, previewElev, pendingRotation
             );
             cursorPreview.lineStyle(2, color, 0.6);
@@ -1279,9 +1340,16 @@ export function chooseToken(casterToken, options = {}) {
             }
             previewSelectHighlight.endFill();
 
-            if (elevationAware) {
-                const e = Math.round(previewElev || 0);
-                cursorElevLabel.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+            if (elevationAware && cellsAreTilted(elevByCell)) {
+                // tilted line: an arrow label per cell
+                cursorElevLabel.visible = false;
+                for (const [key, e] of elevByCell) {
+                    const [col, row] = key.split(',').map(Number);
+                    cellLabelLayer.addChild(makeCellNumber(e, col, row));
+                }
+            } else if (elevationAware) {
+                // flat line -> single arrow; cone -> top/bottom band
+                cursorElevLabel.text = elevByCell ? elevArrow(previewElev) : bandStr(previewElev);
                 cursorElevLabel.style.fontSize = Math.max(14, canvas.grid.size * 0.22);
                 cursorElevLabel.x = centerPt.x;
                 cursorElevLabel.y = centerPt.y;
@@ -1403,15 +1471,11 @@ export function chooseToken(casterToken, options = {}) {
             showStackPicker(tokensHere, sx + 10, sy + 10);
         };
 
-        // Q/E elevation-offset keys (mirrors placeToken.js).
-        const ascendKeys = new Set([
-            ...(game.keybindings.get('core', 'zoomIn') ?? []).map(b => b.key),
-            'NumpadAdd', 'KeyE',
-        ]);
-        const descendKeys = new Set([
-            ...(game.keybindings.get('core', 'zoomOut') ?? []).map(b => b.key),
-            'NumpadSubtract', 'KeyQ',
-        ]);
+        // Rebindable elevation (Q/E) + line tilt (W/S) shortcuts.
+        const ascendKeys = keyCodesFor('elevationUp');
+        const descendKeys = keyCodesFor('elevationDown');
+        const tiltUpKeys = keyCodesFor('lineTiltUp');
+        const tiltDownKeys = keyCodesFor('lineTiltDown');
 
         const refreshCurrentCursor = () => {
             if (isConeMode || isLineMode)
@@ -1427,6 +1491,7 @@ export function chooseToken(casterToken, options = {}) {
                 return;
             pendingElevationOffset += step;
             refreshCurrentCursor();
+            playUiSound('targeting');
         };
 
         // Ctrl+wheel rotates the cursor preview only (frozen once placed).
@@ -1435,6 +1500,16 @@ export function chooseToken(casterToken, options = {}) {
             const N = rotationModulus;
             pendingRotation = ((pendingRotation + step) % N + N) % N;
             refreshConeCursor();
+            playUiSound('targeting');
+        };
+
+        // W/S tilt the line's end elevation on the cursor preview only (frozen once placed).
+        const bumpTilt = (step) => {
+            if (!elevationAware)
+                return;
+            pendingTilt += step;
+            refreshConeCursor();
+            playUiSound('targeting');
         };
 
         const wheelHandler = (event) => {
@@ -1460,6 +1535,14 @@ export function chooseToken(casterToken, options = {}) {
             }
             if (!isBlastMode && !isConeMode && !isLineMode)
                 return;
+            // W/S tilt the line's end elevation.
+            if (isLineMode && (tiltUpKeys.has(event.code) || tiltDownKeys.has(event.code))) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                bumpTilt(tiltUpKeys.has(event.code) ? 1 : -1);
+                return;
+            }
             let step = 0;
             if (ascendKeys.has(event.code))
                 step = 1;
@@ -1496,8 +1579,18 @@ export function chooseToken(casterToken, options = {}) {
 
         const safe = makeSafe('chooseToken', doCancel);
         const isAimed = isConeMode || isLineMode;
-        safeMove = safe(isAimed ? coneMoveHandler : isBurstMode ? burstMoveHandler : isBlastMode ? blastMoveHandler : moveHandler);
-        safeClick = safe(isAimed ? coneClickHandler : isBurstMode ? burstClickHandler : isBlastMode ? blastClickHandler : clickHandler);
+        const _move = isAimed ? coneMoveHandler : isBurstMode ? burstMoveHandler : isBlastMode ? blastMoveHandler : moveHandler;
+        safeMove = safe((e) => {
+            const { x, y } = pointerToWorld(e);
+            const o = pixelToOffset(x, y);
+            playTargetingMove(o.col, o.row);
+            _move(e);
+        });
+        const _click = isAimed ? coneClickHandler : isBurstMode ? burstClickHandler : isBlastMode ? blastClickHandler : clickHandler;
+        safeClick = safe((e) => {
+            playUiSound('targetingConfirm');
+            _click(e);
+        });
         safeKey = safe(keyHandler);
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);

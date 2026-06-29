@@ -177,3 +177,24 @@ Hooks.once('ready', () => {
     Hooks.on('refreshToken', restore);
     Hooks.on('updateToken', (doc) => restore(doc.object));
 });
+
+// Sequencer's IsometricPerspective plugin applies iso skew via `rotation` without
+// checking `isIsometricActive`, so .stretchTo() effects get iso-skewed even on non-iso scenes.
+// Gate it on the scene flag.
+Hooks.once('ready', () => {
+    if (!game.modules.get(ISO_MODULE_ID)?.active)
+        return;
+    if (!game.modules.get('sequencer')?.active)
+        return;
+    const plugins = /** @type {any} */ (globalThis.Sequencer)?.PluginsManager?.plugins ?? [];
+    const plugin = plugins.find(p => p?.constructor?.name === 'IsometricPerspective');
+    if (!plugin || plugin._laGated)
+        return;
+    const origRotation = plugin.rotation.bind(plugin);
+    plugin.rotation = function (args) {
+        if (!plugin.isIsometricActive(args?.effect))
+            return;
+        return origRotation(args);
+    };
+    plugin._laGated = true;
+});

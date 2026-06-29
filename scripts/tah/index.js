@@ -227,7 +227,7 @@ Hooks.on('init', () => {
         });
     }
     for (const v of ['tokenHover', 'tokenSelect', 'tokenDeselect', 'tokenTarget',
-        'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey']) {
+        'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm']) {
         game.settings.register(MODULE, `tah.tokenSound.${v}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });

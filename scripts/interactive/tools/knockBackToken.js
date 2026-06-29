@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, $, document */
+/* global canvas, PIXI, game, ui, $, document, globalThis */
 
 import {
     isHexGrid, getHexCenter,
@@ -6,6 +6,8 @@ import {
     getDistanceTokenToPoint,
     snapTokenCenter, getOccupiedGridSpaces, getInRangeOffsets,
 } from "../../combat/grid-helpers.js";
+import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+import { keyCodesFor } from "../keybindings.js";
 
 import {
     _queueCardUrgent, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -15,11 +17,12 @@ import {
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     makeSafe, createCursorPreview, drawRangeHighlight, applyKnockbackMoves,
 } from "../canvas-helpers.js";
+import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 
 export function knockBackToken(tokens, distance, options = {}) {
     const _title = options.title || 'KNOCKBACK';
     return _queueCardUrgent(() => new Promise((resolve) => {
-        // reactive card — jumps any open mount-pick / weapon-pick card already in the queue.
+        // reactive card: jumps any open mount-pick / weapon-pick card already in the queue.
         const {
             title = "KNOCKBACK",
             description = "Select destination for each token.",
@@ -46,6 +49,38 @@ export function knockBackToken(tokens, distance, options = {}) {
         const traces = new Map(); // tokenId -> Graphics
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
 
+        // Auto elevation follows the terrain under the active token's destination; Q/E shifts an offset.
+        let pendingElevationOffset = 0;
+        let lastDest = null;
+        const groundUnder = (tok, dest) => {
+            const tAPI = globalThis.terrainHeightTools;
+            if (!tAPI)
+                return 0;
+            let max = 0;
+            for (const o of getOccupiedOffsets(tok, dest)) {
+                const h = Number(getHexGroundElevation(o.col, o.row, tAPI)) || 0;
+                if (h > max)
+                    max = h;
+            }
+            return max;
+        };
+        const elevAtDest = (tok, dest) => groundUnder(tok, dest) + pendingElevationOffset;
+        const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+        const cursorElevLabel = new PIXI.Text('', {
+            fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
+            fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+        });
+        cursorElevLabel.anchor.set(0.5);
+        cursorElevLabel.visible = false;
+        canvas.stage.addChild(cursorElevLabel);
+        const updateElevLabel = (tok, dest) => {
+            const c = tok.getCenterPoint(dest);
+            cursorElevLabel.text = elevStr(elevAtDest(tok, dest));
+            cursorElevLabel.x = c.x;
+            cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+            cursorElevLabel.visible = true;
+        };
+
         const restoreLayerClick = suppressTokenLayerClick();
         let safeMove, safeClick, safeAbort, safeKey;
 
@@ -61,6 +96,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             restoreLayerClick();
 
             disposeCursorPreview();
+            destroyGraphics(cursorElevLabel);
             destroyGraphics(rangeHighlight);
             for (const g of traces.values())
                 destroyGraphics(g);
@@ -82,7 +118,7 @@ export function knockBackToken(tokens, distance, options = {}) {
                 for (const [id, move] of moves.entries()) {
                     const t = tokenList.find(t => t.id === id);
                     if (t) {
-                        moveList.push({ tokenId: id, updateData: { x: move.x, y: move.y } });
+                        moveList.push({ tokenId: id, updateData: { x: move.x, y: move.y, elevation: move.elevation } });
                     }
                 }
 
@@ -245,6 +281,8 @@ export function knockBackToken(tokens, distance, options = {}) {
             // Check validity (distance; -1 = infinite)
             const dist = getDistanceTokenToPoint({ x: snappedX + activeToken.w/2, y: snappedY + activeToken.h/2 }, activeToken);
             const offsets = getOccupiedOffsets(activeToken, { x: snappedX, y: snappedY });
+            if (offsets[0])
+                playTargetingMove(offsets[0].col, offsets[0].row);
             const inRangeSet = distance < 0 ? null : getInRangeOffsets(activeToken, distance, { includeSelf: true });
             const inRange = distance < 0 || (dist <= distance && offsets.some(o => inRangeSet.has(`${o.col},${o.row}`)));
 
@@ -287,6 +325,8 @@ export function knockBackToken(tokens, distance, options = {}) {
                 }
                 cursorPreview.endFill();
             }
+            lastDest = { x: snappedX, y: snappedY };
+            updateElevLabel(activeToken, lastDest);
         };
 
         const clickHandler = (event) => {
@@ -309,7 +349,8 @@ export function knockBackToken(tokens, distance, options = {}) {
                 return;
             }
 
-            moves.set(activeToken.id, { x: snappedX, y: snappedY });
+            moves.set(activeToken.id, { x: snappedX, y: snappedY, elevation: elevAtDest(activeToken, { x: snappedX, y: snappedY }) });
+            playUiSound('targetingConfirm');
             drawTrace(activeToken, snappedX, snappedY);
 
             let nextIndex = -1;
@@ -331,6 +372,8 @@ export function knockBackToken(tokens, distance, options = {}) {
             updateVisuals();
         };
 
+        const ascendKeys = keyCodesFor('elevationUp');
+        const descendKeys = keyCodesFor('elevationDown');
         const keyHandler = (event) => {
             if (event.key === "Escape") {
                 event.preventDefault();
@@ -338,7 +381,22 @@ export function knockBackToken(tokens, distance, options = {}) {
                 event.stopImmediatePropagation();
                 doCleanup(); // Cancel
                 resolve(null);
+                return;
             }
+            let step = 0;
+            if (ascendKeys.has(event.code)) step = 1;
+            else if (descendKeys.has(event.code)) step = -1;
+            if (step === 0)
+                return;
+            // Swallow Q/E so it never changes the real token's elevation.
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            pendingElevationOffset += step;
+            const tok = tokenList[activeIndex];
+            if (tok && lastDest)
+                updateElevLabel(tok, lastDest);
+            playUiSound('targeting');
         };
 
         // Initialize

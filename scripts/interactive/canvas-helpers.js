@@ -478,7 +478,9 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         const dest = { x: updateData.x, y: updateData.y };
         if (!asVoluntary)
             dest.action = 'forced';
-        if (setElevation && terrainAPI) {
+        if (typeof updateData.elevation === 'number') {
+            dest.elevation = updateData.elevation; // chosen in the picker (auto-ground + Q/E offset)
+        } else if (setElevation && terrainAPI) {
             let maxH = 0;
             for (const o of getOccupiedOffsets(t, dest)) {
                 const h = getHexGroundElevation(o.col, o.row, terrainAPI);

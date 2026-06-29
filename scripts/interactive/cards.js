@@ -1,5 +1,7 @@
 /* global canvas, PIXI, game, ui, $, Hooks */
 
+import { firstKeyFor } from "./keybindings.js";
+
 // --- Info Card Helpers (internal) ---
 
 /**
@@ -19,10 +21,13 @@ export function isWhiteSvgIcon(iconPath) {
 
 const _ELEV_KEY_LABELS = { KeyQ: 'Q', KeyE: 'E', KeyA: 'A', KeyD: 'D', KeyW: 'W', KeyS: 'S' };
 function _elevationKeyLabels() {
-    const labelOf = (k) => _ELEV_KEY_LABELS[k] ?? k.replace(/^Key/, '');
-    const up = game.keybindings?.get?.('core', 'zoomIn')?.[0]?.key;
-    const down = game.keybindings?.get?.('core', 'zoomOut')?.[0]?.key;
-    return { up: up ? labelOf(up) : 'E', down: down ? labelOf(down) : 'Q' };
+    const labelOf = (k) => _ELEV_KEY_LABELS[k] ?? (k ? k.replace(/^Key/, '') : '');
+    return {
+        up: labelOf(firstKeyFor('elevationUp')),
+        down: labelOf(firstKeyFor('elevationDown')),
+        tiltUp: labelOf(firstKeyFor('lineTiltUp')),
+        tiltDown: labelOf(firstKeyFor('lineTiltDown')),
+    };
 }
 
 export const _cardDefaults = {
@@ -216,6 +221,8 @@ export function _createInfoCard(type, opts) {
         const showAutoElev = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line'; // burst pins elevation to its host token
         const showQEHint = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line';
         const showRotateHint = opts.pattern === 'cone' || opts.pattern === 'line';
+        const showTiltHint = opts.pattern === 'line';
+        const _ek = _elevationKeyLabels();
         const blastSection = isAreaPattern ? `
             <h3 class="la-section-header lancer-border-primary">Placed Areas</h3>
             <div class="la-area-modes" data-role="area-modes" style="display:flex;gap:14px;align-items:center;padding:4px 4px 6px 4px;border-bottom:1px solid #ccc;margin-bottom:6px;color:#fff;font-size:11.5px;flex-wrap:wrap;">
@@ -231,8 +238,9 @@ export function _createInfoCard(type, opts) {
                     <input type="checkbox" data-role="propagation-toggle" style="margin:0;">
                     <span>Propagation</span>
                 </label>
-                ${showQEHint ? `<span style="margin-left:auto;color:#666;font-size:10.5px;font-style:italic;">Q/E: shift elevation</span>` : ''}
+                ${showQEHint ? `<span style="margin-left:auto;color:#666;font-size:10.5px;font-style:italic;">${_ek.down}/${_ek.up}: shift elevation</span>` : ''}
                 ${showRotateHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">Ctrl+wheel: rotate</span>` : ''}
+                ${showTiltHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">${_ek.tiltDown}/${_ek.tiltUp}: tilt</span>` : ''}
             </div>
             <div class="la-placed-areas" data-role="area-list">
                 <div class="la-empty-state">No areas placed</div>
@@ -257,7 +265,10 @@ export function _createInfoCard(type, opts) {
         dynamicHtml = `
             ${selectorHtml}
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
-            <div style="font-size:0.78em; opacity:0.75; margin:-4px 0 4px 0;">Use <kbd>${_elevationKeyLabels().down}</kbd> / <kbd>${_elevationKeyLabels().up}</kbd> to adjust the last placed token's elevation.</div>
+            <div style="font-size:0.78em; opacity:0.85; margin:-4px 0 4px 0; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-role="placetoken-auto-elev" style="margin:0;"> Auto elevation</label>
+                <span style="opacity:0.75;">Use <kbd>${_elevationKeyLabels().down}</kbd> / <kbd>${_elevationKeyLabels().up}</kbd> to offset before placing.</span>
+            </div>
             <div class="la-placed-tokens" data-role="token-list">
                 <div class="la-empty-state">No tokens placed</div>
             </div>`;
@@ -542,6 +553,11 @@ export function _updateInfoCard(cardEl, type, data) {
             });
         }
     } else if (type === "placeToken") {
+        // --- Auto elevation toggle ---
+        const autoElevEl = cardEl.find('[data-role="placetoken-auto-elev"]');
+        autoElevEl.prop('checked', data.autoElevation !== false);
+        autoElevEl.off('change').on('change', () => data.onToggleAutoElevation?.());
+
         // --- Actor selector ---
         if (data.isMultiActor && data.actorEntries) {
             const selectorEl = cardEl.find('[data-role="actor-selector"]');

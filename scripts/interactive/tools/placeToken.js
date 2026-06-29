@@ -1,11 +1,14 @@
-/* global canvas, PIXI, game, ui, Sequence, document */
+/* global canvas, PIXI, game, ui, Sequence, document, globalThis */
 
 import {
     isHexGrid, getHexCenter, pixelToOffset,
     drawHexAt, getOccupiedOffsets,
     snapTokenCenter, getInRangeOffsets,
 } from "../../combat/grid-helpers.js";
+import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 import { getIsoProvider } from "../../setup/iso-settings.js";
+import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { keyCodesFor } from "../keybindings.js";
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -86,7 +89,7 @@ export function placeToken(options = {}) {
                 name: defaultExtraData.name ?? proto.name ?? actorInput.name ?? "Token"
             });
         } else {
-            // No actor — empty proto
+            // No actor: empty proto
             actorEntries.push({
                 actor: null,
                 extraData: defaultExtraData,
@@ -160,6 +163,31 @@ export function placeToken(options = {}) {
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
 
+        // Auto elevation follows terrain under the cursor; Q/E offsets it, frozen onto each placed token.
+        let autoElevation = true;
+        let pendingElevationOffset = defaultElevation;
+        let lastCursorOffset = null;
+        const groundAt = (offset) => {
+            const tAPI = globalThis.terrainHeightTools;
+            return tAPI ? (Number(getHexGroundElevation(offset.col, offset.row, tAPI)) || 0) : 0;
+        };
+        const elevAt = (offset) => (autoElevation ? groundAt(offset) : 0) + pendingElevationOffset;
+        const cursorElevLabel = new PIXI.Text('', {
+            fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
+            fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+        });
+        cursorElevLabel.anchor.set(0.5);
+        cursorElevLabel.visible = false;
+        {
+            const iso = getIsoProvider();
+            if (iso) {
+                cursorElevLabel.rotation = iso.reverseRotation;
+                cursorElevLabel.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+                cursorElevLabel.scale.set(iso.counterScale, 1 / iso.counterScale);
+            }
+        }
+        canvas.stage.addChild(cursorElevLabel);
+
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
         const restoreLayerClick = suppressTokenLayerClick();
@@ -216,6 +244,7 @@ export function placeToken(options = {}) {
         let safeMove, safeClick, safeRight, safeKey;
         const doCleanup = () => {
             disposeCursorPreview();
+            destroyGraphics(cursorElevLabel);
             if (wavePulse)
                 canvas.app.ticker.remove(wavePulse);
             if (safeClick)
@@ -252,6 +281,13 @@ export function placeToken(options = {}) {
                 activeActorIndex,
                 isMultiActor,
                 warnings,
+                autoElevation,
+                onToggleAutoElevation: () => {
+                    autoElevation = !autoElevation;
+                    if (lastCursorOffset)
+                        drawCursorAt(lastCursorOffset);
+                    refreshCard();
+                },
                 onSelectActor: (idx) => {
                     activeActorIndex = idx;
                     refreshCard();
@@ -391,18 +427,28 @@ export function placeToken(options = {}) {
             return container;
         };
 
-        const moveHandler = (event) => {
-            const { x: tx, y: ty } = pointerToWorld(event);
-
-            const cursorOffset = snapCursor(tx, ty);
-            const inRange = checkInRange(cursorOffset.col, cursorOffset.row);
+        const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+        const drawCursorAt = (offset) => {
+            const inRange = checkInRange(offset.col, offset.row);
             const color = inRange ? 0x0088ff : 0xff0000;
-
             cursorPreview.clear();
             cursorPreview.lineStyle(2, color, 0.8);
             cursorPreview.beginFill(color, 0.4);
-            drawOffsets(cursorPreview, getProtoOffsets(cursorOffset.col, cursorOffset.row));
+            drawOffsets(cursorPreview, getProtoOffsets(offset.col, offset.row));
             cursorPreview.endFill();
+            const c = getHexCenter(offset.col, offset.row);
+            cursorElevLabel.text = elevStr(elevAt(offset));
+            cursorElevLabel.x = c.x;
+            cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+            cursorElevLabel.visible = true;
+        };
+
+        const moveHandler = (event) => {
+            const { x: tx, y: ty } = pointerToWorld(event);
+            const cursorOffset = snapCursor(tx, ty);
+            lastCursorOffset = cursorOffset;
+            playTargetingMove(cursorOffset.col, cursorOffset.row);
+            drawCursorAt(cursorOffset);
         };
 
         const clickHandler = (event) => {
@@ -416,15 +462,17 @@ export function placeToken(options = {}) {
             }
 
             const warning = !checkInRange(cursorOffset.col, cursorOffset.row) ? 'Out of range' : null;
-            const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row, defaultElevation);
+            const elev = elevAt(cursorOffset);
+            const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row, elev);
             placements.push({
                 col: cursorOffset.col,
                 row: cursorOffset.row,
                 graphics,
                 actorIndex: activeActorIndex,
                 warning,
-                elevation: defaultElevation
+                elevation: elev
             });
+            playUiSound('targetingConfirm');
             refreshCard();
 
             if (noCard && (count === -1 || placements.length >= count)) {
@@ -432,14 +480,8 @@ export function placeToken(options = {}) {
             }
         };
 
-        const ascendKeys = new Set([
-            ...(game.keybindings.get('core', 'zoomIn') ?? []).map(b => b.key),
-            'NumpadAdd', 'KeyE',
-        ]);
-        const descendKeys = new Set([
-            ...(game.keybindings.get('core', 'zoomOut') ?? []).map(b => b.key),
-            'NumpadSubtract', 'KeyQ',
-        ]);
+        const ascendKeys = keyCodesFor('elevationUp');
+        const descendKeys = keyCodesFor('elevationDown');
         const keyHandler = (event) => {
             if (event.key === "Escape") {
                 event.preventDefault();
@@ -460,15 +502,11 @@ export function placeToken(options = {}) {
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
-            if (placements.length === 0)
-                return;
-            const last = placements[placements.length - 1];
-            last.elevation = (typeof last.elevation === 'number' ? last.elevation : 0) + step;
-            if (last.graphics?._labelText) {
-                const e = last.elevation;
-                last.graphics._labelText.text = e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
-            }
-            refreshCard();
+            // Adjust the pending offset (next placement), not already-placed tokens.
+            pendingElevationOffset += step;
+            if (lastCursorOffset)
+                drawCursorAt(lastCursorOffset);
+            playUiSound('targeting');
         };
 
         refreshCard();

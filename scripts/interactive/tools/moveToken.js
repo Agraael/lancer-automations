@@ -7,6 +7,8 @@ import {
     snapTokenCenter, getInRangeOffsets,
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { keyCodesFor } from "../keybindings.js";
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -61,11 +63,45 @@ export async function moveToken(token, options = {}) {
             addGraphicsBelowTokens(pulseGraphic);
             let wavePulse = null;
 
+            // Auto elevation follows the terrain under the destination footprint; Q/E shifts an offset.
+            let autoElevation = true;
+            let pendingElevationOffset = 0;
+            let lastDest = null;
+            const groundUnder = (dest) => {
+                const tAPI = globalThis.terrainHeightTools;
+                if (!tAPI)
+                    return 0;
+                let max = 0;
+                for (const o of getOccupiedOffsets(token, dest)) {
+                    const h = Number(getHexGroundElevation(o.col, o.row, tAPI)) || 0;
+                    if (h > max)
+                        max = h;
+                }
+                return max;
+            };
+            const elevAtDest = (dest) => (autoElevation ? groundUnder(dest) : 0) + pendingElevationOffset;
+            const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+            const cursorElevLabel = new PIXI.Text('', {
+                fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
+                fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+            });
+            cursorElevLabel.anchor.set(0.5);
+            cursorElevLabel.visible = false;
+            canvas.stage.addChild(cursorElevLabel);
+            const updateElevLabel = (dest) => {
+                const c = token.getCenterPoint(dest);
+                cursorElevLabel.text = elevStr(elevAtDest(dest));
+                cursorElevLabel.x = c.x;
+                cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+                cursorElevLabel.visible = true;
+            };
+
             const restoreLayerClick = suppressTokenLayerClick();
             let safeMove, safeClick, safeAbort, safeKey;
 
             const doCleanup = () => {
                 disposeCursorPreview();
+                destroyGraphics(cursorElevLabel);
                 if (wavePulse)
                     canvas.app.ticker.remove(wavePulse);
                 if (safeClick)
@@ -148,6 +184,8 @@ export async function moveToken(token, options = {}) {
             const moveHandler = (event) => {
                 const { x: tx, y: ty } = pointerToWorld(event);
                 const snapped = snapTokenCenter(token, { x: tx, y: ty });
+                const _o = pixelToOffset(snapped.x, snapped.y);
+                playTargetingMove(_o.col, _o.row);
                 const inRange = isDestInRange(snapped.x, snapped.y);
                 cursorPreview.clear();
                 const offsets = getOccupiedOffsets(token, { x: snapped.x, y: snapped.y });
@@ -163,6 +201,8 @@ export async function moveToken(token, options = {}) {
                     }
                 }
                 cursorPreview.endFill();
+                lastDest = { x: snapped.x, y: snapped.y };
+                updateElevLabel(lastDest);
             };
 
             const clickHandler = (event) => {
@@ -171,18 +211,35 @@ export async function moveToken(token, options = {}) {
                 if (!isDestInRange(snapped.x, snapped.y)) {
                     ui.notifications.warn("Destination is out of range!"); return;
                 }
-                selectedPos = { x: snapped.x, y: snapped.y };
+                selectedPos = { x: snapped.x, y: snapped.y, elevation: elevAtDest({ x: snapped.x, y: snapped.y }) };
+                playUiSound('targetingConfirm');
                 drawTeleportTrace(snapped.x, snapped.y);
                 _updateInfoCard(cardEl, "teleport", { selectedPos, tokenName: token.name });
             };
 
+            const ascendKeys = keyCodesFor('elevationUp');
+            const descendKeys = keyCodesFor('elevationDown');
             const keyHandler = (e) => {
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     doCleanup(); resolve(null);
+                    return;
                 }
+                let step = 0;
+                if (ascendKeys.has(e.code)) step = 1;
+                else if (descendKeys.has(e.code)) step = -1;
+                if (step === 0)
+                    return;
+                // Swallow Q/E so it never changes the real token's elevation.
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                pendingElevationOffset += step;
+                if (lastDest)
+                    updateElevLabel(lastDest);
+                playUiSound('targeting');
             };
 
             const safe = makeSafe('moveToken', () => {
@@ -260,17 +317,19 @@ export async function moveToken(token, options = {}) {
     const endCenter = token.getCenterPoint(destTopLeft);
     const moveCost = options.cost ?? getDistanceTokenToPoint(endCenter, token);
 
-    // Calculate ground elevation at destination (max solid terrain under footprint)
+    // Picker already resolved auto-ground + Q/E offset; direct mode / blocked stop falls back to terrain.
     const updateData = { ...destTopLeft };
-    const terrainAPI = globalThis.terrainHeightTools;
-    if (terrainAPI) {
-        let maxHeight = 0;
-        for (const o of getOccupiedOffsets(token, destTopLeft)) {
-            const h = getHexGroundElevation(o.col, o.row, terrainAPI);
-            if (h > maxHeight)
-                maxHeight = h;
+    if (typeof destTopLeft.elevation !== 'number') {
+        const terrainAPI = globalThis.terrainHeightTools;
+        if (terrainAPI) {
+            let maxHeight = 0;
+            for (const o of getOccupiedOffsets(token, destTopLeft)) {
+                const h = getHexGroundElevation(o.col, o.row, terrainAPI);
+                if (h > maxHeight)
+                    maxHeight = h;
+            }
+            updateData.elevation = maxHeight;
         }
-        updateData.elevation = maxHeight;
     }
 
     const moveFlags = {

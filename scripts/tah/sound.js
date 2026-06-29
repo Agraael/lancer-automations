@@ -3,17 +3,30 @@
 import { playDamageImpactFX } from '../fx/actionFX.js';
 
 const _lastSoundAt = new Map();
+let _lastTargetingCell = null;
+
+// Targeting blip, only when the hovered grid cell changes (not every pointermove).
+export function playTargetingMove(col, row) {
+    const key = `${col},${row}`;
+    if (key === _lastTargetingCell)
+        return;
+    _lastTargetingCell = key;
+    playUiSound('targeting');
+}
 
 const TOKEN_FEEDBACK_VARIANTS = new Set([
     'tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget',
-    'tokenDrag', 'tokenMove', 'elevationKey'
+    'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'
 ]);
+
+// Per-variant min gap (ms); default 60.
+const MIN_GAP = { targeting: 60 };
 
 /**
  * Play a UI sound. Token/canvas feedback variants use `tah.tokenFeedbackVolume`;
  * TAH HUD sounds use `tah.uiSoundVolume`. 0 = silent.
- * @param {'hover'|'open'|'details'|'toggle'|'statusHover'|'tokenHover'|'tokenSelect'|'tokenDeselect'|'tokenTarget'|'tokenUntarget'|'tokenDrag'|'tokenMove'|'elevationKey'} [variant='open']
+ * @param {'hover'|'open'|'details'|'toggle'|'statusHover'|'tokenHover'|'tokenSelect'|'tokenDeselect'|'tokenTarget'|'tokenUntarget'|'tokenDrag'|'tokenMove'|'elevationKey'|'targeting'|'targetingConfirm'} [variant='open']
  */
 export function playUiSound(variant = 'open', { force = false } = {}) {
     let vol = 0;
@@ -30,7 +43,7 @@ export function playUiSound(variant = 'open', { force = false } = {}) {
     if (vol <= 0)
         return;
     const now = Date.now();
-    const minGap = 60;
+    const minGap = MIN_GAP[variant] ?? 60;
     const cooldownKey = (variant === 'hover' || variant === 'open') ? 'hover|open' : variant;
     if (now - (_lastSoundAt.get(cooldownKey) ?? 0) < minGap)
         return;
@@ -49,8 +62,12 @@ export function playUiSound(variant = 'open', { force = false } = {}) {
         tokenDrag:     { src: 'modules/lancer-automations/FX/audio/drag.wav',          scale: 0.2 },
         tokenMove:     { src: 'modules/lancer-automations/FX/audio/move2.wav',          scale: 0.3 },
         elevationKey:  { src: 'modules/lancer-automations/FX/audio/elevationKey.mp3',  scale: 0.5 },
+        targeting:     { src: 'modules/lancer-automations/FX/audio/targeting_1.mp3', scale: 0.2 },
+        targetingConfirm: { src: 'modules/lancer-automations/FX/audio/targeting_2.mp3', scale: 0.2 },
     };
-    const { src, scale } = SFX[variant] ?? SFX.open;
+    const entry = SFX[variant] ?? SFX.open;
+    const scale = entry.scale;
+    const src = entry.src;
     // Very thin continuous pitch jitter: ±30 cents (roughly ±1.7%).
     const cents = (Math.random() * 2 - 1) * 30;
     const rate = Math.pow(2, cents / 1200);

@@ -18,4 +18,5 @@ export { placeZone } from "./tools/placeZone.js";
 export { moveToken } from "./tools/moveToken.js";
 export { knockBackToken } from "./tools/knockBackToken.js";
 export { placeToken } from "./tools/placeToken.js";
-export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";
+export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker, clearSingleTargetShape } from "./tools/pickSingleTargetToggle.js";
+export { pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape } from "./tools/pickAreaTargetToggle.js";

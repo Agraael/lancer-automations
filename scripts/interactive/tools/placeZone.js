@@ -11,8 +11,9 @@ import {
 
 import {
     addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    drawRangeHighlight, _groupCellsByDistance, _makeRangePulseTick,
+    drawRangeHighlight, _groupCellsByDistance, _makeRangePulseTick, pointerToWorld,
 } from "../canvas-helpers.js";
+import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 
 /**
  * Place a template zone on the map using Lancer's WeaponRangeTemplate.
@@ -175,18 +176,33 @@ export async function placeZone(casterToken, options = {}) {
 
         // One interactive placement; returns a { x, y, template } result, or null if cancelled.
         const placeOne = async () => {
-            const templateMacroApi = game.modules.get('templatemacro')?.api;
-            if (templateMacroApi?.placeZone)
-                return await withEscOnlyCancel(templateMacroApi.placeZone(options, hooks));
-            const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: size });
-            const template = await withEscOnlyCancel(templatePreview.placeTemplate());
-            if (!template)
-                return null;
-            const updateData = { fillColor, borderColor };
-            if (texture)
-                updateData.texture = texture;
-            await template.update(updateData);
-            return { x: template.x, y: template.y, template };
+            const onMove = (e) => {
+                const { x, y } = pointerToWorld(e);
+                const o = pixelToOffset(x, y);
+                playTargetingMove(o.col, o.row);
+            };
+            canvas.stage.on('pointermove', onMove);
+            try {
+                const templateMacroApi = game.modules.get('templatemacro')?.api;
+                if (templateMacroApi?.placeZone) {
+                    const res = await withEscOnlyCancel(templateMacroApi.placeZone(options, hooks));
+                    if (res)
+                        playUiSound('targetingConfirm');
+                    return res;
+                }
+                const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: size });
+                const template = await withEscOnlyCancel(templatePreview.placeTemplate());
+                if (!template)
+                    return null;
+                playUiSound('targetingConfirm');
+                const updateData = { fillColor, borderColor };
+                if (texture)
+                    updateData.texture = texture;
+                await template.update(updateData);
+                return { x: template.x, y: template.y, template };
+            } finally {
+                canvas.stage.off('pointermove', onMove);
+            }
         };
 
         const deleteAll = async () => {
