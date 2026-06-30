@@ -182,7 +182,7 @@ export class ReactionManager {
 
     static async createFolder(name) {
         const folders = ReactionManager.getFolders();
-        if (folders.some(f => f.name === name))
+        if (folders.some(folder => folder.name === name))
             return;
         folders.push({ name: name, items: [] });
         await ReactionManager.saveFolders(folders);
@@ -190,7 +190,7 @@ export class ReactionManager {
 
     static async renameFolder(oldName, newName) {
         const folders = ReactionManager.getFolders();
-        const folder = folders.find(f => f.name === oldName);
+        const folder = folders.find(folder => folder.name === oldName);
         if (folder)
             folder.name = newName;
         await ReactionManager.saveFolders(folders);
@@ -198,17 +198,17 @@ export class ReactionManager {
 
     static async deleteFolder(name) {
         let folders = ReactionManager.getFolders();
-        folders = folders.filter(f => f.name !== name);
+        folders = folders.filter(folder => folder.name !== name);
         await ReactionManager.saveFolders(folders);
     }
 
     static async assignToFolder(folderName, activationKey) {
         const folders = ReactionManager.getFolders();
         // Remove from any existing folder first
-        for (const f of folders) {
-            f.items = f.items.filter(k => k !== activationKey);
+        for (const folder of folders) {
+            folder.items = folder.items.filter(itemKey => itemKey !== activationKey);
         }
-        const target = folders.find(f => f.name === folderName);
+        const target = folders.find(folder => folder.name === folderName);
         if (target)
             target.items.push(activationKey);
         await ReactionManager.saveFolders(folders);
@@ -216,8 +216,8 @@ export class ReactionManager {
 
     static async unassignFromFolder(activationKey) {
         const folders = ReactionManager.getFolders();
-        for (const f of folders) {
-            f.items = f.items.filter(k => k !== activationKey);
+        for (const folder of folders) {
+            folder.items = folder.items.filter(itemKey => itemKey !== activationKey);
         }
         await ReactionManager.saveFolders(folders);
     }
@@ -312,7 +312,7 @@ export class ReactionManager {
         const itemReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
         const generalReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         const startupScripts = (game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
-            .filter(s => !s.builtin);
+            .filter(script => !script.builtin);
 
         const skip = new Set([
             ReactionManager.SETTING_REACTIONS,
@@ -347,7 +347,7 @@ export class ReactionManager {
                     continue;
                 const bindings = game.keybindings.bindings.get(`${module}.${key}`);
                 if (Array.isArray(bindings))
-                    keybindings[`${module}.${key}`] = bindings.map(b => ({ key: b.key, modifiers: [...(b.modifiers ?? [])] }));
+                    keybindings[`${module}.${key}`] = bindings.map(binding => ({ key: binding.key, modifiers: [...(binding.modifiers ?? [])] }));
             }
         } catch { /* settingsMenus unavailable */ }
 
@@ -389,13 +389,13 @@ export class ReactionManager {
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, { ...existingGeneral, ...data.generalReactions });
                 if (Array.isArray(data.startupScripts) && data.startupScripts.length) {
                     const existingScripts = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
-                    const seen = new Set(existingScripts.map(s => s.id ?? s.name));
+                    const seen = new Set(existingScripts.map(script => script.id ?? script.name));
                     const merged = [...existingScripts];
-                    for (const s of data.startupScripts) {
-                        const key = s.id ?? s.name;
+                    for (const script of data.startupScripts) {
+                        const key = script.id ?? script.name;
                         if (key && seen.has(key))
                             continue;
-                        merged.push(s);
+                        merged.push(script);
                         if (key)
                             seen.add(key);
                     }
@@ -474,16 +474,16 @@ export class ReactionManager {
 
             if (pickedStartup.size && Array.isArray(data.startupScripts)) {
                 const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
-                const existingKeys = new Set(existing.map(s => s.id ?? s.name));
+                const existingKeys = new Set(existing.map(script => script.id ?? script.name));
                 const merged = [...existing];
                 for (let i = 0; i < data.startupScripts.length; i++) {
-                    const s = data.startupScripts[i];
-                    const key = s?.id ?? s?.name ?? String(i);
+                    const script = data.startupScripts[i];
+                    const key = script?.id ?? script?.name ?? String(i);
                     if (!pickedStartup.has(String(key)))
                         continue;
                     if (existingKeys.has(key))
                         continue;
-                    merged.push(s);
+                    merged.push(script);
                     existingKeys.add(key);
                 }
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, merged);
@@ -675,10 +675,10 @@ export class ReactionConfig extends FormApplication {
             }
         };
 
-        const startEnabled = (r) => {
-            if (r.enabled === undefined)
-                r.enabled = true;
-            return r;
+        const startEnabled = (reaction) => {
+            if (reaction.enabled === undefined)
+                reaction.enabled = true;
+            return reaction;
         };
 
         const isPureDefault = (saved, def) => {
@@ -755,7 +755,7 @@ export class ReactionConfig extends FormApplication {
                 allReactions.push(validReactions[0]);
             } else {
                 const first = validReactions[0];
-                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
+                const uniqueTriggers = [...new Set(validReactions.flatMap(reaction => reaction.triggers.split(", ")))].filter(Boolean).join(", ");
                 const itemInfo = itemMap.get(lid);
                 const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
 
@@ -768,7 +768,7 @@ export class ReactionConfig extends FormApplication {
                     isGeneral: false,
                     isGroup: true,
                     reactions: validReactions,
-                    enabled: validReactions.every(r => r.enabled)
+                    enabled: validReactions.every(reaction => reaction.enabled)
                 });
             }
         }
@@ -821,7 +821,7 @@ export class ReactionConfig extends FormApplication {
                 defaultList.push(validReactions[0]);
             } else {
                 const first = validReactions[0];
-                const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
+                const uniqueTriggers = [...new Set(validReactions.flatMap(reaction => reaction.triggers.split(", ")))].filter(Boolean).join(", ");
                 const itemInfo = itemMap.get(lid);
                 const groupName = itemInfo ? itemInfo.name : first.name.split(':')[0].trim();
 
@@ -834,7 +834,7 @@ export class ReactionConfig extends FormApplication {
                     isDefault: true,
                     isGroup: true,
                     reactions: validReactions,
-                    enabled: validReactions.every(r => r.enabled),
+                    enabled: validReactions.every(reaction => reaction.enabled),
                     category: data.category || ""
                 });
             }
@@ -1156,7 +1156,7 @@ export class ReactionConfig extends FormApplication {
             const groups = new Map();
             list.find('.scrollable .reaction-item:not(.group-header):not(.folder-header)').each(function () {
                 const row = $(this);
-                const triggers = (row.find('.col-triggers').text() || '').split(',').map(s => s.trim()).filter(Boolean);
+                const triggers = (row.find('.col-triggers').text() || '').split(',').map(triggerName => triggerName.trim()).filter(Boolean);
                 if (triggers.length === 0)
                     triggers.push('(no trigger)');
                 for (const trig of triggers) {
@@ -2313,7 +2313,7 @@ export class ReactionEditor extends FormApplication {
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.evaluateEditor.on('change', (cm) => cm.save());
+                this.evaluateEditor.on('change', (editor) => editor.save());
                 installLancerHints(this.evaluateEditor, 'evaluate');
             }
 
@@ -2330,7 +2330,7 @@ export class ReactionEditor extends FormApplication {
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.codeEditor.on('change', (cm) => cm.save());
+                this.codeEditor.on('change', (editor) => editor.save());
                 installLancerHints(this.codeEditor, 'activationCode');
             }
 
@@ -2347,7 +2347,7 @@ export class ReactionEditor extends FormApplication {
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.onInitEditor.on('change', (cm) => cm.save());
+                this.onInitEditor.on('change', (editor) => editor.save());
                 installLancerHints(this.onInitEditor, 'onInit');
             }
 
@@ -2364,7 +2364,7 @@ export class ReactionEditor extends FormApplication {
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.onMessageEditor.on('change', (cm) => cm.save());
+                this.onMessageEditor.on('change', (editor) => editor.save());
                 installLancerHints(this.onMessageEditor, 'onMessage');
             }
 
@@ -2782,17 +2782,17 @@ export class ReactionEditor extends FormApplication {
             }
             // Frame: core power + frame trait actions.
             if (item.type === "frame") {
-                const cs = item.system?.core_system;
-                if (cs) {
-                    if (cs.active_name)
-                        actions.push({ name: `${cs.active_name} (Core Power)`, path: `core_system` });
-                    (cs.active_actions ?? []).forEach((action, idx) => {
+                const coreSystem = item.system?.core_system;
+                if (coreSystem) {
+                    if (coreSystem.active_name)
+                        actions.push({ name: `${coreSystem.active_name} (Core Power)`, path: `core_system` });
+                    (coreSystem.active_actions ?? []).forEach((action, idx) => {
                         actions.push({
                             name: `${action.name || `Active Action ${idx + 1}`} (Core)`,
                             path: `core_system.active_actions[${idx}]`
                         });
                     });
-                    (cs.passive_actions ?? []).forEach((action, idx) => {
+                    (coreSystem.passive_actions ?? []).forEach((action, idx) => {
                         actions.push({
                             name: `${action.name || `Passive Action ${idx + 1}`} (Core Passive)`,
                             path: `core_system.passive_actions[${idx}]`
@@ -3037,12 +3037,12 @@ export class ReactionEditor extends FormApplication {
         deployables.sort((a, b) => a.name.localeCompare(b.name));
         const MAX_RESULTS = 50;
 
-        const buildEntry = (d) => `
-            <div class="deployable-entry" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;transition:background 0.15s;" data-lid="${d.lid}">
-                <img src="${d.img}" style="width:32px;height:32px;border-radius:4px;border:1px solid #ccc;object-fit:cover;">
+        const buildEntry = (deployable) => `
+            <div class="deployable-entry" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;transition:background 0.15s;" data-lid="${deployable.lid}">
+                <img src="${deployable.img}" style="width:32px;height:32px;border-radius:4px;border:1px solid #ccc;object-fit:cover;">
                 <div style="flex:1;min-width:0;">
-                    <div style="font-weight:bold;font-size:0.9em;">${d.name}</div>
-                    <div style="font-size:0.78em;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.type} | <code style="background:color-mix(in srgb, var(--primary-color), transparent 92%);color:var(--primary-color);padding:1px 4px;border-radius:3px;font-size:0.9em;">${d.lid}</code> <span style="opacity:0.5;">\u2014 ${d.pack}</span></div>
+                    <div style="font-weight:bold;font-size:0.9em;">${deployable.name}</div>
+                    <div style="font-size:0.78em;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${deployable.type} | <code style="background:color-mix(in srgb, var(--primary-color), transparent 92%);color:var(--primary-color);padding:1px 4px;border-radius:3px;font-size:0.9em;">${deployable.lid}</code> <span style="opacity:0.5;">\u2014 ${deployable.pack}</span></div>
                 </div>
                 <a class="copy-lid-btn" title="Copy LID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;"><i class="fas fa-copy"></i></a>
             </div>`;
@@ -3089,10 +3089,10 @@ export class ReactionEditor extends FormApplication {
                         return;
                     }
 
-                    const matched = deployables.filter(d => {
+                    const matched = deployables.filter(deployable => {
                         if (!query)
                             return true;
-                        return d.name.toLowerCase().includes(query) || d.lid.toLowerCase().includes(query);
+                        return deployable.name.toLowerCase().includes(query) || deployable.lid.toLowerCase().includes(query);
                     });
 
                     if (matched.length === 0) {
@@ -3133,7 +3133,7 @@ export class ReactionEditor extends FormApplication {
                         ev.preventDefault();
                         ev.stopPropagation();
                         const lid = $(ev.currentTarget).data('lid');
-                        const entry = deployables.find(d => d.lid === lid);
+                        const entry = deployables.find(deployable => deployable.lid === lid);
                         if (!entry)
                             return;
                         const actor = /** @type {any} */ (await fromUuid(entry.uuid));
@@ -3154,7 +3154,7 @@ export class ReactionEditor extends FormApplication {
 
                 listContainer.on('contextmenu', '.deployable-entry', async function (ev) {
                     ev.preventDefault();
-                    const entry = deployables.find(d => d.lid === $(this).data('lid'));
+                    const entry = deployables.find(deployable => deployable.lid === $(this).data('lid'));
                     if (entry) {
                         const actor = /** @type {Actor} */(await fromUuid(entry.uuid));
                         if (actor)

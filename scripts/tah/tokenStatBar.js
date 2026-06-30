@@ -529,9 +529,9 @@ async function _autoInjectCounters(tokenDoc) {
 
         const next = existing.slice();
         const seenNext = { ...seen };
-        for (const c of toAdd) {
-            next.push(_buildAutoInjectedEntry(c, color, widthPct));
-            seenNext[c.autoKey] = true;
+        for (const counter of toAdd) {
+            next.push(_buildAutoInjectedEntry(counter, color, widthPct));
+            seenNext[counter.autoKey] = true;
         }
         await setTokenFlag(td, MODULE_ID, FLAG_EXTRAS, next);
         await setTokenFlag(td, MODULE_ID, FLAG_AUTO_KEYS, seenNext);
@@ -582,10 +582,10 @@ async function _resetAutoInjectedExtras(tokenDoc) {
                 const color = game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161';
                 const widthPct = Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
                 const counters = _enumerateAutoCounters(actor);
-                const fresh = counters.map(c => _buildAutoInjectedEntry(c, color, widthPct));
+                const fresh = counters.map(counter => _buildAutoInjectedEntry(counter, color, widthPct));
                 nextArr = [...kept, ...fresh];
-                for (const c of counters)
-                    nextSeen[c.autoKey] = true;
+                for (const counter of counters)
+                    nextSeen[counter.autoKey] = true;
             }
         }
         await setTokenFlag(td, MODULE_ID, FLAG_EXTRAS, nextArr);
@@ -600,16 +600,16 @@ async function _resetAutoInjectedExtras(tokenDoc) {
 // Group extras into lines respecting layoutMode + 100% width cap. Overflow wraps.
 function _groupExtrasIntoLines(extras) {
     const lines = [];
-    let cur = null;
-    for (const e of extras ?? []) {
-        const w = Math.max(1, Math.min(100, Number(e?.widthPct) || 100));
-        const breaks = !cur || e?.layoutMode === 'newLine' || (cur.used + w) > 100;
+    let currentLine = null;
+    for (const extra of extras ?? []) {
+        const widthPct = Math.max(1, Math.min(100, Number(extra?.widthPct) || 100));
+        const breaks = !currentLine || extra?.layoutMode === 'newLine' || (currentLine.used + widthPct) > 100;
         if (breaks) {
-            cur = { entries: [], used: 0 };
-            lines.push(cur);
+            currentLine = { entries: [], used: 0 };
+            lines.push(currentLine);
         }
-        cur.entries.push({ entry: e, width: w });
-        cur.used += w;
+        currentLine.entries.push({ entry: extra, width: widthPct });
+        currentLine.used += widthPct;
     }
     return lines;
 }
@@ -894,17 +894,17 @@ function _bindExtraBarsUI(root, tokenDoc, app) {
         const lines = _groupExtrasIntoLines(arr);
         // Mark every entry whose requested width pushed it onto a new line.
         const overflowing = new Set();
-        let cur = null;
-        for (const e of arr) {
-            const w = Math.max(1, Math.min(100, Number(e?.widthPct) || 100));
-            const breaks = !cur || e?.layoutMode === 'newLine' || (cur.used + w) > 100;
+        let currentLine = null;
+        for (const extra of arr) {
+            const widthPct = Math.max(1, Math.min(100, Number(extra?.widthPct) || 100));
+            const breaks = !currentLine || extra?.layoutMode === 'newLine' || (currentLine.used + widthPct) > 100;
             if (breaks) {
-                if (cur && e?.layoutMode === 'sameLine' && (cur.used + w) > 100) {
-                    overflowing.add(e.id);
+                if (currentLine && extra?.layoutMode === 'sameLine' && (currentLine.used + widthPct) > 100) {
+                    overflowing.add(extra.id);
                 }
-                cur = { used: 0 };
+                currentLine = { used: 0 };
             }
-            cur.used += w;
+            currentLine.used += widthPct;
         }
         void lines;
         return overflowing;
@@ -1117,10 +1117,10 @@ function _bindExtraBarsUI(root, tokenDoc, app) {
 function snapshotValues(actor, tokenDoc = null) {
     const extras = tokenDoc?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
     const extrasSnap = {};
-    for (const e of extras) {
-        if (!e?.id)
+    for (const extra of extras) {
+        if (!extra?.id)
             continue;
-        extrasSnap[e.id] = _resolveExtraBarValues(actor, e).value;
+        extrasSnap[extra.id] = _resolveExtraBarValues(actor, extra).value;
     }
     return {
         hp: actor.system?.hp?.value ?? 0,
@@ -1254,14 +1254,14 @@ function spawnFlash(token, barId, oldVal, newVal) {
         }
         const barX = rightColX + 1;
         const barW = rightColW - 2;
-        const y = startY + rowIdx * (rowHeight + rowGap) + 1;
-        const h = rowHeight - 2;
+        const rowY = startY + rowIdx * (rowHeight + rowGap) + 1;
+        const rowH = rowHeight - 2;
 
-        const lo = Math.min(oldVal, newVal);
-        const hi = Math.max(oldVal, newVal);
+        const minVal = Math.min(oldVal, newVal);
+        const maxVal = Math.max(oldVal, newVal);
         const isDamage = newVal < oldVal;
-        const initialFlashX = barX + (lo / hostMax) * barW;
-        const initialFlashW = ((hi - lo) / hostMax) * barW;
+        const initialFlashX = barX + (minVal / hostMax) * barW;
+        const initialFlashW = ((maxVal - minVal) / hostMax) * barW;
         if (initialFlashW <= 0) {
             return;
         }
@@ -1271,7 +1271,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
                 ? initialFlashX
                 : initialFlashX + (initialFlashW - remainingW);
             gfx.beginFill(0xffffff, 1);
-            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
         });
         return;
@@ -1282,30 +1282,30 @@ function spawnFlash(token, barId, oldVal, newVal) {
             return;
         }
         const rowIdx = barId === 'structure' ? 0 : 1;
-        const max = barId === 'structure'
+        const pipMax = barId === 'structure'
             ? (token.actor?.system?.structure?.max ?? 0)
             : (token.actor?.system?.stress?.max ?? 0);
-        if (max <= 0) {
+        if (pipMax <= 0) {
             return;
         }
         const colX = layoutOffsetX;
         const colW = pipColW;
-        const y = startY + rowIdx * (rowHeight + rowGap) + 1;
-        const h = rowHeight - 2;
+        const rowY = startY + rowIdx * (rowHeight + rowGap) + 1;
+        const rowH = rowHeight - 2;
 
-        const gap = 1;
-        const inner = colW - 2;
-        const segW = (inner - gap * (max - 1)) / max;
-        const oldEmpty = max - oldVal;
-        const newEmpty = max - newVal;
+        const pipGapPx = 1;
+        const innerW = colW - 2;
+        const pipSegW = (innerW - pipGapPx * (pipMax - 1)) / pipMax;
+        const oldEmpty = pipMax - oldVal;
+        const newEmpty = pipMax - newVal;
         const startIdx = Math.min(oldEmpty, newEmpty);
         const endIdx = Math.max(oldEmpty, newEmpty);
         if (endIdx <= startIdx) {
             return;
         }
         const isDamage = newVal < oldVal;
-        const flashStartX = colX + 1 + startIdx * (segW + gap);
-        const flashEndX = colX + 1 + endIdx * (segW + gap) - gap;
+        const flashStartX = colX + 1 + startIdx * (pipSegW + pipGapPx);
+        const flashEndX = colX + 1 + endIdx * (pipSegW + pipGapPx) - pipGapPx;
         const initialFlashW = flashEndX - flashStartX;
         if (initialFlashW <= 0) {
             return;
@@ -1317,7 +1317,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
                 ? flashStartX + (initialFlashW - remainingW)
                 : flashStartX;
             gfx.beginFill(0xffffff, 1);
-            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
         });
         return;
@@ -1333,14 +1333,14 @@ function spawnFlash(token, barId, oldVal, newVal) {
         }
         const barX = rightColX + 1;
         const barW = rightColW - 2;
-        const y = startY + 1;
-        const h = rowHeight - 2;
+        const rowY = startY + 1;
+        const rowH = rowHeight - 2;
 
-        const lo = Math.min(oldVal, newVal);
-        const hi = Math.max(oldVal, newVal);
+        const minVal = Math.min(oldVal, newVal);
+        const maxVal = Math.max(oldVal, newVal);
         const isDamage = newVal < oldVal;
-        const initialFlashX = barX + (lo / hpMax) * barW;
-        const initialFlashW = ((hi - lo) / hpMax) * barW;
+        const initialFlashX = barX + (minVal / hpMax) * barW;
+        const initialFlashW = ((maxVal - minVal) / hpMax) * barW;
         if (initialFlashW <= 0) {
             return;
         }
@@ -1350,7 +1350,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
                 ? initialFlashX
                 : initialFlashX + (initialFlashW - remainingW);
             gfx.beginFill(0xffffff, 1);
-            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
         });
         return;
@@ -1371,8 +1371,8 @@ function spawnFlash(token, barId, oldVal, newVal) {
         const rowIdx = barId === 'burn' ? 0 : 1;
         const barX = rightColX + 1;
         const barW = rightColW - 2;
-        const y = startY + rowIdx * (rowHeight + rowGap) + 1;
-        const h = rowHeight - 2;
+        const rowY = startY + rowIdx * (rowHeight + rowGap) + 1;
+        const rowH = rowHeight - 2;
 
         const isReduction = newVal < oldVal;
         const fillPx = (Math.max(0, hostVal) / hostMax) * barW;
@@ -1410,7 +1410,7 @@ function spawnFlash(token, barId, oldVal, newVal) {
                     : initialFlashX + (initialFlashW - remainingW);
             }
             gfx.beginFill(0xffffff, 1);
-            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
         });
         return;
@@ -1476,7 +1476,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
     let target = null;
     let lineY = 0;
     for (const line of geom.extras) {
-        const found = line.entries.find(/** @type {any} */ e => e.entryId === entryId);
+        const found = line.entries.find(/** @type {any} */ entryGeom => entryGeom.entryId === entryId);
         if (found) {
             target = found;
             lineY = line.y;
@@ -1490,21 +1490,21 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
     const isDamage = newVal < oldVal;
 
     if (target.segmented) {
-        const max = Math.max(1, target.segments);
+        const pipMax = Math.max(1, target.segments);
         const colX = target.x;
         const colW = target.w;
-        const y = lineY + 1;
-        const h = rowHeight - 2;
-        const gap = 1;
-        const inner = colW - 2;
-        const segW = (inner - gap * (max - 1)) / max;
+        const rowY = lineY + 1;
+        const rowH = rowHeight - 2;
+        const pipGapPx = 1;
+        const innerW = colW - 2;
+        const pipSegW = (innerW - pipGapPx * (pipMax - 1)) / pipMax;
         // LTR fill: changed pips sit between min(old,new) and max(old,new) from the left.
-        const lo = Math.max(0, Math.min(max, Math.min(oldVal, newVal)));
-        const hi = Math.max(0, Math.min(max, Math.max(oldVal, newVal)));
-        if (hi <= lo)
+        const minVal = Math.max(0, Math.min(pipMax, Math.min(oldVal, newVal)));
+        const maxVal = Math.max(0, Math.min(pipMax, Math.max(oldVal, newVal)));
+        if (maxVal <= minVal)
             return;
-        const flashStartX = colX + 1 + lo * (segW + gap);
-        const flashEndX = colX + 1 + hi * (segW + gap) - gap;
+        const flashStartX = colX + 1 + minVal * (pipSegW + pipGapPx);
+        const flashEndX = colX + 1 + maxVal * (pipSegW + pipGapPx) - pipGapPx;
         const initialFlashW = flashEndX - flashStartX;
         if (initialFlashW <= 0)
             return;
@@ -1515,7 +1515,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
                 ? flashStartX
                 : flashStartX + (initialFlashW - remainingW);
             gfx.beginFill(0xffffff, 1);
-            gfx.drawRect(drawX, y, remainingW, h);
+            gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
         });
         return;
@@ -1525,12 +1525,12 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
     const hostMax = Math.max(1, oldVal, newVal);
     const barX = target.x + 1;
     const barW = target.w - 2;
-    const y = lineY + 1;
-    const h = rowHeight - 2;
-    const lo = Math.min(oldVal, newVal);
-    const hi = Math.max(oldVal, newVal);
-    const initialFlashX = barX + (lo / hostMax) * barW;
-    const initialFlashW = ((hi - lo) / hostMax) * barW;
+    const rowY = lineY + 1;
+    const rowH = rowHeight - 2;
+    const minVal = Math.min(oldVal, newVal);
+    const maxVal = Math.max(oldVal, newVal);
+    const initialFlashX = barX + (minVal / hostMax) * barW;
+    const initialFlashW = ((maxVal - minVal) / hostMax) * barW;
     if (initialFlashW <= 0)
         return;
     runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) => {
@@ -1539,7 +1539,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal) {
             ? initialFlashX
             : initialFlashX + (initialFlashW - remainingW);
         gfx.beginFill(0xffffff, 1);
-        gfx.drawRect(drawX, y, remainingW, h);
+        gfx.drawRect(drawX, rowY, remainingW, rowH);
         gfx.endFill();
     });
 }
@@ -1944,10 +1944,10 @@ function drawStatHub() {
         osGfx.name = 'la-overshield';
         container.addChild(osGfx);
 
-        const c1 = 0x2244ee;
-        const c2 = 0x1133ee;
-        const r1 = (c1 >> 16) & 0xff, g1 = (c1 >> 8) & 0xff, b1 = c1 & 0xff;
-        const r2 = (c2 >> 16) & 0xff, g2 = (c2 >> 8) & 0xff, b2 = c2 & 0xff;
+        const colorA = 0x2244ee;
+        const colorB = 0x1133ee;
+        const rA = (colorA >> 16) & 0xff, gA = (colorA >> 8) & 0xff, bA = colorA & 0xff;
+        const rB = (colorB >> 16) & 0xff, gB = (colorB >> 8) & 0xff, bB = colorB & 0xff;
         const periodMs = 2200;
 
         const tick = () => {
@@ -1964,9 +1964,9 @@ function drawStatHub() {
                     t = 1 - t;
                 }
                 t *= 2;
-                const r = Math.round(r1 + (r2 - r1) * t);
-                const g = Math.round(g1 + (g2 - g1) * t);
-                const b = Math.round(b1 + (b2 - b1) * t);
+                const r = Math.round(rA + (rB - rA) * t);
+                const g = Math.round(gA + (gB - gA) * t);
+                const b = Math.round(bA + (bB - bA) * t);
                 osGfx.beginFill((r << 16) | (g << 8) | b, 0.75);
                 osGfx.drawRect(osX + i, osY, 1, osH);
                 osGfx.endFill();
@@ -2382,14 +2382,14 @@ function drawElevationBadge(token) {
         badge.pivot.set(cellW / 2, cellH / 2);
         badge.rotation = iso.reverseRotation;
         badge.skew.set(iso.reverseSkewX, iso.reverseSkewY);
-        const k = 0.76;
-        badge.scale.set(k, 1 / k);
-        const cosR = Math.cos(iso.reverseRotation);
-        const sinR = Math.sin(iso.reverseRotation);
-        const lx = token.w / 2 - cellW / 2;
-        const ly = -token.h / 2 + cellH / 2;
-        const offsetX = (cosR * k * lx) + (-sinR * (1 / k) * ly);
-        const offsetY = (sinR * k * lx) + (cosR * (1 / k) * ly);
+        const isoScale = 0.76;
+        badge.scale.set(isoScale, 1 / isoScale);
+        const cosTheta = Math.cos(iso.reverseRotation);
+        const sinTheta = Math.sin(iso.reverseRotation);
+        const localX = token.w / 2 - cellW / 2;
+        const localY = -token.h / 2 + cellH / 2;
+        const offsetX = (cosTheta * isoScale * localX) + (-sinTheta * (1 / isoScale) * localY);
+        const offsetY = (sinTheta * isoScale * localX) + (cosTheta * (1 / isoScale) * localY);
         const worldX = token.mesh.position.x + offsetX;
         const worldY = token.mesh.position.y + offsetY;
         badge.position.set(worldX - token.position.x, worldY - token.position.y);
@@ -2897,10 +2897,10 @@ export function initTokenStatBar() {
             // Path-bound extras: their value updates when the actor changes.
             const prevExtras = prev.extras ?? {};
             const nextExtras = next.extras ?? {};
-            for (const id of Object.keys(nextExtras)) {
-                const ov = prevExtras[id];
-                if (ov !== undefined && ov !== nextExtras[id]) {
-                    spawnFlashExtra(tok, id, ov, nextExtras[id]);
+            for (const extraId of Object.keys(nextExtras)) {
+                const oldVal = prevExtras[extraId];
+                if (oldVal !== undefined && oldVal !== nextExtras[extraId]) {
+                    spawnFlashExtra(tok, extraId, oldVal, nextExtras[extraId]);
                     flashed = true;
                 }
             }
@@ -3312,10 +3312,10 @@ export function initTokenStatBar() {
                 let flashed = false;
                 const prevExtras = prev.extras ?? {};
                 const nextExtras = next.extras ?? {};
-                for (const id of Object.keys(nextExtras)) {
-                    const ov = prevExtras[id];
-                    if (ov !== undefined && ov !== nextExtras[id]) {
-                        spawnFlashExtra(tok, id, ov, nextExtras[id]);
+                for (const extraId of Object.keys(nextExtras)) {
+                    const oldVal = prevExtras[extraId];
+                    if (oldVal !== undefined && oldVal !== nextExtras[extraId]) {
+                        spawnFlashExtra(tok, extraId, oldVal, nextExtras[extraId]);
                         flashed = true;
                     }
                 }
@@ -3458,10 +3458,10 @@ export function initTokenStatBar() {
             let flashed = false;
             const prevExtras = prev.extras ?? {};
             const nextExtras = next.extras ?? {};
-            for (const id of Object.keys(nextExtras)) {
-                const ov = prevExtras[id];
-                if (ov !== undefined && ov !== nextExtras[id]) {
-                    spawnFlashExtra(tok, id, ov, nextExtras[id]);
+            for (const extraId of Object.keys(nextExtras)) {
+                const oldVal = prevExtras[extraId];
+                if (oldVal !== undefined && oldVal !== nextExtras[extraId]) {
+                    spawnFlashExtra(tok, extraId, oldVal, nextExtras[extraId]);
                     flashed = true;
                 }
             }

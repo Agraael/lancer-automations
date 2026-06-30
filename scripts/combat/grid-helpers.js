@@ -2,8 +2,8 @@
 import { getHexGroundElevation } from "./terrain-utils.js";
 
 // Lancer v3 changed acc_diff targets from `{target: Token}` to `{targetUuid: string}`.
-export function accDiffTargetToken(t) {
-    return t?.targetUuid ? (fromUuidSync(t.targetUuid)?.object ?? null) : null;
+export function accDiffTargetToken(accDiffTarget) {
+    return accDiffTarget?.targetUuid ? (fromUuidSync(accDiffTarget.targetUuid)?.object ?? null) : null;
 }
 
 /**
@@ -194,7 +194,7 @@ export function measureGridDistance(c1, c2) {
     const d = canvas.grid.measurePath
         ? canvas.grid.measurePath([c1, c2], {}).distance
         : canvas.grid.measureDistance(c1, c2, {});
-    return Array.isArray(d) ? d.reduce((a, b) => a + b, 0) : d;
+    return Array.isArray(d) ? d.reduce((sum, segment) => sum + segment, 0) : d;
 }
 
 export function getOccupiedOffsets(token, overridePos = null) {
@@ -204,15 +204,15 @@ export function getOccupiedOffsets(token, overridePos = null) {
         const pos = overridePos
             ? { x: overridePos.x, y: overridePos.y, width: doc.width, height: doc.height }
             : { x: doc.x, y: doc.y, width: doc.width, height: doc.height };
-        return doc.getOccupiedGridSpaceOffsets(pos).map(o => ({ col: o.j, row: o.i }));
+        return doc.getOccupiedGridSpaceOffsets(pos).map(gridOffset => ({ col: gridOffset.j, row: gridOffset.i }));
     }
     // v12 fallback (Lancer system extension on the Token class).
     if (typeof token.getOccupiedSpaces === 'function') {
         const dx = overridePos ? (overridePos.x - token.x) : 0;
         const dy = overridePos ? (overridePos.y - token.y) : 0;
-        return token.getOccupiedSpaces().map(p => {
-            const o = canvas.grid.getOffset({ x: p.x + dx, y: p.y + dy });
-            return { col: o.j, row: o.i };
+        return token.getOccupiedSpaces().map(spacePoint => {
+            const offset = canvas.grid.getOffset({ x: spacePoint.x + dx, y: spacePoint.y + dy });
+            return { col: offset.j, row: offset.i };
         });
     }
 
@@ -256,7 +256,7 @@ export function getOccupiedOffsets(token, overridePos = null) {
 
 export function getOccupiedCenters(token, overridePos = null) {
     const offsets = getOccupiedOffsets(token, overridePos);
-    return offsets.map(o => getHexCenter(o.col, o.row));
+    return offsets.map(offset => getHexCenter(offset.col, offset.row));
 }
 
 /** @returns {number} */
@@ -302,9 +302,9 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
     if (!includeElevation)
         return planarDist;
 
-    const e1 = token1?.document?.elevation ?? 0;
-    const e2 = token2?.document?.elevation ?? 0;
-    const elevDist = Math.round(Math.abs(e1 - e2) / canvas.scene.grid.distance);
+    const elev1 = token1?.document?.elevation ?? 0;
+    const elev2 = token2?.document?.elevation ?? 0;
+    const elevDist = Math.round(Math.abs(elev1 - elev2) / canvas.scene.grid.distance);
     // Max: 5 horizontal + 3 vertical = 5 (dominant axis wins).
     return Math.max(planarDist, elevDist);
 }
@@ -445,17 +445,17 @@ export function getOccupiedGridSpaces(excludeIds = []) {
     const occupied = new Set();
     const excludeSet = new Set(excludeIds);
 
-    for (const t of canvas.tokens.placeables) {
-        if (excludeSet.has(t.id))
+    for (const token of canvas.tokens.placeables) {
+        if (excludeSet.has(token.id))
             continue;
-        if (!t.actor)
+        if (!token.actor)
             continue;
-        if (t.document.hidden)
+        if (token.document.hidden)
             continue;
 
-        const tOffsets = getOccupiedOffsets(t);
-        for (const o of tOffsets) {
-            occupied.add(`${o.col},${o.row}`);
+        const tokenOffsets = getOccupiedOffsets(token);
+        for (const offset of tokenOffsets) {
+            occupied.add(`${offset.col},${offset.row}`);
         }
     }
     return occupied;
@@ -614,21 +614,21 @@ export function drawDebugPath(pathHexes) {
         canvas.lancerDebugPath.clear();
     }
 
-    const g = canvas.lancerDebugPath;
+    const graphics = canvas.lancerDebugPath;
 
     for (let i = 0; i < pathHexes.length; i++) {
         const stepData = pathHexes[i];
         const stepColor = Math.floor(Math.random() * 0xFFFFFF);
 
-        g.lineStyle(4, stepColor);
+        graphics.lineStyle(4, stepColor);
 
         for (let center of stepData.hexes) {
             let fillAlpha = stepData.isHistory ? 0.2 : 0.4;
             let radius = stepData.isHistory ? canvas.grid.size / 6 : canvas.grid.size / 3;
 
-            g.beginFill(stepColor, fillAlpha);
-            g.drawCircle(center.x, center.y, radius);
-            g.endFill();
+            graphics.beginFill(stepColor, fillAlpha);
+            graphics.drawCircle(center.x, center.y, radius);
+            graphics.endFill();
         }
     }
 }

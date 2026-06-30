@@ -95,13 +95,13 @@ function terrainTopUnder(tokenDoc, position) {
     if (!tht)
         return null;
     const terrainTypes = tht.getTerrainTypes?.() ?? [];
-    const typeById = new Map(terrainTypes.map(t => [t.id, t]));
+    const typeById = new Map(terrainTypes.map(terrainType => [terrainType.id, terrainType]));
 
     let highest = null;
     const consider = (shapes) => {
         for (const shape of shapes) {
-            const tt = typeById.get(shape.terrainTypeId);
-            if (!tt?.usesHeight || !tt?.isSolid)
+            const terrainType = typeById.get(shape.terrainTypeId);
+            if (!terrainType?.usesHeight || !terrainType?.isSolid)
                 continue;
             const top = shape.top ?? (shape.elevation + shape.height);
             if (highest == null || top > highest)
@@ -121,8 +121,8 @@ function terrainTopUnder(tokenDoc, position) {
         try {
             offsets = tokenDoc.getOccupiedGridSpaceOffsets?.(position ?? {}) ?? [];
         } catch { /* invalid */ }
-        for (const off of offsets)
-            consider(tht.getCell?.(off.j, off.i) ?? []);
+        for (const gridOffset of offsets)
+            consider(tht.getCell?.(gridOffset.j, gridOffset.i) ?? []);
     }
     return highest;
 }
@@ -229,7 +229,7 @@ function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {}) 
     const tht = thtApi();
     if (!tht) return 0;
     const terrainTypes = tht.getTerrainTypes?.() ?? [];
-    const typeById = new Map(terrainTypes.map(t => [t.id, t]));
+    const typeById = new Map(terrainTypes.map(terrainType => [terrainType.id, terrainType]));
     const gridType = canvas.grid?.type;
 
     const ranges = [{ bottom: -Infinity, top: 0 }];
@@ -237,8 +237,8 @@ function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {}) 
 
     const consider = (shapes) => {
         for (const shape of shapes ?? []) {
-            const tt = typeById.get(shape.terrainTypeId);
-            if (!tt?.usesHeight || !tt?.isSolid) continue;
+            const terrainType = typeById.get(shape.terrainTypeId);
+            if (!terrainType?.usesHeight || !terrainType?.isSolid) continue;
             if (typeof terrainFilter === 'function' && !terrainFilter(shape)) continue;
             const top = shape.top ?? ((shape.elevation ?? 0) + (shape.height ?? 0));
             const bottom = shape.bottom ?? (shape.elevation ?? 0);
@@ -257,7 +257,7 @@ function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {}) 
     } else {
         let offsets = [];
         try { offsets = tokenDoc.getOccupiedGridSpaceOffsets?.(position ?? {}) ?? []; } catch { /* ignore */ }
-        for (const off of offsets) consider(tht.getCell?.(off.j, off.i));
+        for (const gridOffset of offsets) consider(tht.getCell?.(gridOffset.j, gridOffset.i));
     }
 
     if (!gapSearch)
@@ -290,7 +290,7 @@ function getCompleteMovementPathWrapper(wrapped, waypoints) {
     const originElev = this.elevation ?? 0;
 
     let prevTop = _terrainTopMost(this, movementPath[0], {
-        terrainFilter: s => (s.bottom ?? s.elevation ?? 0) <= (movementPath[0].elevation ?? 0) + tokenZHeight
+        terrainFilter: shape => (shape.bottom ?? shape.elevation ?? 0) <= (movementPath[0].elevation ?? 0) + tokenZHeight
     });
     const originTop = prevTop;
 
@@ -349,33 +349,33 @@ function _injectMovementPenaltyBoundaries(tokenDoc, movementPath) {
     if (!states.length) return;
 
     const startCenter = tokenDoc.getCenterPoint(movementPath[0]);
-    for (const s of states) s.active = s.region.testPoint(startCenter);
+    for (const regionState of states) regionState.active = regionState.region.testPoint(startCenter);
 
     const newPath = [movementPath[0]];
     for (let i = 1; i < movementPath.length; i++) {
-        const wp = movementPath[i];
-        const center = tokenDoc.getCenterPoint(wp);
-        for (const s of states) {
-            const nowActive = s.region.testPoint(center);
-            if (nowActive === s.active) continue;
+        const waypoint = movementPath[i];
+        const center = tokenDoc.getCenterPoint(waypoint);
+        for (const regionState of states) {
+            const nowActive = regionState.region.testPoint(center);
+            if (nowActive === regionState.active) continue;
             // Terrain reflects state BEFORE crossing (Foundry's convention).
             // Entering region: was outside -> terrain null.
             // Leaving region:  was inside  -> terrain = difficulty (slows the segment we just finished).
             let terrain = null;
             if (!nowActive) {
-                const d = s.behavior.system.difficulties?.[wp.action] ?? 1;
-                if (d > 1) terrain = TerrainData.resolveTerrainEffects([{ name: 'difficulty', difficulty: d }]);
+                const difficulty = regionState.behavior.system.difficulties?.[waypoint.action] ?? 1;
+                if (difficulty > 1) terrain = TerrainData.resolveTerrainEffects([{ name: 'difficulty', difficulty }]);
             }
             newPath.push({
-                x: wp.x, y: wp.y, elevation: wp.elevation,
-                width: wp.width, height: wp.height, shape: wp.shape,
-                action: wp.action, terrain,
+                x: waypoint.x, y: waypoint.y, elevation: waypoint.elevation,
+                width: waypoint.width, height: waypoint.height, shape: waypoint.shape,
+                action: waypoint.action, terrain,
                 intermediate: true, explicit: true, snapped: true, checkpoint: false,
                 _laSilent: true
             });
-            s.active = nowActive;
+            regionState.active = nowActive;
         }
-        newPath.push(wp);
+        newPath.push(waypoint);
     }
 
     movementPath.length = 0;
@@ -433,15 +433,15 @@ Hooks.once('ready', () => {
         // Synthesize an elevation-only waypoint at the current position so Q/E offset is committed.
         if (_dragElevationOffset !== 0) {
             const contexts = event?.interactionData?.contexts ?? {};
-            for (const [id, ctx] of Object.entries(contexts)) {
-                if ((ctx?.foundPath?.length ?? 0) > 1)
+            for (const [id, dragContext] of Object.entries(contexts)) {
+                if ((dragContext?.foundPath?.length ?? 0) > 1)
                     continue;
                 const doc = canvas.scene.tokens.get(id);
                 if (!doc)
                     continue;
                 const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
                 const elev = (doc.elevation ?? 0) + _dragElevationOffset * sceneDistance;
-                if (!updates.some(u => u._id === id))
+                if (!updates.some(update => update._id === id))
                     updates.push({ _id: id });
                 options.movement ??= {};
                 options.movement[id] = {
@@ -472,9 +472,9 @@ Hooks.once('ready', () => {
             return wrapped.call(this, waypoints, options);
         if (!shouldAutoElevate(this))
             return wrapped.call(this, waypoints, options);
-        const wpArr = Array.isArray(waypoints) ? waypoints : [waypoints];
-        for (const wp of wpArr)
-            applyAutoElevationToWaypoint(this, wp);
-        return wrapped.call(this, wpArr, options);
+        const waypointList = Array.isArray(waypoints) ? waypoints : [waypoints];
+        for (const waypoint of waypointList)
+            applyAutoElevationToWaypoint(this, waypoint);
+        return wrapped.call(this, waypointList, options);
     }, 'WRAPPER');
 });

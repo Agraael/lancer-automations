@@ -13,39 +13,39 @@ export { getMinGridDistance };
 const THREAT_AURA_NAMES = new Set(["Threat_detail", "Threat"]);
 const isThreatAura = (a) => THREAT_AURA_NAMES.has(a.config.name);
 
-function getDispositionData(t1, t2) {
+function getDispositionData(tokenA, tokenB) {
     const tokenFactions = game.modules.get("token-factions")?.api;
     if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
-        return { factionDisposition: tokenFactions.getDisposition(t1, t2) };
+        return { factionDisposition: tokenFactions.getDisposition(tokenA, tokenB) };
     }
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
-    const d1 = t1.document.disposition;
-    const d2 = t2.document.disposition;
+    const dispA = tokenA.document.disposition;
+    const dispB = tokenB.document.disposition;
     return {
-        is1Bad: d1 === HOSTILE || d1 === SECRET,
-        is2Bad: d2 === HOSTILE || d2 === SECRET,
-        is1Good: d1 === FRIENDLY || d1 === NEUTRAL,
-        is2Good: d2 === FRIENDLY || d2 === NEUTRAL
+        isAHostile: dispA === HOSTILE || dispA === SECRET,
+        isBHostile: dispB === HOSTILE || dispB === SECRET,
+        isAFriendly: dispA === FRIENDLY || dispA === NEUTRAL,
+        isBFriendly: dispB === FRIENDLY || dispB === NEUTRAL
     };
 }
 
 /** @returns {boolean} */
 export function isFriendly(token1, token2) {
-    const d = getDispositionData(token1, token2);
-    if (d.factionDisposition !== undefined) {
-        return d.factionDisposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+    const disposition = getDispositionData(token1, token2);
+    if (disposition.factionDisposition !== undefined) {
+        return disposition.factionDisposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
     }
-    return (d.is1Good && d.is2Good) || (d.is1Bad && d.is2Bad);
+    return (disposition.isAFriendly && disposition.isBFriendly) || (disposition.isAHostile && disposition.isBHostile);
 }
 
 /** @returns {boolean} */
 export function isHostile(reactor, mover) {
-    const d = getDispositionData(reactor, mover);
-    if (d.factionDisposition !== undefined) {
-        const disp = d.factionDisposition;
+    const disposition = getDispositionData(reactor, mover);
+    if (disposition.factionDisposition !== undefined) {
+        const disp = disposition.factionDisposition;
         return disp === CONST.TOKEN_DISPOSITIONS.HOSTILE || disp === CONST.TOKEN_DISPOSITIONS.SECRET;
     }
-    return (d.is1Good && d.is2Bad) || (d.is1Bad && d.is2Good);
+    return (disposition.isAFriendly && disposition.isBHostile) || (disposition.isAHostile && disposition.isBFriendly);
 }
 
 /** @returns {boolean} */
@@ -340,34 +340,34 @@ export async function drawDistanceDebug() {
 
     const distance = getMinGridDistance(token1, token2);
 
-    const offsets1 = getOccupiedOffsets(token1);
-    const offsets2 = getOccupiedOffsets(token2);
+    const token1Offsets = getOccupiedOffsets(token1);
+    const token2Offsets = getOccupiedOffsets(token2);
 
-    let closestPair = { c1: null, c2: null, dist: Infinity };
+    let closestPair = { nearCenter1: null, nearCenter2: null, dist: Infinity };
 
     if (isHexGrid()) {
-        for (const o1 of offsets1) {
-            const cube1 = offsetToCube(o1.col, o1.row);
-            for (const o2 of offsets2) {
-                const cube2 = offsetToCube(o2.col, o2.row);
-                const d = cubeDistance(cube1, cube2);
-                if (d < closestPair.dist) {
+        for (const offset1 of token1Offsets) {
+            const cube1 = offsetToCube(offset1.col, offset1.row);
+            for (const offset2 of token2Offsets) {
+                const cube2 = offsetToCube(offset2.col, offset2.row);
+                const hexDistance = cubeDistance(cube1, cube2);
+                if (hexDistance < closestPair.dist) {
                     closestPair = {
-                        c1: getHexCenter(o1.col, o1.row),
-                        c2: getHexCenter(o2.col, o2.row),
-                        dist: d
+                        nearCenter1: getHexCenter(offset1.col, offset1.row),
+                        nearCenter2: getHexCenter(offset2.col, offset2.row),
+                        dist: hexDistance
                     };
                 }
             }
         }
     } else {
-        const centers1 = getOccupiedCenters(token1);
-        const centers2 = getOccupiedCenters(token2);
-        for (const c1 of centers1) {
-            for (const c2 of centers2) {
-                const dPixel = measureGridDistance(c1, c2);
-                if (dPixel < closestPair.dist) {
-                    closestPair = { c1, c2, dist: dPixel };
+        const token1Centers = getOccupiedCenters(token1);
+        const token2Centers = getOccupiedCenters(token2);
+        for (const center1 of token1Centers) {
+            for (const center2 of token2Centers) {
+                const pixelDistance = measureGridDistance(center1, center2);
+                if (pixelDistance < closestPair.dist) {
+                    closestPair = { nearCenter1: center1, nearCenter2: center2, dist: pixelDistance };
                 }
             }
         }
@@ -400,15 +400,15 @@ export async function drawDistanceDebug() {
     }
     canvas.controls.debug.endFill();
 
-    if (closestPair.c1 && closestPair.c2) {
+    if (closestPair.nearCenter1 && closestPair.nearCenter2) {
         canvas.controls.debug.lineStyle(4, 0xFFFF00, 1);
-        canvas.controls.debug.moveTo(closestPair.c1.x, closestPair.c1.y);
-        canvas.controls.debug.lineTo(closestPair.c2.x, closestPair.c2.y);
+        canvas.controls.debug.moveTo(closestPair.nearCenter1.x, closestPair.nearCenter1.y);
+        canvas.controls.debug.lineTo(closestPair.nearCenter2.x, closestPair.nearCenter2.y);
 
         canvas.controls.debug.lineStyle(0);
         canvas.controls.debug.beginFill(0xFFFF00, 1);
-        canvas.controls.debug.drawCircle(closestPair.c1.x, closestPair.c1.y, 6);
-        canvas.controls.debug.drawCircle(closestPair.c2.x, closestPair.c2.y, 6);
+        canvas.controls.debug.drawCircle(closestPair.nearCenter1.x, closestPair.nearCenter1.y, 6);
+        canvas.controls.debug.drawCircle(closestPair.nearCenter2.x, closestPair.nearCenter2.y, 6);
         canvas.controls.debug.endFill();
     }
 
@@ -525,18 +525,18 @@ export async function updateAllEngagements(options = {}) {
     const shouldBeEngaged = new Set();
 
     for (let i = 0; i < allTokens.length; i++) {
-        const t1 = allTokens[i];
+        const tokenA = allTokens[i];
 
         for (let j = i + 1; j < allTokens.length; j++) {
-            const t2 = allTokens[j];
+            const tokenB = allTokens[j];
 
-            if (shouldBeEngaged.has(t1.id) && shouldBeEngaged.has(t2.id))
+            if (shouldBeEngaged.has(tokenA.id) && shouldBeEngaged.has(tokenB.id))
                 continue;
 
-            if (canEngage(t1, t2)) {
-                if (getMinGridDistance(t1, t2) <= 1) {
-                    shouldBeEngaged.add(t1.id);
-                    shouldBeEngaged.add(t2.id);
+            if (canEngage(tokenA, tokenB)) {
+                if (getMinGridDistance(tokenA, tokenB) <= 1) {
+                    shouldBeEngaged.add(tokenA.id);
+                    shouldBeEngaged.add(tokenB.id);
                 }
             }
         }

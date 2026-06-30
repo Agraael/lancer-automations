@@ -19,18 +19,18 @@ export const rechargeIcon = (/** @type {boolean} */ charged) =>
     `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
 
 export function activationTheme(/** @type {string|null|undefined} */ activation) {
-    const a = (activation ?? '').toLowerCase().replaceAll(/[\s-]+/g, '_');
-    if (a === 'protocol')
+    const normalized = (activation ?? '').toLowerCase().replaceAll(/[\s-]+/g, '_');
+    if (normalized === 'protocol')
         return 'protocol';
-    if (a === 'reaction')
+    if (normalized === 'reaction')
         return 'reaction';
-    if (a === 'free_action' || a === 'free')
+    if (normalized === 'free_action' || normalized === 'free')
         return 'free_action';
-    if (a === 'invade')
+    if (normalized === 'invade')
         return 'invade';
-    if (a === 'quick_tech' || a === 'full_tech')
+    if (normalized === 'quick_tech' || normalized === 'full_tech')
         return 'tech';
-    if (a === 'quick' || a === 'quick_action' || a === 'full' || a === 'full_action')
+    if (normalized === 'quick' || normalized === 'quick_action' || normalized === 'full' || normalized === 'full_action')
         return 'action';
     return 'weapon';
 }
@@ -99,15 +99,15 @@ export function getItemStatus(itemOrAction, extraAction = null) {
         parts.push(pips.join(''));
     };
 
-    if (itemTags.some(t => t.lid === 'tg_loading'))
+    if (itemTags.some(tag => tag.lid === 'tg_loading'))
         pushLoaded(sys.loaded);
-    if (itemTags.some(t => t.lid === 'tg_recharge'))
+    if (itemTags.some(tag => tag.lid === 'tg_recharge'))
         pushCharged(sys.charged);
-    if (itemTags.some(t => t.lid === 'tg_limited'))
+    if (itemTags.some(tag => tag.lid === 'tg_limited'))
         pushUses(sys.uses);
     if (perFreqOn) {
-        const perRound = Number(itemTags.find(t => t.lid === 'tg_round')?.val ?? 0);
-        const perTurn = Number(itemTags.find(t => t.lid === 'tg_turn')?.val ?? 0);
+        const perRound = Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0);
+        const perTurn = Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0);
         let perScene = 0;
         if (extraAction) perScene = getPerSceneLimitFromSub(extraAction);
         else if (isItem && itemOrAction.type !== 'frame') perScene = getPerSceneLimit(itemOrAction);
@@ -118,11 +118,11 @@ export function getItemStatus(itemOrAction, extraAction = null) {
 
     // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
     const actionTags = isItem && extraAction?._addedViaExtrasUI ? (extraAction.tags ?? []) : [];
-    if (actionTags.some(t => t.lid === 'tg_loading'))
+    if (actionTags.some(tag => tag.lid === 'tg_loading'))
         pushLoaded(extraAction.loaded);
-    if (actionTags.some(t => t.lid === 'tg_recharge'))
+    if (actionTags.some(tag => tag.lid === 'tg_recharge'))
         pushCharged(extraAction.charged);
-    if (actionTags.some(t => t.lid === 'tg_limited'))
+    if (actionTags.some(tag => tag.lid === 'tg_limited'))
         pushUses(extraAction.uses);
 
     const badge = parts.length ? parts.join(' ') : null;
@@ -189,20 +189,20 @@ export function laHudItemChildren(item, opts = {}) {
     // ── Profiles ──────────────────────────────────────────────────────────────
     if (profiles.length > 1) {
         items.push({ label: 'PROFILES', isSectionLabel: true });
-        profiles.forEach((p, idx) => {
+        profiles.forEach((profile, idx) => {
             const isActive = idx === activeIdx;
-            const profileName = p.name || `Profile ${idx + 1}`;
+            const profileName = profile.name || `Profile ${idx + 1}`;
             items.push({
                 label: (isActive ? '● ' : '○ ') + profileName,
                 icon: ICON_PROFILE,
                 highlightBg: isActive ? '#cce0f5' : null,
                 keepOpen: true,
-                _profile: p,
+                _profile: profile,
                 onClick: isActive ? null : async () => item.update({ 'system.selected_profile_index': idx }),
                 refreshCol4: () => laHudItemChildren(item, opts),
                 onRightClick: showPopup ? (row) => {
-                    const bodyHtml = laRenderWeaponProfile(p, false);
-                    const subtitle = [p.type, isActive ? 'Active' : null].filter(Boolean).join(' · ');
+                    const bodyHtml = laRenderWeaponProfile(profile, false);
+                    const subtitle = [profile.type, isActive ? 'Active' : null].filter(Boolean).join(' · ');
                     const popup = laDetailPopup('la-hud-popup la-hud-profile-popup', profileName, subtitle, bodyHtml, 'weapon');
                     showPopup(popup, row);
                 } : null,
@@ -255,19 +255,19 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const allTags = isActorExtra
         ? (action?.tags ?? [])
         : (sys ? [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])] : []);
-    const hasLoading  = allTags.some(t => t.lid === 'tg_loading');
-    const hasRecharge = allTags.some(t => t.lid === 'tg_recharge');
-    const hasLimited  = allTags.some(t => t.lid === 'tg_limited');
+    const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading');
+    const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge');
+    const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited');
     const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
-    const perRoundMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_round')?.val ?? 0) : 0;
-    const perTurnMax = perFreqOn ? Number(allTags.find(t => t.lid === 'tg_turn')?.val ?? 0) : 0;
+    const perRoundMax = perFreqOn ? Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0) : 0;
+    const perTurnMax = perFreqOn ? Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0) : 0;
     const sub = subData ?? action;
     const perSceneMax = !perFreqOn || isActorExtra ? 0
         : sub ? getPerSceneLimitFromSub(sub)
         : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
     const isCoreActive = !!action && item?.type === 'frame' && (
-        (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ a => a === action || a?.name === action?.name)
+        (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ candidate => candidate === action || candidate?.name === action?.name)
         || action?.name === item.system?.core_system?.active_name
         || action?.name === item.system?.core_system?.name
     );
@@ -282,14 +282,14 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const readState = () => {
         if (isActorExtra) {
             const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
-            return list.find(a => a.name === action.name) ?? action;
+            return list.find(entry => entry.name === action.name) ?? action;
         }
         return item.system;
     };
     const patchState = async (patch) => {
         if (isActorExtra) {
             const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
-            const idx = list.findIndex(a => a.name === action.name);
+            const idx = list.findIndex(entry => entry.name === action.name);
             if (idx < 0)
                 return;
             const next = list.slice();
@@ -297,17 +297,17 @@ export function appendItemPips(item, popup, depthCallbacks) {
             await item.setFlag('lancer-automations', 'extraActions', next);
         } else {
             const flat = {};
-            for (const [k, v] of Object.entries(patch))
-                flat[`system.${k}`] = v;
+            for (const [key, val] of Object.entries(patch))
+                flat[`system.${key}`] = val;
             await /** @type {any} */ (item).update(flat);
         }
     };
 
     const rebuild = () => {
         pipsWrap.empty();
-        const s = readState();
+        const state = readState();
         if (hasLoading) {
-            const loaded = s.loaded !== false;
+            const loaded = state.loaded !== false;
             const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
@@ -317,7 +317,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading</span>`), pip));
         }
         if (hasRecharge) {
-            const charged = s.charged !== false;
+            const charged = state.charged !== false;
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
             pip.on('click', async () => {
                 playUiSound('toggle');
@@ -326,19 +326,19 @@ export function appendItemPips(item, popup, depthCallbacks) {
             });
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged</span>`), pip));
         }
-        if (hasLimited && s.uses != null) {
-            const isObj = typeof s.uses !== 'number';
-            const val = isObj ? (s.uses.value ?? 0) : s.uses;
-            const max = isObj ? (s.uses.max ?? 0) : s.uses;
+        if (hasLimited && state.uses != null) {
+            const isObj = typeof state.uses !== 'number';
+            const val = isObj ? (state.uses.value ?? 0) : state.uses;
+            const max = isObj ? (state.uses.max ?? 0) : state.uses;
             if (max > 0) {
                 const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
                 for (let i = 1; i <= max; i++) {
-                    const n = i;
-                    const pip = $(`<span style="${S_PIP}color:${n <= val ? '#3a9e6e' : '#444'};">${n <= val ? '⬢' : '⬡'}</span>`);
+                    const pipIdx = i;
+                    const pip = $(`<span style="${S_PIP}color:${pipIdx <= val ? '#3a9e6e' : '#444'};">${pipIdx <= val ? '⬢' : '⬡'}</span>`);
                     pip.on('click', async () => {
                         playUiSound('toggle');
-                        const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
-                        await patchState(isObj ? { uses: { ...s.uses, value: newVal } } : { uses: newVal });
+                        const newVal = Math.max(0, Math.min(max, pipIdx === val ? pipIdx - 1 : pipIdx));
+                        await patchState(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
                         rebuild();
                     });
                     usesRow.append(pip);
@@ -350,12 +350,12 @@ export function appendItemPips(item, popup, depthCallbacks) {
         const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) => {
             const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
             for (let i = 1; i <= max; i++) {
-                const n = i;
-                const consumed = n <= used;
+                const pipIdx = i;
+                const consumed = pipIdx <= used;
                 const pip = $(`<span style="${S_PIP}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
                 pip.on('click', async () => {
                     playUiSound('toggle');
-                    const newUsed = n === used ? n - 1 : n;
+                    const newUsed = pipIdx === used ? pipIdx - 1 : pipIdx;
                     await patchState({ [fieldKey]: { value: Math.max(0, Math.min(max, newUsed)) } });
                     rebuild();
                 });
@@ -364,11 +364,11 @@ export function appendItemPips(item, popup, depthCallbacks) {
             pipsWrap.append(usesRow);
         };
         if (perRoundMax > 0)
-            renderFreqRow('Per round', perRoundMax, Number(s.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off', !inCombat);
+            renderFreqRow('Per round', perRoundMax, Number(state.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off', !inCombat);
         if (perTurnMax > 0)
-            renderFreqRow('Per turn', perTurnMax, Number(s.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline', !inCombat);
+            renderFreqRow('Per turn', perTurnMax, Number(state.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline', !inCombat);
         if (perSceneMax > 0)
-            renderFreqRow('Per scene', perSceneMax, Number(s.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
+            renderFreqRow('Per scene', perSceneMax, Number(state.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
         if (isCoreActive) {
             const actor = item.parent ?? item.actor;
             const charged = (actor?.system?.core_energy ?? 0) > 0;
@@ -396,10 +396,10 @@ export function appendItemPips(item, popup, depthCallbacks) {
         const actHasLimited  = action.tags.some(t => t.lid === 'tg_limited');
         if (actHasLoading || actHasRecharge || actHasLimited) {
             const readAct = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
-                .find(a => a.name === action.name) ?? action;
+                .find(entry => entry.name === action.name) ?? action;
             const patchAct = async (patch) => {
                 const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
-                const idx = list.findIndex(a => a.name === action.name);
+                const idx = list.findIndex(entry => entry.name === action.name);
                 if (idx < 0)
                     return;
                 const next = list.slice();
@@ -410,9 +410,9 @@ export function appendItemPips(item, popup, depthCallbacks) {
             popup.children().last().prepend(actWrap);
             const rebuildAct = () => {
                 actWrap.empty();
-                const s = readAct();
+                const state = readAct();
                 if (actHasLoading) {
-                    const loaded = s.loaded !== false;
+                    const loaded = state.loaded !== false;
                     const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
                     pip.on('click', async () => {
                         playUiSound('toggle'); await patchAct({ loaded: !loaded }); rebuildAct();
@@ -420,26 +420,26 @@ export function appendItemPips(item, popup, depthCallbacks) {
                     actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
                 }
                 if (actHasRecharge) {
-                    const charged = s.charged !== false;
+                    const charged = state.charged !== false;
                     const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
                     pip.on('click', async () => {
                         playUiSound('toggle'); await patchAct({ charged: !charged }); rebuildAct();
                     });
                     actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
                 }
-                if (actHasLimited && s.uses != null) {
-                    const isObj = typeof s.uses !== 'number';
-                    const val = isObj ? (s.uses.value ?? 0) : s.uses;
-                    const max = isObj ? (s.uses.max ?? 0) : s.uses;
+                if (actHasLimited && state.uses != null) {
+                    const isObj = typeof state.uses !== 'number';
+                    const val = isObj ? (state.uses.value ?? 0) : state.uses;
+                    const max = isObj ? (state.uses.max ?? 0) : state.uses;
                     if (max > 0) {
                         const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses*</span>`));
                         for (let i = 1; i <= max; i++) {
-                            const n = i;
-                            const pip = $(`<span style="${S_PIP}color:${n <= val ? '#3a9e6e' : '#444'};">${n <= val ? '⬢' : '⬡'}</span>`);
+                            const pipIdx = i;
+                            const pip = $(`<span style="${S_PIP}color:${pipIdx <= val ? '#3a9e6e' : '#444'};">${pipIdx <= val ? '⬢' : '⬡'}</span>`);
                             pip.on('click', async () => {
                                 playUiSound('toggle');
-                                const newVal = Math.max(0, Math.min(max, n === val ? n - 1 : n));
-                                await patchAct(isObj ? { uses: { ...s.uses, value: newVal } } : { uses: newVal });
+                                const newVal = Math.max(0, Math.min(max, pipIdx === val ? pipIdx - 1 : pipIdx));
+                                await patchAct(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
                                 rebuildAct();
                             });
                             usesRow.append(pip);
@@ -460,8 +460,8 @@ export function appendItemPips(item, popup, depthCallbacks) {
         if (!pipsWrap.length)
             popup.children().last().prepend(eaWrap);
         const rebuildEa = () => {
-            const ea = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(a => a.name === extraAction.name);
-            const charged = ea ? ea.charged !== false : extraAction.charged !== false;
+            const eaEntry = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(entry => entry.name === extraAction.name);
+            const charged = eaEntry ? eaEntry.charged !== false : extraAction.charged !== false;
             eaWrap.find('.la-ea-recharge-row').remove();
             const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
             row.append($(`<span style="${S_LBL}">Charged</span>`));
@@ -469,7 +469,7 @@ export function appendItemPips(item, popup, depthCallbacks) {
             pip.on('click', async () => {
                 playUiSound('toggle');
                 const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];
-                const match = actions.find(a => a.name === extraAction.name);
+                const match = actions.find(entry => entry.name === extraAction.name);
                 if (match) {
                     match.charged = !match.charged;
                     await item.setFlag('lancer-automations', 'extraActions', actions);

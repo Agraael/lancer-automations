@@ -616,32 +616,32 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
 
     const { title = "Contested Check", sendToOwner = false } = options;
     const extra = { suppressStatFX: true, sendToOwner };
-    const s1 = stat1.toUpperCase();
-    const s2 = stat2.toUpperCase();
-    const n1 = actor1?.name ?? "?";
-    const n2 = actor2?.name ?? "?";
-    const [r1, r2] = await Promise.all([
-        executeStatRoll(actor1, stat1, `${s1} vs ${n2} ${s2}`, 0, { ...extra, cardTitle: title, cardDescription: `${n1} :: ${s1}` }),
-        executeStatRoll(actor2, stat2, `${s2} vs ${n1} ${s1}`, 0, { ...extra, cardTitle: title, cardDescription: `${n2} :: ${s2}` })
+    const statLabel1 = stat1.toUpperCase();
+    const statLabel2 = stat2.toUpperCase();
+    const actorName1 = actor1?.name ?? "?";
+    const actorName2 = actor2?.name ?? "?";
+    const [rollResult1, rollResult2] = await Promise.all([
+        executeStatRoll(actor1, stat1, `${statLabel1} vs ${actorName2} ${statLabel2}`, 0, { ...extra, cardTitle: title, cardDescription: `${actorName1} :: ${statLabel1}` }),
+        executeStatRoll(actor2, stat2, `${statLabel2} vs ${actorName1} ${statLabel1}`, 0, { ...extra, cardTitle: title, cardDescription: `${actorName2} :: ${statLabel2}` })
     ]);
 
-    if (!r1?.completed || !r2?.completed) {
+    if (!rollResult1?.completed || !rollResult2?.completed) {
         return {
             completed: false,
             winner: null,
             loser: null,
             tie: false,
             results: [
-                { actor: actor1, stat: stat1, total: r1?.total ?? null, roll: r1?.roll ?? null },
-                { actor: actor2, stat: stat2, total: r2?.total ?? null, roll: r2?.roll ?? null }
+                { actor: actor1, stat: stat1, total: rollResult1?.total ?? null, roll: rollResult1?.roll ?? null },
+                { actor: actor2, stat: stat2, total: rollResult2?.total ?? null, roll: rollResult2?.roll ?? null }
             ]
         };
     }
 
-    const t1 = r1.total ?? -Infinity;
-    const t2 = r2.total ?? -Infinity;
-    const tie = t1 === t2;
-    const oneWins = t1 > t2;
+    const total1 = rollResult1.total ?? -Infinity;
+    const total2 = rollResult2.total ?? -Infinity;
+    const tie = total1 === total2;
+    const oneWins = total1 > total2;
     const winner = tie ? null : (oneWins ? actor1 : actor2);
     const loser = tie ? null : (oneWins ? actor2 : actor1);
     const winnerToken = tie ? null : (oneWins ? token1 : token2);
@@ -656,10 +656,10 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
             <span style="font-variant-numeric:tabular-nums;font-weight:700;">${total}</span>
         </div>`;
     const body = tie
-        ? `<div style="text-align:center;padding:8px 0;font-style:italic;font-weight:700;">TIE — ${t1}</div>` +
-          row('', n1, stat1, r1.total, null) + row('', n2, stat2, r2.total, null)
-        : row('WIN', winner === actor1 ? n1 : n2, oneWins ? stat1 : stat2, oneWins ? r1.total : r2.total, true) +
-          row('LOSS', loser === actor1 ? n1 : n2, oneWins ? stat2 : stat1, oneWins ? r2.total : r1.total, false);
+        ? `<div style="text-align:center;padding:8px 0;font-style:italic;font-weight:700;">TIE - ${total1}</div>` +
+          row('', actorName1, stat1, rollResult1.total, null) + row('', actorName2, stat2, rollResult2.total, null)
+        : row('WIN', winner === actor1 ? actorName1 : actorName2, oneWins ? stat1 : stat2, oneWins ? rollResult1.total : rollResult2.total, true) +
+          row('LOSS', loser === actor1 ? actorName1 : actorName2, oneWins ? stat2 : stat1, oneWins ? rollResult2.total : rollResult1.total, false);
     ChatMessage.create({
         content: `<div class="card clipped-bot" style="margin:0;">
             <div class="lancer-header lancer-primary">// CONTEST :: ${title} //</div>
@@ -675,8 +675,8 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
         loserToken,
         tie,
         results: [
-            { actor: actor1, stat: stat1, total: r1.total, roll: r1.roll },
-            { actor: actor2, stat: stat2, total: r2.total, roll: r2.roll }
+            { actor: actor1, stat: stat1, total: rollResult1.total, roll: rollResult1.roll },
+            { actor: actor2, stat: stat2, total: rollResult2.total, roll: rollResult2.roll }
         ]
     };
 }
@@ -1133,7 +1133,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
     let weapons;
     if (bypassMount) {
         weapons = (bypassMount.slots ?? [])
-            .map(s => s.weapon?.value ?? (s.weapon?.id ? actor.items.get(s.weapon.id) : null))
+            .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
             .filter(Boolean);
         if (!weapons.length)
             return;
@@ -1154,13 +1154,13 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
         if (!choices || choices.length === 0)
             return;
 
-        const chosen = choices[0];
-        if (chosen.slots) {
-            weapons = chosen.slots
-                .map(s => s.weapon?.value)
+        const chosenMount = choices[0];
+        if (chosenMount.slots) {
+            weapons = chosenMount.slots
+                .map(slot => slot.weapon?.value)
                 .filter(Boolean);
         } else {
-            weapons = [chosen];
+            weapons = [chosenMount];
         }
     }
 
@@ -1172,7 +1172,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
     const hasNonAux = weapons.some(w => !isAuxSize(w));
     let auxPrimaryUsed = false;
 
-    const fireOne = async (weapon) => {
+    const fireWeapon = async (weapon) => {
         if (preTarget)
             /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
         let suppressBonus;
@@ -1187,12 +1187,12 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
     };
 
     if (weapons.length === 1) {
-        await fireOne(weapons[0]);
+        await fireWeapon(weapons[0]);
     } else {
         const choices = weapons.map(weapon => ({
             text: weapon.name,
             icon: weapon.img,
-            callback: async () => fireOne(weapon)
+            callback: async () => fireWeapon(weapon)
         }));
 
         await InteractiveAPI.startChoiceCard({
@@ -1229,10 +1229,10 @@ export async function executeFight(actorOrToken, bypassWeapon = null) {
         const choices = await choseMount(actor, 1, null, null, 'FIGHT');
         if (!choices?.length)
             return;
-        const chosen = choices[0];
-        weapon = chosen.slots
-            ? chosen.slots.find(/** @type {any} */ s => s.weapon?.value)?.weapon?.value ?? null
-            : chosen;
+        const chosenMount = choices[0];
+        weapon = chosenMount.slots
+            ? chosenMount.slots.find(/** @type {any} */ slot => slot.weapon?.value)?.weapon?.value ?? null
+            : chosenMount;
     }
     if (weapon)
         await beginWeaponAttackFlow(weapon);
@@ -1265,12 +1265,12 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     // Helper to check if a mount or weapon contains a Superheavy weapon
     const hasSuperheavy = (selectedItem) => {
         if (selectedItem?.slots) {
-            return selectedItem.slots.some(s => {
-                const w = s.weapon?.value;
-                if (!w) {
+            return selectedItem.slots.some(slot => {
+                const weapon = slot.weapon?.value;
+                if (!weapon) {
                     return false;
                 }
-                const size = w.system?.size || w.system?.type || "";
+                const size = weapon.system?.size || weapon.system?.type || "";
                 return size.toLowerCase() === 'superheavy';
             });
         }
@@ -1315,17 +1315,17 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         let weapons;
         if (mount.slots) {
             weapons = mount.slots
-                .map(s => s.weapon?.value ?? (s.weapon?.id ? actor.items.get(s.weapon.id) : null))
+                .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
                 .filter(Boolean);
         } else {
             weapons = [mount];
         }
 
-        const isAuxSize = (w) => String(w.system?.size || "").toLowerCase() === 'auxiliary';
-        const hasNonAux = weapons.some(w => !isAuxSize(w));
+        const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
+        const hasNonAux = weapons.some(weapon => !isAuxSize(weapon));
         let auxPrimaryUsed = false;
 
-        const fireOne = async (weapon) => {
+        const fireWeapon = async (weapon) => {
             if (preTarget) {
                 /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
             }
@@ -1341,12 +1341,12 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         };
 
         if (weapons.length === 1) {
-            await fireOne(weapons[0]);
+            await fireWeapon(weapons[0]);
         } else if (weapons.length > 1) {
             const choices = weapons.map(weapon => ({
                 text: weapon.name,
                 icon: weapon.img,
-                callback: async () => fireOne(weapon)
+                callback: async () => fireWeapon(weapon)
             }));
             await InteractiveAPI.startChoiceCard({
                 title: "WEAPON ORDER",
@@ -1367,7 +1367,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         const mountChoices = choices.map((mount, index) => {
             const mountLabel = mount.name || mount.type || "Mount " + (index + 1);
             const weaponNames = (mount.slots ?? [])
-                .map(s => s.weapon?.value?.name ?? (s.weapon?.id ? actor.items.get(s.weapon.id)?.name : null))
+                .map(slot => slot.weapon?.value?.name ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id)?.name : null))
                 .filter(Boolean);
             const text = weaponNames.length
                 ? `Fire ${mountLabel} (${weaponNames.join(", ")})`

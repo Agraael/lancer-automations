@@ -129,7 +129,7 @@ export async function getAttackRange(actionName, actor, item) {
 async function getItemMaxReach(item, actor) {
     const ranges = await getMaxItemRanges_WithBonus(item, actor);
     const ALL_TYPES = ['Range', 'Line', 'Cone', 'Blast', 'Burst', 'Threat', 'Thrown', 'Deploy'];
-    return Math.max(0, ...ALL_TYPES.map(t => ranges[t] ?? 0));
+    return Math.max(0, ...ALL_TYPES.map(rangeType => ranges[rangeType] ?? 0));
 }
 
 /**
@@ -154,7 +154,7 @@ async function computePreviewRange(category, actionName, actor, item, profile) {
 
     // Specific profile → use profile's own range array
     if (profile?.range?.length) {
-        const max = Math.max(0, ...profile.range.map(r => Number(r.val) || 0));
+        const max = Math.max(0, ...profile.range.map(rangeEntry => Number(rangeEntry.val) || 0));
         return max > 0 ? Math.max(1, max) : null;
     }
 
@@ -216,13 +216,13 @@ const AURA_DEFS = {
                 const item = actor?.items?.get(overrideId);
                 if (item) {
                     const profiles = getWeaponProfiles_WithBonus(item, actor);
-                    return Math.max(0, ...profiles.flatMap(/** @type {any} */ p => (p.range ?? []).map(/** @type {any} */ r => Number(r.val) || 0)));
+                    return Math.max(0, ...profiles.flatMap(/** @type {any} */ profile => (profile.range ?? []).map(/** @type {any} */ rangeEntry => Number(rangeEntry.val) || 0)));
                 }
             }
             const ranges = getMaxWeaponRanges_WithBonus(actor);
             return Math.max(0, ...Object.entries(ranges)
-                .filter(([t]) => t !== 'Threat')
-                .map(([, v]) => v));
+                .filter(([rangeType]) => rangeType !== 'Threat')
+                .map(([, rangeValue]) => rangeValue));
         },
     },
     LA_custom_measure: {
@@ -264,20 +264,20 @@ async function _renameStaleTeamAuras(tokenDoc) {
     if (!auras.length)
         return;
     let changed = false;
-    const next = auras.map(a => {
+    const next = auras.map(auraCfg => {
         for (const baseName of Object.keys(AURA_DEFS)) {
             const prefix = `${baseName}__t`;
-            const isMatch = a.name === baseName || (typeof a.name === 'string' && a.name.startsWith(prefix));
+            const isMatch = auraCfg.name === baseName || (typeof auraCfg.name === 'string' && auraCfg.name.startsWith(prefix));
             if (!isMatch)
                 continue;
             const expected = _teamSuffixedName(baseName, token);
-            if (a.name !== expected) {
+            if (auraCfg.name !== expected) {
                 changed = true;
-                return { ...a, name: expected };
+                return { ...auraCfg, name: expected };
             }
             break;
         }
-        return a;
+        return auraCfg;
     });
     if (changed)
         await tokenDoc.setFlag('grid-aware-auras', 'auras', next);
@@ -374,12 +374,12 @@ async function ensurePersistentAura(tokenDoc, auraName) {
     const prefix = `${auraName}__t`;
     const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
 
-    if (auras.some(a => a.name === suffixed))
+    if (auras.some(auraCfg => auraCfg.name === suffixed))
         return;
 
-    const stale = auras.find(a => a.name === auraName || (typeof a.name === 'string' && a.name.startsWith(prefix)));
+    const stale = auras.find(auraCfg => auraCfg.name === auraName || (typeof auraCfg.name === 'string' && auraCfg.name.startsWith(prefix)));
     if (stale) {
-        const renamed = auras.map(a => a === stale ? { ...a, name: suffixed } : a);
+        const renamed = auras.map(auraCfg => auraCfg === stale ? { ...auraCfg, name: suffixed } : auraCfg);
         await tokenDoc.setFlag('grid-aware-auras', 'auras', renamed);
         return;
     }
@@ -401,8 +401,8 @@ function _getAuraFromCanvas(token, auraName) {
         return null;
     const suffixed = _teamSuffixedName(auraName, token);
     const prefix = `${auraName}__t`;
-    return auras.find(a => a.config?.name === suffixed)
-        ?? auras.find(a => a.config?.name === auraName || (typeof a.config?.name === 'string' && a.config.name.startsWith(prefix)))
+    return auras.find(aura => aura.config?.name === suffixed)
+        ?? auras.find(aura => aura.config?.name === auraName || (typeof aura.config?.name === 'string' && aura.config.name.startsWith(prefix)))
         ?? null;
 }
 
@@ -416,10 +416,10 @@ async function _persistAuraState(tokenDoc, auraName, enabled, radius) {
     const suffixed = token ? _teamSuffixedName(auraName, token) : auraName;
     const prefix = `${auraName}__t`;
     const elevationAware = auraName !== 'LA_custom_measure';
-    const auras = (tokenDoc.getFlag('grid-aware-auras', 'auras') ?? []).map(a => {
-        if (a.name !== suffixed && a.name !== auraName && !(typeof a.name === 'string' && a.name.startsWith(prefix)))
-            return a;
-        return { ...a, name: suffixed, enabled, radius: String(Math.max(1, radius)), elevationAware };
+    const auras = (tokenDoc.getFlag('grid-aware-auras', 'auras') ?? []).map(auraCfg => {
+        if (auraCfg.name !== suffixed && auraCfg.name !== auraName && !(typeof auraCfg.name === 'string' && auraCfg.name.startsWith(prefix)))
+            return auraCfg;
+        return { ...auraCfg, name: suffixed, enabled, radius: String(Math.max(1, radius)), elevationAware };
     });
     await tokenDoc.setFlag('grid-aware-auras', 'auras', auras);
 }
@@ -507,7 +507,7 @@ export async function applyDefaultAuras(token) {
         const mode = getAuraDefaultMode(name);
         if (mode === 'none')
             continue;
-        const inCombat = !!game.combat?.combatants?.find(c => c.token?.id === token.id);
+        const inCombat = !!game.combat?.combatants?.find(combatant => combatant.token?.id === token.id);
         if (mode === 'combat' && !inCombat)
             continue;
         const radius = def.getRadius(actor, token);

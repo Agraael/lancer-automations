@@ -309,10 +309,10 @@ function openStatusPicker(targetInput) {
 
     const customApi = game.modules.get('temporary-custom-statuses')?.api;
     if (customApi && typeof customApi.getStatuses === 'function') {
-        const customs = customApi.getStatuses() || [];
-        for (const cs of customs) {
-            if (!statuses.some(s => s.id === cs.id))
-                statuses.push(cs);
+        const customStatuses = customApi.getStatuses() || [];
+        for (const customStatus of customStatuses) {
+            if (!statuses.some(existing => existing.id === customStatus.id))
+                statuses.push(customStatus);
         }
     }
 
@@ -792,9 +792,9 @@ export async function executeEffectManager(options = {}) {
         defaultTarget = game.user.targets.first();
 
     const tokens = canvas.tokens.placeables;
-    const tokensHtml = tokens.map(t => {
-        const isSelf = t.id === defaultTarget?.id;
-        return `<option value="${t.id}" ${isSelf ? 'selected' : ''}>${t.name}${isSelf ? ' (self)' : ''}</option>`;
+    const tokensHtml = tokens.map(token => {
+        const isSelf = token.id === defaultTarget?.id;
+        return `<option value="${token.id}" ${isSelf ? 'selected' : ''}>${token.name}${isSelf ? ' (self)' : ''}</option>`;
     }).join('');
 
     let durations = [{
@@ -817,7 +817,7 @@ export async function executeEffectManager(options = {}) {
     );
 
     if (!game.combat) {
-        durations = durations.filter(d => d.label === 'indefinite' || d.label === 'permanent');
+        durations = durations.filter(duration => duration.label === 'indefinite' || duration.label === 'permanent');
     }
 
     const customStatusModule = game.modules.get("temporary-custom-statuses");
@@ -826,23 +826,23 @@ export async function executeEffectManager(options = {}) {
     const allPresets = getStoredPresets();
 
     const defaultDuration = game.combat ? 'end' : 'indefinite';
-    const durationOptionsHtml = durations.map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
+    const durationOptionsHtml = durations.map(duration => `<option value="${duration.label}" ${duration.label === defaultDuration ? 'selected' : ''}>${duration.name}</option>`).join('');
 
     // Bonus tab: duration options (includes "None" for permanent bonuses with no icon).
     // 'permanent' is omitted here; bonuses use the "None" entry as their permanent option.
     const bonusDurationOptionsHtml = '<option value="">None (Permanent, no Icon)</option>' +
-        durations.filter(d => d.label !== 'permanent').map(d => `<option value="${d.label}" ${d.label === defaultDuration ? 'selected' : ''}>${d.name}</option>`).join('');
+        durations.filter(duration => duration.label !== 'permanent').map(duration => `<option value="${duration.label}" ${duration.label === defaultDuration ? 'selected' : ''}>${duration.name}</option>`).join('');
 
     const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
-        .map(t => `<option value="${t}">${t}</option>`).join('');
+        .map(dmgType => `<option value="${dmgType}">${dmgType}</option>`).join('');
 
     const statusEffectIconsHtml = [...CONFIG.statusEffects]
         .sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name))
-        .map(e => {
-            const label = game.i18n.localize(e.name) || e.name;
+        .map(statusEffect => {
+            const label = game.i18n.localize(statusEffect.name) || statusEffect.name;
             return `
-        <div class="bonus-immunity-effect-option" data-effect="${e.name}" data-name="${label}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:#f5f5f5; color:#000; font-size:0.75em; min-width:0;">
-            <img src="${e.img || e.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;">
+        <div class="bonus-immunity-effect-option" data-effect="${statusEffect.name}" data-name="${label}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:#f5f5f5; color:#000; font-size:0.75em; min-width:0;">
+            <img src="${statusEffect.img || statusEffect.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;">
             <span class="la-hud-clip" style="flex:1; overflow:hidden; min-width:0; pointer-events:none;"><span class="la-hud-pan" style="display:inline-block; white-space:nowrap; padding-right:6px;">${label}</span></span>
         </div>`;
         }).join('');
@@ -854,9 +854,9 @@ export async function executeEffectManager(options = {}) {
         { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
         { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
     ];
-    const damageTypeIconsHtml = damageTypes.map(t => `
-        <div class="bonus-immunity-damage-option te-icon-option" data-type="${t.name}" title="${t.name}">
-            <img src="${t.icon}" width="24" height="24">
+    const damageTypeIconsHtml = damageTypes.map(dmgType => `
+        <div class="bonus-immunity-damage-option te-icon-option" data-type="${dmgType.name}" title="${dmgType.name}">
+            <img src="${dmgType.icon}" width="24" height="24">
         </div>
     `).join('');
 
@@ -1676,12 +1676,12 @@ export async function executeEffectManager(options = {}) {
             html.find('.bonus-uses-step').on('click', function () {
                 const step = Number($(this).data('step')) || 0;
                 const $input = html.find('#bonus-uses');
-                const cur = Number.parseInt(String($input.val() ?? ''));
-                const next = Number.isFinite(cur) ? cur + step : (step > 0 ? 1 : 0);
-                if (next < 1)
+                const currentUses = Number.parseInt(String($input.val() ?? ''));
+                const nextUses = Number.isFinite(currentUses) ? currentUses + step : (step > 0 ? 1 : 0);
+                if (nextUses < 1)
                     $input.val('');
                 else
-                    $input.val(next);
+                    $input.val(nextUses);
             });
 
             html.find('.la-num-step').on('click', function () {
@@ -1693,11 +1693,11 @@ export async function executeEffectManager(options = {}) {
                 if (!$input.length)
                     return;
                 const min = Number($input.attr('min'));
-                const cur = Number.parseInt(String($input.val() ?? '0'));
-                let next = (Number.isFinite(cur) ? cur : 0) + step;
-                if (Number.isFinite(min) && next < min)
-                    next = min;
-                $input.val(next).trigger('change');
+                const currentValue = Number.parseInt(String($input.val() ?? '0'));
+                let nextValue = (Number.isFinite(currentValue) ? currentValue : 0) + step;
+                if (Number.isFinite(min) && nextValue < min)
+                    nextValue = min;
+                $input.val(nextValue).trigger('change');
             });
 
             // Saved Status
@@ -2014,63 +2014,63 @@ export async function executeEffectManager(options = {}) {
             });
 
             // Shared bonus detail helpers
-            const getBonusDetailString = (subB) => {
-                if (subB.type === 'accuracy')
-                    return `Accuracy +${subB.val}`;
-                if (subB.type === 'difficulty')
-                    return `Difficulty +${subB.val}`;
-                if (subB.type === 'stat')
-                    return `${subB.stat?.split('.').pop() || subB.stat} ${Number.parseInt(subB.val) >= 0 ? '+' : ''}${subB.val}`;
-                if (subB.type === 'damage')
-                    return (subB.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
-                if (subB.type === 'tag') {
-                    if (subB.removeTag)
-                        return `Remove Tag: ${subB.tagName}`;
-                    const action = subB.tagMode === 'override' ? 'Set' : 'Add';
-                    return `${action} ${subB.tagName} ${subB.val}`;
+            const getBonusDetailString = (bonus) => {
+                if (bonus.type === 'accuracy')
+                    return `Accuracy +${bonus.val}`;
+                if (bonus.type === 'difficulty')
+                    return `Difficulty +${bonus.val}`;
+                if (bonus.type === 'stat')
+                    return `${bonus.stat?.split('.').pop() || bonus.stat} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
+                if (bonus.type === 'damage')
+                    return (bonus.damage || []).map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
+                if (bonus.type === 'tag') {
+                    if (bonus.removeTag)
+                        return `Remove Tag: ${bonus.tagName}`;
+                    const action = bonus.tagMode === 'override' ? 'Set' : 'Add';
+                    return `${action} ${bonus.tagName} ${bonus.val}`;
                 }
-                if (subB.type === 'range') {
-                    const rangeLabel = subB.rangeMode === 'override' ? 'Set' : subB.rangeMode === 'change' ? 'Change All →' : 'Add';
-                    return `${rangeLabel} ${subB.rangeType} ${subB.val}`;
+                if (bonus.type === 'range') {
+                    const rangeLabel = bonus.rangeMode === 'override' ? 'Set' : bonus.rangeMode === 'change' ? 'Change All →' : 'Add';
+                    return `${rangeLabel} ${bonus.rangeType} ${bonus.val}`;
                 }
-                if (subB.type === 'immunity') {
-                    if (subB.subtype === 'effect' && subB.effects)
-                        return `Immunity: ${subB.effects.join(', ')}`;
-                    if ((subB.subtype === 'damage' || subB.subtype === 'resistance') && subB.damageTypes)
-                        return `${subB.subtype}: ${subB.damageTypes.join(', ')}`;
-                    if (subB.subtype === 'crit')
+                if (bonus.type === 'immunity') {
+                    if (bonus.subtype === 'effect' && bonus.effects)
+                        return `Immunity: ${bonus.effects.join(', ')}`;
+                    if ((bonus.subtype === 'damage' || bonus.subtype === 'resistance') && bonus.damageTypes)
+                        return `${bonus.subtype}: ${bonus.damageTypes.join(', ')}`;
+                    if (bonus.subtype === 'crit')
                         return 'Immunity: Critical Hit';
-                    if (subB.subtype === 'hit')
+                    if (bonus.subtype === 'hit')
                         return 'Immunity: Hit';
-                    if (subB.subtype === 'miss')
+                    if (bonus.subtype === 'miss')
                         return 'Immunity: Miss';
-                    if (subB.subtype === 'elevation')
+                    if (bonus.subtype === 'elevation')
                         return 'Immunity: Elevation';
-                    if (subB.subtype === 'terrain')
+                    if (bonus.subtype === 'terrain')
                         return 'Immunity: Terrain';
-                    if (subB.subtype === 'provoke')
+                    if (bonus.subtype === 'provoke')
                         return 'Immunity: Provoke (Engagement & Reactions)';
-                    return subB.subtype;
+                    return bonus.subtype;
                 }
-                if (subB.type === 'target_modifier') {
+                if (bonus.type === 'target_modifier') {
                     const labels = {
                         invisible: 'Invisible (50% miss)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover', hard_cover: 'Hard Cover',
                         ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced',
                         crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss'
                     };
-                    return `Target: ${labels[subB.subtype] || subB.subtype}`;
+                    return `Target: ${labels[bonus.subtype] || bonus.subtype}`;
                 }
-                if (subB.type === 'reroll') {
-                    const rts = Array.isArray(subB.rollTypes) && subB.rollTypes.length > 0 ? subB.rollTypes.join(', ') : 'any';
-                    const sub = String(subB.subtype ?? 'retry');
-                    return `Reroll [${sub}]: ${rts}`;
+                if (bonus.type === 'reroll') {
+                    const rerollTypes = Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0 ? bonus.rollTypes.join(', ') : 'any';
+                    const subtype = String(bonus.subtype ?? 'retry');
+                    return `Reroll [${subtype}]: ${rerollTypes}`;
                 }
-                return subB.type || 'Unknown';
+                return bonus.type || 'Unknown';
             };
-            const renderBonusDetails = (b) => {
-                if (b.type === 'multi' && Array.isArray(b.bonuses))
-                    return `[${b.bonuses.map(getBonusDetailString).join(' | ')}]`;
-                return `(${getBonusDetailString(b)})`;
+            const renderBonusDetails = (bonus) => {
+                if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
+                    return `[${bonus.bonuses.map(getBonusDetailString).join(' | ')}]`;
+                return `(${getBonusDetailString(bonus)})`;
             };
 
             // Manage Tab
@@ -2110,11 +2110,11 @@ export async function executeEffectManager(options = {}) {
                     list.html('<p style="text-align:center; color:#ccc">No effects found.</p>');
                 }
 
-                effects.forEach(e => {
-                    const dur = e.getFlag('lancer-automations', 'duration') || (game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'duration') : null);
-                    const consumption = e.getFlag('lancer-automations', 'consumption');
-                    const stack = e.flags?.statuscounter?.value ||
-                        e.flags?.['temporary-custom-statuses']?.stack || 0;
+                effects.forEach(effect => {
+                    const dur = effect.getFlag('lancer-automations', 'duration') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'duration') : null);
+                    const consumption = effect.getFlag('lancer-automations', 'consumption');
+                    const stack = effect.flags?.statuscounter?.value ||
+                        effect.flags?.['temporary-custom-statuses']?.stack || 0;
 
                     let durText = "Indefinite";
                     if (dur) {
@@ -2123,21 +2123,21 @@ export async function executeEffectManager(options = {}) {
 
                     let consumptionText = '';
                     if (consumption?.trigger) {
-                        let cLabel = Array.isArray(consumption.trigger)
+                        let triggerLabel = Array.isArray(consumption.trigger)
                             ? consumption.trigger.join(', ')
                             : consumption.trigger;
                         if (consumption.itemId)
-                            cLabel += ` ID:${consumption.itemId}`;
+                            triggerLabel += ` ID:${consumption.itemId}`;
                         else if (consumption.itemLid)
-                            cLabel += ` ${consumption.itemLid}`;
-                        consumptionText = `<span style="font-size:0.75em; color:var(--primary-color); margin-left:4px;">[${cLabel}]</span>`;
+                            triggerLabel += ` ${consumption.itemLid}`;
+                        consumptionText = `<span style="font-size:0.75em; color:var(--primary-color); margin-left:4px;">[${triggerLabel}]</span>`;
                     }
 
                     const item = $(`
                         <div class="te-effect-item">
                             <div class="te-effect-info">
-                                <img src="${e.img}" width="24" height="24" style="border:none; background:#1a1a1a; border-radius:3px; padding:1px; object-fit:contain;">
-                                <span>${e.name}</span>
+                                <img src="${effect.img}" width="24" height="24" style="border:none; background:#1a1a1a; border-radius:3px; padding:1px; object-fit:contain;">
+                                <span>${effect.name}</span>
                                 <span style="font-size:0.8em; opacity:0.7">(${durText})</span>
                                 ${consumptionText}
                                 ${stack > 0 ? `<span style="font-weight:bold; margin-left:4px;">x${stack}</span>` : ''}
@@ -2154,14 +2154,14 @@ export async function executeEffectManager(options = {}) {
                     `);
 
                     item.find('.te-delete-btn').click(async () => {
-                        await pushRemoveEffect(targetID, e.id);
+                        await pushRemoveEffect(targetID, effect.id);
                         setTimeout(updateManageList, 200);
                     });
 
                     item.find('.stack-btn').click(async (ev) => {
                         const action = $(ev.currentTarget).data('action');
                         const delta = action === 'inc' ? 1 : -1;
-                        await modifyEffectStack(targetID, e.id, delta);
+                        await modifyEffectStack(targetID, effect.id, delta);
                         setTimeout(updateManageList, 200);
                     });
 
@@ -2183,32 +2183,32 @@ export async function executeEffectManager(options = {}) {
 
                 if (allBonuses.length > 0) {
                     bonusList.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid #555; padding-top:6px;">Bonuses</p>'));
-                    allBonuses.forEach(b => {
-                        const details = renderBonusDetails(b);
-                        const lids = (b.itemLids && b.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${b.itemLids.join(', ')}]</span>` : '';
-                        const types = (b.rollTypes && b.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${b.rollTypes.join(', ')}]</span>` : '';
-                        const itemIdInfo = b.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${b.itemId}]</span>` : '';
-                        const kindLabel = b._kind === 'constant' ? ' <span style="font-size:0.75em; color:#aaa;">(constant)</span>' : '';
+                    allBonuses.forEach(bonus => {
+                        const details = renderBonusDetails(bonus);
+                        const lids = (bonus.itemLids && bonus.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${bonus.itemLids.join(', ')}]</span>` : '';
+                        const types = (bonus.rollTypes && bonus.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${bonus.rollTypes.join(', ')}]</span>` : '';
+                        const itemIdInfo = bonus.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${bonus.itemId}]</span>` : '';
+                        const kindLabel = bonus._kind === 'constant' ? ' <span style="font-size:0.75em; color:#aaa;">(constant)</span>' : '';
 
                         let usesInfo = '';
-                        if (b.uses !== undefined) {
-                            const linkedEffect = actor.effects.find(e => e.getFlag("lancer-automations", "linkedBonusId") === b.id);
+                        if (bonus.uses !== undefined) {
+                            const linkedEffect = actor.effects.find(effect => effect.getFlag("lancer-automations", "linkedBonusId") === bonus.id);
                             const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
-                            usesInfo = remaining === null ? ` <span style="color:var(--primary-color);">[uses: ${b.uses}]</span>` : ` <span style="color:var(--primary-color);">[${remaining}/${b.uses}]</span>`;
+                            usesInfo = remaining === null ? ` <span style="color:var(--primary-color);">[uses: ${bonus.uses}]</span>` : ` <span style="color:var(--primary-color);">[${remaining}/${bonus.uses}]</span>`;
                         }
 
                         const item = $(`
                             <div class="te-bonus-item">
-                                <span><strong>${b.name}</strong>${kindLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
-                                <div class="te-delete-btn manage-bonus-remove-btn" data-id="${b.id}" data-kind="${b._kind}" title="Remove"><i class="fas fa-trash"></i></div>
+                                <span><strong>${bonus.name}</strong>${kindLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
+                                <div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>
                             </div>
                         `);
 
                         item.find('.manage-bonus-remove-btn').click(async () => {
-                            if (b._kind === 'constant')
-                                await removeConstantBonus(actor, b.id);
+                            if (bonus._kind === 'constant')
+                                await removeConstantBonus(actor, bonus.id);
                             else
-                                await removeGlobalBonus(actor, b.id);
+                                await removeGlobalBonus(actor, bonus.id);
                             setTimeout(updateManageList, 200);
                         });
 

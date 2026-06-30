@@ -46,17 +46,17 @@ export function hasAutomation(itemOrName) {
 export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse }) {
     $('body').append(popup);
     const offset = anchorEl.offset() ?? { left: 300, top: 100 };
-    const pw = popup.outerWidth(), ph = popup.outerHeight();
-    const wx = window.innerWidth,  wy = window.innerHeight;
-    let px = offset.left + anchorEl.outerWidth() + 2;
-    const flipped = px + pw > wx - 10;
+    const popupW = popup.outerWidth(), popupH = popup.outerHeight();
+    const viewportW = window.innerWidth,  viewportH = window.innerHeight;
+    let popupLeft = offset.left + anchorEl.outerWidth() + 2;
+    const flipped = popupLeft + popupW > viewportW - 10;
     if (flipped)
-        px = offset.left - pw - 2;
-    let py = offset.top;
-    if (py + ph > wy - 10)
-        py = wy - ph - 10;
-    const finalLeft = Math.max(10, px);
-    popup.css({ position: 'fixed', left: finalLeft, top: Math.max(10, py), opacity: 0 });
+        popupLeft = offset.left - popupW - 2;
+    let popupTop = offset.top;
+    if (popupTop + popupH > viewportH - 10)
+        popupTop = viewportH - popupH - 10;
+    const finalLeft = Math.max(10, popupLeft);
+    popup.css({ position: 'fixed', left: finalLeft, top: Math.max(10, popupTop), opacity: 0 });
     popup.animate({ opacity: 1 }, { duration: 150, easing: 'swing' });
     laBindPopupBehavior(popup);
     // Hovering the popup keeps columns alive
@@ -65,14 +65,14 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
     // mouseleave from firing on the HUD while the mouse crosses the gap.
     if (!flipped) {
         const anchorRight = offset.left + anchorEl.outerWidth();
-        const bridgeW = finalLeft - anchorRight;
-        if (bridgeW > 0) {
+        const bridgeWidth = finalLeft - anchorRight;
+        if (bridgeWidth > 0) {
             const bridge = $('<div class="la-hud-popup-bridge">').css({
                 position: 'fixed',
                 left: anchorRight,
-                top: Math.max(10, py),
-                width: bridgeW,
-                height: Math.min(ph, anchorEl.outerHeight() + 20),
+                top: Math.max(10, popupTop),
+                width: bridgeWidth,
+                height: Math.min(popupH, anchorEl.outerHeight() + 20),
                 zIndex: 9998,
                 pointerEvents: 'all',
             });
@@ -106,7 +106,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
  *   postRender?:   (popup: any) => void
  * }} opts
  */
-export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: show, postRender = null }) {
+export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: showAt, postRender = null }) {
     const selector = '.' + cssClass.trim().split(/\s+/).pop(); // last class is the specific one
     const existing = $(selector);
     if (existing.length && existing.data(dataKey) === dataValue) {
@@ -125,28 +125,28 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
     // Disable/Destroy toggles for items that support them
     if (item?.system && item.update) {
         if ('disabled' in item.system) {
-            const dis = !!item.system.disabled;
-            const disBtn = $(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${dis ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dis ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`);
-            disBtn.on('click', async () => {
+            const isDisabled = !!item.system.disabled;
+            const disableBtn = $(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${isDisabled ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDisabled ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`);
+            disableBtn.on('click', async () => {
                 playUiSound('toggle');
-                const newVal = !item.system.disabled;
-                await item.update({ 'system.disabled': newVal });
-                disBtn.css('color', newVal ? '#e8a020' : '#666');
-                disBtn.attr('title', newVal ? 'Enable' : 'Disable');
+                const nextDisabled = !item.system.disabled;
+                await item.update({ 'system.disabled': nextDisabled });
+                disableBtn.css('color', nextDisabled ? '#e8a020' : '#666');
+                disableBtn.attr('title', nextDisabled ? 'Enable' : 'Disable');
             });
-            headerBtns.push(disBtn);
+            headerBtns.push(disableBtn);
         }
         if ('destroyed' in item.system) {
-            const dest = !!item.system.destroyed;
-            const destBtn = $(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${dest ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${dest ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`);
-            destBtn.on('click', async () => {
+            const isDestroyed = !!item.system.destroyed;
+            const destroyBtn = $(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${isDestroyed ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDestroyed ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`);
+            destroyBtn.on('click', async () => {
                 playUiSound('toggle');
-                const newVal = !item.system.destroyed;
-                await item.update({ 'system.destroyed': newVal });
-                destBtn.css('color', newVal ? '#c33' : '#666');
-                destBtn.attr('title', newVal ? 'Repair' : 'Destroy');
+                const nextDestroyed = !item.system.destroyed;
+                await item.update({ 'system.destroyed': nextDestroyed });
+                destroyBtn.css('color', nextDestroyed ? '#c33' : '#666');
+                destroyBtn.attr('title', nextDestroyed ? 'Repair' : 'Destroy');
             });
-            headerBtns.push(destBtn);
+            headerBtns.push(destroyBtn);
         }
     }
     if (headerBtns.length) {
@@ -156,5 +156,5 @@ export function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitl
     popup.data(dataKey, dataValue);
     if (postRender)
         postRender(popup);
-    show(popup, row);
+    showAt(popup, row);
 }

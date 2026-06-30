@@ -169,6 +169,8 @@ export function _createInfoCard(type, opts) {
         description = "",
         origin = "",
         range = null,
+        areaRange = null,
+        pattern = "",
         count = 1,
         zoneType = "",
         zoneSize = 1,
@@ -187,8 +189,10 @@ export function _createInfoCard(type, opts) {
     let infoRowHtml = '';
     if (type !== "choiceCard" && type !== "deploymentCard" && type !== "voteCard") {
         let infoItems = [];
-        if (range !== null) {
-            infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${range}</span>`);
+        const isAoePattern = pattern === 'blast' || pattern === 'burst' || pattern === 'cone' || pattern === 'line';
+        const shownRange = range !== null ? range : (isAoePattern ? areaRange : null);
+        if (shownRange !== null && shownRange !== undefined) {
+            infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${shownRange}</span>`);
         }
         if (count !== -1) {
             infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> ${count}</span>`);

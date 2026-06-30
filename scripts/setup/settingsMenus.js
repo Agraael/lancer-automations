@@ -614,6 +614,13 @@ const CONTROL_FIELDS = [
     { type: 'section', label: 'Movement' },
     laKb('freeMovement'),
     laKb('debugMovement'),
+    laKb('movementWheel'),
+
+    { type: 'section', label: 'Targeting & Placement' },
+    laKb('elevationUp'),
+    laKb('elevationDown'),
+    laKb('lineTiltUp'),
+    laKb('lineTiltDown'),
 ];
 
 const ISO_FIELDS = [

@@ -251,7 +251,7 @@ function createGenericBonusStep(flowType) {
             }
 
             const tags = getFlowTags(flowType, state);
-            const r = {
+            const collected = {
                 netBonus: (actor.getFlag("lancer-automations", "generic_accuracy") || 0) -
                            (actor.getFlag("lancer-automations", "generic_difficulty") || 0) +
                            (actor.getFlag("world", "generic_accuracy") || 0) -
@@ -265,16 +265,16 @@ function createGenericBonusStep(flowType) {
                 disabledByUser: new Set()
             };
 
-            await processBonusBatch(flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses")), flowType, tags, state, r);
-            await processBonusBatch(actor.getFlag("lancer-automations", "constant_bonuses"), flowType, tags, state, r);
-            await processEphemeralBonuses(actor, flowType, tags, state, r);
+            await processBonusBatch(flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses")), flowType, tags, state, collected);
+            await processBonusBatch(actor.getFlag("lancer-automations", "constant_bonuses"), flowType, tags, state, collected);
+            await processEphemeralBonuses(actor, flowType, tags, state, collected);
 
-            const attackerId = actor.token?.id ?? canvas.tokens.placeables.find(t => t.actor?.id === actor.id)?.id;
-            await collectTargeterBonuses(attackerId, flowType, tags, state, r);
+            const attackerId = actor.token?.id ?? canvas.tokens.placeables.find(tok => tok.actor?.id === actor.id)?.id;
+            await collectTargeterBonuses(attackerId, flowType, tags, state, collected);
 
-            const hasAny = r.netBonus !== 0 || r.activeBonuses.length > 0 || r.rangeBonuses.length > 0 ||
-                           r.damageBonuses.length > 0 || r.allTargetedBonuses.length > 0 || r.targetedDamageBonuses.length > 0 ||
-                           r.targetModifiers.length > 0;
+            const hasAny = collected.netBonus !== 0 || collected.activeBonuses.length > 0 || collected.rangeBonuses.length > 0 ||
+                           collected.damageBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetedDamageBonuses.length > 0 ||
+                           collected.targetModifiers.length > 0;
             if (!hasAny) {
                 return true;
             }
@@ -295,42 +295,42 @@ function createGenericBonusStep(flowType) {
             if (typeof base.difficulty !== 'number')
                 base.difficulty = 0;
 
-            if (r.netBonus > 0) {
-                base.accuracy += r.netBonus;
-            } else if (r.netBonus < 0) {
-                base.difficulty += Math.abs(r.netBonus);
+            if (collected.netBonus > 0) {
+                base.accuracy += collected.netBonus;
+            } else if (collected.netBonus < 0) {
+                base.difficulty += Math.abs(collected.netBonus);
             }
 
             const appliedMode = new Map();
             const applyTargetedBonuses = (accDiff) => {
                 const count = accDiff.targets?.length || 0;
-                const bBase = accDiff.base;
-                for (const bonus of r.allTargetedBonuses) {
+                const accDiffBase = accDiff.base;
+                for (const bonus of collected.allTargetedBonuses) {
                     const val = Number.parseInt(bonus.val) || 0;
                     if (!val) {
                         continue;
                     }
 
-                    const prev = appliedMode.get(bonus.id);
-                    if (prev === 'base') {
+                    const prevMode = appliedMode.get(bonus.id);
+                    if (prevMode === 'base') {
                         if (bonus.type === 'difficulty') {
-                            bBase.difficulty -= val;
+                            accDiffBase.difficulty -= val;
                         } else {
-                            bBase.accuracy -= val;
+                            accDiffBase.accuracy -= val;
                         }
-                    } else if (prev === 'target') {
-                        accDiff.targets.forEach(t => {
-                            if (bonus.applyTo.includes(accDiffTargetToken(t)?.id)) {
+                    } else if (prevMode === 'target') {
+                        accDiff.targets.forEach(targetEntry => {
+                            if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id)) {
                                 if (bonus.type === 'difficulty') {
-                                    t.difficulty -= val;
+                                    targetEntry.difficulty -= val;
                                 } else {
-                                    t.accuracy -= val;
+                                    targetEntry.accuracy -= val;
                                 }
                             }
                         });
                     }
 
-                    const matching = accDiff.targets?.filter(t => bonus.applyTo.includes(accDiffTargetToken(t)?.id)) ?? [];
+                    const matching = accDiff.targets?.filter(targetEntry => bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id)) ?? [];
                     if (!matching.length) {
                         appliedMode.set(bonus.id, null);
                         continue;
@@ -338,18 +338,18 @@ function createGenericBonusStep(flowType) {
 
                     if (count <= 1) {
                         if (bonus.type === 'difficulty') {
-                            bBase.difficulty += val;
+                            accDiffBase.difficulty += val;
                         } else {
-                            bBase.accuracy += val;
+                            accDiffBase.accuracy += val;
                         }
                         appliedMode.set(bonus.id, 'base');
                     } else {
-                        matching.forEach(t => {
-                            if (!r.disabledByUser.has(`${bonus.id}:${accDiffTargetToken(t)?.id}`)) {
+                        matching.forEach(targetEntry => {
+                            if (!collected.disabledByUser.has(`${bonus.id}:${accDiffTargetToken(targetEntry)?.id}`)) {
                                 if (bonus.type === 'difficulty') {
-                                    t.difficulty += val;
+                                    targetEntry.difficulty += val;
                                 } else {
-                                    t.accuracy += val;
+                                    targetEntry.accuracy += val;
                                 }
                             }
                         });
@@ -358,10 +358,10 @@ function createGenericBonusStep(flowType) {
                 }
             };
 
-            const getEffActive = () => [...r.activeBonuses, ...r.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'base')];
-            const getEffTargeted = () => r.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'target');
+            const getEffActive = () => [...collected.activeBonuses, ...collected.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'base')];
+            const getEffTargeted = () => collected.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'target');
 
-            if (r.allTargetedBonuses.length > 0) {
+            if (collected.allTargetedBonuses.length > 0) {
                 applyTargetedBonuses(state.data.acc_diff);
             }
 
@@ -380,40 +380,40 @@ function createGenericBonusStep(flowType) {
             };
 
             const applyTargetModifiers = (hudData) => {
-                if (r.targetModifiers.length === 0)
+                if (collected.targetModifiers.length === 0)
                     return;
-                for (const t of (hudData.targets || [])) {
-                    for (const mod of r.targetModifiers) {
-                        if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0) {
-                            if (!mod.applyTo.includes(accDiffTargetToken(t)?.id))
+                for (const targetEntry of (hudData.targets || [])) {
+                    for (const modifier of collected.targetModifiers) {
+                        if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0) {
+                            if (!modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
                         }
-                        if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
+                        if (!evaluateApplyToCondition(modifier, targetEntry, state, resolveReactorToken(modifier, state)))
                             continue;
-                        if (mod.subtype === 'invisible' && t.plugins?.invisibility) {
-                            t.plugins.invisibility.data = 1;
-                        } else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility) {
-                            t.plugins.invisibility.data = 0;
-                        } else if (mod.subtype === 'no_cover') {
-                            t.cover = 0;
-                        } else if (mod.subtype === 'soft_cover') {
-                            t.cover = Math.max(t.cover || 0, 1);
-                        } else if (mod.subtype === 'hard_cover') {
-                            t.cover = 2;
+                        if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility) {
+                            targetEntry.plugins.invisibility.data = 1;
+                        } else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility) {
+                            targetEntry.plugins.invisibility.data = 0;
+                        } else if (modifier.subtype === 'no_cover') {
+                            targetEntry.cover = 0;
+                        } else if (modifier.subtype === 'soft_cover') {
+                            targetEntry.cover = Math.max(targetEntry.cover || 0, 1);
+                        } else if (modifier.subtype === 'hard_cover') {
+                            targetEntry.cover = 2;
                         }
                         // Damage card modifiers (damage_hud_data targets)
-                        else if (mod.subtype === 'ap' && t.ap !== undefined) {
-                            t.ap = true;
-                        } else if (mod.subtype === 'half_damage' && t.halfDamage !== undefined) {
-                            t.halfDamage = true;
-                        } else if (mod.subtype === 'paracausal' && t.paracausal !== undefined) {
-                            t.paracausal = true;
-                        } else if (mod.subtype === 'crit' && t.quality !== undefined) {
-                            t.quality = 2;
-                        } else if (mod.subtype === 'hit' && t.quality !== undefined) {
-                            t.quality = Math.max(t.quality, 1);
-                        } else if (mod.subtype === 'miss' && t.quality !== undefined) {
-                            t.quality = 0;
+                        else if (modifier.subtype === 'ap' && targetEntry.ap !== undefined) {
+                            targetEntry.ap = true;
+                        } else if (modifier.subtype === 'half_damage' && targetEntry.halfDamage !== undefined) {
+                            targetEntry.halfDamage = true;
+                        } else if (modifier.subtype === 'paracausal' && targetEntry.paracausal !== undefined) {
+                            targetEntry.paracausal = true;
+                        } else if (modifier.subtype === 'crit' && targetEntry.quality !== undefined) {
+                            targetEntry.quality = 2;
+                        } else if (modifier.subtype === 'hit' && targetEntry.quality !== undefined) {
+                            targetEntry.quality = Math.max(targetEntry.quality, 1);
+                        } else if (modifier.subtype === 'miss' && targetEntry.quality !== undefined) {
+                            targetEntry.quality = 0;
                         }
                     }
                 }
@@ -423,8 +423,8 @@ function createGenericBonusStep(flowType) {
             // For damage flows: inject target_modifier subtypes into state.data
             // so showDamageHUD picks them up when creating damage_hud_data.
             // Also poll for damage_hud_data to hook replaceTargets for new targets.
-            if (flowType === 'damage' && r.targetModifiers.length > 0) {
-                const dmgMods = r.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
+            if (flowType === 'damage' && collected.targetModifiers.length > 0) {
+                const dmgMods = collected.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
                 // Set global state.data flags for global mods, or per-target mods when single target AND target matches
                 const currentTargets = Array.from(game.user?.targets || []);
                 const targetCount = currentTargets.length;
@@ -446,24 +446,24 @@ function createGenericBonusStep(flowType) {
                 }
                 // Hook replaceTargets once damage_hud_data exists + apply per-target mods to initial targets
                 const applyDmgModsToTargets = (targets) => {
-                    for (const t of targets) {
-                        for (const mod of dmgMods) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(accDiffTargetToken(t)?.id))
+                    for (const targetEntry of targets) {
+                        for (const modifier of dmgMods) {
+                            if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0 && !modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
-                            if (!evaluateApplyToCondition(mod, t, state, resolveReactorToken(mod, state)))
+                            if (!evaluateApplyToCondition(modifier, targetEntry, state, resolveReactorToken(modifier, state)))
                                 continue;
-                            if (mod.subtype === 'ap')
-                                t.ap = true;
-                            else if (mod.subtype === 'half_damage')
-                                t.halfDamage = true;
-                            else if (mod.subtype === 'paracausal')
-                                t.paracausal = true;
-                            else if (mod.subtype === 'crit')
-                                t.quality = 2;
-                            else if (mod.subtype === 'hit')
-                                t.quality = Math.max(t.quality, 1);
-                            else if (mod.subtype === 'miss')
-                                t.quality = 0;
+                            if (modifier.subtype === 'ap')
+                                targetEntry.ap = true;
+                            else if (modifier.subtype === 'half_damage')
+                                targetEntry.halfDamage = true;
+                            else if (modifier.subtype === 'paracausal')
+                                targetEntry.paracausal = true;
+                            else if (modifier.subtype === 'crit')
+                                targetEntry.quality = 2;
+                            else if (modifier.subtype === 'hit')
+                                targetEntry.quality = Math.max(targetEntry.quality, 1);
+                            else if (modifier.subtype === 'miss')
+                                targetEntry.quality = 0;
                         }
                     }
                 };
@@ -487,12 +487,12 @@ function createGenericBonusStep(flowType) {
                         return;
                     const $allCards = $form.find('.damage-hud-target-card');
                     const hudTargets = state.data.damage_hud_data?.targets || [];
-                    for (const mod of dmgMods) {
-                        if (!Array.isArray(mod.applyTo) || mod.applyTo.length === 0)
+                    for (const modifier of dmgMods) {
+                        if (!Array.isArray(modifier.applyTo) || modifier.applyTo.length === 0)
                             continue;
                         $allCards.each(function (cardIndex) {
                             const hudTarget = hudTargets[cardIndex];
-                            if (!hudTarget || !mod.applyTo.includes(accDiffTargetToken(hudTarget)?.id))
+                            if (!hudTarget || !modifier.applyTo.includes(accDiffTargetToken(hudTarget)?.id))
                                 return;
                             const $card = $(this);
                             // Find and click the matching checkbox in the target card.
@@ -501,20 +501,20 @@ function createGenericBonusStep(flowType) {
                             // The checkboxes in the card are labeled with icon/text
                             // Find by sibling icon/text
                             $card.find('label.container').each(function () {
-                                const text = $(this).text().trim().toLowerCase();
-                                const hasIcon = $(this).find('i, img').attr('class') || '';
-                                let match = false;
-                                if (mod.subtype === 'half_damage' && (text.includes('½') || text.includes('half') || hasIcon.includes('half')))
-                                    match = true;
-                                if (mod.subtype === 'ap' && (text.includes('ap') || text.includes('armor') || hasIcon.includes('armor')))
-                                    match = true;
-                                if (mod.subtype === 'paracausal' && (text.includes('paracausal') || text.includes('reduce') || hasIcon.includes('paracausal')))
-                                    match = true;
-                                if (match) {
-                                    const cb = $(this).find('input[type="checkbox"]')[0];
-                                    if (cb && !cb.checked) {
-                                        cb.checked = true;
-                                        cb.dispatchEvent(new Event('change', { bubbles: true }));
+                                const labelText = $(this).text().trim().toLowerCase();
+                                const iconClass = $(this).find('i, img').attr('class') || '';
+                                let matched = false;
+                                if (modifier.subtype === 'half_damage' && (labelText.includes('½') || labelText.includes('half') || iconClass.includes('half')))
+                                    matched = true;
+                                if (modifier.subtype === 'ap' && (labelText.includes('ap') || labelText.includes('armor') || iconClass.includes('armor')))
+                                    matched = true;
+                                if (modifier.subtype === 'paracausal' && (labelText.includes('paracausal') || labelText.includes('reduce') || iconClass.includes('paracausal')))
+                                    matched = true;
+                                if (matched) {
+                                    const checkbox = $(this).find('input[type="checkbox"]')[0];
+                                    if (checkbox && !checkbox.checked) {
+                                        checkbox.checked = true;
+                                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                                     }
                                 }
                             });
@@ -535,9 +535,9 @@ function createGenericBonusStep(flowType) {
             let reinjectCallback = null;
             if (typeof state.data.acc_diff.replaceTargets === 'function') {
                 const origReplace = state.data.acc_diff.replaceTargets.bind(state.data.acc_diff);
-                state.data.acc_diff.replaceTargets = function(ts) {
-                    origReplace(ts);
-                    if (r.allTargetedBonuses.length > 0) {
+                state.data.acc_diff.replaceTargets = function(newTargets) {
+                    origReplace(newTargets);
+                    if (collected.allTargetedBonuses.length > 0) {
                         applyTargetedBonuses(this);
                     }
                     applyTargetModifiers(this);
@@ -548,13 +548,13 @@ function createGenericBonusStep(flowType) {
                 };
             }
 
-            if (r.activeBonuses.length > 0 || r.allTargetedBonuses.length > 0 || r.targetModifiers.length > 0) {
-                reinjectCallback = showBonusNotification(getEffActive, state, getEffTargeted, r.disabledByUser);
+            if (collected.activeBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetModifiers.length > 0) {
+                reinjectCallback = showBonusNotification(getEffActive, state, getEffTargeted, collected.disabledByUser);
             }
 
             // Inject target modifier toggles into the attack HUD
             const attackModSubtypes = new Set(['invisible', 'no_invisible', 'no_cover', 'soft_cover', 'hard_cover']);
-            const attackMods = r.targetModifiers.filter(m => attackModSubtypes.has(m.subtype));
+            const attackMods = collected.targetModifiers.filter(m => attackModSubtypes.has(m.subtype));
             if (attackMods.length > 0 && flowType !== 'damage') {
                 const modLabels = { invisible: 'Invisible (*)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover (+1)', hard_cover: 'Hard Cover (+2)' };
                 const modEnabled = new Map(attackMods.map(m => [m.id || m.subtype, true]));
@@ -592,25 +592,25 @@ function createGenericBonusStep(flowType) {
                     const perTargetMods = multiTarget ? attackMods.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
 
                     // Build toggle change handler
-                    const onToggle = (mod, on) => {
-                        const mKey = mod.id || mod.subtype;
-                        modEnabled.set(mKey, on);
-                        const reactorToken = resolveReactorToken(mod, state);
-                        for (const t of (state.data.acc_diff?.targets || [])) {
-                            if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(accDiffTargetToken(t)?.id))
+                    const onToggle = (modifier, isOn) => {
+                        const modKey = modifier.id || modifier.subtype;
+                        modEnabled.set(modKey, isOn);
+                        const reactorToken = resolveReactorToken(modifier, state);
+                        for (const targetEntry of (state.data.acc_diff?.targets || [])) {
+                            if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0 && !modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
-                            if (!evaluateApplyToCondition(mod, t, state, reactorToken))
+                            if (!evaluateApplyToCondition(modifier, targetEntry, state, reactorToken))
                                 continue;
-                            if (on) {
-                                applyOneModifier(t, mod);
+                            if (isOn) {
+                                applyOneModifier(targetEntry, modifier);
                             } else {
-                                const oKey = `${accDiffTargetToken(t)?.id}::${mod.subtype}`;
-                                if (mod.subtype === 'invisible' && t.plugins?.invisibility)
-                                    t.plugins.invisibility.data = 0;
-                                else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
-                                    t.plugins.invisibility.data = originals.get(oKey) ?? 0;
-                                else if (['no_cover', 'soft_cover', 'hard_cover'].includes(mod.subtype))
-                                    t.cover = originals.get(oKey) ?? 0;
+                                const originalKey = `${accDiffTargetToken(targetEntry)?.id}::${modifier.subtype}`;
+                                if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility)
+                                    targetEntry.plugins.invisibility.data = 0;
+                                else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility)
+                                    targetEntry.plugins.invisibility.data = originals.get(originalKey) ?? 0;
+                                else if (['no_cover', 'soft_cover', 'hard_cover'].includes(modifier.subtype))
+                                    targetEntry.cover = originals.get(originalKey) ?? 0;
                             }
                         }
                     };
@@ -681,9 +681,9 @@ function createGenericBonusStep(flowType) {
             }
 
             if (flowType === 'damage') {
-                const dmgModifiers = r.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
-                if (r.damageBonuses.length > 0 || r.targetedDamageBonuses.length > 0 || dmgModifiers.length > 0) {
-                    showDamageBonusNotification(r.damageBonuses, state, r.targetedDamageBonuses, dmgModifiers);
+                const dmgModifiers = collected.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
+                if (collected.damageBonuses.length > 0 || collected.targetedDamageBonuses.length > 0 || dmgModifiers.length > 0) {
+                    showDamageBonusNotification(collected.damageBonuses, state, collected.targetedDamageBonuses, dmgModifiers);
                 }
             }
 
@@ -717,7 +717,7 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
         } else if (bonus.type === 'damage' && flowType === 'damage') {
             const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
             if (hasTarget) {
-                if (targets.some(t => bonus.applyTo.includes(t.id))) {
+                if (targets.some(target => bonus.applyTo.includes(target.id))) {
                     results.targetedDamageBonuses.push(bonus);
                 }
             } else {
@@ -726,8 +726,8 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
         } else if (bonus.type !== 'damage') {
             const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
             if (hasTarget) {
-                const b = { ...bonus, id: bonus.id || foundry.utils.randomID() };
-                results.allTargetedBonuses.push(b);
+                const injectedBonus = { ...bonus, id: bonus.id || foundry.utils.randomID() };
+                results.allTargetedBonuses.push(injectedBonus);
             } else {
                 let val = Number.parseInt(bonus.val) || 0;
                 if (bonus.type === 'difficulty') {
@@ -808,33 +808,33 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
             continue;
         }
         const sourceActor = token.actor;
-        const isTargeted = targets.some(t => t.id === token.id);
-        const filter = async (b) => {
-            return b.applyToTargetter && (!b.applyTo?.length || b.applyTo.includes(attackerTokenId)) &&
-                                   await isBonusApplicable(b, tags, state) && b.type !== 'stat';
+        const isTargeted = targets.some(target => target.id === token.id);
+        const isApplicableTargeterBonus = async (bonus) => {
+            return bonus.applyToTargetter && (!bonus.applyTo?.length || bonus.applyTo.includes(attackerTokenId)) &&
+                                   await isBonusApplicable(bonus, tags, state) && bonus.type !== 'stat';
         };
-        const route = (b) => {
-            const injected = { ...b, applyTo: [token.id], id: b.id || foundry.utils.randomID() };
-            if (b.type === 'damage') {
+        const routeToResults = (bonus) => {
+            const injected = { ...bonus, applyTo: [token.id], id: bonus.id || foundry.utils.randomID() };
+            if (bonus.type === 'damage') {
                 if (flowType === 'damage' && isTargeted) {
                     results.targetedDamageBonuses.push(injected);
                 }
-            } else if (b.type === 'tag') {
-                applyTagBonus(state, b);
+            } else if (bonus.type === 'tag') {
+                applyTagBonus(state, bonus);
                 results.activeBonuses.push(injected);
             } else {
                 results.allTargetedBonuses.push(injected);
             }
         };
 
-        for (const b of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses"))) {
-            if (await filter(b)) {
-                route(b);
+        for (const bonus of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses"))) {
+            if (await isApplicableTargeterBonus(bonus)) {
+                routeToResults(bonus);
             }
         }
-        for (const b of (sourceActor.getFlag("lancer-automations", "constant_bonuses") || [])) {
-            if (await filter(b)) {
-                route(b);
+        for (const bonus of (sourceActor.getFlag("lancer-automations", "constant_bonuses") || [])) {
+            if (await isApplicableTargeterBonus(bonus)) {
+                routeToResults(bonus);
             }
         }
         /*
@@ -1084,11 +1084,11 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
     const bindEvents = ($container) => {
         $container.find('.csm-bonus-checkbox').on('change', function() {
-            const index = Number.parseInt($(this).data('index'));
+            const bonusIndex = Number.parseInt($(this).data('index'));
             const bonusId = $(this).closest('label').data('bonus-id');
             const isChecked = $(this).is(':checked');
             const currentStates = getCurrentBonusStates();
-            const bonus = currentStates[index];
+            const bonus = currentStates[bonusIndex];
             if (!bonus)
                 return;
             const wasEnabled = enabledById.has(bonusId) ? enabledById.get(bonusId) : true;
@@ -1426,9 +1426,9 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         if (bonusState.enabled) {
             if ($existingRows.length === 0) {
                 const damages = bonusState.damage || [];
-                for (const d of damages) {
+                for (const damageEntry of damages) {
                     $addBtn.click();
-                    await new Promise(r => setTimeout(r, 100));
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     const $valInputs = $bonusSection.find('input[type="text"][placeholder="0"], input[type="number"]');
                     const $lastValInput = $valInputs.last();
 
@@ -1439,15 +1439,15 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                         $rowContainer.addClass('csm-hidden-bonus-row');
                         $rowContainer.css('display', 'none');
 
-                        $lastValInput.val(d.val);
+                        $lastValInput.val(damageEntry.val);
                         $lastValInput[0].dispatchEvent(new Event('input', { bubbles: true }));
                         $lastValInput[0].dispatchEvent(new Event('change', { bubbles: true }));
 
                         const $select = $rowContainer.find('select');
                         if ($select.length > 0) {
                             $select.find('option').each(function() {
-                                if ($(this).text().toLowerCase() === d.type.toLowerCase() ||
-                                         $(this).val().toLowerCase() === d.type.toLowerCase()) {
+                                if ($(this).text().toLowerCase() === damageEntry.type.toLowerCase() ||
+                                         $(this).val().toLowerCase() === damageEntry.type.toLowerCase()) {
                                     $select.val($(this).val());
                                     return false;
                                 }
