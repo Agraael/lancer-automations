@@ -47,7 +47,7 @@ Two detection modes, auto-added to tokens on creation (`lancerVisionAutoAdd`):
 - **Sensors** - blue scanlines, ranged to the actor's `sensor_range`, a precise read of who's on sensors.
 - **Battlefield Awareness** - a fuzzy yellow silhouette at infinite range, for "you know something's there."
 
-When both would see a target, **Sensors win**. Each can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or made to read its range from the token's detection-mode entry instead of the actor (`...UseModeRange`). A per-token **awareness mode** (Token Config) switches a token's silhouette between default, a simple rotating outline, plain visible, or not-detected; any non-default mode also turns Sensors off for that token. **`basicSightTo999`** gives auto-created tokens full basic sight, and a **Refresh Tokens** button re-applies the modes across all scenes and actors (run it after enabling auto-add, or if the highlights go missing).
+When both would see a target, **Sensors win**. Each can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or made to read its range from the token's detection-mode entry instead of the actor (`...UseModeRange`). A per-token **Detection Visual** dropdown (Token Config) sets how a token shows: **Default** (silhouette + scan), **Simple Object** (a rotating outline), **Visible** (no overlay), or **Ignore** (not detected); any non-default choice also turns Sensors off for that token. **`basicSightTo999`** gives auto-created tokens full basic sight, and a **Refresh Tokens** button re-applies the modes across all scenes and actors (run it after enabling auto-add, or if the highlights go missing).
 
 <br clear="right"/>
 

@@ -43,7 +43,7 @@ Elevation also feeds combat range checks (overwatch, engagement, range) if you e
 
 During a drag, **Q** and **E** bump the token's elevation up and down by one grid unit per press (the offset resets when the drag starts).
 
-With Terrain Height Tools, the token also **auto-elevates** to sit on the terrain under it, as you drag, on drop, and when you first place it. Your Q/E offset stacks on top. You can turn this off globally with **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`), turn it off just for the measure ruler with **Disable Auto-elevation on Measure**, or opt a single token out with a flag.
+With Terrain Height Tools, the token also **auto-elevates** to sit on the terrain under it, as you drag, on drop, and when you first place it. Your Q/E offset stacks on top. You can turn this off globally with **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`), turn it off just for the measure ruler with **Disable Auto-elevation on Measure**, or opt a single token out with its **`disableAutoTerrainElevation`** flag (or Terrain Height Tools' own `ignoreAutoElevation`).
 
 **Auto-insert Climb Waypoints** (`enableClimbWaypoints`) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb.
 

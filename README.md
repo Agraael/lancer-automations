@@ -137,7 +137,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## Settings
 
-<img src="doc/img/settings-access.png" width="65%"/>
+<img src="doc/img/settings-access.png" width="85%"/>
 
 Almost everything in the module is configured from one place: **Game Settings > Configure Settings > Lancer Automations**. This is the hub the rest of the module hangs off of. Every feature has its toggles here, and a handful of buttons open dedicated tools: the Activation Manager, export and import, the guided tour, the news popup, and a full reset.
 
@@ -148,7 +148,7 @@ There are a lot of settings, so they aren't all listed here. Each feature guide 
 
 ### Export & Import
 
-<img align="right" src="doc/img/ae-import-review.png" width="50%"/>
+<img align="right" src="doc/img/ae-import-review.png" width="70%"/>
 
 Export your whole setup (automations, startup scripts, settings, and keybindings) to a JSON file for a backup or to share a build, then import it back through a review dialog that lets you pick exactly what comes in. A full reset is here too, for starting clean.
 
@@ -162,7 +162,7 @@ Short pitches below. Each links to its full guide (being written).
 
 ### Automation Engine
 
-<img align="right" src="doc/img/feature-automation-engine.png" width="43%"/>
+<img align="right" src="doc/img/feature-automation-engine.png" width="53%"/>
 
 The core feature of Lancer Automations, and the hardest to grasp. The engine is a powerful framework for automating almost any item, effect, or event tied to Lancer gameplay. Many of Lancer's base actions, plus some items and simple NPC automations, are handled out of the box. I also ship my personal set of activations, but that's separate: just my own games' stuff shared as-is, not part of the core module, there for you to use, inspect, or modify to dip your toes into the engine.
 
@@ -182,7 +182,7 @@ The Effect Manager can be driven from automation code through the API, but it's 
 
 ### Token Action HUD
 
-<img align="right" src="doc/img/feature-tah.png" width="53%"/>
+<img align="right" src="doc/img/feature-tah.png" width="60%"/>
 
 The TAH, or Token Action HUD, is a custom-built action menu that gives you everything you need and more, attached right to your token: your items, skills, stats, scans, history, favorites, a search tool, range preview, and more.
 
@@ -234,7 +234,7 @@ Interactive tools are meant to be used with the automation engine, and elsewhere
 
 <img align="right" src="doc/img/feature-attack-targeting.png" width="53%"/>
 
-Pick your target or drop your blast, cone, or line straight from the attack HUD, with elevation- and terrain-aware areas, multi-targeting, and templates that resolve into normal Foundry targets.
+An upgrade to the Lancer system's targeting flow: choose your target or place a blast, cone, or line from the attack HUD, with 3D targeting, elevation and terrain blocking through Terrain Height Tools, adjustable line angles, and multi-targeting.
 
 → Full guide: [`doc/feature/ATTACK_TARGETING.md`](doc/feature/ATTACK_TARGETING.md)
 
@@ -274,7 +274,7 @@ Lancer doesn't really have a concept of fog of war or vision, but personally, fo
 
 <img align="right" src="doc/img/feature-wreck.png" width="53%"/>
 
-When a unit is destroyed, Lancer Automations doesn't just swap its art: it spawns a dedicated wreck actor on the field. Wrecks come in flavors for mechs, humans, monstrosities, and biologicals, each with their own art, explosion FX, and sound. A wreck can optionally drop difficult terrain at the death site (with Terrain Height Tools), and any wreck can be resurrected straight from the HUD, which deletes the wreck and brings the original unit back. Assets resolve automatically from the wreck folder by category and size, and you can override art, FX, sound, and scale per token.
+When a unit is destroyed, the module drops a dedicated wreck on the field, with per-category art, explosion, and sound, optional difficult terrain through Terrain Height Tools, and a resurrect button to bring the unit back. Art, FX, sound, and scale can be overridden per token.
 
 → Full guide: [`doc/feature/WRECK.md`](doc/feature/WRECK.md)
 

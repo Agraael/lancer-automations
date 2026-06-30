@@ -368,10 +368,13 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
 
         // caught -> targets (setTarget broadcasts); shape stays. Shift stacks and keeps open.
         const place = (r, keepOpen) => {
+            // Mark coverage before targeting so caught tokens never momentarily draw a single shape.
+            setAreaCoveredCells([..._persistCellKeys, ...r.affected]);
             for (const t of r.caught) {
                 const already = Array.from(game.user.targets ?? []).some(x => x.id === t.id);
-                if (!already)
-                    t.setTarget(true, { releaseOthers: false });
+                if (already)
+                    continue; // keep manual/pre-existing targets out of the picker's release set
+                t.setTarget(true, { releaseOthers: false });
                 _persistTargetIds.add(t.id);
             }
             addPersistShape(r);
