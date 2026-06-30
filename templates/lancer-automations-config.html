@@ -6,7 +6,7 @@
 
     <nav class="sheet-tabs tabs la-config-tabs" data-group="primary" style="flex-wrap: wrap; position: relative; padding-right: 32px;">
         {{#each tabs}}
-        <a class="item {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
+        <a class="item {{#if this.active}}active{{/if}} {{#if this.disabled}}la-tab-disabled{{/if}}" data-tab="{{this.id}}" data-group="primary" {{#if this.disabled}}title="{{this.disabledReason}}" aria-disabled="true"{{/if}}>
             <i class="{{this.icon}}"></i> {{this.label}}
         </a>
         {{/each}}

@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, Hooks */
+/* global canvas, PIXI, game, ui, Hooks, document */
 
 import {
     isHexGrid, offsetToCube, cubeDistance,
@@ -89,6 +89,45 @@ export function createCursorPreview() {
         dispose() {
             canvas.app.ticker.remove(cursorPulse);
             destroyGraphics(cursorPreview);
+        },
+    };
+}
+
+// A small green "+" near the cursor while Shift is held, signalling multi add/select mode.
+// Call move(shiftHeld, x, y) from the picker's pointermove; it also tracks Shift keydown/keyup.
+export function createMultiPlusIndicator() {
+    const label = new PIXI.Text('+', {
+        fontFamily: 'Arial', fontSize: Math.max(18, canvas.grid.size * 0.32),
+        fill: 0x33ff66, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+    });
+    label.anchor.set(0.5);
+    label.visible = false;
+    canvas.stage.addChild(label);
+    let last = null;
+    const place = (shiftHeld) => {
+        if (shiftHeld && last) {
+            label.x = last.x + canvas.grid.size * 0.4;
+            label.y = last.y - canvas.grid.size * 0.4;
+            label.visible = true;
+        } else {
+            label.visible = false;
+        }
+    };
+    const onKey = (e) => {
+        if (e.key === 'Shift')
+            place(e.type === 'keydown');
+    };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keyup', onKey, true);
+    return {
+        move(shiftHeld, x, y) {
+            last = { x, y };
+            place(shiftHeld);
+        },
+        dispose() {
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('keyup', onKey, true);
+            destroyGraphics(label);
         },
     };
 }

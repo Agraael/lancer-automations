@@ -632,6 +632,16 @@ h2.la-collapsible:hover {
     margin-right: 3px;
 }
 
+.la-config-tabs .item.la-tab-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+}
+.la-config-tabs .item.la-tab-disabled:hover {
+    text-shadow: none;
+    color: inherit;
+}
+
 .la-config-content {
     flex: 1 1 auto;
     overflow-y: auto;

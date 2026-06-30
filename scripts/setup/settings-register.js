@@ -155,6 +155,15 @@ export function registerSettings() {
         default: true
     });
 
+    game.settings.register('lancer-automations', 'autoStartTargetPicking', {
+        name: 'Auto-Start Target Picking',
+        hint: 'Open the target picker automatically when an attack starts with no target set.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
         name: 'Treat Generic Prints as Activations',
         hint: 'Items printed via the generic method also trigger onActivation events.',

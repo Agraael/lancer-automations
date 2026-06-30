@@ -7,7 +7,7 @@ import {
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 import {
     pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview,
-    addGraphicsBelowTokens, destroyGraphics, _paintCells,
+    addGraphicsBelowTokens, destroyGraphics, _paintCells, createMultiPlusIndicator,
 } from "../canvas-helpers.js";
 import { computeArea, rotationStepsFor } from "../area-geometry.js";
 import { playUiSound, playTargetingMove } from "../../tah/sound.js";
@@ -106,6 +106,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         let pendingTilt = 0; // line only: end elevation delta (W/S)
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
+        const plus = createMultiPlusIndicator();
         const selectHighlight = new PIXI.Graphics();
         canvas.stage.addChild(selectHighlight); // above tokens
         const elevLabel = new PIXI.Text('', {
@@ -141,6 +142,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         const doCleanup = () => {
             _activeCancel = null;
             disposeCursorPreview();
+            plus.dispose();
             destroyGraphics(selectHighlight);
             destroyGraphics(elevLabel);
             clearCellLabels();
@@ -321,6 +323,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             const { x: tx, y: ty } = pointerToWorld(event);
             lastCursor = { x: tx, y: ty };
             drawAt(tx, ty);
+            plus.move(!!event?.data?.originalEvent?.shiftKey, tx, ty);
             const o = pixelToOffset(tx, ty);
             playTargetingMove(o.col, o.row);
         };

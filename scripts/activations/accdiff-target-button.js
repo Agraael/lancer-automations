@@ -178,6 +178,7 @@ function injectButton(state, $form) {
             $row.append($b);
         }
         injectToggleRow($form);
+        maybeAutoStart($form);
         return;
     }
 
@@ -200,6 +201,22 @@ function injectButton(state, $form) {
         }
     });
     $row.append($btn);
+    maybeAutoStart($form);
+}
+
+// Auto-launch the first targeting button when the HUD opens with no target set (opt-in setting).
+function maybeAutoStart($form) {
+    try {
+        if (!game.settings.get('lancer-automations', 'autoStartTargetPicking'))
+            return;
+    } catch { return; }
+    if ((game.user.targets?.size ?? 0) > 0)
+        return;
+    if (isAreaPickerActive() || isSingleTargetPickerActive())
+        return;
+    const $btn = $form.find('.la-accdiff-target-button').first();
+    if ($btn.length)
+        setTimeout(() => $btn.trigger('click'), 50);
 }
 
 export function registerAccDiffTargetButton() {

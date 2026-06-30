@@ -178,23 +178,24 @@ Hooks.once('ready', () => {
     Hooks.on('updateToken', (doc) => restore(doc.object));
 });
 
-// Sequencer's IsometricPerspective plugin applies iso skew via `rotation` without
-// checking `isIsometricActive`, so .stretchTo() effects get iso-skewed even on non-iso scenes.
-// Gate it on the scene flag.
-Hooks.once('ready', () => {
+// Sequencer's iso plugin re-skews isometricContainer every tick. Clamp it back per-frame.
+Hooks.on('createSequencerEffect', (effect) => {
     if (!game.modules.get(ISO_MODULE_ID)?.active)
         return;
-    if (!game.modules.get('sequencer')?.active)
+    if (_isoActive(canvas.scene))
         return;
-    const plugins = /** @type {any} */ (globalThis.Sequencer)?.PluginsManager?.plugins ?? [];
-    const plugin = plugins.find(p => p?.constructor?.name === 'IsometricPerspective');
-    if (!plugin || plugin._laGated)
-        return;
-    const origRotation = plugin.rotation.bind(plugin);
-    plugin.rotation = function (args) {
-        if (!plugin.isIsometricActive(args?.effect))
+    const ticker = () => {
+        const ic = effect?.isometricContainer;
+        if (!ic)
             return;
-        return origRotation(args);
+        if (ic.skew.x !== 0 || ic.skew.y !== 0)
+            ic.skew.set(0, 0);
+        if (ic.scale.x !== 1 || ic.scale.y !== 1)
+            ic.scale.set(1, 1);
     };
-    plugin._laGated = true;
+    PIXI.Ticker.shared.add(ticker);
+    Hooks.once('endedSequencerEffect', (e) => {
+        if (e === effect)
+            PIXI.Ticker.shared.remove(ticker);
+    });
 });

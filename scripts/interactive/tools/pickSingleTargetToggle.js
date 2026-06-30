@@ -6,7 +6,7 @@ import {
 } from "../../combat/grid-helpers.js";
 
 import {
-    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview,
+    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 
@@ -20,9 +20,10 @@ export function cancelSingleTargetPicker() {
         _activeCancel();
 }
 
-// Placed shapes, stamped per click and cleared on a fresh pick. Not tied to targets.
-let _persistG = null;
-let _persistPulse = null;  // ticker breathing the alpha
+// One placed shape per targeted token (mirrors the target state); cleared on a fresh pick.
+let _persistG = null;                 // Container of per-token Graphics
+const _persistShapes = new Map();     // tokenId -> Graphics
+let _persistPulse = null;             // ticker breathing the alpha
 export function clearSingleTargetShape() {
     if (_persistPulse) {
         canvas.app.ticker.remove(_persistPulse);
@@ -31,16 +32,17 @@ export function clearSingleTargetShape() {
     if (_persistG) {
         if (_persistG.parent)
             _persistG.parent.removeChild(_persistG);
-        _persistG.destroy();
+        _persistG.destroy({ children: true });
         _persistG = null;
     }
+    _persistShapes.clear();
 }
-// chooseToken's yellow, stamped on the clicked token.
+// chooseToken's yellow, added when a token becomes targeted.
 function addSinglePersistShape(token) {
-    if (!token)
+    if (!token || _persistShapes.has(token.id))
         return;
     if (!_persistG) {
-        _persistG = new PIXI.Graphics();
+        _persistG = new PIXI.Container();
         canvas.stage.addChild(_persistG); // above tokens
         _persistPulse = () => {
             // detach if torn down (scene change), don't write to a dead object
@@ -48,21 +50,35 @@ function addSinglePersistShape(token) {
                 canvas.app.ticker.remove(_persistPulse);
                 _persistPulse = null;
                 _persistG = null;
+                _persistShapes.clear();
                 return;
             }
             _persistG.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
         };
         canvas.app.ticker.add(_persistPulse);
     }
-    _persistG.lineStyle(4, 0xffd84a, 0.85);
-    _persistG.beginFill(0xffd84a, 0.22);
+    const g = new PIXI.Graphics();
+    g.lineStyle(4, 0xffd84a, 0.85);
+    g.beginFill(0xffd84a, 0.22);
     if (isHexGrid()) {
         for (const o of getOccupiedOffsets(token))
-            drawHexAt(_persistG, o.col, o.row);
+            drawHexAt(g, o.col, o.row);
     } else {
-        _persistG.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
+        g.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
     }
-    _persistG.endFill();
+    g.endFill();
+    _persistG.addChild(g);
+    _persistShapes.set(token.id, g);
+}
+// Remove a token's shape when it is untargeted.
+function removeSinglePersistShape(tokenId) {
+    const g = _persistShapes.get(tokenId);
+    if (!g)
+        return;
+    if (g.parent)
+        g.parent.removeChild(g);
+    g.destroy();
+    _persistShapes.delete(tokenId);
 }
 
 /** Cardless single-target toggle picker. Click toggles game.user.targets and exits.
@@ -79,6 +95,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         });
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
+        const plus = createMultiPlusIndicator();
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
@@ -101,6 +118,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         const doCleanup = () => {
             _activeCancel = null;
             disposeCursorPreview();
+            plus.dispose();
             if (safeClick)
                 canvas.stage.off('click', safeClick);
             if (safeAbort)
@@ -118,7 +136,10 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             const already = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
             token.setTarget(!already, { releaseOthers: false });
             playUiSound('targetingConfirm');
-            addSinglePersistShape(token);
+            if (already)
+                removeSinglePersistShape(token.id); // untargeted: drop its shape
+            else
+                addSinglePersistShape(token);
             if (keepOpen)
                 return; // Shift: keep targeting
             doCleanup();
@@ -162,6 +183,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         const moveHandler = (event) => {
             const { x: tx, y: ty } = pointerToWorld(event);
             drawCursorHighlight(tx, ty);
+            plus.move(!!event?.data?.originalEvent?.shiftKey, tx, ty);
             const o = pixelToOffset(tx, ty);
             playTargetingMove(o.col, o.row);
         };

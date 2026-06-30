@@ -32,20 +32,31 @@ const ACTIVATIONS_FIELDS = [
 
 const COMBAT_MOVEMENT_FIELDS = [
     { type: 'section', label: 'Combat Flows' },
+
+    { type: 'section', label: 'Targeting', subsection: true },
+    { key: 'enableAttackTargeting', type: 'boolean' },
+    { key: 'autoStartTargetPicking', type: 'boolean' },
+    { key: 'statRollTargeting', type: 'boolean' },
+    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
+
+    { type: 'section', label: 'Attacks', subsection: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
-    { key: 'statRollTargeting', type: 'boolean' },
-    { key: 'enableAttackTargeting', type: 'boolean' },
-    { key: 'enablePathHexCalculation', type: 'boolean' },
+
+    { type: 'section', label: 'Movement & Boost', subsection: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
-    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
     { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
+    { key: 'enablePathHexCalculation', type: 'boolean' },
+    { key: 'count3DDistance', type: 'boolean' },
+
+    { type: 'section', label: 'Structure & Damage', subsection: true },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
+
+    { type: 'section', label: 'Turns & Actions', subsection: true },
     { key: 'enablePerRoundTurnTags', type: 'boolean' },
-    { key: 'count3DDistance', type: 'boolean' },
     { type: 'section', label: 'Lancer Automations Ruler', collapsible: true, collapsed: true },
     { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Enable Lancer Automations Ruler', hint: 'Custom token/canvas ruler with Lancer speed tiers, free/debug movement modes, and THT elevation readout. Reload after toggling.' },
     { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' },
@@ -626,7 +637,15 @@ const TAB_DEFS = [
     { id: 'tah', label: 'Token Action HUD', icon: 'fas fa-th-list', fields: TAH_FIELDS },
     { id: 'sounds', label: 'Sounds', icon: 'fas fa-volume-high', fields: SOUNDS_FIELDS },
     { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
-    { id: 'iso', label: 'Isometric', icon: 'fas fa-cube', fields: ISO_FIELDS, condition: () => !!game.modules.get('isometric-perspective')?.active || !!game.modules.get('grape_juice-isometrics')?.active },
+    {
+        id: 'iso', label: 'Isometric', icon: 'fas fa-cube', fields: ISO_FIELDS,
+        disabledReason: () => {
+            const iso1 = !!game.modules.get('isometric-perspective')?.active;
+            const iso2 = !!game.modules.get('grape_juice-isometrics')?.active;
+            if (iso1 || iso2) return null;
+            return 'Install and enable "Isometric Perspective" or "Grape Juice Isometrics" to use these settings.';
+        },
+    },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
@@ -635,7 +654,10 @@ const TAB_DEFS = [
 ];
 
 function _visibleTabs() {
-    return TAB_DEFS.filter(t => !t.condition || t.condition());
+    return TAB_DEFS.filter(t => !t.condition || t.condition()).map(t => {
+        const reason = t.disabledReason?.() ?? null;
+        return { ...t, _disabled: !!reason, _disabledReason: reason };
+    });
 }
 
 export function getExportableModuleBooleanFields() {
@@ -1149,11 +1171,15 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 
     getData() {
-        const tabs = _visibleTabs().map((tab, idx) => ({
+        const visible = _visibleTabs();
+        const firstEnabledIdx = visible.findIndex(t => !t._disabled);
+        const tabs = visible.map((tab, idx) => ({
             id: tab.id,
             label: tab.label,
             icon: tab.icon,
-            active: idx === 0,
+            active: idx === Math.max(firstEnabledIdx, 0),
+            disabled: tab._disabled,
+            disabledReason: tab._disabledReason,
             items: tab.fields.map(_buildItem).filter(Boolean),
         }));
         return { tabs };
@@ -1167,6 +1193,10 @@ export class LancerAutomationsConfig extends FormApplication {
             if (scroller)
                 requestAnimationFrame(() => { scroller.scrollTop = _laConfigState.scroll; });
         }
+        $html.find('.la-config-tabs .item.la-tab-disabled').on('click', (/** @type {any} */ ev) => {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+        });
         const captureKey = (onDone) => {
             const km = /** @type {any} */ (globalThis).KeyboardManager;
             const protectedKeys = new Set(km?.PROTECTED_KEYS ?? ['F5', 'F11', 'F12', 'PrintScreen', 'ScrollLock', 'NumLock', 'CapsLock', 'Pause', 'Break', 'Insert', 'Home', 'PageUp', 'PageDown', 'End', 'ContextMenu']);
