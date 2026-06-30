@@ -17,7 +17,7 @@ When it fires, the `onMove` trigger data carries `moveInfo.isBoost` (this move c
 
 ## Movement cap and the offer cards
 
-<img align="right" src="../img/mv-boost-offer.png" width="30%"/>
+<img align="right" src="../img/mv-boost-offer.png" width="45%"/>
 
 **`enableMovementCapDetection`** sets a movement cap from the token's speed when combat starts and cancels a drag that would exceed it. With **`enableBoostOffer`** also on, instead of cancelling it offers a card:
 

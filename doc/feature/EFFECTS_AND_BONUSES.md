@@ -25,7 +25,7 @@ Everything here can also be driven from automation code; signatures are in [API_
 
 ## Standard tab
 
-<img align="right" src="../img/em-standard.png" width="40%"/>
+<img align="right" src="../img/em-standard.png" width="55%"/>
 
 Pick a status from the searchable grid and apply it with:
 
@@ -40,7 +40,7 @@ Hover a status for its description. Save common setups as **presets** from the b
 
 ## Custom tab
 
-<img align="right" src="../img/em-custom.png" width="40%"/>
+<img align="right" src="../img/em-custom.png" width="55%"/>
 
 This tab only appears when the **Temporary Custom Statuses** module is active; it's the front-end for that module's custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes). A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
 
@@ -61,7 +61,7 @@ For anything the filters can't express, write a short **evaluate function** that
 
 ## Bonuses
 
-<img align="right" src="../img/em-bonus-tab.png" width="40%"/>
+<img align="right" src="../img/em-bonus-tab.png" width="55%"/>
 
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
@@ -75,7 +75,7 @@ Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](.
 
 ### Bonus types
 
-<img align="right" src="../img/em-bonus-roll.png" width="38%"/>
+<img align="right" src="../img/em-bonus-roll.png" width="53%"/>
 
 | Type | What it does |
 |------|--------------|
@@ -86,7 +86,7 @@ Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](.
 | **Range** | Change a weapon's ranges (Range, Threat, Blast, Burst, Cone, Line). |
 | **Immunity** | Immunity to a damage type, effect, crit, terrain, or engagement. Prompts a choice card on incoming damage (below). |
 | **Target Modifier** | Tactical changes to the target: cover, invisibility, armor-piercing, half-damage, paracausal, or force a hit / crit / miss. |
-| **Reroll** | Reroll a roll type (attack, damage, skill, structure, overheat). Modes: retry, highest, lowest, or choose. |
+| **Reroll** | Reroll a roll type (attack, tech attack, damage, skill, structure, stress). Modes: retry, highest, lowest, or choose. |
 
 Accuracy and difficulty bonuses show up in the roll HUD before you confirm; damage bonuses appear in the damage output.
 
@@ -103,7 +103,7 @@ Accuracy and difficulty bonuses show up in the roll HUD before you confirm; dama
 
 ## Immunity and the choice card
 
-<img align="right" src="../img/em-immunity-card.png" width="38%"/>
+<img align="right" src="../img/em-immunity-card.png" width="53%"/>
 
 When a token holds an immunity bonus and takes matching damage, a **choice card** prompts whether to apply the immunity.
 
@@ -111,7 +111,7 @@ When a token holds an immunity bonus and takes matching damage, a **choice card*
 
 ## Manage tab
 
-<img align="right" src="../img/em-manage.png" width="40%"/>
+<img align="right" src="../img/em-manage.png" width="55%"/>
 
 See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them outright. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Duplicate module effects that share a name collapse into one icon with a count badge.
 

@@ -8,7 +8,7 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 ## Settings
 
-<img align="right" src="../img/mv-settings.png" width="30%"/>
+<img align="right" src="../img/mv-settings.png" width="45%"/>
 
 **Combat & Movement → Lancer Automations Ruler** (and its **Ruler Speed Colors** subsection).
 
@@ -16,7 +16,7 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 ## The Lancer ruler
 
-<img align="right" src="../img/mv-ruler.png" width="30%"/>
+<img align="right" src="../img/mv-ruler.png" width="45%"/>
 
 Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it). While you drag a token, the ruler shows the **movement cost** and colours the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colours. All five colours are set in **Ruler Speed Colors**.
 
@@ -39,7 +39,7 @@ Elevation also feeds combat range checks (overwatch, engagement, range) if you e
 
 ## Elevation
 
-<img align="right" src="../img/mv-elevation.png" width="30%"/>
+<img align="right" src="../img/mv-elevation.png" width="45%"/>
 
 During a drag, **Q** and **E** bump the token's elevation up and down by one grid unit per press (the offset resets when the drag starts).
 
@@ -51,11 +51,11 @@ With Terrain Height Tools, the token also **auto-elevates** to sit on the terrai
 
 ## Movement types and the wheel
 
-<img align="right" src="../img/mv-wheel.png" width="30%"/>
+<img align="right" src="../img/mv-wheel.png" width="45%"/>
 
 A token moves with a **movement type**: walk, fly, crawl (only while prone), forced, teleport, or ignore-elevation (skips auto-elevation). Gaining a **flying** or **hover** status switches the token to fly automatically, and back to walk when it's removed.
 
-Press **M** for the **movement wheel**: outside a drag it opens a radial picker; during a drag it cycles the active type without moving the token. With **Reset Movement Type on Drag Start** (`resetMovementTypeOnDragStart`) on, each drag begins on the token's natural type (walk, or fly if it's flying), and you cycle from there with M.
+Press **M** for the **movement wheel**: outside a drag it opens a radial picker; during a drag it cycles the active type without moving the token.
 
 <br clear="right"/>
 
@@ -72,7 +72,7 @@ All four are rebindable under **Configure Controls → Lancer Automations**.
 
 ## Tactical distance
 
-<img align="right" src="../img/mv-tactical.png" width="30%"/>
+<img align="right" src="../img/mv-tactical.png" width="45%"/>
 
 While you drag a token, **Tactical Distance Labels** show the distance and elevation delta to every other visible token, right under each one. Set it to **off**, **only in combat**, or **always** (`enableTacticalDistance`).
 
@@ -80,7 +80,7 @@ While you drag a token, **Tactical Distance Labels** show the distance and eleva
 
 ## History and revert
 
-<img align="right" src="../img/mv-history.png" width="30%"/>
+<img align="right" src="../img/mv-history.png" width="45%"/>
 
 Each token's moves are recorded during combat (distance, cost, whether dragged, free, or forced). From the [HUD](./HUD.md) combat bar you can **revert the last move** (teleport the token back) or **clear the history**.
 

@@ -2,13 +2,13 @@
 
 [← Back to the README](../../README.md)
 
-When a token dies, the module leaves a wreck where it stood instead of just clearing it off the board. What that wreck is, a token or a flat tile, whether it blocks the field, and how it looks and sounds, is set per category and per token, and a wreck can be resurrected back into the original.
+When a token dies, the module leaves a wreck where it stood. What that wreck is, a token or a flat tile, whether it blocks the field, and how it looks and sounds, is set per category and per token, and a wreck can be resurrected back into the original.
 
 ---
 
 ## Settings
 
-<img align="right" src="../img/wr-settings.png" width="30%"/>
+<img align="right" src="../img/wr-settings.png" width="45%"/>
 
 The **Wrecks** tab.
 
@@ -16,7 +16,7 @@ The **Wrecks** tab.
 
 ## On death
 
-<img align="right" src="../img/wr-wreck.png" width="30%"/>
+<img align="right" src="../img/wr-wreck.png" width="45%"/>
 
 When a token's structure hits 0, the module drops its wreck in place and clears the original. The dead token leaves the combat tracker (**`enableRemoveFromCombat`**), and a destroyed squad is marked **MIA** (**`squadLostOnDeath`**).
 
@@ -32,7 +32,7 @@ A wreck can leave something on its footprint: **THT difficult terrain** (needs T
 
 ## Per-token config
 
-<img align="right" src="../img/wr-token-config.png" width="30%"/>
+<img align="right" src="../img/wr-token-config.png" width="45%"/>
 
 A single token can override its category in the Token Config **L.A** tab: its wreck mode and terrain, a custom wreck image, effect, and sound, the tile scale, and whether the image, sound, and effect play at all.
 

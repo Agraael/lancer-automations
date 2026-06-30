@@ -12,7 +12,7 @@ Lancer Automations provides basic automation for most of the game's base actions
 
 ## The Activation Manager
 
-<img align="right" src="../img/ae-activation-manager.png" width="20%"/>
+<img align="right" src="../img/ae-activation-manager.png" width="35%"/>
 
 Register, modify, and copy automations. Open it from the Lancer Automations settings.
 
@@ -23,13 +23,13 @@ It has two kinds of entries:
 
 Entries can be sorted into named **folders**, and there's a **Startup Scripts** tab, covered further down.
 
-Each activation has an **enable / disable** toggle, so you can switch one off without deleting it. It works per sub-reaction on a multi-reaction item, and on the built-in and personal-set automations too (the toggle is saved as your own override, so disabling a built-in one sticks).
+Each activation has an **enable / disable** toggle. It works per sub-reaction on a multi-reaction item, and on the built-in and personal-set automations too (the toggle is saved as your own override, so disabling a built-in one sticks).
 
 <br clear="right"/>
 
 ### Finding an item's LID
 
-<img align="right" src="../img/ae-lid-finder.png" width="30%"/>
+<img align="right" src="../img/ae-lid-finder.png" width="45%"/>
 
 Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger); covered in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
 
@@ -44,14 +44,14 @@ Each activation is a small form. The main fields:
 | Group | What you set |
 |-------|--------------|
 | **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md). |
-| **Mode** | How it composes with the original action: **before**, **instead of**, or **after** it, and whether it **auto-activates** silently (no popup). |
-| **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), distance, trigger-self / trigger-other, only-on-source-match, require-can-provoke, and out-of-combat. |
+| **Mode** | How it composes with the original action: **instead of** or **after** it, and whether it **auto-activates** silently (no popup). |
+| **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, and out-of-combat. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type shown in the popup (Reaction / Quick / Full / ...), and frequency. |
 | **Text** | Override the trigger and effect descriptions shown in the popup. |
 
 ## How an activation runs
 
-<img src="../img/ae-example.png" width="30%"/>
+<img src="../img/ae-example.png" width="45%"/>
 
 When a trigger fires and the filters pass, three pieces decide the outcome.
 
@@ -69,7 +69,7 @@ By default `onActivation` fires when an item runs through an activation; **`trea
 
 ## The activation popup
 
-<img align="right" src="../img/ae-activation-popup.png" width="30%"/>
+<img align="right" src="../img/ae-activation-popup.png" width="45%"/>
 
 When a trigger fires reactions that aren't set to auto-activate, they're collected into a popup, grouped by token. Click an entry to expand its detail panel (trigger text, effect, action type badge, frequency), then click **Activate** to run it.
 
@@ -85,7 +85,7 @@ If **`consumeReaction`** is on, activating a reaction spends that token's reacti
 
 ## Startup scripts
 
-<img align="right" src="../img/ae-startup-scripts.png" width="30%"/>
+<img align="right" src="../img/ae-startup-scripts.png" width="45%"/>
 
 The **Startup Scripts** tab in the Activation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any activation or macro.
 
@@ -102,4 +102,4 @@ Module Settings has a toggle for my personal activation set (**`enableLaSossisIt
 
 The worked examples are walked through in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md), and the patterns for registering your own automations from code are in [API_HOWTO.md](../API_HOWTO.md).
 
-<img src="../img/ae-personal-set.png" width="30%"/>
+<img src="../img/ae-personal-set.png" width="45%"/>

@@ -8,7 +8,7 @@ Lancer Automations draws its own bars and labels directly on the token, as a rep
 
 ## Settings
 
-<img align="right" src="../img/td-settings.png" width="30%"/>
+<img align="right" src="../img/td-settings.png" width="45%"/>
 
 Everything here lives in the **Tokens & Display** tab, under the **Custom Token Stat Bars** and **Token Stat Hint** sections.
 
@@ -18,7 +18,7 @@ Turn the bars on with **`tokenStatBar`** (Enable Custom Token Stat Bars). It nee
 
 ## What the bars show
 
-<img align="right" src="../img/td-bars.png" width="30%"/>
+<img align="right" src="../img/td-bars.png" width="45%"/>
 
 Under the token, depending on the actor type:
 
@@ -34,7 +34,7 @@ Elevation also gets a small badge at the token's corner (up/down arrow with the 
 
 ## Visibility and defaults
 
-<img align="right" src="../img/td-config.png" width="30%"/>
+<img align="right" src="../img/td-config.png" width="45%"/>
 
 The settings hold the **world defaults**; each token can override them from **Token Config → Resources tab**:
 
@@ -52,7 +52,7 @@ Hold **Alt** to peek: while held, the bars show on every visible token regardles
 
 ## Extra bars
 
-<img align="right" src="../img/td-extra-bars.png" width="30%"/>
+<img align="right" src="../img/td-extra-bars.png" width="45%"/>
 
 The **Extra Bars** section of Token Config → Resources adds your own bars below the standard ones. Each bar has:
 
@@ -67,7 +67,7 @@ Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `remo
 
 ## Auto talent counters
 
-<img align="right" src="../img/td-talent-counters.png" width="30%"/>
+<img align="right" src="../img/td-talent-counters.png" width="45%"/>
 
 With **Auto-add Talent Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section. A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-Injected** button rebuilds them from its current talents and frame.
 
@@ -82,7 +82,7 @@ In the Custom Token Stat Bars settings:
 
 ## Token stat hint
 
-<img align="right" src="../img/td-stat-hint.png" width="30%"/>
+<img align="right" src="../img/td-stat-hint.png" width="45%"/>
 
 A hover popup with a token's full stats, enabled with **`tokenStatHintEnabled`**. Settings cover the hover **delay**, the popup **scale**, whether it shows for the token you control, and whether it's **combat only**.
 
@@ -92,7 +92,7 @@ For enemy tokens, the **label mode** decides what the header shows: the real nam
 
 ## Half-size tokens
 
-<img align="right" src="../img/td-halfsize.png" width="30%"/>
+<img align="right" src="../img/td-halfsize.png" width="45%"/>
 
 With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid space instead of being forced to a full 1×1.
 

@@ -8,7 +8,7 @@ The setup and housekeeping side of the module: optional content, actor and data 
 
 ## Settings
 
-<img align="right" src="../img/st-settings.png" width="30%"/>
+<img align="right" src="../img/st-settings.png" width="45%"/>
 
 The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
@@ -28,7 +28,7 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
 ## News & releases
 
-<img align="right" src="../img/st-news.png" width="30%"/>
+<img align="right" src="../img/st-news.png" width="45%"/>
 
 On load, the GM gets a popup for new module news and pending updates. The **News & Releases** button reopens it any time, with the news log and the GitHub release notes.
 
@@ -36,7 +36,7 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 
 ## Guided tours
 
-<img align="right" src="../img/st-tour.png" width="30%"/>
+<img align="right" src="../img/st-tour.png" width="45%"/>
 
 Five in-app walkthroughs, config, the activation manager, the effect manager, the HUD, and the ruler, run from the **Tutorial & Help** tab. A welcome dialog offers them on first install.
 
@@ -44,7 +44,7 @@ Five in-app walkthroughs, config, the activation manager, the effect manager, th
 
 ## Scene dimensions
 
-<img align="right" src="../img/st-scene.png" width="30%"/>
+<img align="right" src="../img/st-scene.png" width="45%"/>
 
 In a scene's configuration, **Match background image** sets the scene's width and height to the background's pixel size, and a **Scale W/H %** row scales the current dimensions by a percentage, linked or separate.
 

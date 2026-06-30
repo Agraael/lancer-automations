@@ -8,7 +8,7 @@ Lancer doesn't really have fog of war or vision, but if you like playing with li
 
 ## Settings
 
-<img align="right" src="../img/vis-settings.png" width="30%"/>
+<img align="right" src="../img/vis-settings.png" width="45%"/>
 
 The **Vision** tab.
 
@@ -16,7 +16,7 @@ The **Vision** tab.
 
 ## Vision from edge
 
-<img align="right" src="../img/vis-from-edge.png" width="30%"/>
+<img align="right" src="../img/vis-from-edge.png" width="45%"/>
 
 Experimental. Vanilla Foundry checks line of sight from a token's centre; **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner the way Lancer means it to. A per-token override lives in the Token Config Vision tab.
 
@@ -26,7 +26,7 @@ Tune it with the **sample density** (`visionFromEdgeSampleMode`: 4 corners, 8 pe
 
 ## Token blocks line of sight
 
-<img align="right" src="../img/vis-blocks-los.png" width="30%"/>
+<img align="right" src="../img/vis-blocks-los.png" width="45%"/>
 
 A token can be set to **block line of sight** through its footprint, from a checkbox in its Token Config Vision tab. The **Bulwark** status turns this on automatically (`bulwarkBlocksLineOfSight`).
 
@@ -40,14 +40,14 @@ For the elevation-aware blocking above to work, tokens need a height. **Auto Tok
 
 ## Lancer vision modes
 
-<img align="right" src="../img/vis-modes.png" width="30%"/>
+<img align="right" src="../img/vis-modes.png" width="45%"/>
 
 Two detection modes, auto-added to tokens on creation (`lancerVisionAutoAdd`):
 
 - **Sensors** - blue scanlines, ranged to the actor's `sensor_range`, a precise read of who's on sensors.
 - **Battlefield Awareness** - a fuzzy yellow silhouette at infinite range, for "you know something's there."
 
-When both would see a target, **Sensors win**. Each can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or made to read its range from the token's detection-mode entry instead of the actor (`...UseModeRange`). A per-token **awareness mode** (Token Config) switches a token's silhouette between default, a simple rotating outline, plain visible, or not-detected. **`basicSightTo999`** gives auto-created tokens full basic sight, and a **Refresh Tokens** button re-applies the modes across all scenes and actors (run it after enabling auto-add, or if the highlights go missing).
+When both would see a target, **Sensors win**. Each can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or made to read its range from the token's detection-mode entry instead of the actor (`...UseModeRange`). A per-token **awareness mode** (Token Config) switches a token's silhouette between default, a simple rotating outline, plain visible, or not-detected; any non-default mode also turns Sensors off for that token. **`basicSightTo999`** gives auto-created tokens full basic sight, and a **Refresh Tokens** button re-applies the modes across all scenes and actors (run it after enabling auto-add, or if the highlights go missing).
 
 <br clear="right"/>
 

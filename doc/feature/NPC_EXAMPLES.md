@@ -50,7 +50,7 @@ const npcInsulatedBonus = {
 
 ## 2. Sapper Smoke Grenade - an action that drops a zone
 
-<img align="right" src="../img/npc-smoke-zone.png" width="38%"/>
+<img align="right" src="../img/npc-smoke-zone.png" width="53%"/>
 
 **What it does.** A quick action that places a Blast 1 soft-cover smoke zone within Range 5.
 
@@ -90,7 +90,7 @@ const npcInsulatedBonus = {
 
 ## 3. Veterancy - a combat-lifecycle pair with a choice card
 
-<img align="right" src="../img/npc-choice-card.png" width="38%"/>
+<img align="right" src="../img/npc-choice-card.png" width="53%"/>
 
 **What it does.** On entering combat the NPC picks a skill (Hull / Agility / Systems / Engineering) and gains +1 accuracy on that kind of check; on leaving combat the bonus is removed.
 
@@ -331,7 +331,7 @@ const movingTargetSniperReaction = {
 
 ## 7. Restock Drone - a deployable on an NPC
 
-<img align="right" src="../img/npc-restock-aura.png" width="38%"/>
+<img align="right" src="../img/npc-restock-aura.png" width="53%"/>
 
 **What it does.** A support feature that can deploy a Restock Drone. When the drone lands it gets a healing aura; allies that enter the aura can spend it to heal (or reload, in the rebake variant).
 

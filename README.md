@@ -155,26 +155,6 @@ Export your whole setup (automations, startup scripts, settings, and keybindings
 
 ---
 
-## Features Overview
-
-- **Automation Engine**: event-driven engine that fires on gameplay triggers (`onMove`, `onHit`, `onDamage`, and many more) and runs reactions tied to items or global rules
-- **Effect Manager & Bonuses**: status effects with duration and consumable stacks, plus accuracy, difficulty, damage, stat, tag, range, immunity, target-modifier, and reroll bonuses that plug into Lancer's roll flows
-- **Token Action HUD**: a cascading action menu on your token for weapons, systems, frame abilities, skills, statuses, history, favorites, search, and range previews
-- **Custom Token Stat Bars**: Lancer-tailored token bars that replace Bar Brawl, with per-token visibility, extra bars, and auto-injected talent counters
-- **Movement & the Lancer Ruler**: a detailed movement-cost ruler with elevation, movement types, boost detection, and movement history and revert
-- **Isometric handling**: elevation animation and UI adaptation so the module's features line up correctly in isometric scenes
-- **Interactive Tools**: knockback, token pickers, zone placement, deployables, throw weapons, and choice and vote cards
-- **Gameplay Automation**: overwatch, grapple, reinforcement, action limits, per-turn/round/scene usage tracking, alt structure, and the scan, rest, downtime, and reserve flows
-- **FX & Sounds**: action animations and status overlays with sound, on top of JB2A and Lancer Weapon FX, with a free-pack fallback
-- **Vision**: vision from edge, token-blocks-line-of-sight with Bulwark, and the Lancer sensor and awareness detection modes
-- **Wrecks**: spawns a dedicated wreck actor on death, with resurrect and optional difficult terrain
-- **System Additions**: item-disabled gear, the ammo system, extra status effects, permanent statuses, and extra trackable attributes
-- **Setup & Tools**: optional content packs, actor-to-token sync, data repair, news and releases, guided tours, and scene-sizing helpers
-- **Infection damage type**: the Infection mechanic from HORUS: Thy Hubris Manifest, fully integrated with checks, a sheet card, and visuals
-- **Built-in Macros**: Skirmish, Barrage, Ram, Grapple, Eject, Disengage, Knockback, Deploy, Throw Weapon, Scan, Reinforcement, and more
-
----
-
 ## Feature guides
 
 Short pitches below. Each links to its full guide (being written).

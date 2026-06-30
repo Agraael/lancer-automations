@@ -8,7 +8,7 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 ## Enabling and opening
 
-<img align="right" src="../img/hud-overview.png" width="20%"/>
+<img align="right" src="../img/hud-overview.png" width="35%"/>
 
 Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near the top-left of the screen:
 
@@ -19,7 +19,7 @@ Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near t
 
 ## Settings
 
-<img align="right" src="../img/hud-settings.png" width="20%"/>
+<img align="right" src="../img/hud-settings.png" width="35%"/>
 
 The **Token Action HUD** tab.
 
@@ -35,7 +35,7 @@ The bar at the top of the HUD shows:
 
 ## Stats bar
 
-<img align="right" src="../img/hud-stats.png" width="20%"/>
+<img align="right" src="../img/hud-stats.png" width="35%"/>
 
 A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it); then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
 
@@ -43,7 +43,7 @@ A compact readout under the header: **HP**, structure, overshield, repairs, and 
 
 ## Combat bar
 
-<img align="right" src="../img/hud-combat-bar.png" width="20%"/>
+<img align="right" src="../img/hud-combat-bar.png" width="35%"/>
 
 Appears while combat is running:
 
@@ -58,7 +58,7 @@ Appears while combat is running:
 
 The left column lists categories; opening one cascades its items out to the right. Which categories appear depends on the actor (mech / NPC / pilot / deployable).
 
-<img src="../img/hud-menus.png" width="30%"/>
+<img src="../img/hud-menus.png" width="45%"/>
 
 | Category | Holds |
 |----------|-------|
@@ -82,19 +82,19 @@ See also: movement actions → [MOVEMENT.md](./MOVEMENT.md), resurrect → [WREC
 
 ## Item interaction
 
-<img align="right" src="../img/hud-popup.png" width="20%"/>
+<img align="right" src="../img/hud-popup.png" width="35%"/>
 
 Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Menu rows and popups also carry small markers.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-automation-indicator.png" width="20%"/>
+<img align="right" src="../img/hud-automation-indicator.png" width="35%"/>
 
 **Automation indicator** - a tiny triangle on the menu row, and ⚡ in the popup header, mean the item or action has automation.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-extra-action-dot.png" width="20%"/>
+<img align="right" src="../img/hud-extra-action-dot.png" width="35%"/>
 
 **Extra-action dot** - an orange ● before an action's name means it was added by extras-UI code (e.g. via `addExtraActions`, or attached to an item by a registered reaction) rather than by the system itself.
 
@@ -104,7 +104,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 ## Status panel
 
-<img align="right" src="../img/hud-status-panel.png" width="20%"/>
+<img align="right" src="../img/hud-status-panel.png" width="35%"/>
 
 Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
 
@@ -117,7 +117,7 @@ Search and toggle statuses on a grid: left-click adds or increments a stack, rig
 
 ## Log panel
 
-<img align="right" src="../img/hud-log.png" width="20%"/>
+<img align="right" src="../img/hud-log.png" width="35%"/>
 
 The token's last ~40 action cards, newest first. Click one to expand the full card again.
 
@@ -125,7 +125,7 @@ The token's last ~40 action cards, newest first. Click one to expand the full ca
 
 ## Glossary panel
 
-<img align="right" src="../img/hud-glossary.png" width="20%"/>
+<img align="right" src="../img/hud-glossary.png" width="35%"/>
 
 The scans you've run, shown with portraits and names and searchable by name. Click one to open its scan journal entry. (The scan tools themselves are in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).)
 
@@ -133,25 +133,25 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 ## Search, favorites, macros, and HUD position
 
-<img align="right" src="../img/hud-search.png" width="20%"/>
+<img align="right" src="../img/hud-search.png" width="35%"/>
 
 **Search** - press Alt+F (or click the search icon) to filter every category at once; matches gather into a single column as you type.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-favorites.png" width="20%"/>
+<img align="right" src="../img/hud-favorites.png" width="35%"/>
 
 **Favorites** - Ctrl+right-click an item to star it; the star tab on the HUD's edge gathers your favorites in one place.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-macro-slot.png" width="20%"/>
+<img align="right" src="../img/hud-macro-slot.png" width="35%"/>
 
 **Macro slots** - right-click a slot in the Macros row to open its edit dialog, then drop a macro from the hotbar onto the drop zone to assign it.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-lock.png" width="20%"/>
+<img align="right" src="../img/hud-lock.png" width="35%"/>
 
 **HUD position** - the 🔒 icon on the title bar unlocks the HUD for dragging (cursor turns to grab, ↺ resets to default).
 
@@ -159,13 +159,13 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 ## Range and aura previews
 
-<img align="right" src="../img/hud-range-hover.png" width="20%"/>
+<img align="right" src="../img/hud-range-hover.png" width="35%"/>
 
 **Hover preview** - hovering a weapon or action pulses its range on the canvas (`rangePreview`); the attack card can pulse the attacker's range too (`rangePreviewOnAttackCard`). Works standalone, no extra module needed.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-auras.png" width="20%"/>
+<img align="right" src="../img/hud-auras.png" width="35%"/>
 
 **Persistent auras** (requires [Grid-Aware Auras](../../README.md#optional-integrations)) - four you can toggle from the Utility menu: threat, sensor, max weapon range, and a custom measure. Each has its own color, opacity, and a default mode (off / in combat / always), and they're elevation-aware.
 
