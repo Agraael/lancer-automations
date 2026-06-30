@@ -8,6 +8,7 @@ import {
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
 import { _rulerMove } from "../main.js";
+import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
 
 /**
  * Convert a PixiJS pointer event's global screen position to canvas world coordinates.
@@ -291,7 +292,8 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
  * @param {Object|null} newEndPos
  * @returns {PIXI.Graphics}
  */
-export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
+let _moveTraceSeq = 0;
+export function drawMovementTrace(token, originalEndPos, newEndPos = null, { suppressBroadcast = false } = {}) {
     const trace = new PIXI.Graphics();
     const centerStart = token.center;
     const gridSize = canvas.grid.size;
@@ -336,6 +338,39 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null) {
     }
 
     addGraphicsBelowTokens(trace);
+
+    // Mirror the trace to other clients: start (yellow), base destination (cells), new destination (placed), lines.
+    // Relay sites (socket/network GM trace) pass suppressBroadcast so only the originating client broadcasts.
+    if (!suppressBroadcast) {
+        const kind = `moveTrace:${token.id}:${++_moveTraceSeq}`;
+        const startCells = getOccupiedOffsets(token).map(o => `${o.col},${o.row}`);
+        const origCells = getOccupiedOffsets(token, { x: originalEndPos.x, y: originalEndPos.y }).map(o => `${o.col},${o.row}`);
+        const newCells = newEndPos ? getOccupiedOffsets(token, { x: newEndPos.x, y: newEndPos.y }).map(o => `${o.col},${o.row}`) : [];
+        const traceLines = [{ x1: centerStart.x, y1: centerStart.y, x2: centerOriginal.x, y2: centerOriginal.y }];
+        if (newEndPos)
+            traceLines.push({ x1: centerStart.x, y1: centerStart.y, x2: newEndPos.x + token.w / 2, y2: newEndPos.y + token.h / 2 });
+        const tracePresence = {
+            originCells: startCells,
+            cells: origCells,
+            cellColor: originalColor,
+            placedCells: newCells,
+            placedColor: 0xff6400,
+            originColor: 0xffff00,
+            lines: traceLines,
+            lineColor: 0xffffff,
+            relatedToken: token,
+        };
+        broadcastToolPresence(kind, tracePresence);
+        let destroyed = false; // guard a heartbeat tick that fires after destroy
+        const stopTraceBeat = startToolHeartbeat(kind, () => destroyed ? null : tracePresence);
+        const origDestroy = trace.destroy.bind(trace);
+        trace.destroy = (...a) => {
+            destroyed = true;
+            stopTraceBeat();
+            clearToolPresence(kind);
+            return origDestroy(...a);
+        };
+    }
 
     return trace;
 }

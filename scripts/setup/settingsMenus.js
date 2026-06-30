@@ -38,6 +38,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'autoStartTargetPicking', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
     { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
+    { key: 'displayToolsToOthers', type: 'boolean', label: 'Share Interactive Tools' },
 
     { type: 'section', label: 'Attacks', subsection: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },

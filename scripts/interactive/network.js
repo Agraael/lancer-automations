@@ -276,7 +276,7 @@ export function startChoiceCard(options = {}) {
                     const { tokenId, endPos, newEndPos } = traceData;
                     const traceToken = canvas.tokens.get(tokenId);
                     if (traceToken)
-                        gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+                        gmTrace = drawMovementTrace(traceToken, endPos, newEndPos, { suppressBroadcast: true });
                 }
 
                 const doCleanup = () => {

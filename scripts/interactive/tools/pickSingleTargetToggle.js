@@ -9,6 +9,8 @@ import {
     pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { broadcastToolPresence, clearToolPresence } from "../presence.js";
+import { syncTargetShapes } from "../target-shapes.js";
 
 // Cancel fn of the running picker (null when idle). Lets the launching button toggle it.
 let _activeCancel = null;
@@ -20,76 +22,15 @@ export function cancelSingleTargetPicker() {
         _activeCancel();
 }
 
-// One placed shape per targeted token (mirrors the target state); cleared on a fresh pick.
-let _persistG = null;                 // Container of per-token Graphics
-const _persistShapes = new Map();     // tokenId -> Graphics
-let _persistPulse = null;             // ticker breathing the alpha
-export function clearSingleTargetShape() {
-    if (_persistPulse) {
-        canvas.app.ticker.remove(_persistPulse);
-        _persistPulse = null;
-    }
-    if (_persistG) {
-        if (_persistG.parent)
-            _persistG.parent.removeChild(_persistG);
-        _persistG.destroy({ children: true });
-        _persistG = null;
-    }
-    _persistShapes.clear();
-}
-// chooseToken's yellow, added when a token becomes targeted.
-function addSinglePersistShape(token) {
-    if (!token || _persistShapes.has(token.id))
-        return;
-    if (!_persistG) {
-        _persistG = new PIXI.Container();
-        canvas.stage.addChild(_persistG); // above tokens
-        _persistPulse = () => {
-            // detach if torn down (scene change), don't write to a dead object
-            if (!_persistG || _persistG.destroyed) {
-                canvas.app.ticker.remove(_persistPulse);
-                _persistPulse = null;
-                _persistG = null;
-                _persistShapes.clear();
-                return;
-            }
-            _persistG.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
-        };
-        canvas.app.ticker.add(_persistPulse);
-    }
-    const g = new PIXI.Graphics();
-    g.lineStyle(4, 0xffd84a, 0.85);
-    g.beginFill(0xffd84a, 0.22);
-    if (isHexGrid()) {
-        for (const o of getOccupiedOffsets(token))
-            drawHexAt(g, o.col, o.row);
-    } else {
-        g.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
-    }
-    g.endFill();
-    _persistG.addChild(g);
-    _persistShapes.set(token.id, g);
-}
-// Remove a token's shape when it is untargeted.
-function removeSinglePersistShape(tokenId) {
-    const g = _persistShapes.get(tokenId);
-    if (!g)
-        return;
-    if (g.parent)
-        g.parent.removeChild(g);
-    g.destroy();
-    _persistShapes.delete(tokenId);
-}
-
 /** Cardless single-target toggle picker. Click toggles game.user.targets and exits.
  *  Hold Shift to keep it open and target multiple tokens. */
 export function pickSingleTargetToggle(casterToken = null, { includeSelf = false } = {}) {
     return new Promise((resolve) => {
-        clearSingleTargetShape(); // fresh pick clears old shapes
+        syncTargetShapes(); // reconcile to current targets (keeps still-targeted shapes; no-op outside a session)
         const allTokens = canvas.tokens.placeables.filter(t => {
             if (!includeSelf && t.id === casterToken?.id)
                 return false;
-            if (t.document.hidden)
+            if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                 return false;
             return true;
         });
@@ -117,6 +58,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
 
         const doCleanup = () => {
             _activeCancel = null;
+            clearToolPresence('singlePick');
             disposeCursorPreview();
             plus.dispose();
             if (safeClick)
@@ -134,12 +76,8 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
 
         const toggleTarget = (token, keepOpen = false) => {
             const already = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
-            token.setTarget(!already, { releaseOthers: false });
+            token.setTarget(!already, { releaseOthers: false }); // targetToken hook reconciles the shape
             playUiSound('targetingConfirm');
-            if (already)
-                removeSinglePersistShape(token.id); // untargeted: drop its shape
-            else
-                addSinglePersistShape(token);
             if (keepOpen)
                 return; // Shift: keep targeting
             doCleanup();
@@ -178,6 +116,10 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
                 }
             }
             cursorPreview.endFill();
+            if (hoveredToken)
+                broadcastToolPresence('singlePick', { tokens: [hoveredToken.id], relatedToken: casterToken });
+            else
+                broadcastToolPresence('singlePick', { cells: [`${pixelToOffset(tx, ty).col},${pixelToOffset(tx, ty).row}`], relatedToken: casterToken });
         };
 
         const moveHandler = (event) => {

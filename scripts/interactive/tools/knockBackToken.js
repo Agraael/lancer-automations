@@ -18,6 +18,7 @@ import {
     makeSafe, createCursorPreview, drawRangeHighlight, applyKnockbackMoves,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
 export function knockBackToken(tokens, distance, options = {}) {
     const _title = options.title || 'KNOCKBACK';
@@ -52,6 +53,7 @@ export function knockBackToken(tokens, distance, options = {}) {
         // Auto elevation follows the terrain under the active token's destination; Q/E shifts an offset.
         let pendingElevationOffset = 0;
         let lastDest = null;
+        let lastCursorColor = 0x0088ff; // mirrors the live cursor's valid/invalid colour
         const groundUnder = (tok, dest) => {
             const tAPI = globalThis.terrainHeightTools;
             if (!tAPI)
@@ -80,11 +82,45 @@ export function knockBackToken(tokens, distance, options = {}) {
             cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
             cursorElevLabel.visible = true;
         };
+        // Presence: live cursor footprint (blue) + chosen destinations (yellow) + elevation labels.
+        const presenceData = () => {
+            const placedCells = [];
+            const originCells = [];
+            const lines = [];
+            const labels = [];
+            for (const [id, mv] of moves) {
+                const t = tokenList.find(tk => tk.id === id);
+                if (!t)
+                    continue;
+                for (const o of getOccupiedOffsets(t, { x: mv.x, y: mv.y }))
+                    placedCells.push(`${o.col},${o.row}`);
+                for (const o of getOccupiedOffsets(t))
+                    originCells.push(`${o.col},${o.row}`);
+                lines.push({ x1: t.center.x, y1: t.center.y, x2: mv.x + t.w / 2, y2: mv.y + t.h / 2 });
+                const c = t.getCenterPoint({ x: mv.x, y: mv.y });
+                labels.push({ x: c.x, y: c.y - canvas.grid.size * 0.45, text: elevStr(mv.elevation) });
+            }
+            const activeToken = tokenList[activeIndex];
+            const cells = (activeToken && lastDest)
+                ? getOccupiedOffsets(activeToken, { x: lastDest.x, y: lastDest.y }).map(o => `${o.col},${o.row}`)
+                : [];
+            if (cursorElevLabel.visible)
+                labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
+            return {
+                cells, placedCells, originCells, lines, labels, tokens: [],
+                placedColor: 0xff6400, cellColor: lastCursorColor, lineColor: 0xffffff,
+                relatedToken: triggeringToken,
+            };
+        };
 
         const restoreLayerClick = suppressTokenLayerClick();
         let safeMove, safeClick, safeAbort, safeKey;
+        let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
 
         const doCleanup = () => {
+            if (stopPresenceBeat)
+                stopPresenceBeat();
+            clearToolPresence('knockBackToken');
             if (safeClick)
                 canvas.stage.off('click', safeClick);
             if (safeAbort)
@@ -325,8 +361,11 @@ export function knockBackToken(tokens, distance, options = {}) {
                 }
                 cursorPreview.endFill();
             }
+            const anyOverlap = offsets.some(o => otherOccupied.has(`${o.col},${o.row}`));
+            lastCursorColor = (!inRange || anyOverlap) ? 0xff0000 : 0x0088ff;
             lastDest = { x: snappedX, y: snappedY };
             updateElevLabel(activeToken, lastDest);
+            broadcastToolPresence('knockBackToken', presenceData());
         };
 
         const clickHandler = (event) => {
@@ -352,6 +391,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             moves.set(activeToken.id, { x: snappedX, y: snappedY, elevation: elevAtDest(activeToken, { x: snappedX, y: snappedY }) });
             playUiSound('targetingConfirm');
             drawTrace(activeToken, snappedX, snappedY);
+            broadcastToolPresence('knockBackToken', presenceData());
 
             let nextIndex = -1;
             for (let i = 1; i <= tokenList.length; i++) {
@@ -415,5 +455,6 @@ export function knockBackToken(tokens, distance, options = {}) {
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
         document.addEventListener('keydown', safeKey, true);
+        stopPresenceBeat = startToolHeartbeat('knockBackToken', presenceData);
     }), _title);
 }

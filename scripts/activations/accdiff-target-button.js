@@ -3,6 +3,7 @@
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker, clearSingleTargetShape,
     pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape,
+    beginTargetSession,
 } from '../interactive/canvas.js';
 import { firstKeyFor } from '../interactive/keybindings.js';
 
@@ -228,6 +229,8 @@ export function registerAccDiffTargetButton() {
             // Must schedule before awaiting; original returns only after the HUD closes.
             try {
                 injectWhenReady(state);
+                if (game.settings.get('lancer-automations', 'enableAttackTargeting'))
+                    beginTargetSession(); // show single shapes for targets already set before the HUD
             } catch { /* */ }
             const ret = await original(state, options);
             // HUD closed (roll or cancel): stop the picker + drop shapes
@@ -236,8 +239,8 @@ export function registerAccDiffTargetButton() {
                     cancelAreaPicker();
                 if (isSingleTargetPickerActive())
                     cancelSingleTargetPicker();
+                clearSingleTargetShape(); // end session first so the area clear's resync is a no-op
                 clearAreaTargetShape();
-                clearSingleTargetShape();
             } catch { /* */ }
             return ret;
         });
@@ -258,8 +261,8 @@ export function registerAccDiffTargetButton() {
         // scene change: drop shapes + their pulse tickers before the canvas is torn down
         Hooks.on('canvasTearDown', () => {
             try {
-                clearAreaTargetShape();
                 clearSingleTargetShape();
+                clearAreaTargetShape();
             } catch { /* */ }
         });
     });

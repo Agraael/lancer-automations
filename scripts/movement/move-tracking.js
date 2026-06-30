@@ -322,21 +322,25 @@ export function _handleMovementCapExceeded(token, ctx) {
         const snapMid = remaining > 0 ? computeMid(remaining) : null;
         (async () => {
             const moveTrace = drawMovementTrace(token, finalDest);
-            const result = await startChoiceCard({
-                title: 'BOOST & MOVE',
-                icon: 'modules/lancer-automations/icons/speedometer.svg',
-                description: `Movement exceeds cap (${need}/${cap}). Boost adds +${speed}.`,
-                originToken: token,
-                userIdControl: getTokenOwnerUserId(token),
-                traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null },
-                choices: [
-                    { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/speedometer.svg' },
-                    { text: 'Ignore', icon: 'fas fa-forward' },
-                ]
-            });
-            if (moveTrace?.parent)
-                moveTrace.parent.removeChild(moveTrace);
-            moveTrace?.destroy();
+            let result;
+            try {
+                result = await startChoiceCard({
+                    title: 'BOOST & MOVE',
+                    icon: 'modules/lancer-automations/icons/speedometer.svg',
+                    description: `Movement exceeds cap (${need}/${cap}). Boost adds +${speed}.`,
+                    originToken: token,
+                    userIdControl: getTokenOwnerUserId(token),
+                    traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null },
+                    choices: [
+                        { text: 'Boost & Move', icon: 'modules/lancer-automations/icons/speedometer.svg' },
+                        { text: 'Ignore', icon: 'fas fa-forward' },
+                    ]
+                });
+            } finally {
+                if (moveTrace?.parent)
+                    moveTrace.parent.removeChild(moveTrace);
+                moveTrace?.destroy();
+            }
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
             if (choiceIdx === 1) {
                 // Ignore: do the move anyway, bypassing the cap (and any further offer).
@@ -371,21 +375,25 @@ export function _handleMovementCapExceeded(token, ctx) {
         const mid2 = computeMid(remaining + speed);
         (async () => {
             const moveTrace = drawMovementTrace(token, finalDest);
-            const result = await startChoiceCard({
-                title: 'OVERCHARGE & BOOST & MOVE',
-                icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
-                description: `Movement exceeds cap+boost (${need}/${cap + speed}). Overcharge grants an extra Boost (+${speed}).`,
-                originToken: token,
-                userIdControl: getTokenOwnerUserId(token),
-                traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null },
-                choices: [
-                    { text: 'Overcharge & Boost & Move', icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg' },
-                    { text: 'Ignore', icon: 'fas fa-forward' },
-                ]
-            });
-            if (moveTrace?.parent)
-                moveTrace.parent.removeChild(moveTrace);
-            moveTrace?.destroy();
+            let result;
+            try {
+                result = await startChoiceCard({
+                    title: 'OVERCHARGE & BOOST & MOVE',
+                    icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
+                    description: `Movement exceeds cap+boost (${need}/${cap + speed}). Overcharge grants an extra Boost (+${speed}).`,
+                    originToken: token,
+                    userIdControl: getTokenOwnerUserId(token),
+                    traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null },
+                    choices: [
+                        { text: 'Overcharge & Boost & Move', icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg' },
+                        { text: 'Ignore', icon: 'fas fa-forward' },
+                    ]
+                });
+            } finally {
+                if (moveTrace?.parent)
+                    moveTrace.parent.removeChild(moveTrace);
+                moveTrace?.destroy();
+            }
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
             if (choiceIdx === 1) {
                 await _rulerMove(token, finalDest, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });

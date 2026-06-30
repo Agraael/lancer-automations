@@ -67,6 +67,7 @@ This README is the hub. The detailed guides live under `doc/`.
 | [`doc/feature/MOVEMENT_ADVANCED.md`](doc/feature/MOVEMENT_ADVANCED.md) | Advanced/beta: boost detection, the movement cap and offer cards, trigger-boundary splits, debug |
 | [`doc/feature/ISOMETRIC.md`](doc/feature/ISOMETRIC.md) | Isometric compatibility: elevation animation and the `iso.*` display toggles |
 | [`doc/feature/INTERACTIVE_TOOLS.md`](doc/feature/INTERACTIVE_TOOLS.md) | Choice and vote cards, the canvas tools, deployables, selectors |
+| [`doc/feature/ATTACK_TARGETING.md`](doc/feature/ATTACK_TARGETING.md) | Target / AoE picking from the attack HUD: single target, blast/burst/cone/line, elevation, propagation |
 | [`doc/feature/GAMEPLAY_AUTOMATION.md`](doc/feature/GAMEPLAY_AUTOMATION.md) | Built-in actions/reactions, overwatch, grapple, stabilize, action limits, usage tracking, alt structure, scan, rest, downtime, reserves |
 | [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md) | Status visual effects, action FX, the JB2A free-pack fallback, and the sound system |
 | [`doc/feature/VISION.md`](doc/feature/VISION.md) | Vision from edge, token-blocks-LOS, the Lancer detection modes |
@@ -136,7 +137,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 ## Settings
 
-<img src="doc/img/settings-access.png" width="50%"/>
+<img src="doc/img/settings-access.png" width="65%"/>
 
 Almost everything in the module is configured from one place: **Game Settings > Configure Settings > Lancer Automations**. This is the hub the rest of the module hangs off of. Every feature has its toggles here, and a handful of buttons open dedicated tools: the Activation Manager, export and import, the guided tour, the news popup, and a full reset.
 
@@ -147,7 +148,7 @@ There are a lot of settings, so they aren't all listed here. Each feature guide 
 
 ### Export & Import
 
-<img align="right" src="doc/img/ae-import-review.png" width="35%"/>
+<img align="right" src="doc/img/ae-import-review.png" width="50%"/>
 
 Export your whole setup (automations, startup scripts, settings, and keybindings) to a JSON file for a backup or to share a build, then import it back through a review dialog that lets you pick exactly what comes in. A full reset is here too, for starting clean.
 
@@ -161,7 +162,7 @@ Short pitches below. Each links to its full guide (being written).
 
 ### Automation Engine
 
-<img align="right" src="doc/img/feature-automation-engine.png" width="28%"/>
+<img align="right" src="doc/img/feature-automation-engine.png" width="43%"/>
 
 The core feature of Lancer Automations, and the hardest to grasp. The engine is a powerful framework for automating almost any item, effect, or event tied to Lancer gameplay. Many of Lancer's base actions, plus some items and simple NPC automations, are handled out of the box. I also ship my personal set of activations, but that's separate: just my own games' stuff shared as-is, not part of the core module, there for you to use, inspect, or modify to dip your toes into the engine.
 
@@ -171,7 +172,7 @@ The core feature of Lancer Automations, and the hardest to grasp. The engine is 
 
 ### Effect Manager & Bonuses
 
-<img align="right" src="doc/img/feature-effect-manager.png" width="28%"/>
+<img align="right" src="doc/img/feature-effect-manager.png" width="43%"/>
 
 The Effect Manager can be driven from automation code through the API, but it's also fully available by hand during play. It manages effects, custom effects, and a wide variety of bonuses and status effects so you can apply almost anything you want: custom effects that grant charges, weapon range bonuses, a single reroll, and more.
 
@@ -181,7 +182,7 @@ The Effect Manager can be driven from automation code through the API, but it's 
 
 ### Token Action HUD
 
-<img align="right" src="doc/img/feature-tah.png" width="38%"/>
+<img align="right" src="doc/img/feature-tah.png" width="53%"/>
 
 The TAH, or Token Action HUD, is a custom-built action menu that gives you everything you need and more, attached right to your token: your items, skills, stats, scans, history, favorites, a search tool, range preview, and more.
 
@@ -191,7 +192,7 @@ The TAH, or Token Action HUD, is a custom-built action menu that gives you every
 
 ### Custom Token Stat Bars
 
-<img align="right" src="doc/img/feature-token-display.png" width="38%"/>
+<img align="right" src="doc/img/feature-token-display.png" width="53%"/>
 
 Lancer Automations draws its own token bars, tailored to Lancer and meant to replace Bar Brawl (turn Bar Brawl off on your tokens for these to show). They show the stats that matter, with per-token control over when they're visible (in combat, out of combat, hidden, GM only, owner only), icon scale, and row height. You can add extra custom bars per token, and talent counters can be injected automatically.
 
@@ -201,7 +202,7 @@ Lancer Automations draws its own token bars, tailored to Lancer and meant to rep
 
 ### Movement & the Lancer Ruler
 
-<img align="right" src="doc/img/feature-ruler.png" width="38%"/>
+<img align="right" src="doc/img/feature-ruler.png" width="53%"/>
 
 Lancer Automations ships its own Lancer ruler, built to be as detailed as possible. There's still more work to do, but if you want accurate, detailed information about movement in Lancer, this ruler is for you. The same system powers boost detection, cancelling movement through engagement, and more, all wired into the automation engine.
 
@@ -211,7 +212,7 @@ Lancer Automations ships its own Lancer ruler, built to be as detailed as possib
 
 ### Isometric handling
 
-<img align="right" src="doc/img/feature-isometric.png" width="38%"/>
+<img align="right" src="doc/img/feature-isometric.png" width="53%"/>
 
 If you run an isometric game, Lancer Automations plays nicely with the isometric modules. It animates token elevation in iso view and adapts its own UI (stat bars, tactical distance labels, waypoint labels, the target reticle, click zones, the selection marquee, scrolling text, and more) so the module's additions line up correctly in an isometric scene. Each piece can be toggled from the Isometric settings tab.
 
@@ -221,7 +222,7 @@ If you run an isometric game, Lancer Automations plays nicely with the isometric
 
 ### Interactive Tools
 
-<img align="right" src="doc/img/feature-interactive.png" width="38%"/>
+<img align="right" src="doc/img/feature-interactive.png" width="53%"/>
 
 Interactive tools are meant to be used with the automation engine, and elsewhere too. Lancer Automations provides a wide variety of them to build multi-step actions: applying knockback, choosing targets, picking tokens within a defined range, spawning tokens, running votes, and more.
 
@@ -229,9 +230,19 @@ Interactive tools are meant to be used with the automation engine, and elsewhere
 
 <br clear="right"/>
 
+### Attack Targeting
+
+<img align="right" src="doc/img/feature-attack-targeting.png" width="53%"/>
+
+Pick your target or drop your blast, cone, or line straight from the attack HUD, with elevation- and terrain-aware areas, multi-targeting, and templates that resolve into normal Foundry targets.
+
+→ Full guide: [`doc/feature/ATTACK_TARGETING.md`](doc/feature/ATTACK_TARGETING.md)
+
+<br clear="right"/>
+
 ### Gameplay Automation
 
-<img align="right" src="doc/img/feature-gameplay.png" width="38%"/>
+<img align="right" src="doc/img/feature-gameplay.png" width="53%"/>
 
 Through the automation engine and many tweaks to the Lancer system, Lancer Automations runs Lancer's actions and reactions for you, from combat to the out-of-combat flows: scanning, rest, downtime, and reserves. It also handles skill checks and contests, and tracks usage on a per-turn, per-round, or per-scene basis.
 
@@ -241,7 +252,7 @@ Through the automation engine and many tweaks to the Lancer system, Lancer Autom
 
 ### FX and Sounds
 
-<img align="right" src="doc/img/feature-fx.png" width="38%"/>
+<img align="right" src="doc/img/feature-fx.png" width="53%"/>
 
 There's a lot more flavor in Lancer Automations than just JB2A and Lancer Weapon FX. You get many sounds and graphical effects throughout the module that feel good and break up the plain Foundry VTT experience. Almost all of them can be tweaked or disabled.
 
@@ -251,7 +262,7 @@ There's a lot more flavor in Lancer Automations than just JB2A and Lancer Weapon
 
 ### Vision
 
-<img align="right" src="doc/img/feature-vision.png" width="38%"/>
+<img align="right" src="doc/img/feature-vision.png" width="53%"/>
 
 Lancer doesn't really have a concept of fog of war or vision, but personally, for immersion, I still like to play with light. To stay within the rules, Lancer Automations gives you a way to do that: two vision modes, one for units visible on sensors and one for units seen anywhere through Battlefield Awareness. A per-token "blocks line of sight" option (with Bulwark support, elevation-aware via Wall Height) lets units actually break sight. There are also performance tools for light and movement, and a system that emulates Lancer's true edge-of-token line of sight (visually only).
 
@@ -261,7 +272,7 @@ Lancer doesn't really have a concept of fog of war or vision, but personally, fo
 
 ### Wrecks
 
-<img align="right" src="doc/img/feature-wreck.png" width="38%"/>
+<img align="right" src="doc/img/feature-wreck.png" width="53%"/>
 
 When a unit is destroyed, Lancer Automations doesn't just swap its art: it spawns a dedicated wreck actor on the field. Wrecks come in flavors for mechs, humans, monstrosities, and biologicals, each with their own art, explosion FX, and sound. A wreck can optionally drop difficult terrain at the death site (with Terrain Height Tools), and any wreck can be resurrected straight from the HUD, which deletes the wreck and brings the original unit back. Assets resolve automatically from the wreck folder by category and size, and you can override art, FX, sound, and scale per token.
 
@@ -271,7 +282,7 @@ When a unit is destroyed, Lancer Automations doesn't just swap its art: it spawn
 
 ### System Additions
 
-<img align="right" src="doc/img/feature-system.png" width="38%"/>
+<img align="right" src="doc/img/feature-system.png" width="53%"/>
 
 Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry so your whole table benefits without installing anything extra: an item-disabled state for dropped or jammed gear, an ammo system for mech systems, extra status effects, and extra trackable attributes for token bars (Move, Reaction). The GM setup and maintenance tools have their own guide.
 
@@ -281,7 +292,7 @@ Some of the most useful things here aren't flashy, they're changes baked directl
 
 ### Infection damage type
 
-<img align="right" src="doc/img/feature-infection.png" width="38%"/>
+<img align="right" src="doc/img/feature-infection.png" width="53%"/>
 
 HORUS: Thy Hubris Manifest introduces an Infection damage type, and I liked it enough to wire it into Lancer properly. It works like Burn, but for Heat, and it asks for a Systems check instead of Engineering. You get the damage type itself, the turn-end check flow, an Infection card on the sheet, and the matching visual effects.
 

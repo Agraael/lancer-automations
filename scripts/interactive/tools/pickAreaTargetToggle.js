@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, document, globalThis, performance */
+/* global canvas, PIXI, game, document, globalThis, performance, setInterval, clearInterval */
 
 import {
     isHexGrid, getHexCenter, pixelToOffset,
@@ -12,6 +12,8 @@ import {
 import { computeArea, rotationStepsFor } from "../area-geometry.js";
 import { playUiSound, playTargetingMove } from "../../tah/sound.js";
 import { keyCodesFor } from "../keybindings.js";
+import { broadcastToolPresence, clearToolPresence } from "../presence.js";
+import { setAreaCoveredCells } from "../target-shapes.js";
 
 // Cancel fn of the running picker (null when idle). Lets the button toggle it.
 let _activeCancel = null;
@@ -28,7 +30,30 @@ let _persistG = null;      // Container: shape + elevation labels
 let _persistGfx = null;    // cells Graphics, accumulated across placements
 let _persistPulse = null;  // ticker breathing the alpha
 const _persistTargetIds = new Set();
+const _persistCellKeys = []; // placed cells, mirrored for presence broadcast
+let _persistLabels = [];     // placed elevation labels {x,y,text}, for presence
+let _persistRelated = null;  // caster token; presence is suppressed while it is hidden
+// Keep the placed shape alive on other clients after the picker closes (until cleared).
+let _persistBeat = null;
+function startPersistBeat() {
+    if (_persistBeat)
+        return;
+    _persistBeat = setInterval(() => {
+        if (!_persistCellKeys.length) {
+            stopPersistBeat();
+            return;
+        }
+        broadcastToolPresence('areaPick', { placedCells: _persistCellKeys, labels: _persistLabels, relatedToken: _persistRelated });
+    }, 1200);
+}
+function stopPersistBeat() {
+    if (_persistBeat) {
+        clearInterval(_persistBeat);
+        _persistBeat = null;
+    }
+}
 export function clearAreaTargetShape() {
+    stopPersistBeat();
     if (_persistPulse) {
         canvas.app.ticker.remove(_persistPulse);
         _persistPulse = null;
@@ -41,6 +66,11 @@ export function clearAreaTargetShape() {
     }
     _persistGfx = null;
     _persistTargetIds.clear();
+    _persistCellKeys.length = 0;
+    _persistLabels = [];
+    _persistRelated = null;
+    setAreaCoveredCells([]); // no AoE coverage: uncovered targets regain single shapes
+    clearToolPresence('areaPick');
 }
 function releasePickerTargets() {
     for (const id of _persistTargetIds) {
@@ -68,6 +98,23 @@ function isTiltedLine(r) {
         return false;
     const vals = [...r.elevByCell.values()];
     return vals.some(e => e !== vals[0]);
+}
+// Elevation labels for the presence broadcast: [{x, y, text}] in world space.
+function buildLabels(r) {
+    if (!r || !r.elevAware)
+        return [];
+    if (isTiltedLine(r)) {
+        const out = [];
+        for (const [key, elev] of r.elevByCell) {
+            const [col, row] = key.split(',').map(Number);
+            const c = getHexCenter(col, row);
+            out.push({ x: c.x, y: c.y, text: elevText(elev) });
+        }
+        return out;
+    }
+    if (r.labelPt)
+        return [{ x: r.labelPt.x, y: r.labelPt.y, text: r.elevByCell ? elevText(r.elev) : bandLabel(r) }];
+    return [];
 }
 
 /**
@@ -98,6 +145,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             releasePickerTargets();
             clearAreaTargetShape();
         }
+        _persistRelated = casterToken; // presence suppressed while the caster is hidden
         const isBurst = pattern === 'burst';
         const isAimed = pattern === 'cone' || pattern === 'line';
         const rotMod = rotationStepsFor(pattern, areaRange);
@@ -141,6 +189,13 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         let safeMove, safeClick, safeKey, safeWheel;
         const doCleanup = () => {
             _activeCancel = null;
+            if (_persistCellKeys.length) {
+                // placed shape persists locally: keep it mirrored on other clients
+                broadcastToolPresence('areaPick', { placedCells: _persistCellKeys, labels: _persistLabels, relatedToken: _persistRelated });
+                startPersistBeat();
+            } else {
+                clearToolPresence('areaPick');
+            }
             disposeCursorPreview();
             plus.dispose();
             destroyGraphics(selectHighlight);
@@ -160,7 +215,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             return {
                 elevationAware: !!t.elevationAware,
                 propagation: !!t.propagation,
-                includeHidden,
+                includeHidden: includeHidden && game.user.isGM, // hidden tokens: GM-only
                 includeSelf,
                 casterToken,
             };
@@ -175,7 +230,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         };
 
         const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(t => {
-            if (!includeHidden && t.document.hidden)
+            if (t.document.hidden && !(includeHidden && game.user.isGM)) // hidden tokens: GM-only
                 return false;
             if (!includeSelf && casterToken && t.id === casterToken.id)
                 return false;
@@ -226,6 +281,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
                 cursorPreview.drawCircle(tx, ty, Math.max(6, canvas.grid.size * 0.12));
                 cursorPreview.endFill();
                 elevLabel.visible = false;
+                broadcastToolPresence('areaPick', { cells: [], tokens: [], placedCells: _persistCellKeys, labels: _persistLabels, relatedToken: _persistRelated });
                 return;
             }
             cursorPreview.lineStyle(2, 0x0088ff, 0.6);
@@ -233,6 +289,11 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             _paintCells(cursorPreview, r.affected);
             cursorPreview.endFill();
             drawCaught(selectHighlight, r.caught);
+            broadcastToolPresence('areaPick', {
+                cells: [...r.affected], tokens: r.caught.map(t => t.id),
+                placedCells: _persistCellKeys, labels: [..._persistLabels, ...buildLabels(r)],
+                relatedToken: _persistRelated,
+            });
 
             if (r.elevAware && isTiltedLine(r)) {
                 // tilted line: an arrow label per cell
@@ -283,6 +344,9 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             _persistGfx.beginFill(0xffd84a, 0.22);
             _paintCells(_persistGfx, r.affected);
             _persistGfx.endFill();
+            _persistCellKeys.push(...r.affected);
+            _persistLabels.push(...buildLabels(r));
+            setAreaCoveredCells(_persistCellKeys); // covered targets drop their single shape
             if (r.elevAware && isTiltedLine(r)) {
                 // tilted line: an arrow label per cell
                 for (const [key, elev] of r.elevByCell) {

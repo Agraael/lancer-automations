@@ -19,6 +19,7 @@ import {
     makeSafe, createCursorPreview, drawRangeHighlight,
     _groupCellsByDistance, _makeRangePulseTick,
 } from "../canvas-helpers.js";
+import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
 /**
  * Interactive tool to place tokens on the map with visual preview.
@@ -167,6 +168,7 @@ export function placeToken(options = {}) {
         let autoElevation = true;
         let pendingElevationOffset = defaultElevation;
         let lastCursorOffset = null;
+        let lastCursorColor = 0x0088ff; // mirrors the live cursor's in-range/out-of-range colour
         const groundAt = (offset) => {
             const tAPI = globalThis.terrainHeightTools;
             return tAPI ? (Number(getHexGroundElevation(offset.col, offset.row, tAPI)) || 0) : 0;
@@ -242,7 +244,11 @@ export function placeToken(options = {}) {
         };
 
         let safeMove, safeClick, safeRight, safeKey;
+        let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
         const doCleanup = () => {
+            if (stopPresenceBeat)
+                stopPresenceBeat();
+            clearToolPresence('placeToken');
             disposeCursorPreview();
             destroyGraphics(cursorElevLabel);
             if (wavePulse)
@@ -428,9 +434,24 @@ export function placeToken(options = {}) {
         };
 
         const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+        // Presence: live cursor footprint (blue) + placed markers (yellow) + elevation labels.
+        const presenceData = () => {
+            const placedCells = placements.flatMap(p => getProtoOffsets(p.col, p.row).map(o => `${o.col},${o.row}`));
+            const labels = placements.map(p => {
+                const c = getHexCenter(p.col, p.row);
+                return { x: c.x, y: c.y - gridSize * 0.45, text: elevStr(p.elevation) };
+            });
+            const cells = lastCursorOffset
+                ? getProtoOffsets(lastCursorOffset.col, lastCursorOffset.row).map(o => `${o.col},${o.row}`)
+                : [];
+            if (cursorElevLabel.visible)
+                labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
+            return { cells, placedCells, labels, tokens: [], placedColor: 0xff6400, cellColor: lastCursorColor, relatedToken: originToken };
+        };
         const drawCursorAt = (offset) => {
             const inRange = checkInRange(offset.col, offset.row);
             const color = inRange ? 0x0088ff : 0xff0000;
+            lastCursorColor = color;
             cursorPreview.clear();
             cursorPreview.lineStyle(2, color, 0.8);
             cursorPreview.beginFill(color, 0.4);
@@ -441,6 +462,7 @@ export function placeToken(options = {}) {
             cursorElevLabel.x = c.x;
             cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
             cursorElevLabel.visible = true;
+            broadcastToolPresence('placeToken', presenceData());
         };
 
         const moveHandler = (event) => {
@@ -474,6 +496,7 @@ export function placeToken(options = {}) {
             });
             playUiSound('targetingConfirm');
             refreshCard();
+            broadcastToolPresence('placeToken', presenceData());
 
             if (noCard && (count === -1 || placements.length >= count)) {
                 doConfirm();
@@ -523,5 +546,6 @@ export function placeToken(options = {}) {
         canvas.stage.on('pointermove', safeMove);
         canvas.stage.on('click', safeClick);
         document.addEventListener('keydown', safeKey, true);
+        stopPresenceBeat = startToolHeartbeat('placeToken', presenceData);
     }), _title);
 }

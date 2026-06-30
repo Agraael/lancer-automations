@@ -163,34 +163,36 @@ Hooks.on('preUpdateToken', (document, change, options, userId) => {
 
             const trace = drawMovementTrace(token, endPos, position);
 
-            await startChoiceCard({
-                mode: "or",
-                title: "MOVEMENT REROUTED",
-                description: reasonText,
-                item,
-                originToken,
-                relatedToken,
-                userIdControl: userIdControl ?? getActiveGMId(),
-                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
-                choices: [
-                    { text: "Confirm",
-                        icon: "fas fa-check",
-                        callback: async () => {
-                            executeChange();
-                            await postChoice?.(true);
-                        } },
-                    { text: "Ignore",
-                        icon: "fas fa-times",
-                        callback: async () => {
-                            await postChoice?.(false);
-                            await executeOriginal();
-                        } }
-                ]
-            });
-
-            if (trace.parent)
-                trace.parent.removeChild(trace);
-            trace.destroy();
+            try {
+                await startChoiceCard({
+                    mode: "or",
+                    title: "MOVEMENT REROUTED",
+                    description: reasonText,
+                    item,
+                    originToken,
+                    relatedToken,
+                    userIdControl: userIdControl ?? getActiveGMId(),
+                    traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos, newEndPos: position } : null,
+                    choices: [
+                        { text: "Confirm",
+                            icon: "fas fa-check",
+                            callback: async () => {
+                                executeChange();
+                                await postChoice?.(true);
+                            } },
+                        { text: "Ignore",
+                            icon: "fas fa-times",
+                            callback: async () => {
+                                await postChoice?.(false);
+                                await executeOriginal();
+                            } }
+                    ]
+                });
+            } finally {
+                if (trace.parent)
+                    trace.parent.removeChild(trace);
+                trace.destroy();
+            }
         };
 
         _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost, moveIsFreeMovement, triggerData });

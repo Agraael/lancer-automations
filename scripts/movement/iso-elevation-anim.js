@@ -186,8 +186,10 @@ Hooks.on('createSequencerEffect', (effect) => {
         return;
     const ticker = () => {
         const ic = effect?.isometricContainer;
-        if (!ic)
+        if (!ic || ic.destroyed || !ic.transform) {
+            PIXI.Ticker.shared.remove(ticker);
             return;
+        }
         if (ic.skew.x !== 0 || ic.skew.y !== 0)
             ic.skew.set(0, 0);
         if (ic.scale.x !== 1 || ic.scale.y !== 1)

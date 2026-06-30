@@ -19,6 +19,7 @@ import {
     makeSafe, createCursorPreview, drawRangeHighlight,
     _groupCellsByDistance, _makeRangePulseTick,
 } from "../canvas-helpers.js";
+import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
 /**
  * Move a token to a destination, bypassing normal movement rules (like knockback).
@@ -67,6 +68,7 @@ export async function moveToken(token, options = {}) {
             let autoElevation = true;
             let pendingElevationOffset = 0;
             let lastDest = null;
+            let lastCursorColor = 0x00cc66; // mirrors the live cursor's in-range/out-of-range colour
             const groundUnder = (dest) => {
                 const tAPI = globalThis.terrainHeightTools;
                 if (!tAPI)
@@ -95,11 +97,42 @@ export async function moveToken(token, options = {}) {
                 cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
                 cursorElevLabel.visible = true;
             };
+            // Presence: live cursor footprint (blue) + chosen destination (yellow) + elevation labels.
+            const presenceData = () => {
+                const placedCells = selectedPos
+                    ? getOccupiedOffsets(token, { x: selectedPos.x, y: selectedPos.y }).map(o => `${o.col},${o.row}`)
+                    : [];
+                const originCells = selectedPos
+                    ? getOccupiedOffsets(token).map(o => `${o.col},${o.row}`)
+                    : [];
+                const lines = selectedPos
+                    ? [{ x1: token.center.x, y1: token.center.y, x2: selectedPos.x + token.w / 2, y2: selectedPos.y + token.h / 2 }]
+                    : [];
+                const cells = lastDest
+                    ? getOccupiedOffsets(token, { x: lastDest.x, y: lastDest.y }).map(o => `${o.col},${o.row}`)
+                    : [];
+                const labels = [];
+                if (cursorElevLabel.visible)
+                    labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
+                if (selectedPos) {
+                    const c = token.getCenterPoint({ x: selectedPos.x, y: selectedPos.y });
+                    labels.push({ x: c.x, y: c.y - canvas.grid.size * 0.45, text: elevStr(selectedPos.elevation) });
+                }
+                return {
+                    cells, placedCells, originCells, lines, labels, tokens: [],
+                    cellColor: lastCursorColor, placedColor: 0x00cc66, lineColor: 0x00cc66,
+                    relatedToken: token,
+                };
+            };
 
             const restoreLayerClick = suppressTokenLayerClick();
             let safeMove, safeClick, safeAbort, safeKey;
+            let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
 
             const doCleanup = () => {
+                if (stopPresenceBeat)
+                    stopPresenceBeat();
+                clearToolPresence('moveToken');
                 disposeCursorPreview();
                 destroyGraphics(cursorElevLabel);
                 if (wavePulse)
@@ -190,6 +223,7 @@ export async function moveToken(token, options = {}) {
                 cursorPreview.clear();
                 const offsets = getOccupiedOffsets(token, { x: snapped.x, y: snapped.y });
                 const color = inRange ? 0x00cc66 : 0xff0000;
+                lastCursorColor = color;
                 const alpha = inRange ? 0.4 : 0.5;
                 cursorPreview.lineStyle(2, color, 0.8);
                 cursorPreview.beginFill(color, alpha);
@@ -203,6 +237,7 @@ export async function moveToken(token, options = {}) {
                 cursorPreview.endFill();
                 lastDest = { x: snapped.x, y: snapped.y };
                 updateElevLabel(lastDest);
+                broadcastToolPresence('moveToken', presenceData());
             };
 
             const clickHandler = (event) => {
@@ -214,6 +249,7 @@ export async function moveToken(token, options = {}) {
                 selectedPos = { x: snapped.x, y: snapped.y, elevation: elevAtDest({ x: snapped.x, y: snapped.y }) };
                 playUiSound('targetingConfirm');
                 drawTeleportTrace(snapped.x, snapped.y);
+                broadcastToolPresence('moveToken', presenceData());
                 _updateInfoCard(cardEl, "teleport", { selectedPos, tokenName: token.name });
             };
 
@@ -254,6 +290,7 @@ export async function moveToken(token, options = {}) {
             canvas.stage.on('click', safeClick);
             canvas.stage.on('pointermove', safeMove);
             document.addEventListener('keydown', safeKey, true);
+            stopPresenceBeat = startToolHeartbeat('moveToken', presenceData);
         }), _title);
         if (!picked)
             return null;

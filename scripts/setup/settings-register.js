@@ -164,6 +164,15 @@ export function registerSettings() {
         default: false
     });
 
+    game.settings.register('lancer-automations', 'displayToolsToOthers', {
+        name: 'Share Interactive Tools',
+        hint: 'Show your in-progress targeting / placement / movement tools to other clients (discreet overlay), and see theirs.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
         name: 'Treat Generic Prints as Activations',
         hint: 'Items printed via the generic method also trigger onActivation events.',

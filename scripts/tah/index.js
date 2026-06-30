@@ -392,7 +392,9 @@ Hooks.on('hoverToken', (token, hovered) => {
         playUiSound('tokenHover');
 });
 
-Hooks.on('targetToken', (_user, _token, targeted) => {
+Hooks.on('targetToken', (user, _token, targeted) => {
+    if (user?.id !== game.userId)
+        return;
     playUiSound(targeted ? 'tokenTarget' : 'tokenUntarget');
 });
 

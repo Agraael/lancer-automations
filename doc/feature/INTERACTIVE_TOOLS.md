@@ -56,7 +56,7 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <img align="right" src="../img/it-attack-target.png" width="45%"/>
 
-- **Target on an attack** - the attack HUD shows a target button (the weapon's **Range**, or **Sensors** for tech); click it to pick your target on the canvas.
+- **Target on an attack** - the attack HUD gets a full target / AoE picker; see [Attack Targeting](./ATTACK_TARGETING.md).
 - **Target on a check** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) lets you pick a token to roll against, using its save or matching stat as the difficulty.
 - **Range on the attack card** - **`rangePreviewOnAttackCard`** shows the attacker's range on the canvas when the attack card opens.
 
@@ -93,6 +93,10 @@ A GM dialog to attach **custom actions** (activation type, plus charges, recharg
 
 <img align="right" src="../img/it-overlap-picker.png" width="45%"/>
 
-With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows a small picker so you choose which one, instead of always grabbing the top.
+With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows a small picker so you choose which one.
 
 <br clear="right"/>
+
+## Share Interactive Tools
+
+With **`displayToolsToOthers`** on (the default), your in-progress tools, target picking, zone and token placement, and movement traces, show to other players as a faded ghost of the same shapes and highlights, so the table can follow what you're aiming. A hidden caster or hidden tokens are never broadcast.

@@ -19,6 +19,7 @@ import {
 } from "../canvas-helpers.js";
 import { computeArea } from "../area-geometry.js";
 import { keyCodesFor } from "../keybindings.js";
+import { broadcastToolPresence, clearToolPresence } from "../presence.js";
 import { playUiSound, playTargetingMove } from "../../tah/sound.js";
 
 /**
@@ -273,7 +274,7 @@ export function chooseToken(casterToken, options = {}) {
         const baseTokens = canvas.tokens.placeables.filter(t => {
             if (!includeSelf && t.id === casterToken?.id)
                 return false;
-            if (!includeHidden && t.document.hidden)
+            if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                 return false;
             if (!soft && filter && !filter(t))
                 return false;
@@ -300,6 +301,7 @@ export function chooseToken(casterToken, options = {}) {
 
         let safeMove, safeClick, safeAbort, safeKey, safeWheel;
         const doCleanup = () => {
+            clearToolPresence('chooseToken');
             disposeCursorPreview();
             canvas.app.ticker.remove(hoverPulseTick);
             canvas.app.ticker.remove(areaPulseTick);
@@ -420,7 +422,7 @@ export function chooseToken(casterToken, options = {}) {
             for (const t of canvas.tokens.placeables) {
                 if (skipId && t.id === skipId)
                     continue;
-                if (!includeHidden && t.document.hidden)
+                if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                     continue;
                 if (!includeSelf && casterToken && t.id === casterToken.id)
                     continue;
@@ -437,7 +439,7 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         // Shared geometry (area-geometry.js). ctx carries the runtime toggles + token filters.
-        const aoeCtx = () => ({ elevationAware, propagation, includeHidden, includeSelf, casterToken });
+        const aoeCtx = () => ({ elevationAware, propagation, includeHidden: game.user.isGM, includeSelf, casterToken });
         const tokensInBlast = (centerPt, radius, areaElev = 0) =>
             computeArea({ pattern: 'blast', centerPt, areaRange: radius, areaElev }, aoeCtx());
 
@@ -788,6 +790,7 @@ export function chooseToken(casterToken, options = {}) {
                 id: ++placementSeq,
                 center,
                 graphics: drawBlastHighlight(affected, { elevation, center }),
+                affectedKeys: [...affected],
                 candidates: caught,
                 included: new Set(),
                 ignoreFilter: false,
@@ -823,6 +826,7 @@ export function chooseToken(casterToken, options = {}) {
                 center,
                 hostToken,
                 graphics: drawBlastHighlight(affected, { elevation: hostElev, center }),
+                affectedKeys: [...affected],
                 candidates: caught,
                 included: new Set(),
                 ignoreFilter: false,
@@ -861,6 +865,7 @@ export function chooseToken(casterToken, options = {}) {
                 id: ++placementSeq,
                 center,
                 graphics: drawBlastHighlight(affected, { elevation, center, elevByCell }),
+                affectedKeys: [...affected],
                 candidates: caught,
                 included: new Set(),
                 ignoreFilter: false,
@@ -892,6 +897,7 @@ export function chooseToken(casterToken, options = {}) {
                 }
                 destroyGraphics(p.graphics);
                 p.graphics = drawBlastHighlight(affected, { elevation: p.elevation, center: p.center, elevByCell });
+                p.affectedKeys = [...affected];
                 const oldIncluded = p.included;
                 p.candidates = caught;
                 // Preserve manual inclusions for tokens still in candidates; default-include new ones that pass filter.
@@ -1149,12 +1155,40 @@ export function chooseToken(casterToken, options = {}) {
             }
 
             cursorPreview.endFill();
+            broadcastToolPresence('chooseToken', { tokens: [...selectedTokens, hoveredToken].filter(Boolean).map(t => t.id), relatedToken: casterToken });
         };
 
         const moveHandler = (event) => {
             const { x: tx, y: ty } = pointerToWorld(event);
             drawCursorHighlight(tx, ty);
         };
+
+        // Presence: placed shapes' cells + their elevation labels, read from the rendered graphics.
+        const placedPresenceCells = () => placements.flatMap(p => p.affectedKeys ?? []);
+        const placedPresenceLabels = () => {
+            const out = [];
+            for (const p of placements)
+                for (const ch of p.graphics?.children ?? [])
+                    if (ch instanceof PIXI.Text)
+                        out.push({ x: ch.x, y: ch.y, text: ch.text });
+            return out;
+        };
+        // Live cursor's elevation labels (band / per-cell), read after they are set.
+        const livePresenceLabels = () => {
+            const out = [];
+            if (cursorElevLabel.visible)
+                out.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
+            for (const ch of cellLabelLayer.children)
+                out.push({ x: ch.x, y: ch.y, text: ch.text });
+            return out;
+        };
+        const broadcastChoose = (cells, tokens) => broadcastToolPresence('chooseToken', {
+            cells,
+            tokens,
+            placedCells: placedPresenceCells(),
+            labels: [...placedPresenceLabels(), ...livePresenceLabels()],
+            relatedToken: casterToken,
+        });
 
         const drawBlastCursor = (tx, ty) => {
             cursorPreview.clear();
@@ -1206,6 +1240,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
+            broadcastChoose([...affected], previewCaught.map(t => t.id));
         };
 
         let lastBlastCursor = null;
@@ -1226,7 +1261,7 @@ export function chooseToken(casterToken, options = {}) {
 
         // Burst cursor: when over a token, preview burst centered on that token; else show a small marker.
         const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(t => {
-            if (!includeHidden && t.document.hidden)
+            if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                 return false;
             if (!includeSelf && casterToken && t.id === casterToken.id)
                 return false;
@@ -1245,6 +1280,7 @@ export function chooseToken(casterToken, options = {}) {
                 cursorPreview.drawCircle(tx, ty, Math.max(6, canvas.grid.size * 0.12));
                 cursorPreview.endFill();
                 cursorElevLabel.visible = false;
+                broadcastChoose([], []);
                 return;
             }
             const tokenElev = Number(hovered.document?.elevation) || 0;
@@ -1288,6 +1324,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
+            broadcastChoose([...affected], caught.map(t => t.id));
         };
 
         const burstMoveHandler = (event) => {
@@ -1357,6 +1394,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
+            broadcastChoose([...affected], previewCaught.map(t => t.id));
         };
 
         let lastConeCursor = null;

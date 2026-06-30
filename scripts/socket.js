@@ -9,6 +9,7 @@ import {
     showVoteCardOnVoter, receiveVoteSubmission,
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
 } from './interactive/index.js';
+import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
 import { setEffect, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
@@ -424,7 +425,7 @@ const HANDLERS = {
             const { tokenId, endPos, newEndPos } = payload.traceData;
             const traceToken = canvas.tokens.get(tokenId);
             if (traceToken)
-                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos, { suppressBroadcast: true });
         }
         await showUserIdControlledChoiceCard(payload);
         if (gmTrace?.parent)
@@ -441,7 +442,7 @@ const HANDLERS = {
             const { tokenId, endPos, newEndPos } = payload.traceData;
             const traceToken = canvas.tokens.get(tokenId);
             if (traceToken)
-                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos);
+                gmTrace = drawMovementTrace(traceToken, endPos, newEndPos, { suppressBroadcast: true });
         }
         await showMultiUserControlledChoiceCard(payload);
         if (gmTrace?.parent)
@@ -577,6 +578,9 @@ const HANDLERS = {
         })().catch((e) => console.error('lancer-automations | statRollRequest error:', e));
     },
     statRollResponse: ({ requestId, result }) => resolveAck(requestId, result ?? { completed: false }),
+
+    toolPresence: (payload) => onRemotePresence(payload),
+    toolPresenceClear: (payload) => onRemotePresenceClear(payload),
 
     syncPlaceholderVideos: ({ placeholderIds }) => {
         setTimeout(() => {
