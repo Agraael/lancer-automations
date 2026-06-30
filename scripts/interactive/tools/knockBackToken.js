@@ -54,20 +54,20 @@ export function knockBackToken(tokens, distance, options = {}) {
         let pendingElevationOffset = 0;
         let lastDest = null;
         let lastCursorColor = 0x0088ff; // mirrors the live cursor's valid/invalid colour
-        const groundUnder = (tok, dest) => {
+        const groundUnder = (token, dest) => {
             const tAPI = globalThis.terrainHeightTools;
             if (!tAPI)
                 return 0;
             let max = 0;
-            for (const o of getOccupiedOffsets(tok, dest)) {
-                const h = Number(getHexGroundElevation(o.col, o.row, tAPI)) || 0;
+            for (const cellOffset of getOccupiedOffsets(token, dest)) {
+                const h = Number(getHexGroundElevation(cellOffset.col, cellOffset.row, tAPI)) || 0;
                 if (h > max)
                     max = h;
             }
             return max;
         };
-        const elevAtDest = (tok, dest) => groundUnder(tok, dest) + pendingElevationOffset;
-        const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+        const elevAtDest = (token, dest) => groundUnder(token, dest) + pendingElevationOffset;
+        const elevStr = (elevation) => elevation > 0 ? `↑ ${elevation}` : elevation < 0 ? `↓ ${-elevation}` : `↕ 0`;
         const cursorElevLabel = new PIXI.Text('', {
             fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
             fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
@@ -75,11 +75,11 @@ export function knockBackToken(tokens, distance, options = {}) {
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
         canvas.stage.addChild(cursorElevLabel);
-        const updateElevLabel = (tok, dest) => {
-            const c = tok.getCenterPoint(dest);
-            cursorElevLabel.text = elevStr(elevAtDest(tok, dest));
-            cursorElevLabel.x = c.x;
-            cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+        const updateElevLabel = (token, dest) => {
+            const cellCenter = token.getCenterPoint(dest);
+            cursorElevLabel.text = elevStr(elevAtDest(token, dest));
+            cursorElevLabel.x = cellCenter.x;
+            cursorElevLabel.y = cellCenter.y - canvas.grid.size * 0.45;
             cursorElevLabel.visible = true;
         };
         // Presence: live cursor footprint (blue) + chosen destinations (yellow) + elevation labels.
@@ -88,21 +88,21 @@ export function knockBackToken(tokens, distance, options = {}) {
             const originCells = [];
             const lines = [];
             const labels = [];
-            for (const [id, mv] of moves) {
-                const t = tokenList.find(tk => tk.id === id);
-                if (!t)
+            for (const [id, moveRecord] of moves) {
+                const token = tokenList.find(tk => tk.id === id);
+                if (!token)
                     continue;
-                for (const o of getOccupiedOffsets(t, { x: mv.x, y: mv.y }))
-                    placedCells.push(`${o.col},${o.row}`);
-                for (const o of getOccupiedOffsets(t))
-                    originCells.push(`${o.col},${o.row}`);
-                lines.push({ x1: t.center.x, y1: t.center.y, x2: mv.x + t.w / 2, y2: mv.y + t.h / 2 });
-                const c = t.getCenterPoint({ x: mv.x, y: mv.y });
-                labels.push({ x: c.x, y: c.y - canvas.grid.size * 0.45, text: elevStr(mv.elevation) });
+                for (const cellOffset of getOccupiedOffsets(token, { x: moveRecord.x, y: moveRecord.y }))
+                    placedCells.push(`${cellOffset.col},${cellOffset.row}`);
+                for (const cellOffset of getOccupiedOffsets(token))
+                    originCells.push(`${cellOffset.col},${cellOffset.row}`);
+                lines.push({ x1: token.center.x, y1: token.center.y, x2: moveRecord.x + token.w / 2, y2: moveRecord.y + token.h / 2 });
+                const cellCenter = token.getCenterPoint({ x: moveRecord.x, y: moveRecord.y });
+                labels.push({ x: cellCenter.x, y: cellCenter.y - canvas.grid.size * 0.45, text: elevStr(moveRecord.elevation) });
             }
             const activeToken = tokenList[activeIndex];
             const cells = (activeToken && lastDest)
-                ? getOccupiedOffsets(activeToken, { x: lastDest.x, y: lastDest.y }).map(o => `${o.col},${o.row}`)
+                ? getOccupiedOffsets(activeToken, { x: lastDest.x, y: lastDest.y }).map(cellOffset => `${cellOffset.col},${cellOffset.row}`)
                 : [];
             if (cursorElevLabel.visible)
                 labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
@@ -152,8 +152,8 @@ export function knockBackToken(tokens, distance, options = {}) {
             onConfirm: async () => {
                 const moveList = [];
                 for (const [id, move] of moves.entries()) {
-                    const t = tokenList.find(t => t.id === id);
-                    if (t) {
+                    const token = tokenList.find(tok => tok.id === id);
+                    if (token) {
                         moveList.push({ tokenId: id, updateData: { x: move.x, y: move.y, elevation: move.elevation } });
                     }
                 }
@@ -244,11 +244,11 @@ export function knockBackToken(tokens, distance, options = {}) {
             // Draw Original Position (Yellow)
             trace.lineStyle(2, 0xffff00, 0.8);
             trace.beginFill(0xffff00, 0.3);
-            for (const o of getOccupiedOffsets(token)) {
+            for (const cellOffset of getOccupiedOffsets(token)) {
                 if (isHexGrid())
-                    drawHexAt(trace, o.col, o.row);
+                    drawHexAt(trace, cellOffset.col, cellOffset.row);
                 else {
-                    const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                    const cellCenter = getHexCenter(cellOffset.col, cellOffset.row); trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
                 }
             }
             trace.endFill();
@@ -256,11 +256,11 @@ export function knockBackToken(tokens, distance, options = {}) {
             // Draw Target Position (Orange)
             trace.lineStyle(2, 0xff6400, 0.8);
             trace.beginFill(0xff6400, 0.3);
-            for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
+            for (const cellOffset of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
                 if (isHexGrid())
-                    drawHexAt(trace, o.col, o.row);
+                    drawHexAt(trace, cellOffset.col, cellOffset.row);
                 else {
-                    const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                    const cellCenter = getHexCenter(cellOffset.col, cellOffset.row); trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
                 }
             }
             trace.endFill();
@@ -433,9 +433,9 @@ export function knockBackToken(tokens, distance, options = {}) {
             event.stopPropagation();
             event.stopImmediatePropagation();
             pendingElevationOffset += step;
-            const tok = tokenList[activeIndex];
-            if (tok && lastDest)
-                updateElevLabel(tok, lastDest);
+            const token = tokenList[activeIndex];
+            if (token && lastDest)
+                updateElevLabel(token, lastDest);
             playUiSound('targeting');
         };
 

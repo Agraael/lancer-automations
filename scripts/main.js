@@ -166,23 +166,23 @@ let _hoverConnectionToken = null;
 let _hoverConnectionTicker = null;
 let _dashOffset = 0;
 
-function _drawDashedLine(g, x1, y1, x2, y2, dashLength = 8, spaceLength = 14, offset = 0) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy);
+function _drawDashedLine(graphics, x1, y1, x2, y2, dashLength = 8, spaceLength = 14, offset = 0) {
+    const deltaX = x2 - x1;
+    const deltaY = y2 - y1;
+    const dist = Math.hypot(deltaX, deltaY);
     if (dist <= 0)
         return;
-    const ux = dx / dist;
-    const uy = dy / dist;
+    const unitX = deltaX / dist;
+    const unitY = deltaY / dist;
     const period = dashLength + spaceLength;
     const norm = ((offset % period) + period) % period;
     let traveled = -norm;
     while (traveled < dist) {
-        const a = Math.max(0, traveled);
-        const b = Math.min(dist, traveled + dashLength);
-        if (b > a) {
-            g.moveTo(x1 + ux * a, y1 + uy * a);
-            g.lineTo(x1 + ux * b, y1 + uy * b);
+        const dashStart = Math.max(0, traveled);
+        const dashEnd = Math.min(dist, traveled + dashLength);
+        if (dashEnd > dashStart) {
+            graphics.moveTo(x1 + unitX * dashStart, y1 + unitY * dashStart);
+            graphics.lineTo(x1 + unitX * dashEnd, y1 + unitY * dashEnd);
         }
         traveled += period;
     }
@@ -209,18 +209,18 @@ function patchHalfSizeTokens() {
             const updates = { width: newSize, height: newSize };
             // hex bbox isn't square; pointy and flat orientations need different offsets
             if (newSize < 1 && canvas?.grid) {
-                const gs = canvas.grid.size;
-                const gt = canvas.grid.type;
+                const gridSize = canvas.grid.size;
+                const gridType = canvas.grid.type;
                 const HEX = 2 / Math.sqrt(3);
-                const isPointy = (gt === 2 || gt === 3);
-                const isFlat = (gt === 4 || gt === 5);
-                const bbW = isFlat ? gs * HEX : gs;
-                const bbH = isPointy ? gs * HEX : gs;
-                const cc = canvas.grid.getCenterPoint
-                    ? canvas.grid.getCenterPoint({ x: self.x + bbW / 2, y: self.y + bbH / 2 })
-                    : { x: self.x + gs / 2, y: self.y + gs / 2 };
-                updates.x = cc.x - (newSize * bbW) / 2;
-                updates.y = cc.y - (newSize * bbH) / 2;
+                const isPointy = (gridType === 2 || gridType === 3);
+                const isFlat = (gridType === 4 || gridType === 5);
+                const bboxWidth = isFlat ? gridSize * HEX : gridSize;
+                const bboxHeight = isPointy ? gridSize * HEX : gridSize;
+                const cellCenter = canvas.grid.getCenterPoint
+                    ? canvas.grid.getCenterPoint({ x: self.x + bboxWidth / 2, y: self.y + bboxHeight / 2 })
+                    : { x: self.x + gridSize / 2, y: self.y + gridSize / 2 };
+                updates.x = cellCenter.x - (newSize * bboxWidth) / 2;
+                updates.y = cellCenter.y - (newSize * bboxHeight) / 2;
             }
             self.updateSource(updates);
         }
@@ -495,7 +495,7 @@ function patchFromUuidSyncForCompendiumActors() {
         if (r || typeof uuid !== 'string' || !/^Actor\.[A-Za-z0-9]+$/.test(uuid))
             return r;
         const id = uuid.split('.').pop();
-        for (const pack of game.packs?.filter(p => p.documentName === 'Actor') ?? []) {
+        for (const pack of game.packs?.filter(pack => pack.documentName === 'Actor') ?? []) {
             const doc = pack.get?.(id);
             if (doc) return doc;
         }
@@ -578,12 +578,12 @@ Hooks.once('ready', async () => {
             const bonuses = [
                 ...flattenBonuses(actor.getFlag('lancer-automations', 'global_bonuses')),
                 ...(actor.getFlag('lancer-automations', 'constant_bonuses') ?? [])
-            ].filter(b => b?.type === 'range' && isBonusApplicable(b, _ATTACK_TAGS, state));
+            ].filter(bonus => bonus?.type === 'range' && isBonusApplicable(bonus, _ATTACK_TAGS, state));
             return bonuses.length ? bonuses : null;
         }
 
         function _applyRangeBonusesToArray(baseRange, bonuses) {
-            const range = baseRange.map(r => Object.assign(Object.create(Object.getPrototypeOf(r)), r));
+            const range = baseRange.map(rangeEntry => Object.assign(Object.create(Object.getPrototypeOf(rangeEntry)), rangeEntry));
             for (const bonus of bonuses) {
                 const rangeType = bonus.rangeType;
                 const rangeMode = bonus.rangeMode || 'add';
@@ -599,7 +599,7 @@ Hooks.once('ready', async () => {
                         range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
                     }
                 } else {
-                    const existingIdx = range.findIndex(r => r.type === rangeType);
+                    const existingIdx = range.findIndex(rangeEntry => rangeEntry.type === rangeType);
                     if (existingIdx !== -1) {
                         const entry = range[existingIdx];
                         entry.val = isOverride ? val : (Number.parseInt(entry.val) || 0) + val;
@@ -632,7 +632,7 @@ Hooks.once('ready', async () => {
                 if (!_getRangeBonuses(this))
                     return wrapped.call(this, types);
                 const filter = new Set(types);
-                return this.currentProfile().range.filter(r => filter.has(r.type));
+                return this.currentProfile().range.filter(rangeEntry => filter.has(rangeEntry.type));
             }, 'MIXED');
 
         libWrapper.register('lancer-automations', 'Token.prototype._getVisionSourceData',
@@ -709,12 +709,12 @@ function _redrawHoverConnections() {
     const ownerUuidFlag = token.document.getFlag('lancer-automations', 'ownerActorUuid');
     deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
     if (ownerUuidFlag) {
-        const ownerToken = canvas.tokens.placeables.find(t => t.actor?.uuid === ownerUuidFlag);
+        const ownerToken = canvas.tokens.placeables.find(candidate => candidate.actor?.uuid === ownerUuidFlag);
         if (ownerToken)
             _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, ownerToken.center.x, ownerToken.center.y, 8, 14, _dashOffset);
     } else {
-        const deployables = canvas.tokens.placeables.filter(t =>
-            t.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
+        const deployables = canvas.tokens.placeables.filter(candidate =>
+            candidate.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
         );
         for (const dep of deployables)
             _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, dep.center.x, dep.center.y, 8, 14, _dashOffset);
@@ -731,7 +731,7 @@ function _redrawHoverConnections() {
     if (partnerUuids.length)
         deployableConnectionsGraphic.lineStyle(2, 0x4caf50, 0.6);
     for (const uuid of partnerUuids) {
-        const partner = canvas.tokens.placeables.find(t => t.actor?.uuid === uuid);
+        const partner = canvas.tokens.placeables.find(candidate => candidate.actor?.uuid === uuid);
         if (partner)
             _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, partner.center.x, partner.center.y, 8, 14, _dashOffset);
     }
@@ -786,7 +786,7 @@ async function syncBuiltinStartups() {
 
     for (const entry of builtinStartups) {
         // legacy: builtin scripts used to be stored in the persistent list
-        const persistentIdx = persistentScripts.findIndex(s => s.id === entry.id);
+        const persistentIdx = persistentScripts.findIndex(script => script.id === entry.id);
         if (persistentIdx !== -1) {
             persistentScripts.splice(persistentIdx, 1);
             persistentChanged = true;
@@ -1002,8 +1002,8 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) => {
                 let tagsHtml = '';
 
                 const immuneTypes = new Set();
-                getImmunityBonuses(actor, "damage").forEach(b => {
-                    b.damageTypes?.forEach(t => immuneTypes.add(t.toLowerCase()));
+                getImmunityBonuses(actor, "damage").forEach(bonus => {
+                    bonus.damageTypes?.forEach(damageType => immuneTypes.add(damageType.toLowerCase()));
                 });
 
                 immuneTypes.forEach(dtype => {
@@ -1017,8 +1017,8 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) => {
                 });
 
                 const resistTypes = new Set();
-                getImmunityBonuses(actor, "resistance").forEach(b => {
-                    b.damageTypes?.forEach(t => resistTypes.add(t.toLowerCase()));
+                getImmunityBonuses(actor, "resistance").forEach(bonus => {
+                    bonus.damageTypes?.forEach(damageType => resistTypes.add(damageType.toLowerCase()));
                 });
 
                 resistTypes.forEach(dtype => {
@@ -1371,11 +1371,11 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) => {
     // grouped effects share lifetime: removing one removes the rest
     const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
     if (groupId && !options?.skipGroupCleanup) {
-        const groupEffects = actor.effects.filter(e =>
-            e.id !== effect.id && e.flags?.['lancer-automations']?.consumption?.groupId === groupId
+        const groupEffects = actor.effects.filter(groupMember =>
+            groupMember.id !== effect.id && groupMember.flags?.['lancer-automations']?.consumption?.groupId === groupId
         );
         if (groupEffects.length > 0) {
-            actor.deleteEmbeddedDocuments("ActiveEffect", groupEffects.map(e => e.id), { skipGroupCleanup: true });
+            actor.deleteEmbeddedDocuments("ActiveEffect", groupEffects.map(groupMember => groupMember.id), { skipGroupCleanup: true });
         }
     }
 });
@@ -1398,16 +1398,16 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) => {
     if (!groupId)
         return;
 
-    const groupEffects = actor.effects.filter(e =>
-        e.id !== effect.id && e.flags?.['lancer-automations']?.consumption?.groupId === groupId
+    const groupEffects = actor.effects.filter(groupMember =>
+        groupMember.id !== effect.id && groupMember.flags?.['lancer-automations']?.consumption?.groupId === groupId
     );
     if (groupEffects.length === 0)
         return;
 
     const updates = groupEffects
-        .filter(e => (e.flags?.statuscounter?.value ?? 1) !== newStack)
-        .map(e => ({
-            _id: e.id,
+        .filter(groupMember => (groupMember.flags?.statuscounter?.value ?? 1) !== newStack)
+        .map(groupMember => ({
+            _id: groupMember.id,
             "flags.statuscounter.value": newStack,
             "flags.statuscounter.visible": newStack > 1
         }));

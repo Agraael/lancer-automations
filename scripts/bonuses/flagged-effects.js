@@ -82,14 +82,14 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
 function _whisperTargetsForToken(token) {
     const actor = token?.actor;
     const ids = new Set();
-    for (const u of game.users) {
-        if (!u.active) continue;
-        if (u.isGM) {
-            ids.add(u.id);
+    for (const user of game.users) {
+        if (!user.active) continue;
+        if (user.isGM) {
+            ids.add(user.id);
             continue;
         }
-        if (actor && actor.testUserPermission(u, 'OWNER'))
-            ids.add(u.id);
+        if (actor && actor.testUserPermission(user, 'OWNER'))
+            ids.add(user.id);
     }
     return [...ids];
 }
@@ -166,11 +166,11 @@ export async function pushEffect(targetID, effect, duration, note, originID) {
  */
 function _sameIdentity(extraOptions, existingEffect) {
     const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
-    const identityKeys = Object.keys(extraOptions || {}).filter(k => !META_KEYS.has(k));
+    const identityKeys = Object.keys(extraOptions || {}).filter(key => !META_KEYS.has(key));
     if (identityKeys.length === 0)
         return true;
     const storedFlags = existingEffect?.flags?.['lancer-automations'] || {};
-    return identityKeys.every(k => storedFlags[k] === extraOptions[k]);
+    return identityKeys.every(key => storedFlags[key] === extraOptions[key]);
 }
 
 /** @returns {Promise<void>} */
@@ -187,7 +187,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
         if (customStatusApi) {
             const savedStatuses = _getSavedStatuses();
-            const hasCustom = savedStatuses.find(s => s.name === effectOrData);
+            const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
             if (hasCustom) {
                 resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
             }
@@ -196,7 +196,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
         if (customStatusApi) {
             const savedStatuses = _getSavedStatuses();
-            const hasCustom = savedStatuses.find(s => s.name === effectOrData.name);
+            const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData.name);
             if (hasCustom) {
                 resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
             }
@@ -213,8 +213,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         if (customStatusApi) {
             // Check for existing effect to stack
-            const existingEffect = target.actor.effects.find(e =>
-                (game.modules.get("temporary-custom-statuses")?.active && e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
+            const existingEffect = target.actor.effects.find(effect =>
+                (game.modules.get("temporary-custom-statuses")?.active && effect.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
             );
 
             if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
@@ -288,8 +288,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
             if (activeEffects && !Array.isArray(activeEffects)) {
                 // modifyStack was called — update our flags on the existing effect
-                const existingEffect = target.actor.effects.find(e =>
-                    (game.modules.get("temporary-custom-statuses")?.active && e.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
+                const existingEffect = target.actor.effects.find(effect =>
+                    (game.modules.get("temporary-custom-statuses")?.active && effect.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
                 );
                 if (existingEffect) {
                     const updateData = { "flags.lancer-automations": lancerFlags };
@@ -452,31 +452,31 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
     const effectNameTail = effectsStr.split('.').pop();
     const effectNameLower = effectNameTail.toLowerCase();
 
-    const effectsToDelete = target.actor.effects.filter(/** @param {any} e */ e => {
+    const effectsToDelete = target.actor.effects.filter(/** @param {any} effect */ effect => {
         // When a source is specified, skip effects from any other source.
         if (originID) {
-            const flagOrigin = e.getFlag('lancer-automations', 'originID') || (game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'originID') : null);
+            const flagOrigin = effect.getFlag('lancer-automations', 'originID') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'originID') : null);
             if (flagOrigin !== originID)
                 return false;
         }
 
         // When extra flag constraints are specified, all must match.
         if (extraFlags) {
-            const storedFlags = e.flags?.['lancer-automations'] ?? {};
+            const storedFlags = effect.flags?.['lancer-automations'] ?? {};
             for (const [key, val] of Object.entries(extraFlags)) {
                 if (storedFlags[key] !== val)
                     return false;
             }
         }
 
-        if (e.getFlag('lancer-automations', 'effect') === effectsStr)
+        if (effect.getFlag('lancer-automations', 'effect') === effectsStr)
             return true;
-        if (e.getFlag('temporary-custom-statuses', 'originalName') === effectsStr)
+        if (effect.getFlag('temporary-custom-statuses', 'originalName') === effectsStr)
             return true;
-        if (game.modules.get('csm-lancer-qol')?.active && e.getFlag('csm-lancer-qol', 'effect') === effectsStr)
+        if (game.modules.get('csm-lancer-qol')?.active && effect.getFlag('csm-lancer-qol', 'effect') === effectsStr)
             return true;
-        if (e.name?.toLowerCase().includes(effectNameLower) ||
-            e.statuses?.has(effectNameTail))
+        if (effect.name?.toLowerCase().includes(effectNameLower) ||
+            effect.statuses?.has(effectNameTail))
             return true;
 
         return false;
@@ -484,7 +484,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
 
     if (effectsToDelete.length > 0) {
         log(`Removing ${effectsToDelete.length} effects matching ${effectsStr} from ${target.name}`);
-        await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(e => e.id));
+        await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(effect => effect.id));
     }
 }
 /**
@@ -553,7 +553,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
                     const savedStatuses = _getSavedStatuses();
-                    const hasCustom = savedStatuses.find(s => s.name === effect);
+                    const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect);
                     if (hasCustom) {
                         resolvedEffectData = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
                     }
@@ -562,7 +562,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
                     const savedStatuses = _getSavedStatuses();
-                    const hasCustom = savedStatuses.find(s => s.name === effect.name);
+                    const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
                     if (hasCustom) {
                         resolvedEffectData = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
                     }
@@ -578,8 +578,8 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
                 // Different sources = different effects, allowed to coexist.
                 const groupId = extraOptions.consumption?.groupId;
                 const bonusId = extraOptions.linkedBonusId;
-                hasEffect = token.actor?.effects.some(e => {
-                    const flags = /** @type {SetEffectOptions} */ (e.flags?.['lancer-automations'] || {});
+                hasEffect = token.actor?.effects.some(effect => {
+                    const flags = /** @type {SetEffectOptions} */ (effect.flags?.['lancer-automations'] || {});
                     if (groupId && flags.consumption?.groupId === groupId)
                         return true;
                     if (bonusId && flags.linkedBonusId === bonusId)
@@ -593,14 +593,14 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
                 const effectNameLower = effectNameTail.toLowerCase();
 
                 // Find a matching effect: same name AND same identity flags (different source = different effect).
-                existingEffect = token.actor?.effects.find(e => {
-                    const nameMatch = (e.name)?.toLowerCase().includes(effectNameLower) ||
-                        e.statuses?.has(effectNameTail) ||
-                        e.flags?.['lancer-automations']?.effect === effectNameToCheck ||
-                        e.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
+                existingEffect = token.actor?.effects.find(effect => {
+                    const nameMatch = (effect.name)?.toLowerCase().includes(effectNameLower) ||
+                        effect.statuses?.has(effectNameTail) ||
+                        effect.flags?.['lancer-automations']?.effect === effectNameToCheck ||
+                        effect.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
                     if (!nameMatch)
                         return false;
-                    return _sameIdentity(extraOptions, e);
+                    return _sameIdentity(extraOptions, effect);
                 });
 
                 // If the found effect is unflagged (player-added) but the new application carries
@@ -664,7 +664,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
 
             if (notify) {
                 const effectName = typeof effect === 'string' ? effect : effect.name;
-                const icon = typeof effect === 'object' ? (effect.icon || "icons/svg/mystery-man.svg") : CONFIG.statusEffects.find(e => e.id === effect)?.icon;
+                const icon = typeof effect === 'object' ? (effect.icon || "icons/svg/mystery-man.svg") : CONFIG.statusEffects.find(statusEffect => statusEffect.id === effect)?.icon;
                 queueEffectNotification(token, effectName, notify, 'Gained', icon);
             }
         }
@@ -714,7 +714,7 @@ export async function removeEffectsByNameFromTokens(options = {}) {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
-                    const hasCustom = savedStatuses.find(s => s.name === effect);
+                    const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect);
                     if (hasCustom) {
                         resolvedEffect = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
                         effectNameVal = effect;
@@ -724,7 +724,7 @@ export async function removeEffectsByNameFromTokens(options = {}) {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
                 if (customStatusApi) {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
-                    const hasCustom = savedStatuses.find(s => s.name === effect.name);
+                    const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
                     if (hasCustom) {
                         resolvedEffect = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
                         effectNameVal = effect.name;
@@ -770,19 +770,19 @@ export function findEffectOnToken(token, identifier) {
         const identifierPathTail = identifier.split('.').pop();
         const identifierPathTailLower = identifierPathTail.toLowerCase();
 
-        return actor.effects.find(/** @param {any} e */ e => {
-            const flags = e.flags;
+        return actor.effects.find(/** @param {any} e */ effect => {
+            const flags = effect.flags;
             const laFlags = flags?.['lancer-automations'];
             const tcsFlags = flags?.['temporary-custom-statuses'];
             const qolFlags = flags?.['csm-lancer-qol'];
 
             return (
                 tcsFlags?.originalName === identifier ||
-                e.name === identifier ||
+                effect.name === identifier ||
                 laFlags?.effect === identifier ||
                 qolFlags?.effect === identifier ||
-                (e.name?.toLowerCase().includes(identifierPathTailLower)) ||
-                (e.statuses?.has(identifierPathTail))
+                (effect.name?.toLowerCase().includes(identifierPathTailLower)) ||
+                (effect.statuses?.has(identifierPathTail))
             );
         });
     }
@@ -819,18 +819,18 @@ export async function consumeEffectCharge(effect) {
     const groupId = consumption.groupId;
 
     if (groupId) {
-        const groupEffects = actor.effects.filter(e => {
-            const c = e.flags?.['lancer-automations']?.consumption;
-            return c?.groupId === groupId;
+        const groupEffects = actor.effects.filter(effect => {
+            const consumption = effect.flags?.['lancer-automations']?.consumption;
+            return consumption?.groupId === groupId;
         });
 
         if (newStack <= 0) {
-            const idsToDelete = groupEffects.map(e => e.id);
+            const idsToDelete = groupEffects.map(effect => effect.id);
             log(`Consumption depleted for group ${groupId}, removing ${idsToDelete.length} effects`);
             await actor.deleteEmbeddedDocuments("ActiveEffect", idsToDelete);
         } else {
-            const updates = groupEffects.map(e => ({
-                _id: e.id,
+            const updates = groupEffects.map(effect => ({
+                _id: effect.id,
                 "flags.statuscounter.value": newStack,
                 "flags.statuscounter.visible": newStack > 1
             }));
@@ -858,10 +858,10 @@ export async function consumeEffectCharge(effect) {
  */
 export async function processDurationEffects(triggerLabel, triggeringTokenId) {
     // Only the active GM processes duration to avoid conflicts
-    if (game.user.id !== game.users.find(u => u.active && u.isGM)?.id)
+    if (game.user.id !== game.users.find(user => user.active && user.isGM)?.id)
         return;
 
-    const allTokens = canvas.tokens.placeables.filter(t => t.actor);
+    const allTokens = canvas.tokens.placeables.filter(token => token.actor);
 
     for (const token of allTokens) {
         const actor = token.actor;
@@ -1009,16 +1009,16 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
     if (targets.length === 0)
         return;
 
-    const foundEffects = actor.effects.filter(e => {
-        const flagName = e.getFlag('lancer-automations', 'effect');
-        const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? e.getFlag('csm-lancer-qol', 'effect') : null;
+    const foundEffects = actor.effects.filter(effect => {
+        const flagName = effect.getFlag('lancer-automations', 'effect');
+        const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null;
 
         return targets.some(name => {
             const nameTail = name.split('.').pop();
             const lowerName = nameTail.toLowerCase();
             return (
-                e.name?.toLowerCase().includes(lowerName) ||
-                e.statuses?.has(nameTail) ||
+                effect.name?.toLowerCase().includes(lowerName) ||
+                effect.statuses?.has(nameTail) ||
                 (flagName?.toLowerCase().includes(lowerName)) ||
                 (legacyFlagName?.toLowerCase().includes(lowerName))
             );
@@ -1055,7 +1055,7 @@ export async function deleteAllEffects(tokens) {
         if (!token.actor)
             continue;
 
-        const ids = token.actor.effects.map(e => e.id.toString());
+        const ids = token.actor.effects.map(effect => effect.id.toString());
         if (ids.length > 0) {
             await token.actor.deleteEmbeddedDocuments("ActiveEffect", ids);
             log(`Removed ${ids.length} effects from ${token.name}`);
@@ -1104,35 +1104,35 @@ function _shrinkEffectIcons(token) {
     if (scale >= 1)
         return;
 
-    const sprites = token.effects.children.filter(c => c !== bg && c instanceof PIXI.Sprite);
+    const sprites = token.effects.children.filter(child => child !== bg && child instanceof PIXI.Sprite);
     if (sprites.length === 0)
         return;
 
     const gridPx = canvas.dimensions?.size ?? 100;
     const shrunk = gridPx * 0.1;
     const natural = gridPx * 0.2;
-    const size = Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
+    const targetSize = Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
 
-    if (sprites[0].width === size && sprites[0].height === size)
+    if (sprites[0].width === targetSize && sprites[0].height === targetSize)
         return;
 
     const rows = Math.floor(token.document.height * 5);
 
     for (let i = 0; i < sprites.length; i++) {
-        const s = sprites[i];
+        const sprite = sprites[i];
         // Scale direct to dodge .width setter dividing by a 0/stale texture size.
-        const tw = s.texture?.orig?.width || s.texture?.width || size;
-        const th = s.texture?.orig?.height || s.texture?.height || size;
-        s.scale.set(size / tw, size / th);
-        s.x = Math.floor(i / rows) * size;
-        s.y = (i % rows) * size;
+        const textureWidth = sprite.texture?.orig?.width || sprite.texture?.width || targetSize;
+        const textureHeight = sprite.texture?.orig?.height || sprite.texture?.height || targetSize;
+        sprite.scale.set(targetSize / textureWidth, targetSize / textureHeight);
+        sprite.x = Math.floor(i / rows) * targetSize;
+        sprite.y = (i % rows) * targetSize;
     }
 
     bg.clear();
     bg.beginFill(0x000000, 0.4);
     bg.lineStyle(1, 0x000000, 1);
-    for (const s of sprites) {
-        bg.drawRoundedRect(s.x, s.y, size, size, 2);
+    for (const sprite of sprites) {
+        bg.drawRoundedRect(sprite.x, sprite.y, targetSize, targetSize, 2);
     }
     bg.endFill();
 }
@@ -1163,19 +1163,19 @@ function _collapseRemoveDuplicates(token) {
 
     // Collect names managed by lancer-automations so we can include HUD effects with the same name.
     const managedNames = new Set(
-        temporaryEffects.filter(e => e.flags?.['lancer-automations'] && e.name).map(e => e.name)
+        temporaryEffects.filter(effect => effect.flags?.['lancer-automations'] && effect.name).map(effect => effect.name)
     );
 
     // Walk effects in order; keep the first sprite for each name, destroy the rest.
     const seenPrimary = new Set();
-    for (const e of temporaryEffects) {
-        if (!spriteMap.has(e.id))
+    for (const effect of temporaryEffects) {
+        if (!spriteMap.has(effect.id))
             continue;
-        const name = e.name;
+        const name = effect.name;
         if (!name || !managedNames.has(name))
             continue;
         if (seenPrimary.has(name)) {
-            const sprite = spriteMap.get(e.id);
+            const sprite = spriteMap.get(effect.id);
             if (sprite.parent === token.effects) {
                 token.effects.removeChild(sprite);
                 sprite.destroy();
@@ -1213,12 +1213,12 @@ function _collapseAddBadges(token) {
 
     // Collect names managed by lancer-automations, then count ALL effects (flagged or HUD) sharing those names.
     const managedNames = new Set(
-        temporaryEffects.filter(e => e.flags?.['lancer-automations'] && e.name).map(e => e.name)
+        temporaryEffects.filter(effect => effect.flags?.['lancer-automations'] && effect.name).map(effect => effect.name)
     );
 
     const effectCountByName = new Map();
-    for (const e of temporaryEffects) {
-        const name = e.name;
+    for (const effect of temporaryEffects) {
+        const name = effect.name;
         if (!name || !managedNames.has(name))
             continue;
         effectCountByName.set(name, (effectCountByName.get(name) ?? 0) + 1);
@@ -1231,7 +1231,7 @@ function _collapseAddBadges(token) {
         if (count <= 1)
             continue;
         // Find the first effect with this name that still has a sprite (the primary).
-        const primaryEffect = temporaryEffects.find(e => e.name === name && spriteMap.has(e.id));
+        const primaryEffect = temporaryEffects.find(effect => effect.name === name && spriteMap.has(effect.id));
         if (!primaryEffect)
             continue;
         const sprite = spriteMap.get(primaryEffect.id);

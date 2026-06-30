@@ -46,17 +46,17 @@ export function laPositionPopup(popup, html) {
     $('body').append(popup);
     const dlg = html.closest('.app');
     const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
-    const dlgW = dlg.outerWidth() ?? 480;
-    const pw = popup.outerWidth(), ph = popup.outerHeight();
-    const wx = window.innerWidth, wy = window.innerHeight;
-    let px = dlgOffset.left + dlgW + 8;
-    if (px + pw > wx - 10)
-        px = dlgOffset.left - pw - 8;
-    let py = dlgOffset.top;
-    if (py + ph > wy - 10)
-        py = wy - ph - 10;
-    const finalLeft = Math.max(10, px);
-    popup.css({ left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
+    const dlgWidth = dlg.outerWidth() ?? 480;
+    const popupWidth = popup.outerWidth(), popupHeight = popup.outerHeight();
+    const viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
+    let popupLeft = dlgOffset.left + dlgWidth + 8;
+    if (popupLeft + popupWidth > viewportWidth - 10)
+        popupLeft = dlgOffset.left - popupWidth - 8;
+    let popupTop = dlgOffset.top;
+    if (popupTop + popupHeight > viewportHeight - 10)
+        popupTop = viewportHeight - popupHeight - 10;
+    const finalLeft = Math.max(10, popupLeft);
+    popup.css({ left: finalLeft - 20, top: Math.max(10, popupTop), opacity: 0 });
     popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
     laBindPopupBehavior(popup);
 }
@@ -94,9 +94,9 @@ export function laRenderTags(tags, resolveStr) {
     if (!tags?.length)
         return '';
     const resolve = resolveStr ?? (s => s);
-    const chips = tags.map(t => {
-        const raw = String(t._resolvedName ?? t.name ?? t.lid ?? t.id ?? '');
-        const text = resolve(raw).replaceAll('{VAL}', resolve(String(t.val ?? '')));
+    const chips = tags.map(tag => {
+        const raw = String(tag._resolvedName ?? tag.name ?? tag.lid ?? tag.id ?? '');
+        const text = resolve(raw).replaceAll('{VAL}', resolve(String(tag.val ?? '')));
         return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;">${text}</span>`;
     }).join('');
     return `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>`;
@@ -127,11 +127,11 @@ export function laRenderActions(actions, resolveStr) {
     if (!actions?.length)
         return '';
     const resolve = resolveStr ?? (s => s);
-    const items = actions.map(a => {
-        const aEffect = laFormatDetailHtml(resolve(a.detail || a.effect || ''));
+    const items = actions.map(action => {
+        const effectHtml = laFormatDetailHtml(resolve(action.detail || action.effect || ''));
         return `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;">
-            <div style="font-size:0.78em;font-weight:bold;color:#ccc;">${a.name || ''}${a.activation ? `<span style="font-size:0.85em;font-weight:normal;color:#888;margin-left:6px;">[${a.activation}]</span>` : ''}</div>
-            ${aEffect ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${aEffect}</div>` : ''}
+            <div style="font-size:0.78em;font-weight:bold;color:#ccc;">${action.name || ''}${action.activation ? `<span style="font-size:0.85em;font-weight:normal;color:#888;margin-left:6px;">[${action.activation}]</span>` : ''}</div>
+            ${effectHtml ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${effectHtml}</div>` : ''}
         </div>`;
     }).join('');
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('ACTIONS', '#1a5c3a')}${items}</div>`;
@@ -145,33 +145,33 @@ export function laRenderActions(actions, resolveStr) {
 export function laRenderDeployables(deployableActors) {
     if (!deployableActors?.length)
         return '';
-    const items = deployableActors.map(dep => {
-        const ds = dep.system;
+    const items = deployableActors.map(deployable => {
+        const depSys = deployable.system;
         const statPairs = [
-            ds?.hp?.max != null ? `HP ${ds.hp.max}` : null,
-            ds?.size != null ? `Size ${ds.size}` : null,
-            ds?.armor != null && ds.armor > 0 ? `Armor ${ds.armor}` : null,
-            ds?.evasion != null ? `Evasion ${ds.evasion}` : null,
-            ds?.edef != null ? `E-Def ${ds.edef}` : null,
-            ds?.speed != null && ds.speed > 0 ? `Speed ${ds.speed}` : null,
-            ds?.heatcap != null && ds.heatcap > 0 ? `Heat ${ds.heatcap}` : null,
-            ds?.save != null && ds.save > 0 ? `Save ${ds.save}` : null
+            depSys?.hp?.max != null ? `HP ${depSys.hp.max}` : null,
+            depSys?.size != null ? `Size ${depSys.size}` : null,
+            depSys?.armor != null && depSys.armor > 0 ? `Armor ${depSys.armor}` : null,
+            depSys?.evasion != null ? `Evasion ${depSys.evasion}` : null,
+            depSys?.edef != null ? `E-Def ${depSys.edef}` : null,
+            depSys?.speed != null && depSys.speed > 0 ? `Speed ${depSys.speed}` : null,
+            depSys?.heatcap != null && depSys.heatcap > 0 ? `Heat ${depSys.heatcap}` : null,
+            depSys?.save != null && depSys.save > 0 ? `Save ${depSys.save}` : null
         ].filter(Boolean);
-        const depDetail = laFormatDetailHtml(ds?.detail || ds?.effect || '');
-        const depTags = laRenderTags(ds?.tags ?? []);
-        const actLabel = ds?.activation ? `<span style="font-size:0.78em;font-weight:normal;color:#888;margin-left:5px;">[${ds.activation}]</span>` : '';
+        const depDetail = laFormatDetailHtml(depSys?.detail || depSys?.effect || '');
+        const depTags = laRenderTags(depSys?.tags ?? []);
+        const actLabel = depSys?.activation ? `<span style="font-size:0.78em;font-weight:normal;color:#888;margin-left:5px;">[${depSys.activation}]</span>` : '';
         const hasBody = !!(depDetail || depTags);
-        const actionsHtml = (ds?.actions ?? []).map(/** @type {any} */ a => {
-            const triggerHtml = a.trigger ? `<div style="font-size:0.73em;color:#aaa;margin-top:2px;"><span style="font-weight:bold;color:#c084fc;">TRIGGER</span> ${a.trigger}</div>` : '';
-            const detailHtml  = a.detail  ? `<div style="font-size:0.73em;color:#bbb;margin-top:2px;line-height:1.3;">${laFormatDetailHtml(a.detail)}</div>` : '';
-            const freqHtml    = a.frequency ? `<span style="font-size:0.7em;color:#888;margin-left:4px;">${a.frequency}</span>` : '';
+        const actionsHtml = (depSys?.actions ?? []).map(/** @type {any} */ action => {
+            const triggerHtml = action.trigger ? `<div style="font-size:0.73em;color:#aaa;margin-top:2px;"><span style="font-weight:bold;color:#c084fc;">TRIGGER</span> ${action.trigger}</div>` : '';
+            const detailHtml  = action.detail  ? `<div style="font-size:0.73em;color:#bbb;margin-top:2px;line-height:1.3;">${laFormatDetailHtml(action.detail)}</div>` : '';
+            const freqHtml    = action.frequency ? `<span style="font-size:0.7em;color:#888;margin-left:4px;">${action.frequency}</span>` : '';
             return `<div style="margin-top:4px;padding:3px 5px;background:rgba(74,16,112,0.15);border-left:2px solid #7c3aed;border-radius:2px;">
-                <div style="font-size:0.75em;font-weight:bold;color:#c084fc;">${a.name}<span style="font-weight:normal;color:#888;margin-left:4px;">[${a.activation}]</span>${freqHtml}</div>
+                <div style="font-size:0.75em;font-weight:bold;color:#c084fc;">${action.name}<span style="font-weight:normal;color:#888;margin-left:4px;">[${action.activation}]</span>${freqHtml}</div>
                 ${triggerHtml}${detailHtml}
             </div>`;
         }).join('');
         return `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;">
-            <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${dep.name}${actLabel}</div>
+            <div style="font-size:0.78em;font-weight:bold;color:#c084fc;margin-bottom:3px;">${deployable.name}${actLabel}</div>
             ${statPairs.length ? `<div style="font-size:0.75em;color:#aaa;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${hasBody ? '4' : '0'}px;">${statPairs.map(s => `<span>${s}</span>`).join('')}</div>` : ''}
             ${depTags}
             ${depDetail ? `<div style="font-size:0.77em;color:#bbb;line-height:1.3;">${depDetail}</div>` : ''}
@@ -200,36 +200,36 @@ function _renderAttackLine(bonus, acc) {
     return `<div style="font-size:0.88em;color:#ccc;margin-bottom:4px;">${parts.join('&nbsp;&nbsp;')}</div>`;
 }
 
-export function laRenderWeaponProfile(p, showName) {
-    const nameHdr = showName && p.name
-        ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${p.name}</div>`
+export function laRenderWeaponProfile(profile, showName) {
+    const nameHdr = showName && profile.name
+        ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${profile.name}</div>`
         : '';
-    const wpnAttackHtml = _renderAttackLine(p.attack_bonus ?? 0, p.accuracy ?? 0);
-    const damageHtml = p.damage?.length
-        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${p.damage.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`
+    const wpnAttackHtml = _renderAttackLine(profile.attack_bonus ?? 0, profile.accuracy ?? 0);
+    const damageHtml = profile.damage?.length
+        ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${profile.damage.map(dmg => `<b>${dmg.val}</b> ${dmg.type}`).join(' + ')}</div></div>`
         : '';
     const rangeHtml = (() => {
-        if (!p.range?.length)
+        if (!profile.range?.length)
             return '';
-        const rangeStr = p.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ');
+        const rangeStr = profile.range.map(r => `<b>${r.val}</b> ${r.type}`).join(' · ');
         let baseStr = '';
-        if (p.base_range?.length) {
-            const changed = p.range.some(r => {
-                const base = p.base_range.find(b => b.type === r.type);
+        if (profile.base_range?.length) {
+            const changed = profile.range.some(r => {
+                const base = profile.base_range.find(b => b.type === r.type);
                 return !base || String(base.val) !== String(r.val);
-            }) || p.base_range.some(b => !p.range.find(r => r.type === b.type));
+            }) || profile.base_range.some(b => !profile.range.find(r => r.type === b.type));
             if (changed) {
-                baseStr = ` <span style="color:#777;font-size:0.85em;">(base: ${p.base_range.map(r => `${r.val} ${r.type}`).join(' · ')})</span>`;
+                baseStr = ` <span style="color:#777;font-size:0.85em;">(base: ${profile.base_range.map(r => `${r.val} ${r.type}`).join(' · ')})</span>`;
             }
         }
         return `<div style="margin-bottom:6px;">${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${rangeStr}${baseStr}</div></div>`;
     })();
-    const tagsHtml = laRenderTags(p.tags);
-    const onHitHtml = p.on_hit
-        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(p.on_hit)}</div></div>`
+    const tagsHtml = laRenderTags(profile.tags);
+    const onHitHtml = profile.on_hit
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(profile.on_hit)}</div></div>`
         : '';
-    const effectHtml = p.effect
-        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(p.effect)}</div></div>`
+    const effectHtml = profile.effect
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(profile.effect)}</div></div>`
         : '';
     return `${nameHdr}${wpnAttackHtml}${damageHtml}${rangeHtml}${tagsHtml}${onHitHtml}${effectHtml}`;
 }
@@ -246,9 +246,9 @@ export function laRenderWeaponMod(modName, modItem) {
     const modActionsHtml = laRenderActions(ms?.actions ?? []);
     const modTagsArr = ms?.tags ?? [];
     const modTagsHtml = modTagsArr.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${modTagsArr.map(t => {
-            const tn = String(t.name ?? t.lid ?? t.id ?? '').replaceAll('{VAL}', t.val ?? '');
-            return `<span style="background:rgba(255,255,255,0.08);border:1px solid #555;border-radius:3px;padding:0 5px;font-size:0.72em;color:#ccc;">${tn}</span>`;
+        ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${modTagsArr.map(tag => {
+            const tagText = String(tag.name ?? tag.lid ?? tag.id ?? '').replaceAll('{VAL}', tag.val ?? '');
+            return `<span style="background:rgba(255,255,255,0.08);border:1px solid #555;border-radius:3px;padding:0 5px;font-size:0.72em;color:#ccc;">${tagText}</span>`;
         }).join('')}</div>`
         : '';
     const modBody = `${modActionsHtml}${modEffect ? `<div style="font-size:0.8em;color:#bbb;margin-top:3px;line-height:1.3;">${modEffect}</div>` : ''}${modTagsHtml}`;
@@ -271,37 +271,37 @@ function laRenderBonusList(bonuses) {
     if (!bonuses?.length)
         return '';
     const activeKeys = (map) => Object.entries(map ?? {}).filter(([, v]) => v).map(([k]) => k);
-    const lines = bonuses.map(b => {
+    const lines = bonuses.map(bonus => {
         // Lancer system bonuses use `lid`; LA custom bonuses use `type`
-        const kind = b.lid ?? b.type ?? '';
+        const kind = bonus.lid ?? bonus.type ?? '';
         if (kind === 'accuracy')
-            return `Accuracy +${b.val}`;
+            return `Accuracy +${bonus.val}`;
         if (kind === 'difficulty')
-            return `Difficulty +${b.val}`;
+            return `Difficulty +${bonus.val}`;
         if (kind === 'stat')
-            return `${(b.stat ?? b.id ?? '').split('.').pop() || kind} ${Number.parseInt(b.val) >= 0 ? '+' : ''}${b.val}`;
+            return `${(bonus.stat ?? bonus.id ?? '').split('.').pop() || kind} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
         if (kind === 'damage')
-            return (b.damage || []).map(d => `${d.val} ${d.type}`).join(' + ');
+            return (bonus.damage || []).map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
         if (kind === 'tag')
-            return b.removeTag ? `Remove Tag: ${b.tagName}` : `${b.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${b.tagName}${b.val ? ` ${b.val}` : ''}`;
+            return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${bonus.tagName}${bonus.val ? ` ${bonus.val}` : ''}`;
         if (kind === 'range') {
             // Lancer system format: range_types map + optional weapon_types/weapon_sizes filters
-            const rangeTypes = activeKeys(b.range_types);
-            const weaponTypes = activeKeys(b.weapon_types);
-            const sign = Number.parseInt(b.val) >= 0 ? '+' : '';
-            const rangeStr = rangeTypes.length ? rangeTypes.join('/') : (b.rangeType ?? 'Range');
+            const rangeTypes = activeKeys(bonus.range_types);
+            const weaponTypes = activeKeys(bonus.weapon_types);
+            const sign = Number.parseInt(bonus.val) >= 0 ? '+' : '';
+            const rangeStr = rangeTypes.length ? rangeTypes.join('/') : (bonus.rangeType ?? 'Range');
             const filterStr = weaponTypes.length < 6 && weaponTypes.length > 0 ? ` (${weaponTypes.join('/')})` : '';
-            return `${sign}${b.val} ${rangeStr}${filterStr}`;
+            return `${sign}${bonus.val} ${rangeStr}${filterStr}`;
         }
         if (kind === 'immunity') {
-            if (b.subtype === 'effect' && b.effects)
-                return `Immunity: ${b.effects.join(', ')}`;
-            if (b.subtype === 'damage' || b.subtype === 'resistance')
-                return `${b.subtype}: ${(b.damageTypes || []).join(', ')}`;
-            return `Immunity: ${b.subtype}`;
+            if (bonus.subtype === 'effect' && bonus.effects)
+                return `Immunity: ${bonus.effects.join(', ')}`;
+            if (bonus.subtype === 'damage' || bonus.subtype === 'resistance')
+                return `${bonus.subtype}: ${(bonus.damageTypes || []).join(', ')}`;
+            return `Immunity: ${bonus.subtype}`;
         }
-        if (kind === 'multi' && Array.isArray(b.bonuses))
-            return b.bonuses.map(bb => laRenderBonusList([bb])).join('');
+        if (kind === 'multi' && Array.isArray(bonus.bonuses))
+            return bonus.bonuses.map(innerBonus => laRenderBonusList([innerBonus])).join('');
         return kind || '?';
     });
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('BONUSES', '#1565c0')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${lines.map(l => `<div>· ${l}</div>`).join('')}</div></div>`;
@@ -366,10 +366,10 @@ export function laRenderCoreSystemBody(cs) {
         : '';
 
     const countersHtml = counters.length
-        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('RESOURCES', '#1a3a5c')}${counters.map(c =>
+        ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('RESOURCES', '#1a3a5c')}${counters.map(counter =>
             `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;display:flex;justify-content:space-between;align-items:center;">
-                <span style="font-size:0.78em;font-weight:bold;color:#ccc;">${c.name}</span>
-                <span style="font-size:0.78em;color:#aaa;">${c.value ?? c.default_value ?? 0} / ${c.max ?? 0}</span>
+                <span style="font-size:0.78em;font-weight:bold;color:#ccc;">${counter.name}</span>
+                <span style="font-size:0.78em;color:#aaa;">${counter.value ?? counter.default_value ?? 0} / ${counter.max ?? 0}</span>
             </div>`).join('')}</div>`
         : '';
 
@@ -412,9 +412,9 @@ export function laRenderWeaponBody(profiles, opts = {}) {
     if (profiles.length <= 1) {
         profilesHtml = profiles.map(p => laRenderWeaponProfile(p, false)).join('');
     } else {
-        const blocks = profiles.map((p, idx) => {
-            const inner   = laRenderWeaponProfile(p, false);
-            const name    = (p.name || 'Profile').toUpperCase();
+        const blocks = profiles.map((profile, idx) => {
+            const inner   = laRenderWeaponProfile(profile, false);
+            const name    = (profile.name || 'Profile').toUpperCase();
             const isActive = idx === activeProfileIndex;
             const blockStyle = isActive
                 ? 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-left:3px solid #4caf50;border-radius:3px;cursor:pointer;'
@@ -471,7 +471,7 @@ export function laRenderActionDetail(action, opts = {}) {
         const tier = (opts.tier ?? 1) - 1;
         const dmgArr = Array.isArray(action.damage[0]) ? (action.damage[tier] ?? action.damage[0]) : action.damage;
         if (dmgArr?.length) {
-            damageHtml = `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${dmgArr.map(d => `<b>${d.val}</b> ${d.type}`).join(' + ')}</div></div>`;
+            damageHtml = `<div style="margin-bottom:6px;">${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${dmgArr.map(dmg => `<b>${dmg.val}</b> ${dmg.type}`).join(' + ')}</div></div>`;
         }
     }
     const onHitHtml = action.on_hit
@@ -481,9 +481,9 @@ export function laRenderActionDetail(action, opts = {}) {
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('TRIGGER', '#1a5c3a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.trigger)}</div></div>`
         : '';
     const actionTags = [...(action.tags ?? [])];
-    if (action.activation && !actionTags.some(t => t.lid?.includes('action') || t.lid?.includes('protocol') || t.lid?.includes('reaction') || t.lid?.includes('tech')))
+    if (action.activation && !actionTags.some(tag => tag.lid?.includes('action') || tag.lid?.includes('protocol') || tag.lid?.includes('reaction') || tag.lid?.includes('tech')))
         actionTags.unshift({ name: action.activation });
-    if (action.recharge && !actionTags.some(t => t.lid === 'tg_recharge'))
+    if (action.recharge && !actionTags.some(tag => tag.lid === 'tg_recharge'))
         actionTags.push({ lid: 'tg_recharge', val: String(action.recharge), name: 'Recharge {VAL}+' });
     const tagsHtml = laRenderTags(actionTags);
     const detail = laFormatDetailHtml(action.detail || action.effect || '');

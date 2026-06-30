@@ -62,8 +62,8 @@ export function playUiSound(variant = 'open', { force = false } = {}) {
         tokenDrag:     { src: 'modules/lancer-automations/FX/audio/drag.wav',          scale: 0.2 },
         tokenMove:     { src: 'modules/lancer-automations/FX/audio/move2.wav',          scale: 0.3 },
         elevationKey:  { src: 'modules/lancer-automations/FX/audio/elevationKey.mp3',  scale: 0.5 },
-        targeting:     { src: 'modules/lancer-automations/FX/audio/targeting_1.mp3', scale: 0.2 },
-        targetingConfirm: { src: 'modules/lancer-automations/FX/audio/targeting_2.mp3', scale: 0.2 },
+        targeting:     { src: 'modules/lancer-automations/FX/audio/targeting_1.mp3', scale: 0.3 },
+        targetingConfirm: { src: 'modules/lancer-automations/FX/audio/targeting_2.mp3', scale: 0.3 },
     };
     const entry = SFX[variant] ?? SFX.open;
     const scale = entry.scale;

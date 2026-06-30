@@ -41,7 +41,7 @@ function structTableDescriptions(roll, remStruct) {
 
 const getRollCount = (roll, num_to_count) => {
     return roll
-        ? roll.terms[0].results.filter((v) => v.result === num_to_count).length
+        ? roll.terms[0].results.filter((diceResult) => diceResult.result === num_to_count).length
         : 0;
 };
 
@@ -62,10 +62,10 @@ async function createCrushingHitRoll(damage) {
     const roll = new Roll(`${damage}d6kl1`);
     await roll.evaluate({ allowInteractive: false });
     const term0 = /** @type {DiceTerm} */ (roll.terms[0]);
-    term0.results = term0.results.map(r => ({
+    term0.results = term0.results.map(diceResult => ({
         result: 1,
-        active: r.active,
-        discarded: r.discarded,
+        active: diceResult.active,
+        discarded: diceResult.discarded,
         hidden: true
     }));
     /** @type {any} */ (roll)._total = 1;
@@ -146,7 +146,7 @@ export async function altRollStructure(state) {
         let formula = `${damage}d6kl1`;
         // If it's an NPC with legendary, change the formula to roll twice and keep the best result.
         if (actor.is_npc() &&
-      actor.items.some((i) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(i.system.lid)
+      actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
       )) {
             formula = `{${formula}, ${formula}}kh`;
         }
@@ -350,7 +350,7 @@ function isValidDestructionChoice(item) {
     if (item.system?.destroyed === true) {
         return false;
     }
-    const isLimited = item.system?.tags?.some((t) => t.lid === "tg_limited" || t.is_limited);
+    const isLimited = item.system?.tags?.some((tag) => tag.lid === "tg_limited" || tag.is_limited);
     if (isLimited) {
         const uses = item.system?.uses?.value ?? 0;
         return uses > 0;
@@ -362,9 +362,9 @@ function getValidWeaponMounts(actor, includeDestroyed = false) {
     // Handle NPCs - they store weapons as items, not in loadout
     if (actor.is_npc?.()) {
         const validWeapons = [];
-        const weapons = actor.items.filter(i =>
-            i.type === "npc_feature" &&
-      i.system.type === "Weapon"
+        const weapons = actor.items.filter(item =>
+            item.type === "npc_feature" &&
+      item.system.type === "Weapon"
         );
         for (let i = 0; i < weapons.length; i++) {
             const weaponItem = weapons[i];
@@ -412,8 +412,8 @@ function getValidSystems(actor, includeDestroyed = false) {
     // Handle NPCs - they store features as items, not in loadout
     if (actor.is_npc?.()) {
         const validSystems = [];
-        const features = actor.items.filter(i =>
-            i.type === "npc_feature" && i.system.type === "System"
+        const features = actor.items.filter(item =>
+            item.type === "npc_feature" && item.system.type === "System"
         );
         for (const featureItem of features) {
             if (includeDestroyed || isValidDestructionChoice(featureItem)) {
@@ -467,43 +467,43 @@ async function showSystemTraumaDialog(actor, traumaType) {
         subtitle = actor.is_npc?.()
             ? "Select a weapon to destroy."
             : "Select a weapon mount to destroy. All destructible weapons on the selected mount will be destroyed.";
-        items = allMounts.map(m => {
-            const allIndestructible = m.weapons.length > 0 && m.weapons.every(w =>
-                (w.system?.all_tags ?? w.system?.tags)?.some(t => t.lid === 'tg_indestructible')
+        items = allMounts.map(mount => {
+            const allIndestructible = mount.weapons.length > 0 && mount.weapons.every(weapon =>
+                (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible')
             );
-            const labelHtml = m.weapons.map(w => {
-                const isDestroyed = w.system?.destroyed === true;
-                const isIndestructible = !isDestroyed && (w.system?.all_tags ?? w.system?.tags)?.some(t => t.lid === 'tg_indestructible');
+            const labelHtml = mount.weapons.map(weapon => {
+                const isDestroyed = weapon.system?.destroyed === true;
+                const isIndestructible = !isDestroyed && (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
                 const badge = isDestroyed
                     ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">✕ DESTROYED</span>`
                     : isIndestructible
                         ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">INDESTRUCTIBLE</span>`
                         : '';
-                return `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${w.name}${badge}</span></div>`;
+                return `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${weapon.name}${badge}</span></div>`;
             }).join('');
-            const weaponDetails = m.weapons.map(w => {
-                const sys = w.system;
+            const weaponDetails = mount.weapons.map(weapon => {
+                const sys = weapon.system;
                 if (!sys)
                     return null;
-                const profiles = getWeaponProfiles_WithBonus(w, actor);
+                const profiles = getWeaponProfiles_WithBonus(weapon, actor);
                 if (!profiles.length)
                     return null;
                 const size = sys.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys.size || "");
                 const type = sys.active_profile?.type || sys.type || "";
-                return { name: w.name, img: w.img, size, type, profiles };
+                return { name: weapon.name, img: weapon.img, size, type, profiles };
             }).filter(Boolean);
             return {
-                id: `mount_${m.index}`,
+                id: `mount_${mount.index}`,
                 type: "mount",
-                data: m,
-                img: m.weapons[0]?.img || "icons/svg/item-bag.svg",
+                data: mount,
+                img: mount.weapons[0]?.img || "icons/svg/item-bag.svg",
                 labelHtml,
-                sublabel: m.name,
-                selectable: !allIndestructible && m.weapons.some(w => isValidDestructionChoice(w)),
+                sublabel: mount.name,
+                selectable: !allIndestructible && mount.weapons.some(weapon => isValidDestructionChoice(weapon)),
                 detail: { weaponDetails },
             };
         });
-        const armamentRedundancy = validSystems.find(s => s.system.lid === "ms_armament_redundancy");
+        const armamentRedundancy = validSystems.find(systemItem => systemItem.system.lid === "ms_armament_redundancy");
         if (armamentRedundancy) {
             items.push({
                 id: `system_${armamentRedundancy.id}`,
@@ -524,34 +524,34 @@ async function showSystemTraumaDialog(actor, traumaType) {
     } else {
         titleHtml = "SYSTEM TRAUMA // SYSTEM DESTRUCTION";
         subtitle = "Select a system to destroy.";
-        items = allSystems.map(s => {
-            const isDestroyed = s.system?.destroyed === true;
-            const isIndestructible = !isDestroyed && s.system?.tags?.some(t => t.lid === 'tg_indestructible');
+        items = allSystems.map(systemItem => {
+            const isDestroyed = systemItem.system?.destroyed === true;
+            const isIndestructible = !isDestroyed && systemItem.system?.tags?.some(tag => tag.lid === 'tg_indestructible');
             const badge = isDestroyed
                 ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">✕ DESTROYED</span>`
                 : isIndestructible
                     ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">INDESTRUCTIBLE</span>`
                     : '';
             return {
-                id: `system_${s.id}`,
+                id: `system_${systemItem.id}`,
                 type: "system",
-                data: s,
-                img: s.img || "systems/lancer/assets/icons/mech_system.svg",
-                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${s.name}${badge}</span></div>`,
-                sublabel: s.system?.type || "SYSTEM",
-                selectable: isValidDestructionChoice(s) && !isIndestructible,
+                data: systemItem,
+                img: systemItem.img || "systems/lancer/assets/icons/mech_system.svg",
+                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${systemItem.name}${badge}</span></div>`,
+                sublabel: systemItem.system?.type || "SYSTEM",
+                selectable: isValidDestructionChoice(systemItem) && !isIndestructible,
                 detail: {
                     weaponDetails: null,
-                    effect: s.system?.effect || "",
-                    tags: s.system?.tags ?? [],
-                    actions: s.system?.actions ?? []
+                    effect: systemItem.system?.effect || "",
+                    tags: systemItem.system?.tags ?? [],
+                    actions: systemItem.system?.actions ?? []
                 },
             };
         });
     }
 
     return new Promise((resolve) => {
-        let selectedId = items.find(i => i.selectable)?.id ?? null;
+        let selectedId = items.find(item => item.selectable)?.id ?? null;
 
         const content = `
             <div class="lancer-dialog-header">
@@ -587,7 +587,7 @@ async function showSystemTraumaDialog(actor, traumaType) {
                     icon: '<i class="fas fa-trash"></i>',
                     label: "Destroy",
                     callback: () => {
-                        const item = items.find(i => i.id === selectedId);
+                        const item = items.find(candidateItem => candidateItem.id === selectedId);
                         if (!item) {
                             resolve(null);
                             return;
@@ -615,35 +615,35 @@ async function showSystemTraumaDialog(actor, traumaType) {
                     e.preventDefault();
                     $('.la-trauma-detail-popup').remove();
                     const itemId = $(this).data('item-id');
-                    const item = items.find(i => i.id === itemId);
+                    const item = items.find(candidateItem => candidateItem.id === itemId);
                     if (!item?.detail)
                         return;
 
                     let title = '', subtitle = '', bodyHtml = '', theme = 'weapon';
                     if (item.type === "mount" && item.detail.weaponDetails?.length) {
-                        bodyHtml = item.detail.weaponDetails.map(wd => {
+                        bodyHtml = item.detail.weaponDetails.map(weaponDetail => {
                             const wName = item.detail.weaponDetails.length > 1
-                                ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>`
+                                ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${weaponDetail.name}</div>`
                                 : '';
-                            const showProfileNames = wd.profiles.length > 1;
-                            const profilesHtml = wd.profiles
-                                .map(p => laRenderWeaponProfile(p, showProfileNames))
+                            const showProfileNames = weaponDetail.profiles.length > 1;
+                            const profilesHtml = weaponDetail.profiles
+                                .map(profile => laRenderWeaponProfile(profile, showProfileNames))
                                 .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
                             return `${wName}${profilesHtml}`;
                         }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
                         title = item.detail.weaponDetails.length > 1 ? item.sublabel : (item.detail.weaponDetails[0]?.name ?? '');
                         subtitle = item.detail.weaponDetails.length > 1
-                            ? item.detail.weaponDetails.map(w => w.name).join(' / ')
+                            ? item.detail.weaponDetails.map(weaponDetail => weaponDetail.name).join(' / ')
                             : [item.detail.weaponDetails[0]?.size, item.detail.weaponDetails[0]?.type].filter(Boolean).join(' · ');
                     } else if (item.type === "system") {
-                        const d = item.detail;
-                        if (!d.effect && !d.tags?.length && !d.actions?.length)
+                        const detail = item.detail;
+                        if (!detail.effect && !detail.tags?.length && !detail.actions?.length)
                             return;
                         title = item.data.name;
                         subtitle = item.sublabel;
-                        bodyHtml = laRenderTextSection('EFFECT', d.effect, '#e65100')
-                            + laRenderTags(d.tags)
-                            + laRenderActions(d.actions);
+                        bodyHtml = laRenderTextSection('EFFECT', detail.effect, '#e65100')
+                            + laRenderTags(detail.tags)
+                            + laRenderActions(detail.actions);
                         theme = 'system';
                     } else {
                         return;
@@ -735,7 +735,7 @@ export async function manualSystemTrauma() {
     let destroyedItems = [];
     if (choice.type === "mount") {
         for (const weapon of choice.mount.weapons) {
-            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(t => t.lid === 'tg_indestructible');
+            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
             if (!isIndestructible) {
                 await weapon.update({ "system.destroyed": true });
                 destroyedItems.push(weapon.name);
@@ -889,7 +889,7 @@ async function handleTearOffChoice(state, isSystemTrauma) {
     if (choice.type === "mount") {
         const destroyedWeapons = [];
         for (const weapon of choice.mount.weapons) {
-            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(t => t.lid === 'tg_indestructible');
+            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
             if (!isIndestructible) {
                 await weapon.update({ "system.destroyed": true });
                 destroyedWeapons.push(weapon.name);

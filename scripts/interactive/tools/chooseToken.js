@@ -103,10 +103,10 @@ export function chooseToken(casterToken, options = {}) {
         const rotationModulus = isLineMode ? (isHexGrid() ? 6 : 8) * lineRadius : CONE_STEPS_PER_TURN;
 
         // Lancer vertical hex count: max of actor.system.size + doc dims; 0.5 special-cased; else ceil to integer ≥ 1.
-        const tokenVerticalSize = (t) => {
-            const actorSize = Number(t?.actor?.system?.size ?? 0);
-            const docW = Number(t?.document?.width ?? t?.w ?? 0) || 0;
-            const docH = Number(t?.document?.height ?? t?.h ?? 0) || 0;
+        const tokenVerticalSize = (token) => {
+            const actorSize = Number(token?.actor?.system?.size ?? 0);
+            const docW = Number(token?.document?.width ?? token?.w ?? 0) || 0;
+            const docH = Number(token?.document?.height ?? token?.h ?? 0) || 0;
             const raw = Math.max(actorSize, docW, docH, 0);
             if (!raw)
                 return 1;
@@ -114,16 +114,16 @@ export function chooseToken(casterToken, options = {}) {
                 return 0.5;
             return Math.max(1, Math.ceil(raw));
         };
-        const verticalOverlap = (a0, a1, b0, b1) => a0 < b1 && b0 < a1;
+        const verticalOverlap = (aBot, aTop, bBot, bTop) => aBot < bTop && bBot < aTop;
         const groundAtCenter = (centerPt) => {
             const terrainAPI = globalThis.terrainHeightTools;
             if (!terrainAPI)
                 return 0;
-            const off = pixelToOffset(centerPt.x, centerPt.y);
-            return Number(getHexGroundElevation(off.col, off.row, terrainAPI)) || 0;
+            const offset = pixelToOffset(centerPt.x, centerPt.y);
+            return Number(getHexGroundElevation(offset.col, offset.row, terrainAPI)) || 0;
         };
-        const resolvePlacementElevation = (p) =>
-            (autoElevation ? groundAtCenter(p.center) : 0) + (Number(p?.elevationOffset) || 0);
+        const resolvePlacementElevation = (placement) =>
+            (autoElevation ? groundAtCenter(placement.center) : 0) + (Number(placement?.elevationOffset) || 0);
 
         // Adjacent "col,row" keys: 6 hex neighbours, or 8 on a square grid.
         const neighborKeys = (key) => {
@@ -132,11 +132,11 @@ export function chooseToken(casterToken, options = {}) {
             if (isHexGrid()) {
                 /** @type {any} */
                 const grid = canvas.grid;
-                const c = grid.getCube({ i: row, j: col });
+                const centerCube = grid.getCube({ i: row, j: col });
                 const dirs = [[1, 0, -1], [0, 1, -1], [-1, 1, 0], [-1, 0, 1], [0, -1, 1], [1, -1, 0]];
                 for (const [dq, dr, ds] of dirs) {
-                    const o = grid.getOffset({ q: c.q + dq, r: c.r + dr, s: c.s + ds });
-                    out.push(`${o.j},${o.i}`);
+                    const neighborOffset = grid.getOffset({ q: centerCube.q + dq, r: centerCube.r + dr, s: centerCube.s + ds });
+                    out.push(`${neighborOffset.j},${neighborOffset.i}`);
                 }
             } else {
                 for (let dc = -1; dc <= 1; dc++)
@@ -154,16 +154,16 @@ export function chooseToken(casterToken, options = {}) {
             const result = new Set();
             const visited = new Set(seedKeys);
             const queue = [...visited];
-            for (const k of visited)
-                if (affected.has(k))
-                    result.add(k);
+            for (const seedKey of visited)
+                if (affected.has(seedKey))
+                    result.add(seedKey);
             while (queue.length) {
-                for (const nb of neighborKeys(queue.shift())) {
-                    if (visited.has(nb) || !affected.has(nb))
+                for (const neighborKey of neighborKeys(queue.shift())) {
+                    if (visited.has(neighborKey) || !affected.has(neighborKey))
                         continue;
-                    visited.add(nb);
-                    result.add(nb);
-                    queue.push(nb);
+                    visited.add(neighborKey);
+                    result.add(neighborKey);
+                    queue.push(neighborKey);
                 }
             }
             return result;
@@ -173,8 +173,8 @@ export function chooseToken(casterToken, options = {}) {
         const propagate = (affected, seeds) =>
             (elevationAware && propagation) ? keepConnected(affected, seeds) : affected;
         const originSeed = (pt) => {
-            const o = pixelToOffset(pt.x, pt.y);
-            return [`${o.col},${o.row}`];
+            const offset = pixelToOffset(pt.x, pt.y);
+            return [`${offset.col},${offset.row}`];
         };
 
         const pulseGraphic = new PIXI.Graphics();
@@ -203,9 +203,9 @@ export function chooseToken(casterToken, options = {}) {
             hoverPulseGraphic.lineStyle(4, 0xff9900, alpha);
             hoverPulseGraphic.beginFill(0xff9900, alpha * 0.25);
             if (isHexGrid()) {
-                const occ = getOccupiedOffsets(hoverPulseToken);
-                for (const o of occ)
-                    drawHexAt(hoverPulseGraphic, o.col, o.row);
+                const occupiedOffsets = getOccupiedOffsets(hoverPulseToken);
+                for (const offset of occupiedOffsets)
+                    drawHexAt(hoverPulseGraphic, offset.col, offset.row);
             } else {
                 hoverPulseGraphic.drawRect(
                     hoverPulseToken.document.x, hoverPulseToken.document.y,
@@ -221,10 +221,10 @@ export function chooseToken(casterToken, options = {}) {
         const areaPulseTick = () => {
             if (placements.length === 0)
                 return;
-            const a = 0.65 + 0.35 * Math.sin(performance.now() / 280);
-            for (const p of placements) {
-                if (p.graphics)
-                    p.graphics.alpha = a;
+            const alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+            for (const placement of placements) {
+                if (placement.graphics)
+                    placement.graphics.alpha = alpha;
             }
         };
         canvas.app.ticker.add(areaPulseTick);
@@ -249,34 +249,34 @@ export function chooseToken(casterToken, options = {}) {
         const previewSelectHighlight = new PIXI.Graphics();
         canvas.stage.addChild(previewSelectHighlight);
 
-        const selectionIds = selection ? new Set(selection.map(t => t.id)) : null;
+        const selectionIds = selection ? new Set(selection.map(token => token.id)) : null;
         const selectionHighlightGraphics = [];
         if (selection) {
-            for (const t of selection) {
-                const hl = new PIXI.Graphics();
-                hl.lineStyle(4, 0x00ff00, 0.8);
-                hl.beginFill(0x00ff00, 0.2);
-                const offsets = getOccupiedOffsets(t);
-                for (const off of offsets) {
+            for (const token of selection) {
+                const highlight = new PIXI.Graphics();
+                highlight.lineStyle(4, 0x00ff00, 0.8);
+                highlight.beginFill(0x00ff00, 0.2);
+                const offsets = getOccupiedOffsets(token);
+                for (const offset of offsets) {
                     if (isHexGrid()) {
-                        drawHexAt(hl, off.col, off.row);
+                        drawHexAt(highlight, offset.col, offset.row);
                     } else {
-                        const c = getHexCenter(off.col, off.row);
-                        hl.drawRect(c.x - canvas.grid.size / 2, c.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
+                        const cellCenter = getHexCenter(offset.col, offset.row);
+                        highlight.drawRect(cellCenter.x - canvas.grid.size / 2, cellCenter.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
                     }
                 }
-                hl.endFill();
-                canvas.stage.addChild(hl);
-                selectionHighlightGraphics.push(hl);
+                highlight.endFill();
+                canvas.stage.addChild(highlight);
+                selectionHighlightGraphics.push(highlight);
             }
         }
 
-        const baseTokens = canvas.tokens.placeables.filter(t => {
-            if (!includeSelf && t.id === casterToken?.id)
+        const baseTokens = canvas.tokens.placeables.filter(token => {
+            if (!includeSelf && token.id === casterToken?.id)
                 return false;
-            if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+            if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                 return false;
-            if (!soft && filter && !filter(t))
+            if (!soft && filter && !filter(token))
                 return false;
             return true;
         });
@@ -290,7 +290,7 @@ export function chooseToken(casterToken, options = {}) {
 
         const getActiveTokens = () => {
             if (selectionOnly && selectionIds)
-                return baseTokens.filter(t => selectionIds.has(t.id));
+                return baseTokens.filter(token => selectionIds.has(token.id));
             return baseTokens;
         };
         let allTokens = getActiveTokens();
@@ -325,9 +325,9 @@ export function chooseToken(casterToken, options = {}) {
             destroyGraphics(rangeHighlight);
             destroyGraphics(pulseGraphic);
             selectionHighlightGraphics.forEach(destroyGraphics);
-            selectionHighlights.forEach(h => destroyGraphics(h.graphics));
-            for (const p of placements)
-                destroyGraphics(p.graphics);
+            selectionHighlights.forEach(entry => destroyGraphics(entry.graphics));
+            for (const placement of placements)
+                destroyGraphics(placement.graphics);
             placements.length = 0;
 
             canvas.tokens.interactiveChildren = prevInteractive;
@@ -363,34 +363,34 @@ export function chooseToken(casterToken, options = {}) {
 
         // Recompute selectedTokens (union of per-placement included) + redraw selection highlights.
         const recomputeBlastSelection = () => {
-            selectionHighlights.splice(0).forEach(h => destroyGraphics(h.graphics));
+            selectionHighlights.splice(0).forEach(entry => destroyGraphics(entry.graphics));
             selectedTokens.clear();
-            for (const p of placements) {
-                for (const id of p.included) {
-                    const t = canvas.tokens.get(id);
-                    if (t)
-                        selectedTokens.add(t);
+            for (const placement of placements) {
+                for (const id of placement.included) {
+                    const token = canvas.tokens.get(id);
+                    if (token)
+                        selectedTokens.add(token);
                 }
             }
-            for (const t of selectedTokens)
-                drawSelectionHighlight(t);
+            for (const token of selectedTokens)
+                drawSelectionHighlight(token);
         };
 
         const enforceCountCap = () => {
             if (count === -1)
                 return;
             let total = 0;
-            for (const p of placements)
-                total += p.included.size;
+            for (const placement of placements)
+                total += placement.included.size;
             if (total <= count)
                 return;
             for (let i = placements.length - 1; i >= 0 && total > count; i--) {
-                const p = placements[i];
-                const ids = Array.from(p.included);
+                const placement = placements[i];
+                const ids = Array.from(placement.included);
                 for (const id of ids) {
                     if (total <= count)
                         break;
-                    p.included.delete(id);
+                    placement.included.delete(id);
                     total--;
                 }
             }
@@ -400,8 +400,8 @@ export function chooseToken(casterToken, options = {}) {
         const terrainBlocks = (col, row, top) => {
             if (!elevationAware)
                 return false;
-            const tAPI = globalThis.terrainHeightTools;
-            const ground = tAPI ? (Number(getHexGroundElevation(col, row, tAPI)) || 0) : 0;
+            const terrainAPI = globalThis.terrainHeightTools;
+            const ground = terrainAPI ? (Number(getHexGroundElevation(col, row, terrainAPI)) || 0) : 0;
             return ground >= top;
         };
         // Drop cells the area can't reach vertically (terrain flush with / above its top).
@@ -410,8 +410,8 @@ export function chooseToken(casterToken, options = {}) {
                 return affected;
             const out = new Set();
             for (const key of affected) {
-                const [c, r] = key.split(',').map(Number);
-                if (!terrainBlocks(c, r, top))
+                const [col, row] = key.split(',').map(Number);
+                if (!terrainBlocks(col, row, top))
                     out.add(key);
             }
             return out;
@@ -419,21 +419,21 @@ export function chooseToken(casterToken, options = {}) {
         // Tokens whose footprint hits `affected` and whose height span overlaps [lo, hi].
         const catchTokens = (affected, lo, hi, skipId = null) => {
             const caught = [];
-            for (const t of canvas.tokens.placeables) {
-                if (skipId && t.id === skipId)
+            for (const token of canvas.tokens.placeables) {
+                if (skipId && token.id === skipId)
                     continue;
-                if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+                if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                     continue;
-                if (!includeSelf && casterToken && t.id === casterToken.id)
+                if (!includeSelf && casterToken && token.id === casterToken.id)
                     continue;
-                if (!getOccupiedOffsets(t).some(o => affected.has(`${o.col},${o.row}`)))
+                if (!getOccupiedOffsets(token).some(offset => affected.has(`${offset.col},${offset.row}`)))
                     continue;
                 if (elevationAware) {
-                    const tElev = Number(t.document?.elevation) || 0;
-                    if (!verticalOverlap(lo, hi, tElev, tElev + tokenVerticalSize(t)))
+                    const tokenElev = Number(token.document?.elevation) || 0;
+                    if (!verticalOverlap(lo, hi, tokenElev, tokenElev + tokenVerticalSize(token)))
                         continue;
                 }
-                caught.push(t);
+                caught.push(token);
             }
             return caught;
         };
@@ -470,46 +470,46 @@ export function chooseToken(casterToken, options = {}) {
                 const offAxis = (((dirDeg % 60) + 60) % 60) > 1e-9;
                 const effRadius = offAxis ? radius + 1 : radius;
 
-                const th = dirDeg * Math.PI / 180;
-                const fx = Math.cos(th), fy = Math.sin(th);
-                const lx = -Math.sin(th), ly = Math.cos(th);
-                const R = Math.ceil(effRadius) + 1;
+                const angleRad = dirDeg * Math.PI / 180;
+                const forwardX = Math.cos(angleRad), forwardY = Math.sin(angleRad);
+                const lateralX = -Math.sin(angleRad), lateralY = Math.cos(angleRad);
+                const searchRadius = Math.ceil(effRadius) + 1;
 
                 // Cone offsets relative to origin (0,0,0).
-                const offs = [];
-                for (let q = -R; q <= R; q++) {
-                    for (let r = -R; r <= R; r++) {
+                const coneOffsets = [];
+                for (let q = -searchRadius; q <= searchRadius; q++) {
+                    for (let r = -searchRadius; r <= searchRadius; r++) {
                         const s = -q - r;
-                        if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > R)
+                        if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > searchRadius)
                             continue;
                         const x = q + 0.5 * r;
                         const y = (Math.sqrt(3) / 2) * r;
-                        const fwd = x * fx + y * fy;
-                        const lat = x * lx + y * ly;
-                        const cd = (Math.abs(q) + Math.abs(r) + Math.abs(s)) / 2;
-                        if (fwd <= 1e-9 || cd > effRadius + 1e-9)
+                        const forward = x * forwardX + y * forwardY;
+                        const lateral = x * lateralX + y * lateralY;
+                        const cubeDist = (Math.abs(q) + Math.abs(r) + Math.abs(s)) / 2;
+                        if (forward <= 1e-9 || cubeDist > effRadius + 1e-9)
                             continue;
-                        if (Math.abs(lat) > CONE_HALF_SLOPE * fwd + 1e-9)
+                        if (Math.abs(lateral) > CONE_HALF_SLOPE * forward + 1e-9)
                             continue;
-                        offs.push({ q, r, s, cd, fwd });
+                        coneOffsets.push({ q, r, s, cubeDist, forward });
                     }
                 }
 
-                if (offs.length) {
+                if (coneOffsets.length) {
                     // Nearest cell (tie-break: most forward) is the one that lands on the cursor.
-                    let first = offs[0];
-                    for (const o of offs) {
-                        if (o.cd < first.cd || (o.cd === first.cd && o.fwd > first.fwd))
-                            first = o;
+                    let nearest = coneOffsets[0];
+                    for (const coneOffset of coneOffsets) {
+                        if (coneOffset.cubeDist < nearest.cubeDist || (coneOffset.cubeDist === nearest.cubeDist && coneOffset.forward > nearest.forward))
+                            nearest = coneOffset;
                     }
-                    // Shift the whole cone so `first` sits on the cursor cell.
-                    for (const o of offs) {
-                        const off = grid.getOffset({
-                            q: cursorCube.q + (o.q - first.q),
-                            r: cursorCube.r + (o.r - first.r),
-                            s: cursorCube.s + (o.s - first.s),
+                    // Shift the whole cone so `nearest` sits on the cursor cell.
+                    for (const coneOffset of coneOffsets) {
+                        const cellOffset = grid.getOffset({
+                            q: cursorCube.q + (coneOffset.q - nearest.q),
+                            r: cursorCube.r + (coneOffset.r - nearest.r),
+                            s: cursorCube.s + (coneOffset.s - nearest.s),
                         });
-                        const cellCol = off.j, cellRow = off.i;
+                        const cellCol = cellOffset.j, cellRow = cellOffset.i;
                         if (terrainBlocks(cellCol, cellRow, areaTop))
                             continue;
                         affected.add(`${cellCol},${cellRow}`);
@@ -524,11 +524,11 @@ export function chooseToken(casterToken, options = {}) {
                     ? getInRangeOffsets({ x: centerPt.x, y: centerPt.y, elevation: areaElev }, radius, { includeSelf: false, elevationAware: true })
                     : getInRangeOffsets({ x: centerPt.x, y: centerPt.y }, radius, { includeSelf: false, elevationAware: false });
                 for (const key of raw) {
-                    const [c, r] = key.split(',').map(Number);
-                    if (terrainBlocks(c, r, areaTop))
+                    const [col, row] = key.split(',').map(Number);
+                    if (terrainBlocks(col, row, areaTop))
                         continue;
-                    const cell = getHexCenter(c, r);
-                    const ang = Math.atan2(cell.y - centerPt.y, cell.x - centerPt.x);
+                    const cellCenter = getHexCenter(col, row);
+                    const ang = Math.atan2(cellCenter.y - centerPt.y, cellCenter.x - centerPt.x);
                     let d = (ang - rotRad) % TAU;
                     if (d > Math.PI) d -= TAU;
                     else if (d < -Math.PI) d += TAU;
@@ -551,17 +551,17 @@ export function chooseToken(casterToken, options = {}) {
             else rs = -rq - rr;
             return { q: rq, r: rr, s: rs };
         };
-        const cubeDistance = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.s - b.s)) / 2;
-        const cubeLineDraw = (a, b) => {
-            const N = Math.max(1, cubeDistance(a, b));
+        const cubeDistance = (fromCube, toCube) => (Math.abs(fromCube.q - toCube.q) + Math.abs(fromCube.r - toCube.r) + Math.abs(fromCube.s - toCube.s)) / 2;
+        const cubeLineDraw = (fromCube, toCube) => {
+            const steps = Math.max(1, cubeDistance(fromCube, toCube));
             const out = [];
-            for (let i = 0; i <= N; i++) {
-                const t = i / N;
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
                 // epsilon nudge keeps samples off cell boundaries so rounding is consistent
                 out.push(cubeRound(
-                    a.q + (b.q - a.q) * t + 1e-6,
-                    a.r + (b.r - a.r) * t + 2e-6,
-                    a.s + (b.s - a.s) * t - 3e-6,
+                    fromCube.q + (toCube.q - fromCube.q) * t + 1e-6,
+                    fromCube.r + (toCube.r - fromCube.r) * t + 2e-6,
+                    fromCube.s + (toCube.s - fromCube.s) * t - 3e-6,
                 ));
             }
             return out;
@@ -609,9 +609,9 @@ export function chooseToken(casterToken, options = {}) {
         };
         // Whole-cell perpendicular offsets for a width-n line: 1→[0], 2→[0,1], 3→[-1,0,1], 4→[-1,0,1,2].
         // Integer steps round reliably (half-cell offsets don't); even widths get the extra cell on one side.
-        const widthOffsets = (n) => {
-            const lo = -Math.floor((n - 1) / 2);
-            return Array.from({ length: n }, (_, i) => lo + i);
+        const widthOffsets = (width) => {
+            const lo = -Math.floor((width - 1) / 2);
+            return Array.from({ length: width }, (_, i) => lo + i);
         };
 
         // Endpoint candidates around the origin at `radius` cells — one per rotation tick.
@@ -619,32 +619,32 @@ export function chooseToken(casterToken, options = {}) {
             if (isHexGrid()) {
                 /** @type {any} */
                 const grid = canvas.grid;
-                const a = grid.getCube({ i: originOff.row, j: originOff.col });
-                return cubeRing(a, radius).map(c => { const o = grid.getOffset(c); return { col: o.j, row: o.i }; });
+                const originCube = grid.getCube({ i: originOff.row, j: originOff.col });
+                return cubeRing(originCube, radius).map(cube => { const cellOffset = grid.getOffset(cube); return { col: cellOffset.j, row: cellOffset.i }; });
             }
             return squareRing(originOff, radius);
         };
 
         // "col,row" keys for a clean line A→B, widened to `size` cells perpendicular.
-        const lineCells = (aOff, bOff, size) => {
+        const lineCells = (fromOffset, toOffset, size) => {
             /** @type {any} */
             const grid = canvas.grid;
             const out = new Set();
-            const aPx = getHexCenter(aOff.col, aOff.row);
-            const bPx = getHexCenter(bOff.col, bOff.row);
-            const dux = bPx.x - aPx.x, duy = bPx.y - aPx.y;
-            const dlen = Math.hypot(dux, duy) || 1;
-            const px = -duy / dlen, py = dux / dlen; // perpendicular unit
+            const fromPx = getHexCenter(fromOffset.col, fromOffset.row);
+            const toPx = getHexCenter(toOffset.col, toOffset.row);
+            const dirX = toPx.x - fromPx.x, dirY = toPx.y - fromPx.y;
+            const dirLen = Math.hypot(dirX, dirY) || 1;
+            const perpX = -dirY / dirLen, perpY = dirX / dirLen; // perpendicular unit
             const pitch = grid.size;
-            for (const k of widthOffsets(Math.max(1, Math.round(size)))) {
-                const a2 = pixelToOffset(aPx.x + px * k * pitch, aPx.y + py * k * pitch);
-                const b2 = pixelToOffset(bPx.x + px * k * pitch, bPx.y + py * k * pitch);
+            for (const widthStep of widthOffsets(Math.max(1, Math.round(size)))) {
+                const fromShifted = pixelToOffset(fromPx.x + perpX * widthStep * pitch, fromPx.y + perpY * widthStep * pitch);
+                const toShifted = pixelToOffset(toPx.x + perpX * widthStep * pitch, toPx.y + perpY * widthStep * pitch);
                 if (isHexGrid()) {
-                    const ca = grid.getCube({ i: a2.row, j: a2.col });
-                    const cb = grid.getCube({ i: b2.row, j: b2.col });
-                    for (const c of cubeLineDraw(ca, cb)) { const o = grid.getOffset(c); out.add(`${o.j},${o.i}`); }
+                    const fromCube = grid.getCube({ i: fromShifted.row, j: fromShifted.col });
+                    const toCube = grid.getCube({ i: toShifted.row, j: toShifted.col });
+                    for (const cube of cubeLineDraw(fromCube, toCube)) { const cellOffset = grid.getOffset(cube); out.add(`${cellOffset.j},${cellOffset.i}`); }
                 } else {
-                    for (const p of bresenham(a2.col, a2.row, b2.col, b2.row)) out.add(`${p.col},${p.row}`);
+                    for (const point of bresenham(fromShifted.col, fromShifted.row, toShifted.col, toShifted.row)) out.add(`${point.col},${point.row}`);
                 }
             }
             return out;
@@ -683,12 +683,12 @@ export function chooseToken(casterToken, options = {}) {
         }, aoeCtx());
 
         // One elevation: ↑ positive / ↓ negative / ↕ for 0.
-        const elevArrow = (e) => {
-            const v = Math.round(Number(e) || 0);
+        const elevArrow = (elevation) => {
+            const v = Math.round(Number(elevation) || 0);
             return v > 0 ? `↑ ${v}` : v < 0 ? `↓ ${-v}` : `↕ 0`;
         };
-        // Top/bottom band ±areaRange around e (blast/cone/burst reach).
-        const bandStr = (e) => `↑ ${Math.round((Number(e) || 0) + areaRange)}\n↓ ${Math.round((Number(e) || 0) - areaRange)}`;
+        // Top/bottom band ±areaRange around elevation (blast/cone/burst reach).
+        const bandStr = (elevation) => `↑ ${Math.round((Number(elevation) || 0) + areaRange)}\n↓ ${Math.round((Number(elevation) || 0) - areaRange)}`;
         const makeElevationLabel = (elev, center, gridSize) => {
             const label = new PIXI.Text(elevArrow(elev), {
                 fontFamily: 'Arial',
@@ -720,9 +720,9 @@ export function chooseToken(casterToken, options = {}) {
             return label;
         };
         // Arrow label on one cell (tilted line).
-        const makeCellNumber = (e, col, row) => {
-            const c = getHexCenter(col, row);
-            const label = new PIXI.Text(elevArrow(e), {
+        const makeCellNumber = (elevation, col, row) => {
+            const cellCenter = getHexCenter(col, row);
+            const label = new PIXI.Text(elevArrow(elevation), {
                 fontFamily: 'Arial',
                 fontSize: Math.max(11, canvas.grid.size * 0.18),
                 fill: 0xffffff,
@@ -731,8 +731,8 @@ export function chooseToken(casterToken, options = {}) {
                 fontWeight: 'bold',
             });
             label.anchor.set(0.5);
-            label.x = c.x;
-            label.y = c.y;
+            label.x = cellCenter.x;
+            label.y = cellCenter.y;
             return label;
         };
         // A line is "tilted" only when its cells span more than one elevation.
@@ -740,7 +740,7 @@ export function chooseToken(casterToken, options = {}) {
             if (!elevByCell)
                 return false;
             const vals = [...elevByCell.values()];
-            return vals.some(e => e !== vals[0]);
+            return vals.some(elevation => elevation !== vals[0]);
         };
 
         const drawBlastHighlight = (affected, { color = 0xffd84a, fillAlpha = 0.22, lineAlpha = 0.7, elevation = null, center = null, elevByCell = null } = {}) => {
@@ -756,9 +756,9 @@ export function chooseToken(casterToken, options = {}) {
             container.addChild(g);
             if (elevationAware && cellsAreTilted(elevByCell)) {
                 // tilted line: an arrow label per cell
-                for (const [key, e] of elevByCell) {
+                for (const [key, elevation] of elevByCell) {
                     const [col, row] = key.split(',').map(Number);
-                    container.addChild(makeCellNumber(e, col, row));
+                    container.addChild(makeCellNumber(elevation, col, row));
                 }
             } else if (elevationAware && center) {
                 // flat line -> single arrow; blast/cone/burst -> top/bottom band
@@ -797,9 +797,9 @@ export function chooseToken(casterToken, options = {}) {
                 elevation,
                 elevationOffset,
             };
-            for (const t of caught) {
-                if (!filter || filter(t))
-                    placement.included.add(t.id);
+            for (const token of caught) {
+                if (!filter || filter(token))
+                    placement.included.add(token.id);
             }
             placements.push(placement);
             enforceCountCap();
@@ -833,9 +833,9 @@ export function chooseToken(casterToken, options = {}) {
                 elevation: hostElev,
                 elevationOffset: 0,
             };
-            for (const t of caught) {
-                if (!filter || filter(t))
-                    placement.included.add(t.id);
+            for (const token of caught) {
+                if (!filter || filter(token))
+                    placement.included.add(token.id);
             }
             placements.push(placement);
             enforceCountCap();
@@ -874,9 +874,9 @@ export function chooseToken(casterToken, options = {}) {
                 rotation,
                 tilt,
             };
-            for (const t of caught) {
-                if (!filter || filter(t))
-                    placement.included.add(t.id);
+            for (const token of caught) {
+                if (!filter || filter(token))
+                    placement.included.add(token.id);
             }
             placements.push(placement);
             enforceCountCap();
@@ -886,27 +886,27 @@ export function chooseToken(casterToken, options = {}) {
 
         // Re-derive every placement from scratch (used when toggles change or Q/E is pressed).
         const recomputeAllPlacements = () => {
-            for (const p of placements) {
+            for (const placement of placements) {
                 let caught, affected, elevByCell;
-                if (p.hostToken) {
-                    p.elevation = Number(p.hostToken.document?.elevation) || 0;
-                    ({ caught, affected } = tokensInBurst(p.hostToken, areaRange));
+                if (placement.hostToken) {
+                    placement.elevation = Number(placement.hostToken.document?.elevation) || 0;
+                    ({ caught, affected } = tokensInBurst(placement.hostToken, areaRange));
                 } else {
-                    p.elevation = resolvePlacementElevation(p);
-                    ({ caught, affected, elevByCell } = computeAreaFor(p.center, p.elevation, p.rotation, p.tilt));
+                    placement.elevation = resolvePlacementElevation(placement);
+                    ({ caught, affected, elevByCell } = computeAreaFor(placement.center, placement.elevation, placement.rotation, placement.tilt));
                 }
-                destroyGraphics(p.graphics);
-                p.graphics = drawBlastHighlight(affected, { elevation: p.elevation, center: p.center, elevByCell });
-                p.affectedKeys = [...affected];
-                const oldIncluded = p.included;
-                p.candidates = caught;
+                destroyGraphics(placement.graphics);
+                placement.graphics = drawBlastHighlight(affected, { elevation: placement.elevation, center: placement.center, elevByCell });
+                placement.affectedKeys = [...affected];
+                const oldIncluded = placement.included;
+                placement.candidates = caught;
                 // Preserve manual inclusions for tokens still in candidates; default-include new ones that pass filter.
-                p.included = new Set();
-                for (const t of caught) {
-                    if (oldIncluded.has(t.id))
-                        p.included.add(t.id);
-                    else if (!filter || filter(t) || p.ignoreFilter)
-                        p.included.add(t.id);
+                placement.included = new Set();
+                for (const token of caught) {
+                    if (oldIncluded.has(token.id))
+                        placement.included.add(token.id);
+                    else if (!filter || filter(token) || placement.ignoreFilter)
+                        placement.included.add(token.id);
                 }
             }
             enforceCountCap();
@@ -915,7 +915,7 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const removeBlast = (placementId) => {
-            const idx = placements.findIndex(p => p.id === placementId);
+            const idx = placements.findIndex(placement => placement.id === placementId);
             if (idx === -1)
                 return;
             destroyGraphics(placements[idx].graphics);
@@ -925,73 +925,73 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const toggleAreaToken = (placementId, tokenId) => {
-            const p = placements.find(x => x.id === placementId);
-            if (!p)
+            const placement = placements.find(candidate => candidate.id === placementId);
+            if (!placement)
                 return;
-            if (p.included.has(tokenId)) {
-                p.included.delete(tokenId);
+            if (placement.included.has(tokenId)) {
+                placement.included.delete(tokenId);
                 recomputeBlastSelection();
                 refreshCard();
                 return;
             }
             const projected = new Set();
-            for (const pl of placements)
-                for (const id of pl.included)
+            for (const otherPlacement of placements)
+                for (const id of otherPlacement.included)
                     projected.add(id);
             projected.add(tokenId);
             if (count !== -1 && projected.size > count) {
                 ui.notifications.warn(`Maximum of ${count} target(s) already selected.`);
                 return;
             }
-            p.included.add(tokenId);
+            placement.included.add(tokenId);
             recomputeBlastSelection();
             refreshCard();
         };
 
         const toggleAreaFilter = (placementId) => {
-            const p = placements.find(x => x.id === placementId);
-            if (!p)
+            const placement = placements.find(candidate => candidate.id === placementId);
+            if (!placement)
                 return;
-            p.ignoreFilter = !p.ignoreFilter;
+            placement.ignoreFilter = !placement.ignoreFilter;
             refreshCard();
         };
 
-        const blastPlacementData = () => placements.map((p, idx) => {
-            const candidates = p.candidates.map(t => {
-                const filterPass = !filter || filter(t);
+        const blastPlacementData = () => placements.map((placement, idx) => {
+            const candidates = placement.candidates.map(candidateToken => {
+                const filterPass = !filter || filter(candidateToken);
                 return {
-                    id: t.id,
-                    name: t.name,
-                    img: t.document.texture.src,
-                    included: p.included.has(t.id),
+                    id: candidateToken.id,
+                    name: candidateToken.name,
+                    img: candidateToken.document.texture.src,
+                    included: placement.included.has(candidateToken.id),
                     filtered: !filterPass,
-                    eligible: filterPass || p.ignoreFilter,
+                    eligible: filterPass || placement.ignoreFilter,
                 };
             });
-            const hasFiltered = !!filter && candidates.some(c => c.filtered);
+            const hasFiltered = !!filter && candidates.some(candidate => candidate.filtered);
             const centerOutOfRange = range !== null && casterToken
-                && !isPositionInRange(casterToken, p.center, range);
+                && !isPositionInRange(casterToken, placement.center, range);
             return {
-                id: p.id,
+                id: placement.id,
                 index: idx,
                 label: `Area ${idx + 1}`,
-                count: p.included.size,
-                ignoreFilter: p.ignoreFilter,
+                count: placement.included.size,
+                ignoreFilter: placement.ignoreFilter,
                 hasFilter: !!filter,
                 hasFiltered,
                 centerOutOfRange,
-                elevation: Number(p.elevation) || 0,
-                elevationOffset: Number(p.elevationOffset) || 0,
+                elevation: Number(placement.elevation) || 0,
+                elevationOffset: Number(placement.elevationOffset) || 0,
                 candidates,
             };
         });
 
         const refreshCard = () => {
             const warnings = {};
-            for (const t of selectedTokens) {
-                const msgs = computeWarnings(t);
+            for (const token of selectedTokens) {
+                const msgs = computeWarnings(token);
                 if (msgs.length > 0)
-                    warnings[t.id] = msgs;
+                    warnings[token.id] = msgs;
             }
             _updateInfoCard(cardEl, "chooseToken", {
                 selectedTokens,
@@ -1002,8 +1002,8 @@ export function chooseToken(casterToken, options = {}) {
                 onDeselect: (tokenId) => {
                     if (isBlastMode) {
                         let changed = false;
-                        for (const p of placements) {
-                            if (p.included.delete(tokenId))
+                        for (const placement of placements) {
+                            if (placement.included.delete(tokenId))
                                 changed = true;
                         }
                         if (changed) {
@@ -1012,7 +1012,7 @@ export function chooseToken(casterToken, options = {}) {
                         }
                         return;
                     }
-                    const token = allTokens.find(t => t.id === tokenId);
+                    const token = allTokens.find(candidate => candidate.id === tokenId);
                     if (token && selectedTokens.has(token)) {
                         selectedTokens.delete(token);
                         removeSelectionHighlight(token);
@@ -1076,8 +1076,8 @@ export function chooseToken(casterToken, options = {}) {
 
             if (isHexGrid()) {
                 const offsets = getOccupiedOffsets(token);
-                for (const off of offsets) {
-                    drawHexAt(highlight, off.col, off.row);
+                for (const offset of offsets) {
+                    drawHexAt(highlight, offset.col, offset.row);
                 }
             } else {
                 highlight.drawRect(
@@ -1094,7 +1094,7 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         const removeSelectionHighlight = (token) => {
-            const idx = selectionHighlights.findIndex(h => h.tokenI === token.id);
+            const idx = selectionHighlights.findIndex(entry => entry.tokenI === token.id);
             if (idx !== -1) {
                 destroyGraphics(selectionHighlights[idx].graphics);
                 selectionHighlights.splice(idx, 1);
@@ -1128,8 +1128,8 @@ export function chooseToken(casterToken, options = {}) {
 
                 if (isHexGrid()) {
                     const offsets = getOccupiedOffsets(hoveredToken);
-                    for (const off of offsets) {
-                        drawHexAt(cursorPreview, off.col, off.row);
+                    for (const offset of offsets) {
+                        drawHexAt(cursorPreview, offset.col, offset.row);
                     }
                 } else {
                     cursorPreview.drawRect(
@@ -1155,7 +1155,7 @@ export function chooseToken(casterToken, options = {}) {
             }
 
             cursorPreview.endFill();
-            broadcastToolPresence('chooseToken', { tokens: [...selectedTokens, hoveredToken].filter(Boolean).map(t => t.id), relatedToken: casterToken });
+            broadcastToolPresence('chooseToken', { tokens: [...selectedTokens, hoveredToken].filter(Boolean).map(token => token.id), relatedToken: casterToken });
         };
 
         const moveHandler = (event) => {
@@ -1164,13 +1164,13 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         // Presence: placed shapes' cells + their elevation labels, read from the rendered graphics.
-        const placedPresenceCells = () => placements.flatMap(p => p.affectedKeys ?? []);
+        const placedPresenceCells = () => placements.flatMap(placement => placement.affectedKeys ?? []);
         const placedPresenceLabels = () => {
             const out = [];
-            for (const p of placements)
-                for (const ch of p.graphics?.children ?? [])
-                    if (ch instanceof PIXI.Text)
-                        out.push({ x: ch.x, y: ch.y, text: ch.text });
+            for (const placement of placements)
+                for (const child of placement.graphics?.children ?? [])
+                    if (child instanceof PIXI.Text)
+                        out.push({ x: child.x, y: child.y, text: child.text });
             return out;
         };
         // Live cursor's elevation labels (band / per-cell), read after they are set.
@@ -1178,8 +1178,8 @@ export function chooseToken(casterToken, options = {}) {
             const out = [];
             if (cursorElevLabel.visible)
                 out.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
-            for (const ch of cellLabelLayer.children)
-                out.push({ x: ch.x, y: ch.y, text: ch.text });
+            for (const child of cellLabelLayer.children)
+                out.push({ x: child.x, y: child.y, text: child.text });
             return out;
         };
         const broadcastChoose = (cells, tokens) => broadcastToolPresence('chooseToken', {
@@ -1216,17 +1216,17 @@ export function chooseToken(casterToken, options = {}) {
             const { caught: previewCaught } = tokensInBlast({ x: centerPt.x, y: centerPt.y }, areaRange, previewElev || 0);
             previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
-            for (const t of previewCaught) {
-                if (filter && !filter(t))
+            for (const token of previewCaught) {
+                if (filter && !filter(token))
                     continue;
                 if (isHexGrid()) {
-                    for (const o of getOccupiedOffsets(t))
-                        drawHexAt(previewSelectHighlight, o.col, o.row);
+                    for (const offset of getOccupiedOffsets(token))
+                        drawHexAt(previewSelectHighlight, offset.col, offset.row);
                 } else {
                     previewSelectHighlight.drawRect(
-                        t.document.x, t.document.y,
-                        t.document.width * canvas.grid.size,
-                        t.document.height * canvas.grid.size
+                        token.document.x, token.document.y,
+                        token.document.width * canvas.grid.size,
+                        token.document.height * canvas.grid.size
                     );
                 }
             }
@@ -1240,7 +1240,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
-            broadcastChoose([...affected], previewCaught.map(t => t.id));
+            broadcastChoose([...affected], previewCaught.map(token => token.id));
         };
 
         let lastBlastCursor = null;
@@ -1260,13 +1260,13 @@ export function chooseToken(casterToken, options = {}) {
         };
 
         // Burst cursor: when over a token, preview burst centered on that token; else show a small marker.
-        const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(t => {
-            if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+        const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(token => {
+            if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
                 return false;
-            if (!includeSelf && casterToken && t.id === casterToken.id)
+            if (!includeSelf && casterToken && token.id === casterToken.id)
                 return false;
-            const b = t.bounds;
-            return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
+            const bounds = token.bounds;
+            return tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom;
         }) || null;
 
         const drawBurstCursor = (tx, ty) => {
@@ -1287,7 +1287,7 @@ export function chooseToken(casterToken, options = {}) {
             const burstTop = tokenElev + areaRange;
             let affected = getInRangeOffsets(hovered, areaRange, { includeSelf: false, elevationAware });
             affected = trimByTerrain(affected, burstTop);
-            affected = propagate(affected, getOccupiedOffsets(hovered).map(o => `${o.col},${o.row}`));
+            affected = propagate(affected, getOccupiedOffsets(hovered).map(offset => `${offset.col},${offset.row}`));
             const outOfRange = range !== null && casterToken
                 && !isPositionInRange(casterToken, hovered, range);
             const color = outOfRange ? 0xff0000 : 0x0088ff;
@@ -1299,17 +1299,17 @@ export function chooseToken(casterToken, options = {}) {
             const { caught } = tokensInBurst(hovered, areaRange);
             previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
-            for (const t of caught) {
-                if (filter && !filter(t))
+            for (const token of caught) {
+                if (filter && !filter(token))
                     continue;
                 if (isHexGrid()) {
-                    for (const o of getOccupiedOffsets(t))
-                        drawHexAt(previewSelectHighlight, o.col, o.row);
+                    for (const offset of getOccupiedOffsets(token))
+                        drawHexAt(previewSelectHighlight, offset.col, offset.row);
                 } else {
                     previewSelectHighlight.drawRect(
-                        t.document.x, t.document.y,
-                        t.document.width * canvas.grid.size,
-                        t.document.height * canvas.grid.size
+                        token.document.x, token.document.y,
+                        token.document.width * canvas.grid.size,
+                        token.document.height * canvas.grid.size
                     );
                 }
             }
@@ -1324,7 +1324,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
-            broadcastChoose([...affected], caught.map(t => t.id));
+            broadcastChoose([...affected], caught.map(token => token.id));
         };
 
         const burstMoveHandler = (event) => {
@@ -1361,17 +1361,17 @@ export function chooseToken(casterToken, options = {}) {
 
             previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
-            for (const t of previewCaught) {
-                if (filter && !filter(t))
+            for (const token of previewCaught) {
+                if (filter && !filter(token))
                     continue;
                 if (isHexGrid()) {
-                    for (const o of getOccupiedOffsets(t))
-                        drawHexAt(previewSelectHighlight, o.col, o.row);
+                    for (const offset of getOccupiedOffsets(token))
+                        drawHexAt(previewSelectHighlight, offset.col, offset.row);
                 } else {
                     previewSelectHighlight.drawRect(
-                        t.document.x, t.document.y,
-                        t.document.width * canvas.grid.size,
-                        t.document.height * canvas.grid.size
+                        token.document.x, token.document.y,
+                        token.document.width * canvas.grid.size,
+                        token.document.height * canvas.grid.size
                     );
                 }
             }
@@ -1380,9 +1380,9 @@ export function chooseToken(casterToken, options = {}) {
             if (elevationAware && cellsAreTilted(elevByCell)) {
                 // tilted line: an arrow label per cell
                 cursorElevLabel.visible = false;
-                for (const [key, e] of elevByCell) {
+                for (const [key, elevation] of elevByCell) {
                     const [col, row] = key.split(',').map(Number);
-                    cellLabelLayer.addChild(makeCellNumber(e, col, row));
+                    cellLabelLayer.addChild(makeCellNumber(elevation, col, row));
                 }
             } else if (elevationAware) {
                 // flat line -> single arrow; cone -> top/bottom band
@@ -1394,7 +1394,7 @@ export function chooseToken(casterToken, options = {}) {
             } else {
                 cursorElevLabel.visible = false;
             }
-            broadcastChoose([...affected], previewCaught.map(t => t.id));
+            broadcastChoose([...affected], previewCaught.map(token => token.id));
         };
 
         let lastConeCursor = null;
@@ -1494,8 +1494,8 @@ export function chooseToken(casterToken, options = {}) {
         const clickHandler = (event) => {
             const { x: tx, y: ty } = pointerToWorld(event);
             const tokensHere = allTokens.filter(token => {
-                const b = token.bounds;
-                return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
+                const bounds = token.bounds;
+                return tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom;
             });
             if (tokensHere.length === 0)
                 return;
@@ -1600,10 +1600,10 @@ export function chooseToken(casterToken, options = {}) {
             if (preSelected.length > count) {
                 ui.notifications.warn(`chooseToken: ${preSelected.length} pre-selected tokens but count is ${count} — only the first ${count} will be used.`);
             }
-            for (const t of preSelected.slice(0, count)) {
-                if (!selectedTokens.has(t)) {
-                    selectedTokens.add(t);
-                    drawSelectionHighlight(t);
+            for (const token of preSelected.slice(0, count)) {
+                if (!selectedTokens.has(token)) {
+                    selectedTokens.add(token);
+                    drawSelectionHighlight(token);
                 }
             }
             refreshCard();
@@ -1620,8 +1620,8 @@ export function chooseToken(casterToken, options = {}) {
         const _move = isAimed ? coneMoveHandler : isBurstMode ? burstMoveHandler : isBlastMode ? blastMoveHandler : moveHandler;
         safeMove = safe((e) => {
             const { x, y } = pointerToWorld(e);
-            const o = pixelToOffset(x, y);
-            playTargetingMove(o.col, o.row);
+            const offset = pixelToOffset(x, y);
+            playTargetingMove(offset.col, offset.row);
             _move(e);
         });
         const _click = isAimed ? coneClickHandler : isBurstMode ? burstClickHandler : isBlastMode ? blastClickHandler : clickHandler;

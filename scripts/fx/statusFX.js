@@ -150,12 +150,12 @@ export class StatusFXConfig extends FormApplication {
 
     async _updateObject(_event, formData) {
         const config = getConfig();
-        for (const [key, val] of Object.entries(formData)) {
+        for (const [key, value] of Object.entries(formData)) {
             // additionalStatuses is saved separately below
             if (key === 'additionalStatuses') {
                 continue;
             }
-            config[key] = val;
+            config[key] = value;
         }
         await game.settings.set(MODULE_ID, SETTING_FX_CONFIG, config);
 
@@ -971,14 +971,14 @@ const EFFECT_MAP = [
     { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
     { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedCracks', 'ShreddedGlow', 'ShreddedAdjust'] },
     { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedCracks', 'StrippedGlow', 'StrippedAdjust'] },
-    { name: 'Prone',      key: 'prone',     preset: slowedEffect.map(f => ({ ...f, filterId: f.filterId.replace('Slowed', 'Prone') })), filterIds: ['ProneWave', 'ProneGlow'] },
+    { name: 'Prone',      key: 'prone',     preset: slowedEffect.map(filter => ({ ...filter, filterId: filter.filterId.replace('Slowed', 'Prone') })), filterIds: ['ProneWave', 'ProneGlow'] },
     { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedWave', 'SlowedGlow'] },
     { name: 'Throttled',  key: 'throttled', preset: throttledEffect, filterIds: ['ThrottledCracks', 'ThrottledGlow', 'ThrottledAdjust'] },
     { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
     { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
     { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
     { name: 'Flying',    key: 'flying',      preset: flyingEffect,    filterIds: ['FlyingBob'] },
-    { name: 'Hover',     key: 'flying',      preset: flyingEffect.map(f => ({ ...f, filterId: f.filterId.replace('Flying', 'Hover') })), filterIds: ['HoverBob'] },
+    { name: 'Hover',     key: 'flying',      preset: flyingEffect.map(filter => ({ ...filter, filterId: filter.filterId.replace('Flying', 'Hover') })), filterIds: ['HoverBob'] },
     { name: 'Core Power Active', key: 'corePower', preset: corePowerEffect, filterIds: ['CorePowerBloom'] },
 ];
 
@@ -988,7 +988,7 @@ const EFFECT_MAP = [
 
 /** Check if actor has the Enkidu alt frame (Tokugawa alt). */
 function isEnkiduFrame(actor) {
-    return actor?.items?.filter(i => i.system?.lid === 'mf_tokugawa_alt_enkidu').length > 0;
+    return actor?.items?.filter(item => item.system?.lid === 'mf_tokugawa_alt_enkidu').length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ async function autoStatusInfection(actor) {
 async function autoStatusCascading(actor) {
     if (!isAutoEnabled('cascading'))
         return;
-    const hasCascading = actor.items?.some?.(i => i.system?.cascading === true) ?? false;
+    const hasCascading = actor.items?.some?.(item => item.system?.cascading === true) ?? false;
     await actor.toggleStatusEffect('cascading', { active: hasCascading });
 }
 
@@ -1086,12 +1086,12 @@ async function removeStatusesOnDeath(actor) {
     if (actor.system.structure.value > 0)
         return;
 
-    const effects = actor.effects.filter(e => !e.getFlag('core', 'overlay'));
+    const effects = actor.effects.filter(effect => !effect.getFlag('core', 'overlay'));
     if (effects.length === 0)
         return;
 
     console.log(`${MODULE_ID} | Removing ${effects.length} status(es) from "${actor.name}" (structure 0)`);
-    await actor.deleteEmbeddedDocuments('ActiveEffect', effects.map(e => e.id));
+    await actor.deleteEmbeddedDocuments('ActiveEffect', effects.map(effect => effect.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -1129,20 +1129,20 @@ function _ensureFakePuppetsForCustomFilters(token) {
         return;
     }
     const flagFilters = token.document?.flags?.tokenmagic?.filters ?? [];
-    for (const flag of flagFilters) {
-        const f = flag?.tmFilters;
-        if (!f || !_NON_ANIME_FILTER_TYPES.has(f.tmFilterType)) {
+    for (const flagEntry of flagFilters) {
+        const tmFilter = flagEntry?.tmFilters;
+        if (!tmFilter || !_NON_ANIME_FILTER_TYPES.has(tmFilter.tmFilterType)) {
             continue;
         }
-        const placeableId = f.tmParams?.placeableId;
-        const filterId = f.tmFilterId;
-        const filterInternalId = f.tmFilterInternalId;
+        const placeableId = tmFilter.tmParams?.placeableId;
+        const filterId = tmFilter.tmFilterId;
+        const filterInternalId = tmFilter.tmFilterInternalId;
         let exists = false;
         for (const anime of animeMap.values()) {
-            const p = anime?.puppet;
-            if (p?.placeableId === placeableId
-                && p?.filterId === filterId
-                && (!('filterInternalId' in p) || p.filterInternalId === filterInternalId)) {
+            const puppet = anime?.puppet;
+            if (puppet?.placeableId === placeableId
+                && puppet?.filterId === filterId
+                && (!('filterInternalId' in puppet) || puppet.filterInternalId === filterInternalId)) {
                 exists = true;
                 break;
             }
@@ -1180,7 +1180,7 @@ async function _doReconcileStatusFX(actor) {
     if (!tokens.length) {
         return;
     }
-    const aeNames = new Set((actor.effects ?? []).map(e => e.name));
+    const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
     for (const token of tokens) {
         // Inject fake puppets before any add/delete so TMFX's hook sees them.
         _ensureFakePuppetsForCustomFilters(token);
@@ -1194,7 +1194,7 @@ async function _doReconcileStatusFX(actor) {
                 }
                 if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene)) {
                     const base = entry.name === 'Hover'
-                        ? flyingEffectIso.map(f => ({ ...f, filterId: f.filterId.replace('Flying', 'Hover') }))
+                        ? flyingEffectIso.map(filter => ({ ...filter, filterId: filter.filterId.replace('Flying', 'Hover') }))
                         : flyingEffectIso;
                     preset = base;
                 }
@@ -1208,16 +1208,16 @@ async function _doReconcileStatusFX(actor) {
                 // chains/fracture workaround above). Keep only the first of each filterId.
                 const mesh = token.mesh;
                 if (mesh?.filters?.length) {
-                    const seen = new Set();
-                    mesh.filters = mesh.filters.filter(f => {
-                        const id = f.filterId;
+                    const seenIds = new Set();
+                    mesh.filters = mesh.filters.filter(filter => {
+                        const id = filter.filterId;
                         if (!id) {
                             return true;
                         }
-                        if (seen.has(id)) {
+                        if (seenIds.has(id)) {
                             return false;
                         }
-                        seen.add(id);
+                        seenIds.add(id);
                         return true;
                     });
                 }
@@ -1282,9 +1282,9 @@ export function initStatusFX() {
         }
     });
     Hooks.on('preDeleteCombat', (combat) => {
-        for (const c of combat.combatants ?? []) {
-            if (c.actor) {
-                autoStatusCorePowerOff(c.actor);
+        for (const combatant of combat.combatants ?? []) {
+            if (combatant.actor) {
+                autoStatusCorePowerOff(combatant.actor);
             }
         }
     });

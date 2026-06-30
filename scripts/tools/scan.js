@@ -34,39 +34,39 @@ const NUMBER_PADDING = 3;
 function _fmtTags(tags) {
     if (!tags?.length)
         return [];
-    return tags.map((t) => {
-        const baseName = t.name ?? t.lid?.replace(/^tg_/, '') ?? '';
-        const name = t.val !== undefined && t.val !== null && String(t.val).length
-            ? baseName.replace('{VAL}', t.val)
+    return tags.map((tag) => {
+        const baseName = tag.name ?? tag.lid?.replace(/^tg_/, '') ?? '';
+        const name = tag.val !== undefined && tag.val !== null && String(tag.val).length
+            ? baseName.replace('{VAL}', tag.val)
             : baseName;
         if (!name)
             return null;
-        const rawDesc = String(t.description ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-        const description = rawDesc.replace('{VAL}', t.val ?? '');
-        return { name, description, lid: t.lid ?? '' };
+        const rawDesc = String(tag.description ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        const description = rawDesc.replace('{VAL}', tag.val ?? '');
+        return { name, description, lid: tag.lid ?? '' };
     }).filter(Boolean);
 }
 
 function _fmtRanges(ranges) {
     if (!ranges?.length)
         return [];
-    return ranges.map((r) => ({ type: r.type, val: r.val }));
+    return ranges.map((range) => ({ type: range.type, val: range.val }));
 }
 
 function _fmtDamages(damages) {
     if (!damages?.length)
         return [];
-    return damages.map((d) => ({ type: d.type, val: d.val }));
+    return damages.map((damage) => ({ type: damage.type, val: damage.val }));
 }
 
 function _formatActions(actions) {
     if (!actions?.length)
         return [];
-    return actions.map((a) => ({
-        name: a.name,
-        activation: a.activation,
-        trigger: a.trigger,
-        detail: a.detail,
+    return actions.map((action) => ({
+        name: action.name,
+        activation: action.activation,
+        trigger: action.trigger,
+        detail: action.detail,
     }));
 }
 
@@ -217,9 +217,9 @@ function _scanningUserFromToken(token) {
     const candidates = Object.entries(ownership)
         .filter(([uid, lvl]) => uid !== 'default' && Number(lvl) >= OWNER)
         .map(([uid]) => game.users.get(uid))
-        .filter((u) => u && !u.isGM);
+        .filter((user) => user && !user.isGM);
     if (!candidates.length) return null;
-    return candidates.find((u) => u.active) ?? candidates[0];
+    return candidates.find((user) => user.active) ?? candidates[0];
 }
 
 function _defaultOwnershipForScan(user = game.user, scanningToken = null) {
@@ -247,11 +247,11 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null) {
     if (mode === 'group' && game.modules.get('player-groups')?.active) {
         const ownership = { default: NONE };
         const groups = game.settings.get('player-groups', 'groups') ?? {};
-        for (const g of Object.values(groups)) {
-            if (!Array.isArray(g?.members) || !g.members.includes(user?.id)) {
+        for (const group of Object.values(groups)) {
+            if (!Array.isArray(group?.members) || !group.members.includes(user?.id)) {
                 continue;
             }
-            for (const uid of g.members) {
+            for (const uid of group.members) {
                 ownership[uid] = OWNER;
             }
         }
@@ -276,8 +276,8 @@ function _ownershipSummary(ownership) {
         return 'Owner: all players';
     }
     const ownerIds = Object.entries(ownership)
-        .filter(([k, v]) => k !== 'default' && v === OWNER)
-        .map(([k]) => k);
+        .filter(([uid, lvl]) => uid !== 'default' && lvl === OWNER)
+        .map(([uid]) => uid);
     if (!ownerIds.length) {
         return 'Owner: nobody (GM only)';
     }
@@ -299,13 +299,13 @@ function _getOwnerRows() {
     ];
     if (game.modules.get('player-groups')?.active) {
         const groups = game.settings.get('player-groups', 'groups') ?? {};
-        for (const g of Object.values(groups)) {
-            if (g?.id)
-                rows.push({ kind: 'group', id: g.id, key: `g-${g.id}`, name: g.name || 'Unnamed Group', isGroup: true });
+        for (const group of Object.values(groups)) {
+            if (group?.id)
+                rows.push({ kind: 'group', id: group.id, key: `g-${group.id}`, name: group.name || 'Unnamed Group', isGroup: true });
         }
     }
-    for (const u of game.users.filter((u) => !u.isGM))
-        rows.push({ kind: 'user', id: u.id, key: `u-${u.id}`, name: u.name });
+    for (const user of game.users.filter((u) => !u.isGM))
+        rows.push({ kind: 'user', id: user.id, key: `u-${user.id}`, name: user.name });
     return rows;
 }
 
@@ -382,10 +382,10 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         data.coreBonuses = [];
         data.talents = [];
         if (pilotActor?.items) {
-            for (const cb of pilotActor.items.filter((i) => i.type === 'core_bonus'))
+            for (const cb of pilotActor.items.filter((item) => item.type === 'core_bonus'))
                 data.coreBonuses.push(_buildCoreBonus(cb));
-            for (const t of pilotActor.items.filter((i) => i.type === 'talent'))
-                data.talents.push(_buildTalent(t));
+            for (const talent of pilotActor.items.filter((item) => item.type === 'talent'))
+                data.talents.push(_buildTalent(talent));
         }
 
         data.corePower = _buildCorePower(frameData);
@@ -394,64 +394,64 @@ function _buildScanData(target, customName = '', scanIndex = '') {
         data.weapons = [];
         for (const mount of actor.system.loadout.weapon_mounts ?? []) {
             for (const slot of mount.slots ?? []) {
-                const w = _buildMechWeapon(slot);
-                if (w)
-                    data.weapons.push(w);
+                const builtWeapon = _buildMechWeapon(slot);
+                if (builtWeapon)
+                    data.weapons.push(builtWeapon);
             }
         }
 
         const allSystems = [];
-        for (const s of actor.system.loadout.systems ?? []) {
-            const sys = _buildMechSystem(s);
+        for (const sysSlot of actor.system.loadout.systems ?? []) {
+            const sys = _buildMechSystem(sysSlot);
             if (sys)
                 allSystems.push(sys);
         }
-        data.systems = allSystems.filter((s) => !s.isTech);
-        data.techSystems = allSystems.filter((s) => s.isTech);
+        data.systems = allSystems.filter((entry) => !entry.isTech);
+        data.techSystems = allSystems.filter((entry) => entry.isTech);
 
         data.templates = [];
         data.npcFeatureGroups = [];
     } else if (isNpc) {
-        const classes = items.filter((i) => i.is_npc_class());
+        const classes = items.filter((item) => item.is_npc_class());
         classOrFrame = classes.length ? classes[0].name : 'UNKNOWN';
         levelOrTier = `Tier ${actor.system.tier ?? '?'}`;
         data.tierIcon = getTierIcon(actor.system.tier);
 
-        const classItems = items.filter((i) => i.is_npc_class());
-        const templateItems = items.filter((i) => i.is_npc_template());
-        data.npcClasses = classItems.map((c) => ({ name: c.name, img: c.img }));
-        data.npcTemplates = templateItems.map((t) => ({ name: t.name, img: t.img }));
+        const classItems = items.filter((item) => item.is_npc_class());
+        const templateItems = items.filter((item) => item.is_npc_template());
+        data.npcClasses = classItems.map((cls) => ({ name: cls.name, img: cls.img }));
+        data.npcTemplates = templateItems.map((tpl) => ({ name: tpl.name, img: tpl.img }));
         data.templates = data.npcTemplates;
 
-        const features = items.filter((i) => i.is_npc_feature());
+        const features = items.filter((item) => item.is_npc_feature());
         const tier = actor.system.tier;
         const origins = [];
-        for (const f of features) {
-            const o = f.system.origin?.name;
-            if (o && !origins.includes(o))
-                origins.push(o);
+        for (const feature of features) {
+            const originName = feature.system.origin?.name;
+            if (originName && !origins.includes(originName))
+                origins.push(originName);
         }
         data.npcFeatureGroups = origins.map((origin) => {
-            const inOrigin = features.filter((f) => f.system.origin?.name === origin);
+            const inOrigin = features.filter((feature) => feature.system.origin?.name === origin);
             return {
                 origin,
-                weapons: inOrigin.filter((f) => f.system.type === 'Weapon').map((f) => _buildNpcWeapon(f, tier)),
-                tech: inOrigin.filter((f) => f.system.type === 'Tech').map((f) => _buildNpcFeature(f, tier)),
-                features: inOrigin.filter((f) => f.system.type !== 'Weapon' && f.system.type !== 'Tech').map((f) => _buildNpcFeature(f, tier)),
+                weapons: inOrigin.filter((feature) => feature.system.type === 'Weapon').map((feature) => _buildNpcWeapon(feature, tier)),
+                tech: inOrigin.filter((feature) => feature.system.type === 'Tech').map((feature) => _buildNpcFeature(feature, tier)),
+                features: inOrigin.filter((feature) => feature.system.type !== 'Weapon' && feature.system.type !== 'Tech').map((feature) => _buildNpcFeature(feature, tier)),
             };
         });
 
         // flat lists grouped by item kind (weapons, systems, traits), each item tagged with origin
-        const _withOrigin = (f, builder) => ({ ...builder(f, tier), origin: f.system.origin?.name ?? '' });
+        const _withOrigin = (feature, builder) => ({ ...builder(feature, tier), origin: feature.system.origin?.name ?? '' });
         data.npcWeaponsFlat = features
-            .filter((f) => f.system.type === 'Weapon')
-            .map((f) => _withOrigin(f, _buildNpcWeapon));
+            .filter((feature) => feature.system.type === 'Weapon')
+            .map((feature) => _withOrigin(feature, _buildNpcWeapon));
         data.npcSystemsFlat = features
-            .filter((f) => f.system.type !== 'Weapon' && f.system.type !== 'Trait')
-            .map((f) => _withOrigin(f, _buildNpcFeature));
+            .filter((feature) => feature.system.type !== 'Weapon' && feature.system.type !== 'Trait')
+            .map((feature) => _withOrigin(feature, _buildNpcFeature));
         data.npcTraitsFlat = features
-            .filter((f) => f.system.type === 'Trait')
-            .map((f) => _withOrigin(f, _buildNpcFeature));
+            .filter((feature) => feature.system.type === 'Trait')
+            .map((feature) => _withOrigin(feature, _buildNpcFeature));
 
         data.weapons = [];
         data.systems = [];
@@ -534,7 +534,7 @@ export async function performSystemScan(target, createJournal = false, customNam
     flow.state.data.la_ownership = ownership;
     flow.state.data.la_chatCard = true;
     flow.state.data.la_createJournal = !!createJournal;
-    flow.state.data.la_useCustomJournal = !!createJournal && _useLAJournal();
+    flow.state.data.la_useCustomJournal = _useLAJournal();
     await flow.begin();
 }
 
@@ -567,7 +567,7 @@ export async function createScanJournalEntry(target, customName = '', ownership 
     const folder = game.folders.getName(FOLDER_NAME);
     if (!folder)
         return null;
-    const matching = folder.contents.filter((e) => e.name.includes(actor.name) && e.name.startsWith(NAME_PREFIX));
+    const matching = folder.contents.filter((entry) => entry.name.includes(actor.name) && entry.name.startsWith(NAME_PREFIX));
     if (!matching.length)
         return null;
     const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
@@ -622,7 +622,7 @@ async function laPostProcessScanJournal(state) {
     const folder = game.folders.getName(FOLDER_NAME);
     if (!folder)
         return true;
-    const matching = folder.contents.filter((e) => e.name.includes(actor.name) && e.name.startsWith(NAME_PREFIX));
+    const matching = folder.contents.filter((entry) => entry.name.includes(actor.name) && entry.name.startsWith(NAME_PREFIX));
     if (!matching.length)
         return true;
     const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
@@ -913,16 +913,16 @@ export async function showSystemScanDialog(targets) {
             const groups = game.modules.get('player-groups')?.active
                 ? (game.settings.get('player-groups', 'groups') ?? {})
                 : {};
-            const membersByGroup = new Map(groupSels.map((s) => [s.dataset.id, groups[s.dataset.id]?.members ?? []]));
+            const membersByGroup = new Map(groupSels.map((sel) => [sel.dataset.id, groups[sel.dataset.id]?.members ?? []]));
 
             const refreshGroup = (gid) => {
-                const gSel = groupSels.find((s) => s.dataset.id === gid);
+                const gSel = groupSels.find((sel) => sel.dataset.id === gid);
                 if (!gSel)
                     return;
                 const members = membersByGroup.get(gid) ?? [];
                 let shared;
                 for (const uid of members) {
-                    const uSel = userSels.find((s) => s.dataset.id === uid);
+                    const uSel = userSels.find((sel) => sel.dataset.id === uid);
                     if (!uSel)
                         continue;
                     if (shared === undefined)
@@ -939,7 +939,7 @@ export async function showSystemScanDialog(targets) {
                     if (gSel.value === '')
                         return;
                     for (const uid of membersByGroup.get(gSel.dataset.id) ?? []) {
-                        const uSel = userSels.find((s) => s.dataset.id === uid);
+                        const uSel = userSels.find((sel) => sel.dataset.id === uid);
                         if (uSel)
                             uSel.value = gSel.value;
                     }
@@ -1050,15 +1050,15 @@ function _bindOwnerGroupSync(html) {
     const groups = game.modules.get('player-groups')?.active
         ? (game.settings.get('player-groups', 'groups') ?? {})
         : {};
-    const membersByGroup = new Map(groupSels.map((s) => [s.dataset.id, groups[s.dataset.id]?.members ?? []]));
+    const membersByGroup = new Map(groupSels.map((sel) => [sel.dataset.id, groups[sel.dataset.id]?.members ?? []]));
     const refreshGroup = (gid) => {
-        const gSel = groupSels.find((s) => s.dataset.id === gid);
+        const gSel = groupSels.find((sel) => sel.dataset.id === gid);
         if (!gSel)
             return;
         const members = membersByGroup.get(gid) ?? [];
         let shared;
         for (const uid of members) {
-            const uSel = userSels.find((s) => s.dataset.id === uid);
+            const uSel = userSels.find((sel) => sel.dataset.id === uid);
             if (!uSel)
                 continue;
             if (shared === undefined)
@@ -1075,7 +1075,7 @@ function _bindOwnerGroupSync(html) {
             if (gSel.value === '')
                 return;
             for (const uid of membersByGroup.get(gSel.dataset.id) ?? []) {
-                const uSel = userSels.find((s) => s.dataset.id === uid);
+                const uSel = userSels.find((sel) => sel.dataset.id === uid);
                 if (uSel)
                     uSel.value = gSel.value;
             }
@@ -1194,11 +1194,11 @@ export async function regenerateScans(opts = {}) {
             } catch { /* ignore */ }
         }
         if (!actor && flag?.actorName)
-            actor = game.actors.find((a) => a.name === flag.actorName);
+            actor = game.actors.find((candidate) => candidate.name === flag.actorName);
         if (!actor) {
             const m = entry.name.match(/^SCAN:\s*\d+\s*-\s*(.+)$/);
             if (m)
-                actor = game.actors.find((a) => a.name === m[1].trim());
+                actor = game.actors.find((candidate) => candidate.name === m[1].trim());
         }
 
         if (!actor) {

@@ -114,9 +114,9 @@ export function createMultiPlusIndicator() {
             label.visible = false;
         }
     };
-    const onKey = (e) => {
-        if (e.key === 'Shift')
-            place(e.type === 'keydown');
+    const onKey = (event) => {
+        if (event.key === 'Shift')
+            place(event.type === 'keydown');
     };
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKey, true);
@@ -155,12 +155,12 @@ export function _groupCellsByDistance(originOffsets, cellKeys) {
     for (const key of cellKeys) {
         const [col, row] = key.split(',').map(Number);
         let minDist = Infinity;
-        for (const o of originOffsets) {
-            const d = hex
-                ? cubeDistance(offsetToCube(o.col, o.row), offsetToCube(col, row))
-                : Math.max(Math.abs(o.col - col), Math.abs(o.row - row));
-            if (d < minDist)
-                minDist = d;
+        for (const originOffset of originOffsets) {
+            const dist = hex
+                ? cubeDistance(offsetToCube(originOffset.col, originOffset.row), offsetToCube(col, row))
+                : Math.max(Math.abs(originOffset.col - col), Math.abs(originOffset.row - row));
+            if (dist < minDist)
+                minDist = dist;
         }
         if (minDist === 0)
             continue;
@@ -190,17 +190,17 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const periodMs = opts.periodMs ?? (range < slowRangeThreshold ? Math.max(slowFloorMs, basePeriod) : basePeriod);
     return () => {
         pulseGraphic.clear();
-        const t = (performance.now() % periodMs) / periodMs;
-        const cur = t * range;
-        for (const [dist, list] of hexesByDist) {
-            const raw = Math.abs(dist - cur);
-            const delta = Math.min(raw, range - raw);
-            const waveAlpha = delta > ringWidth ? 0 : peakAlpha * (1 - delta / ringWidth);
+        const phase = (performance.now() % periodMs) / periodMs;
+        const wavePos = phase * range;
+        for (const [ringDist, ringCells] of hexesByDist) {
+            const rawDist = Math.abs(ringDist - wavePos);
+            const wrappedDist = Math.min(rawDist, range - rawDist);
+            const waveAlpha = wrappedDist > ringWidth ? 0 : peakAlpha * (1 - wrappedDist / ringWidth);
             const fillAlpha = Math.min(1, baseAlpha + waveAlpha);
             const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
             pulseGraphic.lineStyle(lineWidth, lineColor, lineAlpha);
             pulseGraphic.beginFill(color, fillAlpha);
-            _paintCells(pulseGraphic, list);
+            _paintCells(pulseGraphic, ringCells);
             pulseGraphic.endFill();
         }
     };
@@ -251,16 +251,16 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
     let onFadeDone = null;
     const fadeTick = () => {
         const elapsed = performance.now() - fadeStart;
-        const k = Math.min(1, elapsed / fadeDur);
-        const a = fadeFrom + (fadeTo - fadeFrom) * k;
-        rangeHighlight.alpha = a;
-        pulseGraphic.alpha = a;
-        if (k >= 1) {
+        const fadeProgress = Math.min(1, elapsed / fadeDur);
+        const alpha = fadeFrom + (fadeTo - fadeFrom) * fadeProgress;
+        rangeHighlight.alpha = alpha;
+        pulseGraphic.alpha = alpha;
+        if (fadeProgress >= 1) {
             canvas.app.ticker.remove(fadeTick);
-            const cb = onFadeDone;
+            const doneCallback = onFadeDone;
             onFadeDone = null;
-            if (cb)
-                cb();
+            if (doneCallback)
+                doneCallback();
         }
     };
     canvas.app.ticker.add(fadeTick);
@@ -302,12 +302,12 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
         trace.lineStyle(3, lineColor, 0.8);
         trace.beginFill(fillColor, 0.3);
         const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
-        for (const o of offsets) {
+        for (const cellOffset of offsets) {
             if (isHexGrid()) {
-                drawHexAt(trace, o.col, o.row);
+                drawHexAt(trace, cellOffset.col, cellOffset.row);
             } else {
-                const c = getHexCenter(o.col, o.row);
-                trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                const cellCenter = getHexCenter(cellOffset.col, cellOffset.row);
+                trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
             }
         }
         trace.endFill();
@@ -474,11 +474,11 @@ export function cancelRulerDrag(token, _moveInfo = null) {
     const history = doc?._source?._movementHistory;
     if (!Array.isArray(history) || history.length === 0)
         return;
-    const cx = doc.x, cy = doc.y;
+    const currentX = doc.x, currentY = doc.y;
     let lastValidIdx = -1;
     for (let i = history.length - 1; i >= 0; i--) {
-        const w = history[i];
-        if (Math.abs((w.x ?? 0) - cx) < 2 && Math.abs((w.y ?? 0) - cy) < 2) {
+        const waypoint = history[i];
+        if (Math.abs((waypoint.x ?? 0) - currentX) < 2 && Math.abs((waypoint.y ?? 0) - currentY) < 2) {
             lastValidIdx = i; break;
         }
     }
@@ -555,13 +555,13 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         if (typeof updateData.elevation === 'number') {
             dest.elevation = updateData.elevation; // chosen in the picker (auto-ground + Q/E offset)
         } else if (setElevation && terrainAPI) {
-            let maxH = 0;
-            for (const o of getOccupiedOffsets(t, dest)) {
-                const h = getHexGroundElevation(o.col, o.row, terrainAPI);
-                if (h > maxH)
-                    maxH = h;
+            let maxHeight = 0;
+            for (const cellOffset of getOccupiedOffsets(t, dest)) {
+                const cellHeight = getHexGroundElevation(cellOffset.col, cellOffset.row, terrainAPI);
+                if (cellHeight > maxHeight)
+                    maxHeight = cellHeight;
             }
-            dest.elevation = maxH;
+            dest.elevation = maxHeight;
         }
         await _rulerMove(t, dest, extraOpts);
     }

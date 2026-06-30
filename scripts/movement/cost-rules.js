@@ -23,37 +23,37 @@ function debugReset() {
             _debugGfx.eventMode = 'none';
             canvas.tokens?.addChild(_debugGfx);
         }
-        _debugGfx.removeChildren().forEach(c => c.destroy({ children: true }));
+        _debugGfx.removeChildren().forEach(child => child.destroy({ children: true }));
     } else if (_debugGfx) {
-        _debugGfx.removeChildren().forEach(c => c.destroy({ children: true }));
+        _debugGfx.removeChildren().forEach(child => child.destroy({ children: true }));
     }
 }
-function debugMark(curr, ctr, penalty, elev, climb) {
+function debugMark(cellOffset, cellCenter, penalty, tokenElev, climbCells) {
     if (!debugOn() || !_debugGfx)
         return;
-    const g = new PIXI.Graphics();
-    const color = penalty > 0 ? 0x00ff00 : (climb > 0 ? 0xff8800 : 0xffff00);
-    g.lineStyle(2, color, 1).drawCircle(ctr.x, ctr.y, 14);
-    g.beginFill(color, 0.2).drawCircle(ctr.x, ctr.y, 14).endFill();
-    _debugGfx.addChild(g);
-    const t = new PIXI.Text(`${curr.i},${curr.j}\ne=${elev} p=${penalty}\n+${climb}`,
+    const circle = new PIXI.Graphics();
+    const color = penalty > 0 ? 0x00ff00 : (climbCells > 0 ? 0xff8800 : 0xffff00);
+    circle.lineStyle(2, color, 1).drawCircle(cellCenter.x, cellCenter.y, 14);
+    circle.beginFill(color, 0.2).drawCircle(cellCenter.x, cellCenter.y, 14).endFill();
+    _debugGfx.addChild(circle);
+    const label = new PIXI.Text(`${cellOffset.i},${cellOffset.j}\ne=${tokenElev} p=${penalty}\n+${climbCells}`,
         new PIXI.TextStyle({ fontSize: 11, fill: 0xffffff, stroke: 0x000000, strokeThickness: 3, align: 'center' }));
-    t.anchor.set(0.5, 0.5);
-    t.position.set(ctr.x, ctr.y);
-    _debugGfx.addChild(t);
+    label.anchor.set(0.5, 0.5);
+    label.position.set(cellCenter.x, cellCenter.y);
+    _debugGfx.addChild(label);
 }
-function debugFootprint(off, ctr, isNew = false) {
+function debugFootprint(cellOffset, cellCenter, isNew = false) {
     if (!debugOn() || !_debugGfx)
         return;
     const color = isNew ? 0xffaa00 : 0x00bbff;
-    const g = new PIXI.Graphics();
-    g.lineStyle(isNew ? 2 : 1, color, isNew ? 1 : 0.7).drawCircle(ctr.x, ctr.y, 10);
-    _debugGfx.addChild(g);
-    const t = new PIXI.Text(`${off.i},${off.j}${isNew ? '*' : ''}`,
+    const circle = new PIXI.Graphics();
+    circle.lineStyle(isNew ? 2 : 1, color, isNew ? 1 : 0.7).drawCircle(cellCenter.x, cellCenter.y, 10);
+    _debugGfx.addChild(circle);
+    const label = new PIXI.Text(`${cellOffset.i},${cellOffset.j}${isNew ? '*' : ''}`,
         new PIXI.TextStyle({ fontSize: 9, fill: isNew ? 0xffcc66 : 0x88ddff, stroke: 0x000000, strokeThickness: 2 }));
-    t.anchor.set(0.5, 0.5);
-    t.position.set(ctr.x, ctr.y);
-    _debugGfx.addChild(t);
+    label.anchor.set(0.5, 0.5);
+    label.position.set(cellCenter.x, cellCenter.y);
+    _debugGfx.addChild(label);
 }
 
 const FLYING_STATUSES = ['flying', 'hover'];
@@ -104,14 +104,14 @@ function gaaPenaltyAtCells(tokenDoc, offsets) {
     const api = gaaApi();
     if (!api?.getMovementPenaltyAt || !offsets?.length)
         return 0;
-    let max = 0;
-    for (const off of offsets) {
-        const ctr = canvas.grid.getCenterPoint(off);
-        const p = Number(api.getMovementPenaltyAt(ctr.x, ctr.y, { excludeToken: tokenDoc })) || 0;
-        if (p > max)
-            max = p;
+    let maxPenalty = 0;
+    for (const cellOffset of offsets) {
+        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+        const penalty = Number(api.getMovementPenaltyAt(cellCenter.x, cellCenter.y, { excludeToken: tokenDoc })) || 0;
+        if (penalty > maxPenalty)
+            maxPenalty = penalty;
     }
-    return max;
+    return maxPenalty;
 }
 
 // Region difficulty N -> LA additive penalty (N - 1). Warns once on non-integer difficulties.
@@ -134,10 +134,10 @@ function regionPenaltyAtCells(tokenDoc, offsets, tokenElevSceneUnits) {
         return 0;
     const actionKey = getCurrentMovementType() === 'fly' ? "fly" : "walk";
     const segment = { action: actionKey };
-    let max = 0;
-    for (const off of offsets) {
-        const c = canvas.grid.getCenterPoint(off);
-        const point = { x: c.x, y: c.y, elevation: tokenElevSceneUnits };
+    let maxPenalty = 0;
+    for (const cellOffset of offsets) {
+        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+        const point = { x: cellCenter.x, y: cellCenter.y, elevation: tokenElevSceneUnits };
         for (const regionDoc of regions) {
             if (!regionDoc.testPoint?.(point))
                 continue;
@@ -147,29 +147,29 @@ function regionPenaltyAtCells(tokenDoc, offsets, tokenElevSceneUnits) {
                 let effects = [];
                 // _getTerrainEffects is wrapped to return [], so read difficulties[action] directly.
                 // Other behavior types still go through _getTerrainEffects.
-                const sys = behavior.system;
-                if (sys?.constructor?.name === 'ModifyMovementCostRegionBehaviorType') {
-                    const d = sys.difficulties?.[actionKey];
-                    if (d != null && d !== 1) effects = [{ difficulty: d }];
+                const behaviorSystem = behavior.system;
+                if (behaviorSystem?.constructor?.name === 'ModifyMovementCostRegionBehaviorType') {
+                    const difficulty = behaviorSystem.difficulties?.[actionKey];
+                    if (difficulty != null && difficulty !== 1) effects = [{ difficulty }];
                 } else {
                     try {
-                        effects = sys?._getTerrainEffects?.(tokenDoc, segment) ?? [];
+                        effects = behaviorSystem?._getTerrainEffects?.(tokenDoc, segment) ?? [];
                     } catch { /* behavior type without terrain effects */ }
                 }
-                for (const eff of effects) {
-                    const d = Number(eff?.difficulty);
-                    if (!Number.isFinite(d) || d <= 1)
+                for (const effect of effects) {
+                    const difficulty = Number(effect?.difficulty);
+                    if (!Number.isFinite(difficulty) || difficulty <= 1)
                         continue;
-                    if (!Number.isInteger(d))
-                        _warnNonIntegerRegionDifficulty(d, regionDoc.name);
-                    const laPenalty = d - 1;
-                    if (laPenalty > max)
-                        max = laPenalty;
+                    if (!Number.isInteger(difficulty))
+                        _warnNonIntegerRegionDifficulty(difficulty, regionDoc.name);
+                    const laPenalty = difficulty - 1;
+                    if (laPenalty > maxPenalty)
+                        maxPenalty = laPenalty;
                 }
             }
         }
     }
-    return max;
+    return maxPenalty;
 }
 
 // templatemacro Difficult Terrain: flags.templatemacro.{movementPenalty,flatMovementPenalty}.
@@ -183,51 +183,51 @@ function templatePenaltyAtCells(offsets, tokenElev = 0) {
             return 0;
         const tmApi = game.modules.get('templatemacro')?.api;
         const candidates = [];
-        for (const tpl of templates) {
+        for (const template of templates) {
             try {
-                const doc = tpl?.document;
-                if (!doc)
+                const templateDoc = template?.document;
+                if (!templateDoc)
                     continue;
-                const tmFlags = doc.flags?.templatemacro ?? {};
-                const penalty = Number(tmFlags.movementPenalty) || 0;
+                const tmacFlags = templateDoc.flags?.templatemacro ?? {};
+                const penalty = Number(tmacFlags.movementPenalty) || 0;
                 if (penalty <= 0)
                     continue;
-                const isFlat = tmFlags.flatMovementPenalty ?? true;
+                const isFlat = tmacFlags.flatMovementPenalty ?? true;
                 if (!isFlat)
                     continue;
-                if (!tpl.shape || typeof tpl.shape.contains !== 'function')
+                if (!template.shape || typeof template.shape.contains !== 'function')
                     continue;
-                if (tmFlags.elevationGated) {
-                    const base = doc.elevation ?? 0;
-                    const manual = !!tmFlags.elevationRangeManual;
-                    const range = Math.floor(Number(manual ? (tmFlags.elevationRange ?? 0) : (doc.distance ?? 0)) || 0);
+                if (tmacFlags.elevationGated) {
+                    const base = templateDoc.elevation ?? 0;
+                    const manual = !!tmacFlags.elevationRangeManual;
+                    const range = Math.floor(Number(manual ? (tmacFlags.elevationRange ?? 0) : (templateDoc.distance ?? 0)) || 0);
                     if (tokenElev < base || tokenElev > base + range)
                         continue;
                 }
                 // Use the cells Foundry actually highlights, not the raw shape. null = gridless -> shape test.
-                const occupied = tmApi?.getTemplateOccupiedOffsets?.(doc) ?? null;
-                candidates.push({ tpl, penalty, occupied });
+                const occupiedCells = tmApi?.getTemplateOccupiedOffsets?.(templateDoc) ?? null;
+                candidates.push({ template, penalty, occupiedCells });
             } catch { /* */ }
         }
         if (!candidates.length)
             return 0;
-        let max = 0;
-        for (const off of offsets) {
-            for (const { tpl, penalty, occupied } of candidates) {
+        let maxPenalty = 0;
+        for (const cellOffset of offsets) {
+            for (const { template, penalty, occupiedCells } of candidates) {
                 try {
                     let inside;
-                    if (occupied) {
-                        inside = occupied.has(`${off.i},${off.j}`);
+                    if (occupiedCells) {
+                        inside = occupiedCells.has(`${cellOffset.i},${cellOffset.j}`);
                     } else {
-                        const ctr = canvas.grid.getCenterPoint(off);
-                        inside = tpl.shape.contains(ctr.x - tpl.x, ctr.y - tpl.y);
+                        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+                        inside = template.shape.contains(cellCenter.x - template.x, cellCenter.y - template.y);
                     }
-                    if (inside && penalty > max)
-                        max = penalty;
+                    if (inside && penalty > maxPenalty)
+                        maxPenalty = penalty;
                 } catch { /* */ }
             }
         }
-        return max;
+        return maxPenalty;
     } catch {
         return 0;
     }
@@ -239,7 +239,7 @@ function getTerrainTypeMap() {
     if (!tht)
         return null;
     const types = tht.getTerrainTypes?.() ?? [];
-    return new Map(types.map(t => [t.id, t]));
+    return new Map(types.map(terrainType => [terrainType.id, terrainType]));
 }
 
 /** MAX-across-footprint movementPenalty (in grid units) of THT terrains under the token at the given x,y position. */
@@ -256,17 +256,17 @@ function terrainPenaltyAtPosition(tokenDoc, position, typeById = null) {
     try {
         offsets = tokenDoc.getOccupiedGridSpaceOffsets?.(position) ?? [];
     } catch { /* ignore */ }
-    let max = 0;
-    for (const off of offsets) {
-        const shapes = tht.getCell?.(off.j, off.i) ?? [];
+    let maxPenalty = 0;
+    for (const cellOffset of offsets) {
+        const shapes = tht.getCell?.(cellOffset.j, cellOffset.i) ?? [];
         for (const shape of shapes) {
-            const tt = typeById.get(shape.terrainTypeId);
-            const penalty = Number(tt?.movementPenalty) || 0;
-            if (penalty > max)
-                max = penalty;
+            const terrainType = typeById.get(shape.terrainTypeId);
+            const penalty = Number(terrainType?.movementPenalty) || 0;
+            if (penalty > maxPenalty)
+                maxPenalty = penalty;
         }
     }
-    return max;
+    return maxPenalty;
 }
 
 /**
@@ -294,8 +294,8 @@ function terrainPenaltyAtOffset(tokenDoc, offset, typeById, tokenElevGrid) {
 
     let solidMaxTop = 0;
     for (const shape of shapes) {
-        const tt = typeById.get(shape.terrainTypeId);
-        if (tt?.usesHeight && tt?.isSolid) {
+        const terrainType = typeById.get(shape.terrainTypeId);
+        if (terrainType?.usesHeight && terrainType?.isSolid) {
             const top = (shape.elevation ?? 0) + (shape.height ?? 0);
             if (top > solidMaxTop)
                 solidMaxTop = top;
@@ -303,13 +303,13 @@ function terrainPenaltyAtOffset(tokenDoc, offset, typeById, tokenElevGrid) {
     }
 
     let maxPenalty = 0;
-    const dbg = [];
+    const debugLines = [];
     for (const shape of shapes) {
-        const tt = typeById.get(shape.terrainTypeId);
-        const penalty = Number(tt?.movementPenalty) || 0;
+        const terrainType = typeById.get(shape.terrainTypeId);
+        const penalty = Number(terrainType?.movementPenalty) || 0;
         let applies;
         let reason;
-        if (tt?.usesHeight) {
+        if (terrainType?.usesHeight) {
             const top = (shape.elevation ?? 0) + (shape.height ?? 0);
             applies = tokenElevGrid >= (shape.elevation ?? 0) && tokenElevGrid < top;
             reason = `solid elev=[${shape.elevation ?? 0},${top}) tokenE=${tokenElevGrid}`;
@@ -319,12 +319,12 @@ function terrainPenaltyAtOffset(tokenDoc, offset, typeById, tokenElevGrid) {
             reason = `zone top=${zoneTop} tokenE=${tokenElevGrid}`;
         }
         if (debugOn())
-            dbg.push(`{id=${shape.terrainTypeId} name=${tt?.name} mp=${penalty} usesH=${tt?.usesHeight} ${reason} applies=${applies}}`);
+            debugLines.push(`{id=${shape.terrainTypeId} name=${terrainType?.name} mp=${penalty} usesH=${terrainType?.usesHeight} ${reason} applies=${applies}}`);
         if (applies && penalty > maxPenalty)
             maxPenalty = penalty;
     }
     if (debugOn())
-        console.log('LA-COST-TERRAIN', { offset, shapes: dbg, maxPenalty });
+        console.log('LA-COST-TERRAIN', { offset, shapes: debugLines, maxPenalty });
     return maxPenalty;
 }
 
@@ -346,40 +346,40 @@ function footprintShapesAt(tokenDoc, pathOffset, typeById) {
 
     const center = canvas.grid.getCenterPoint(pathOffset);
     const gridSize = canvas.grid.size;
-    const w = tokenDoc.width ?? 1;
-    const h = tokenDoc.height ?? 1;
-    const pos = {
-        x: center.x - w * gridSize / 2,
-        y: center.y - h * gridSize / 2,
-        width: w,
-        height: h
+    const tokenWidthCells = tokenDoc.width ?? 1;
+    const tokenHeightCells = tokenDoc.height ?? 1;
+    const topLeftPos = {
+        x: center.x - tokenWidthCells * gridSize / 2,
+        y: center.y - tokenHeightCells * gridSize / 2,
+        width: tokenWidthCells,
+        height: tokenHeightCells
     };
     let footprint = [];
     try {
-        footprint = tokenDoc.getOccupiedGridSpaceOffsets?.(pos) ?? [];
+        footprint = tokenDoc.getOccupiedGridSpaceOffsets?.(topLeftPos) ?? [];
     } catch { /* ignore */ }
     if (!footprint.length)
         footprint = [pathOffset];
 
     const dedup = new Map();
-    for (const off of footprint) {
-        const ctr = canvas.grid.getCenterPoint(off);
-        let shapes = tht.getShapesAtPoint?.(ctr.x, ctr.y) ?? [];
+    for (const cellOffset of footprint) {
+        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+        let shapes = tht.getShapesAtPoint?.(cellCenter.x, cellCenter.y) ?? [];
         if (!shapes.length)
-            shapes = tht.getCell?.(off.j, off.i) ?? [];
-        for (const s of shapes)
-            dedup.set(`${s.terrainTypeId}|${s.elevation}|${s.height}`, s);
+            shapes = tht.getCell?.(cellOffset.j, cellOffset.i) ?? [];
+        for (const shape of shapes)
+            dedup.set(`${shape.terrainTypeId}|${shape.elevation}|${shape.height}`, shape);
     }
     const shapes = [...dedup.values()];
 
     let top = 0;
     for (const shape of shapes) {
-        const tt = typeById.get(shape.terrainTypeId);
-        if (!tt?.usesHeight || !tt?.isSolid)
+        const terrainType = typeById.get(shape.terrainTypeId);
+        if (!terrainType?.usesHeight || !terrainType?.isSolid)
             continue;
-        const t = (shape.elevation ?? 0) + (shape.height ?? 0);
-        if (t > top)
-            top = t;
+        const shapeTop = (shape.elevation ?? 0) + (shape.height ?? 0);
+        if (shapeTop > top)
+            top = shapeTop;
     }
     return { top, shapes, footprint };
 }
@@ -390,13 +390,13 @@ function collectShapes(offsets, typeById) {
     if (!tht || !typeById || !offsets?.length)
         return [];
     const dedup = new Map();
-    for (const off of offsets) {
-        const ctr = canvas.grid.getCenterPoint(off);
-        let shapes = tht.getShapesAtPoint?.(ctr.x, ctr.y) ?? [];
+    for (const cellOffset of offsets) {
+        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+        let shapes = tht.getShapesAtPoint?.(cellCenter.x, cellCenter.y) ?? [];
         if (!shapes.length)
-            shapes = tht.getCell?.(off.j, off.i) ?? [];
-        for (const s of shapes)
-            dedup.set(`${s.terrainTypeId}|${s.elevation}|${s.height}`, s);
+            shapes = tht.getCell?.(cellOffset.j, cellOffset.i) ?? [];
+        for (const shape of shapes)
+            dedup.set(`${shape.terrainTypeId}|${shape.elevation}|${shape.height}`, shape);
     }
     return [...dedup.values()];
 }
@@ -407,8 +407,8 @@ function penaltyFromShapes(shapes, typeById, tokenElevGrid) {
         return 0;
     let solidMaxTop = 0;
     for (const shape of shapes) {
-        const tt = typeById.get(shape.terrainTypeId);
-        if (tt?.usesHeight && tt?.isSolid) {
+        const terrainType = typeById.get(shape.terrainTypeId);
+        if (terrainType?.usesHeight && terrainType?.isSolid) {
             const top = (shape.elevation ?? 0) + (shape.height ?? 0);
             if (top > solidMaxTop)
                 solidMaxTop = top;
@@ -416,12 +416,12 @@ function penaltyFromShapes(shapes, typeById, tokenElevGrid) {
     }
     let maxPenalty = 0;
     for (const shape of shapes) {
-        const tt = typeById.get(shape.terrainTypeId);
-        const penalty = Number(tt?.movementPenalty) || 0;
+        const terrainType = typeById.get(shape.terrainTypeId);
+        const penalty = Number(terrainType?.movementPenalty) || 0;
         if (penalty <= 0)
             continue;
         let applies;
-        if (tt?.usesHeight) {
+        if (terrainType?.usesHeight) {
             const top = (shape.elevation ?? 0) + (shape.height ?? 0);
             applies = tokenElevGrid >= (shape.elevation ?? 0) && tokenElevGrid < top;
         } else {
@@ -438,77 +438,77 @@ function gridlessPenaltyTemplates() {
     const templates = canvas?.templates?.placeables;
     if (!Array.isArray(templates))
         return [];
-    return templates.filter(tpl => {
-        const tm = tpl?.document?.flags?.templatemacro ?? {};
-        return Number(tm.movementPenalty) > 0 && typeof tpl?.shape?.contains === 'function';
+    return templates.filter(template => {
+        const tmacFlags = template?.document?.flags?.templatemacro ?? {};
+        return Number(tmacFlags.movementPenalty) > 0 && typeof template?.shape?.contains === 'function';
     });
 }
 
 // Per zone: boundary-crossing points (⚠ markers) and the distance the line runs inside it.
-function gridlessPenaltyZones(a, b, templates, gridSize, sceneDistance) {
-    const segPx = Math.hypot(b.x - a.x, b.y - a.y);
-    const steps = Math.max(2, Math.ceil(segPx / 8));
-    const stepSU = (segPx / steps / gridSize) * sceneDistance;
-    const inAt = (tpl, t) => {
+function gridlessPenaltyZones(segStart, segEnd, templates, gridSize, sceneDistance) {
+    const segLengthPx = Math.hypot(segEnd.x - segStart.x, segEnd.y - segStart.y);
+    const steps = Math.max(2, Math.ceil(segLengthPx / 8));
+    const stepSceneUnits = (segLengthPx / steps / gridSize) * sceneDistance;
+    const isInsideTemplateAt = (template, t) => {
         try {
-            return !!tpl.shape.contains(a.x + (b.x - a.x) * t - tpl.x, a.y + (b.y - a.y) * t - tpl.y);
+            return !!template.shape.contains(segStart.x + (segEnd.x - segStart.x) * t - template.x, segStart.y + (segEnd.y - segStart.y) * t - template.y);
         } catch {
             return false;
         }
     };
     const zones = [];
-    for (const tpl of templates) {
-        const penalty = Number(tpl.document?.flags?.templatemacro?.movementPenalty) || 0;
+    for (const template of templates) {
+        const penalty = Number(template.document?.flags?.templatemacro?.movementPenalty) || 0;
         const crossings = [];
-        let hInside = 0;
-        let prev = inAt(tpl, 0);
+        let horizontalInside = 0;
+        let wasInsidePrev = isInsideTemplateAt(template, 0);
         for (let s = 1; s <= steps; s++) {
             const t = s / steps;
-            const inside = inAt(tpl, t);
+            const inside = isInsideTemplateAt(template, t);
             if (inside)
-                hInside += stepSU;
-            if (inside !== prev) {
-                const tm = (t + (s - 1) / steps) / 2;
-                crossings.push({ x: a.x + (b.x - a.x) * tm, y: a.y + (b.y - a.y) * tm });
-                prev = inside;
+                horizontalInside += stepSceneUnits;
+            if (inside !== wasInsidePrev) {
+                const tMid = (t + (s - 1) / steps) / 2;
+                crossings.push({ x: segStart.x + (segEnd.x - segStart.x) * tMid, y: segStart.y + (segEnd.y - segStart.y) * tMid });
+                wasInsidePrev = inside;
             }
         }
-        zones.push({ tpl, penalty, crossings, hInside, anyInside: hInside > 0 });
+        zones.push({ template, penalty, crossings, horizontalInside, anyInside: horizontalInside > 0 });
     }
     return zones;
 }
 
 // Points where elevation steps along the line, for the on-segment ↑/↓ markers.
 function gridlessElevationCrossings(fromWp, toWp, tokenDoc, gridSize) {
-    const w = fromWp.width ?? tokenDoc.width ?? 1;
-    const h = fromWp.height ?? tokenDoc.height ?? 1;
-    const dx = toWp.x - fromWp.x, dy = toWp.y - fromWp.y;
-    const steps = Math.min(60, Math.max(2, Math.ceil(Math.hypot(dx, dy) / Math.max(8, gridSize / 3))));
-    const elevAt = t => elevationForPreview(tokenDoc, { x: fromWp.x + dx * t, y: fromWp.y + dy * t, width: w, height: h });
+    const tokenWidthCells = fromWp.width ?? tokenDoc.width ?? 1;
+    const tokenHeightCells = fromWp.height ?? tokenDoc.height ?? 1;
+    const deltaX = toWp.x - fromWp.x, deltaY = toWp.y - fromWp.y;
+    const steps = Math.min(60, Math.max(2, Math.ceil(Math.hypot(deltaX, deltaY) / Math.max(8, gridSize / 3))));
+    const elevAt = t => elevationForPreview(tokenDoc, { x: fromWp.x + deltaX * t, y: fromWp.y + deltaY * t, width: tokenWidthCells, height: tokenHeightCells });
     const markers = [];
-    let prev = elevAt(0);
+    let prevElev = elevAt(0);
     for (let s = 1; s <= steps; s++) {
         const t = s / steps;
         const elev = elevAt(t);
-        const d = Math.round(elev - prev);
-        if (d !== 0) {
-            const tm = (t + (s - 1) / steps) / 2;
-            markers.push({ x: fromWp.x + dx * tm + w * gridSize / 2, y: fromWp.y + dy * tm + h * gridSize / 2, delta: d });
+        const elevStep = Math.round(elev - prevElev);
+        if (elevStep !== 0) {
+            const tMid = (t + (s - 1) / steps) / 2;
+            markers.push({ x: fromWp.x + deltaX * tMid + tokenWidthCells * gridSize / 2, y: fromWp.y + deltaY * tMid + tokenHeightCells * gridSize / 2, delta: elevStep });
         }
-        prev = elev;
+        prevElev = elev;
     }
     return markers;
 }
 
 // Points along the segment with linear cost, for the per-step gradient renderer.
-function gridlessLineCentroids(fc, tc, segCost) {
-    const steps = Math.max(2, Math.min(60, Math.ceil(Math.hypot(tc.x - fc.x, tc.y - fc.y) / 16)));
-    const pts = [];
+function gridlessLineCentroids(fromCenter, toCenter, segCost) {
+    const steps = Math.max(2, Math.min(60, Math.ceil(Math.hypot(toCenter.x - fromCenter.x, toCenter.y - fromCenter.y) / 16)));
+    const points = [];
     for (let s = 0; s <= steps; s++) {
         const t = s / steps;
-        pts.push({ x: fc.x + (tc.x - fc.x) * t, y: fc.y + (tc.y - fc.y) * t, cost: segCost * t });
+        points.push({ x: fromCenter.x + (toCenter.x - fromCenter.x) * t, y: fromCenter.y + (toCenter.y - fromCenter.y) * t, cost: segCost * t });
     }
-    return pts;
+    return points;
 }
 
 // Gridless cost: horizontal + vertical, plus penalties billed by distance traversed inside zones.
@@ -528,23 +528,23 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result) {
         if (!fromWp || !toWp)
             continue;
 
-        const fc = center(fromWp), tc = center(toWp);
-        const horizontal = (Math.hypot(tc.x - fc.x, tc.y - fc.y) / gridSize) * sceneDistance;
+        const fromCenter = center(fromWp), toCenter = center(toWp);
+        const horizontal = (Math.hypot(toCenter.x - fromCenter.x, toCenter.y - fromCenter.y) / gridSize) * sceneDistance;
         const vertical = Math.abs((toWp.elevation ?? 0) - (fromWp.elevation ?? 0));
         const climbMarkers = gridlessElevationCrossings(fromWp, toWp, tokenDoc, gridSize);
 
-        const zones = penaltyTemplates.length ? gridlessPenaltyZones(fc, tc, penaltyTemplates, gridSize, sceneDistance) : [];
+        const zones = penaltyTemplates.length ? gridlessPenaltyZones(fromCenter, toCenter, penaltyTemplates, gridSize, sceneDistance) : [];
         const penaltyMarkers = [];
         let penaltyCost = 0;
-        for (const z of zones) {
-            penaltyMarkers.push(...z.crossings);
-            if (z.anyInside)
+        for (const zone of zones) {
+            penaltyMarkers.push(...zone.crossings);
+            if (zone.anyInside)
                 penaltyZone = true;
-            let vInside = 0;
-            for (const m of climbMarkers)
-                if (z.tpl.shape?.contains?.(m.x - z.tpl.x, m.y - z.tpl.y))
-                    vInside += Math.abs(m.delta);
-            penaltyCost += z.penalty * (z.hInside + vInside);
+            let verticalInside = 0;
+            for (const climbMarker of climbMarkers)
+                if (zone.template.shape?.contains?.(climbMarker.x - zone.template.x, climbMarker.y - zone.template.y))
+                    verticalInside += Math.abs(climbMarker.delta);
+            penaltyCost += zone.penalty * (zone.horizontalInside + verticalInside);
         }
 
         // First grid-unit of climb is free, the rest 1:1.
@@ -580,7 +580,7 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result) {
             seg.to.lancerVerticalCost = totalVertical;
             seg.to.lancerClimbCells = climbMarkers;
             seg.to.lancerTerrainCells = penaltyMarkers;
-            seg.to.lancerStepCentroids = gridlessLineCentroids(fc, tc, segCost);
+            seg.to.lancerStepCentroids = gridlessLineCentroids(fromCenter, toCenter, segCost);
             seg.to.lancerPenaltyZone = penaltyZone;
         }
     }
@@ -631,13 +631,13 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     const storedElevGrid = startElev / sceneDistance;
     let groundElevGrid = 0;
     try {
-        const gridSize0 = canvas.grid.size;
-        const tCenter = {
-            x: startX + startWidth * gridSize0 / 2,
-            y: startY + startHeight * gridSize0 / 2
+        const startGridSize = canvas.grid.size;
+        const tokenCenter = {
+            x: startX + startWidth * startGridSize / 2,
+            y: startY + startHeight * startGridSize / 2
         };
-        const startOff = canvas.grid.getOffset(tCenter);
-        groundElevGrid = footprintShapesAt(tokenDoc, startOff, typeById).top;
+        const startOffset = canvas.grid.getOffset(tokenCenter);
+        groundElevGrid = footprintShapesAt(tokenDoc, startOffset, typeById).top;
     } catch { /* ignore */ }
     let prevTerrainTop = groundElevGrid;
     let prevCellTop = groundElevGrid;
@@ -657,9 +657,9 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             keepIdx.push(k);
     }
 
-    for (let kp = 0; kp < keepIdx.length - 1; kp++) {
-        const fromIdx = keepIdx[kp];
-        const toIdx = keepIdx[kp + 1];
+    for (let keepIdxPos = 0; keepIdxPos < keepIdx.length - 1; keepIdxPos++) {
+        const fromIdx = keepIdx[keepIdxPos];
+        const toIdx = keepIdx[keepIdxPos + 1];
         const i = toIdx - 1; // store data on the LAST sub-segment of this filtered group
         const seg = result.segments[i];
         const fromWp = inputWaypoints[fromIdx];
@@ -671,7 +671,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
         const flying = segAction === 'fly' || (segAction == null && defaultFlying);
         const noTerrainClimb = segAction === 'ignore' || (segAction == null && defaultIgnoreElev);
 
-        const isLastSegment = (kp === keepIdx.length - 2);
+        const isLastSegment = (keepIdxPos === keepIdx.length - 2);
         let horizontalCost = 0;
         let terrainCost = 0;
         let verticalCost = 0;
@@ -704,7 +704,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
                     path.push(cell);
                 }
             }
-            debug.push(`path cells: ${(path ?? []).map(c => `(${c.i},${c.j})`).join(' -> ')}`);
+            debug.push(`path cells: ${(path ?? []).map(cell => `(${cell.i},${cell.j})`).join(' -> ')}`);
 
             let lastRealJ = -1;
             for (let k = 1; k < (path?.length ?? 0); k++) {
@@ -714,21 +714,21 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
 
             let prev = path?.[0];
             const startFootprint = footprintShapesAt(tokenDoc, prev, typeById).footprint;
-            let prevFootprintKeys = new Set(startFootprint.map(o => `${o.i},${o.j}`));
+            let prevFootprintKeys = new Set(startFootprint.map(cellOffset => `${cellOffset.i},${cellOffset.j}`));
             // Average of footprint cell centers; matches the geometric center of the cells Foundry highlights.
             const footprintCentroid = (cells) => {
                 if (!cells?.length) return null;
-                let sx = 0, sy = 0;
-                for (const off of cells) {
-                    const c = canvas.grid.getCenterPoint(off);
-                    sx += c.x;
-                    sy += c.y;
+                let sumX = 0, sumY = 0;
+                for (const cellOffset of cells) {
+                    const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+                    sumX += cellCenter.x;
+                    sumY += cellCenter.y;
                 }
-                return { x: sx / cells.length, y: sy / cells.length };
+                return { x: sumX / cells.length, y: sumY / cells.length };
             };
-            const startC = footprintCentroid(startFootprint) ?? canvas.grid.getCenterPoint(prev);
-            stepCentroids = [{ x: startC.x, y: startC.y, cost: 0 }];
-            let prevCtr = startC;
+            const startCentroid = footprintCentroid(startFootprint) ?? canvas.grid.getCenterPoint(prev);
+            stepCentroids = [{ x: startCentroid.x, y: startCentroid.y, cost: 0 }];
+            let prevCentroid = startCentroid;
             let segCumCost = 0;
 
             for (let j = 1; j < (path?.length ?? 0); j++) {
@@ -739,11 +739,11 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
                 horizontalCost += sceneDistance;
 
                 const { top: cellTop, footprint } = footprintShapesAt(tokenDoc, curr, typeById);
-                const newCells = footprint.filter(o => !prevFootprintKeys.has(`${o.i},${o.j}`));
+                const newCells = footprint.filter(cellOffset => !prevFootprintKeys.has(`${cellOffset.i},${cellOffset.j}`));
                 const newShapes = collectShapes(newCells, typeById);
 
                 // Step is free of climb cost if the destination terrain has noClimbingCost (e.g. stairs).
-                const noClimbStep = newShapes.some(s => typeById.get(s.terrainTypeId)?.noClimbingCost);
+                const noClimbStep = newShapes.some(shape => typeById.get(shape.terrainTypeId)?.noClimbingCost);
 
                 // Flying gets cumulative-max terrain (up-only).
                 const newTerrainTop = flying ? Math.max(prevTerrainTop, cellTop) : cellTop;
@@ -769,66 +769,66 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
                 tokenElev += stepDelta;
 
                 const cellsForOverlay = newCells.length ? newCells : [curr];
-                const thtPen = terrainImmune ? 0 : penaltyFromShapes(newShapes, typeById, tokenElev);
-                const gaaPen = terrainImmune ? 0 : gaaPenaltyAtCells(tokenDoc, cellsForOverlay);
-                let tmacPen = 0;
+                const thtPenalty = terrainImmune ? 0 : penaltyFromShapes(newShapes, typeById, tokenElev);
+                const gaaPenalty = terrainImmune ? 0 : gaaPenaltyAtCells(tokenDoc, cellsForOverlay);
+                let tmacPenalty = 0;
                 if (!terrainImmune) {
                     try {
-                        tmacPen = templatePenaltyAtCells(cellsForOverlay, tokenElev);
+                        tmacPenalty = templatePenaltyAtCells(cellsForOverlay, tokenElev);
                     } catch {
-                        tmacPen = 0;
+                        tmacPenalty = 0;
                     }
                 }
-                const regionPen = terrainImmune ? 0 : regionPenaltyAtCells(tokenDoc, cellsForOverlay, tokenElev * sceneDistance);
-                const penalty = Math.max(thtPen, gaaPen, tmacPen, regionPen);
+                const regionPenalty = terrainImmune ? 0 : regionPenaltyAtCells(tokenDoc, cellsForOverlay, tokenElev * sceneDistance);
+                const penalty = Math.max(thtPenalty, gaaPenalty, tmacPenalty, regionPenalty);
                 terrainCost += penalty * sceneDistance;
 
-                const cellCtr = canvas.grid.getCenterPoint(curr);
-                const ctr = footprintCentroid(footprint) ?? cellCtr;
+                const cellCenter = canvas.grid.getCenterPoint(curr);
+                const currCentroid = footprintCentroid(footprint) ?? cellCenter;
                 const stepMalus = (!flying && !climbImmune && !freeMode && !noClimbStep && climbCellsBilled > 0)
                     ? Math.max(0, climbCellsBilled - 1) * sceneDistance
                     : 0;
                 const stepClimbCost = (flying || noClimbStep) ? 0 : climbCellsBilled * sceneDistance;
                 if (flying) {
-                    const speedNow = lancerSpeed(tokenDoc);
-                    const hCum = horizontalCost / sceneDistance;
-                    const cellCap = speedNow > 0 ? Math.max(1, Math.ceil(hCum / speedNow)) * speedNow : 0;
-                    const moveGrid = segClimbVU > cellCap ? Math.max(hCum, segClimbVU) : hCum;
-                    segCumCost = moveGrid * sceneDistance + terrainCost;
+                    const tokenSpeed = lancerSpeed(tokenDoc);
+                    const horizontalCells = horizontalCost / sceneDistance;
+                    const flyCellCap = tokenSpeed > 0 ? Math.max(1, Math.ceil(horizontalCells / tokenSpeed)) * tokenSpeed : 0;
+                    const billedMoveCells = segClimbVU > flyCellCap ? Math.max(horizontalCells, segClimbVU) : horizontalCells;
+                    segCumCost = billedMoveCells * sceneDistance + terrainCost;
                 } else {
                     segCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
                 }
-                stepCentroids.push({ x: ctr.x, y: ctr.y, cost: segCumCost });
+                stepCentroids.push({ x: currCentroid.x, y: currCentroid.y, cost: segCumCost });
                 const visualTerrainDelta = noTerrainClimb ? 0 : (cellTop - prevCellTop);
                 const visualStepDelta = visualTerrainDelta + manualDelta;
                 if (visualStepDelta !== 0) {
                     climbCells.push({
-                        x: (prevCtr.x + ctr.x) / 2,
-                        y: (prevCtr.y + ctr.y) / 2,
+                        x: (prevCentroid.x + currCentroid.x) / 2,
+                        y: (prevCentroid.y + currCentroid.y) / 2,
                         delta: visualStepDelta
                     });
                 }
                 if (penalty > 0) {
                     terrainCells.push({
-                        x: (prevCtr.x + ctr.x) / 2,
-                        y: (prevCtr.y + ctr.y) / 2,
+                        x: (prevCentroid.x + currCentroid.x) / 2,
+                        y: (prevCentroid.y + currCentroid.y) / 2,
                         penalty
                     });
                 }
                 debug.push(`cell(${curr.i},${curr.j}) fp=${footprint.length} new=${newCells.length} cellTop=${cellTop} terrain=${prevTerrainTop}->${newTerrainTop} tokenE=${tokenElev} delta=${stepDelta} billed=${climbCellsBilled} penalty=${penalty}`);
-                debugMark(curr, cellCtr, penalty, tokenElev, climbCellsBilled);
-                for (const off of footprint) {
-                    if (off.i === curr.i && off.j === curr.j)
+                debugMark(curr, cellCenter, penalty, tokenElev, climbCellsBilled);
+                for (const cellOffset of footprint) {
+                    if (cellOffset.i === curr.i && cellOffset.j === curr.j)
                         continue;
-                    const isNew = !prevFootprintKeys.has(`${off.i},${off.j}`);
-                    const fctr = canvas.grid.getCenterPoint(off);
-                    debugFootprint(off, fctr, isNew);
+                    const isNew = !prevFootprintKeys.has(`${cellOffset.i},${cellOffset.j}`);
+                    const footprintCellCenter = canvas.grid.getCenterPoint(cellOffset);
+                    debugFootprint(cellOffset, footprintCellCenter, isNew);
                 }
 
-                prevFootprintKeys = new Set(footprint.map(o => `${o.i},${o.j}`));
+                prevFootprintKeys = new Set(footprint.map(cellOffset => `${cellOffset.i},${cellOffset.j}`));
                 prevTerrainTop = newTerrainTop;
                 prevCellTop = cellTop;
-                prevCtr = ctr;
+                prevCentroid = currCentroid;
                 prev = curr;
             }
         } catch (e) {
@@ -841,11 +841,11 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
 
         let segCost;
         if (flying) {
-            const speed = lancerSpeed(tokenDoc);
-            const segHGrid = horizontalCost / sceneDistance;
-            const flyVCapVU = speed > 0 ? Math.max(1, Math.ceil(segHGrid / speed)) * speed : 0;
-            if (segClimbVU > flyVCapVU) {
-                const moveCost = Math.max(segHGrid, segClimbVU) * sceneDistance;
+            const tokenSpeed = lancerSpeed(tokenDoc);
+            const segHorizontalCells = horizontalCost / sceneDistance;
+            const flyClimbCapCells = tokenSpeed > 0 ? Math.max(1, Math.ceil(segHorizontalCells / tokenSpeed)) * tokenSpeed : 0;
+            if (segClimbVU > flyClimbCapCells) {
+                const moveCost = Math.max(segHorizontalCells, segClimbVU) * sceneDistance;
                 verticalCost = moveCost - horizontalCost;
                 segCost = moveCost + terrainCost;
             } else {
@@ -864,7 +864,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             malus = 0;
             climbCells.length = 0;
             terrainCells.length = 0;
-            for (const c of stepCentroids) c.cost = 0;
+            for (const centroid of stepCentroids) centroid.cost = 0;
         }
 
         if (segAction === 'blink') {
@@ -874,18 +874,18 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             if (!terrainImmune) {
                 try {
                     const gridSize = canvas.grid.size;
-                    const sizeTo = tokenDoc.getSize?.(toWp) ?? { width: (toWp.width ?? tokenDoc.width) * gridSize, height: (toWp.height ?? tokenDoc.height) * gridSize };
-                    const toCenter = { x: toWp.x + sizeTo.width / 2, y: toWp.y + sizeTo.height / 2 };
-                    const toCell = canvas.grid.getOffset(toCenter);
-                    const { footprint: destFootprint } = footprintShapesAt(tokenDoc, toCell, typeById);
+                    const destSize = tokenDoc.getSize?.(toWp) ?? { width: (toWp.width ?? tokenDoc.width) * gridSize, height: (toWp.height ?? tokenDoc.height) * gridSize };
+                    const destCenter = { x: toWp.x + destSize.width / 2, y: toWp.y + destSize.height / 2 };
+                    const destCell = canvas.grid.getOffset(destCenter);
+                    const { footprint: destFootprint } = footprintShapesAt(tokenDoc, destCell, typeById);
                     const destShapes = collectShapes(destFootprint, typeById);
                     const destElev = toWp.elevation ?? 0;
-                    const thtPen = penaltyFromShapes(destShapes, typeById, destElev);
-                    const gaaPen = gaaPenaltyAtCells(tokenDoc, destFootprint);
-                    let tmacPen = 0;
-                    try { tmacPen = templatePenaltyAtCells(destFootprint, destElev); } catch { tmacPen = 0; }
-                    const regionPen = regionPenaltyAtCells(tokenDoc, destFootprint, destElev * sceneDistance);
-                    destPenalty = Math.max(thtPen, gaaPen, tmacPen, regionPen);
+                    const thtPenalty = penaltyFromShapes(destShapes, typeById, destElev);
+                    const gaaPenalty = gaaPenaltyAtCells(tokenDoc, destFootprint);
+                    let tmacPenalty = 0;
+                    try { tmacPenalty = templatePenaltyAtCells(destFootprint, destElev); } catch { tmacPenalty = 0; }
+                    const regionPenalty = regionPenaltyAtCells(tokenDoc, destFootprint, destElev * sceneDistance);
+                    destPenalty = Math.max(thtPenalty, gaaPenalty, tmacPenalty, regionPenalty);
                 } catch {
                     destPenalty = 0;
                 }
@@ -895,7 +895,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
             malus = 0;
             climbCells.length = 0;
             terrainCells.length = 0;
-            for (const c of stepCentroids) c.cost = segCost;
+            for (const centroid of stepCentroids) centroid.cost = segCost;
         }
 
         seg.lancerVerticalCost = verticalCost;
@@ -905,14 +905,14 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
         const groupStartCum = cumCost;
         const subCount = toIdx - fromIdx;
         const equalShare = subCount > 0 ? segCost / subCount : segCost;
-        let groupAcc = 0;
-        for (let subI = fromIdx; subI < toIdx; subI++) {
-            const subSeg = result.segments[subI];
+        let groupAccCost = 0;
+        for (let subIdx = fromIdx; subIdx < toIdx; subIdx++) {
+            const subSeg = result.segments[subIdx];
             if (!subSeg) continue;
-            const portion = (subI === toIdx - 1) ? (segCost - groupAcc) : equalShare;
+            const portion = (subIdx === toIdx - 1) ? (segCost - groupAccCost) : equalShare;
             subSeg.cost = portion;
-            groupAcc += portion;
-            if (subSeg.to) subSeg.to.cost = groupStartCum + groupAcc;
+            groupAccCost += portion;
+            if (subSeg.to) subSeg.to.cost = groupStartCum + groupAccCost;
         }
 
         cumDistance += horizontalCost;
@@ -933,8 +933,8 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
 
         // Sub-segments between fromIdx and toIdx-1 must hide their native line to avoid the double-line
         // effect; the polyline on the last sub-segment covers the whole group.
-        for (let subI = fromIdx; subI < toIdx - 1; subI++) {
-            const subSeg = result.segments[subI];
+        for (let subIdx = fromIdx; subIdx < toIdx - 1; subIdx++) {
+            const subSeg = result.segments[subIdx];
             if (subSeg?.to) subSeg.to.lancerSkipNativeSegment = true;
         }
     }

@@ -615,31 +615,31 @@ function _syncOverlayTransform(mesh, token, simple) {
     const pmesh = token.mesh;
     if (!pmesh)
         return;
-    const w = pmesh.width || token.w;
-    const h = pmesh.height || token.h;
+    const meshWidth = pmesh.width || token.w;
+    const meshHeight = pmesh.height || token.h;
     // mirror: pmesh.width/height are abs(); use the signed scale to mirror the overlay quad
-    const sx = Math.sign(pmesh.scale?.x ?? 1) || 1;
-    const sy = Math.sign(pmesh.scale?.y ?? 1) || 1;
-    const ax = pmesh.anchor?.x ?? 0.5;
-    const ay = pmesh.anchor?.y ?? 0.5;
+    const mirrorX = Math.sign(pmesh.scale?.x ?? 1) || 1;
+    const mirrorY = Math.sign(pmesh.scale?.y ?? 1) || 1;
+    const anchorX = pmesh.anchor?.x ?? 0.5;
+    const anchorY = pmesh.anchor?.y ?? 0.5;
     const localX = pmesh.position.x - token.position.x;
     const localY = pmesh.position.y - token.position.y;
     // anchor offset is in mesh-local space, so it flips with the sprite before rotation
-    const dx = sx * w * (0.5 - ax);
-    const dy = sy * h * (0.5 - ay);
+    const anchorOffsetX = mirrorX * meshWidth * (0.5 - anchorX);
+    const anchorOffsetY = mirrorY * meshHeight * (0.5 - anchorY);
     const rot = pmesh.rotation || 0;
-    const cos = Math.cos(rot);
-    const sin = Math.sin(rot);
-    mesh.position.set(localX + cos * dx - sin * dy, localY + sin * dx + cos * dy);
-    mesh.scale.set(sx * w, sy * h);
+    const cosRot = Math.cos(rot);
+    const sinRot = Math.sin(rot);
+    mesh.position.set(localX + cosRot * anchorOffsetX - sinRot * anchorOffsetY, localY + sinRot * anchorOffsetX + cosRot * anchorOffsetY);
+    mesh.scale.set(mirrorX * meshWidth, mirrorY * meshHeight);
     mesh.rotation = rot;
     if (mesh.skew && pmesh.skew)
         mesh.skew.set(pmesh.skew.x ?? 0, pmesh.skew.y ?? 0);
     const stageScale = canvas.stage?.scale?.x ?? 1;
     const thicknessFactor = simple ? 0.1 : 0.35;
-    const osc = simple ? 1 : 0.75 + 0.5 * (Math.cos(performance.now() / 1500 * Math.PI * 2) * 0.5 + 0.5);
-    mesh.shader.uniforms.thickness[0] = thicknessFactor * osc * stageScale / w;
-    mesh.shader.uniforms.thickness[1] = thicknessFactor * osc * stageScale / h;
+    const pulse = simple ? 1 : 0.75 + 0.5 * (Math.cos(performance.now() / 1500 * Math.PI * 2) * 0.5 + 0.5);
+    mesh.shader.uniforms.thickness[0] = thicknessFactor * pulse * stageScale / meshWidth;
+    mesh.shader.uniforms.thickness[1] = thicknessFactor * pulse * stageScale / meshHeight;
 }
 
 const _OVERLAY_COLOR = [1, 0.85, 0.15, 1];

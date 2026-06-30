@@ -70,19 +70,19 @@ export async function moveToken(token, options = {}) {
             let lastDest = null;
             let lastCursorColor = 0x00cc66; // mirrors the live cursor's in-range/out-of-range colour
             const groundUnder = (dest) => {
-                const tAPI = globalThis.terrainHeightTools;
-                if (!tAPI)
+                const terrainAPI = globalThis.terrainHeightTools;
+                if (!terrainAPI)
                     return 0;
-                let max = 0;
-                for (const o of getOccupiedOffsets(token, dest)) {
-                    const h = Number(getHexGroundElevation(o.col, o.row, tAPI)) || 0;
-                    if (h > max)
-                        max = h;
+                let maxHeight = 0;
+                for (const cellOffset of getOccupiedOffsets(token, dest)) {
+                    const groundHeight = Number(getHexGroundElevation(cellOffset.col, cellOffset.row, terrainAPI)) || 0;
+                    if (groundHeight > maxHeight)
+                        maxHeight = groundHeight;
                 }
-                return max;
+                return maxHeight;
             };
             const elevAtDest = (dest) => (autoElevation ? groundUnder(dest) : 0) + pendingElevationOffset;
-            const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+            const elevStr = (elev) => elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`;
             const cursorElevLabel = new PIXI.Text('', {
                 fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
                 fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
@@ -91,32 +91,32 @@ export async function moveToken(token, options = {}) {
             cursorElevLabel.visible = false;
             canvas.stage.addChild(cursorElevLabel);
             const updateElevLabel = (dest) => {
-                const c = token.getCenterPoint(dest);
+                const centerPoint = token.getCenterPoint(dest);
                 cursorElevLabel.text = elevStr(elevAtDest(dest));
-                cursorElevLabel.x = c.x;
-                cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+                cursorElevLabel.x = centerPoint.x;
+                cursorElevLabel.y = centerPoint.y - canvas.grid.size * 0.45;
                 cursorElevLabel.visible = true;
             };
             // Presence: live cursor footprint (blue) + chosen destination (yellow) + elevation labels.
             const presenceData = () => {
                 const placedCells = selectedPos
-                    ? getOccupiedOffsets(token, { x: selectedPos.x, y: selectedPos.y }).map(o => `${o.col},${o.row}`)
+                    ? getOccupiedOffsets(token, { x: selectedPos.x, y: selectedPos.y }).map(cellOffset => `${cellOffset.col},${cellOffset.row}`)
                     : [];
                 const originCells = selectedPos
-                    ? getOccupiedOffsets(token).map(o => `${o.col},${o.row}`)
+                    ? getOccupiedOffsets(token).map(cellOffset => `${cellOffset.col},${cellOffset.row}`)
                     : [];
                 const lines = selectedPos
                     ? [{ x1: token.center.x, y1: token.center.y, x2: selectedPos.x + token.w / 2, y2: selectedPos.y + token.h / 2 }]
                     : [];
                 const cells = lastDest
-                    ? getOccupiedOffsets(token, { x: lastDest.x, y: lastDest.y }).map(o => `${o.col},${o.row}`)
+                    ? getOccupiedOffsets(token, { x: lastDest.x, y: lastDest.y }).map(cellOffset => `${cellOffset.col},${cellOffset.row}`)
                     : [];
                 const labels = [];
                 if (cursorElevLabel.visible)
                     labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
                 if (selectedPos) {
-                    const c = token.getCenterPoint({ x: selectedPos.x, y: selectedPos.y });
-                    labels.push({ x: c.x, y: c.y - canvas.grid.size * 0.45, text: elevStr(selectedPos.elevation) });
+                    const centerPoint = token.getCenterPoint({ x: selectedPos.x, y: selectedPos.y });
+                    labels.push({ x: centerPoint.x, y: centerPoint.y - canvas.grid.size * 0.45, text: elevStr(selectedPos.elevation) });
                 }
                 return {
                     cells, placedCells, originCells, lines, labels, tokens: [],
@@ -171,7 +171,7 @@ export async function moveToken(token, options = {}) {
                 if (!inRangeSet)
                     return true;
                 return getOccupiedOffsets(token, { x: snappedX, y: snappedY })
-                    .some(o => inRangeSet.has(`${o.col},${o.row}`));
+                    .some(cellOffset => inRangeSet.has(`${cellOffset.col},${cellOffset.row}`));
             };
             if (range >= 0) {
                 rangeHighlight = drawRangeHighlight(token, range, 0x888888, 0.1, true);
@@ -187,29 +187,29 @@ export async function moveToken(token, options = {}) {
                 // Original position (yellow)
                 trace.lineStyle(2, 0xffff00, 0.8);
                 trace.beginFill(0xffff00, 0.3);
-                for (const o of getOccupiedOffsets(token)) {
+                for (const cellOffset of getOccupiedOffsets(token)) {
                     if (isHexGrid())
-                        drawHexAt(trace, o.col, o.row);
+                        drawHexAt(trace, cellOffset.col, cellOffset.row);
                     else {
-                        const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                        const cellCenter = getHexCenter(cellOffset.col, cellOffset.row); trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
                     }
                 }
                 trace.endFill();
                 // Target position (green for teleport)
                 trace.lineStyle(2, 0x00cc66, 0.8);
                 trace.beginFill(0x00cc66, 0.3);
-                for (const o of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
+                for (const cellOffset of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
                     if (isHexGrid())
-                        drawHexAt(trace, o.col, o.row);
+                        drawHexAt(trace, cellOffset.col, cellOffset.row);
                     else {
-                        const c = getHexCenter(o.col, o.row); trace.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
+                        const cellCenter = getHexCenter(cellOffset.col, cellOffset.row); trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
                     }
                 }
                 trace.endFill();
                 // Dashed line
                 trace.lineStyle(3, 0x00cc66, 0.8);
-                const cs = token.center;
-                trace.moveTo(cs.x, cs.y);
+                const startCenter = token.center;
+                trace.moveTo(startCenter.x, startCenter.y);
                 trace.lineTo(targetX + token.w / 2, targetY + token.h / 2);
                 addGraphicsBelowTokens(trace);
             };
@@ -217,8 +217,8 @@ export async function moveToken(token, options = {}) {
             const moveHandler = (event) => {
                 const { x: tx, y: ty } = pointerToWorld(event);
                 const snapped = snapTokenCenter(token, { x: tx, y: ty });
-                const _o = pixelToOffset(snapped.x, snapped.y);
-                playTargetingMove(_o.col, _o.row);
+                const snappedOffset = pixelToOffset(snapped.x, snapped.y);
+                playTargetingMove(snappedOffset.col, snappedOffset.row);
                 const inRange = isDestInRange(snapped.x, snapped.y);
                 cursorPreview.clear();
                 const offsets = getOccupiedOffsets(token, { x: snapped.x, y: snapped.y });
@@ -227,11 +227,11 @@ export async function moveToken(token, options = {}) {
                 const alpha = inRange ? 0.4 : 0.5;
                 cursorPreview.lineStyle(2, color, 0.8);
                 cursorPreview.beginFill(color, alpha);
-                for (const o of offsets) {
+                for (const cellOffset of offsets) {
                     if (isHexGrid())
-                        drawHexAt(cursorPreview, o.col, o.row);
+                        drawHexAt(cursorPreview, cellOffset.col, cellOffset.row);
                     else {
-                        const c = getHexCenter(o.col, o.row); cursorPreview.drawRect(c.x - canvas.grid.size / 2, c.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
+                        const cellCenter = getHexCenter(cellOffset.col, cellOffset.row); cursorPreview.drawRect(cellCenter.x - canvas.grid.size / 2, cellCenter.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
                     }
                 }
                 cursorPreview.endFill();
@@ -305,44 +305,44 @@ export async function moveToken(token, options = {}) {
         if (ray.distance > 0) {
             const movingIsIntangible = !!token.actor?.statuses?.has('intangible');
             const selfOffsets = getOccupiedOffsets(token);
-            const selfKeys = new Set(selfOffsets.map(o => `${o.col},${o.row}`));
+            const selfKeys = new Set(selfOffsets.map(cellOffset => `${cellOffset.col},${cellOffset.row}`));
 
             // Sample hexes along the straight line
-            const nSteps = Math.max(Math.ceil(ray.distance / Math.min(canvas.grid.sizeX, canvas.grid.sizeY)), 1);
+            const sampleCount = Math.max(Math.ceil(ray.distance / Math.min(canvas.grid.sizeX, canvas.grid.sizeY)), 1);
             const pathOffsets = [];
             const seenKeys = new Set();
-            for (let i = 0; i <= nSteps; i++) {
-                const t = i / nSteps;
-                const pt = ray.project(t);
-                const off = pixelToOffset(pt.x, pt.y);
-                const key = `${off.col},${off.row}`;
+            for (let i = 0; i <= sampleCount; i++) {
+                const t = i / sampleCount;
+                const samplePoint = ray.project(t);
+                const sampleOffset = pixelToOffset(samplePoint.x, samplePoint.y);
+                const key = `${sampleOffset.col},${sampleOffset.row}`;
                 if (!seenKeys.has(key) && !selfKeys.has(key)) {
                     seenKeys.add(key);
-                    pathOffsets.push(off);
+                    pathOffsets.push(sampleOffset);
                 }
             }
 
             // Check each hex for blocking tokens
-            const allTokens = canvas.tokens.placeables.filter(t => t.id !== token.id && t.actor);
+            const allTokens = canvas.tokens.placeables.filter(other => other.id !== token.id && other.actor);
             for (let i = 0; i < pathOffsets.length; i++) {
-                const off = pathOffsets[i];
+                const sampleOffset = pathOffsets[i];
                 const blocked = allTokens.find(other => {
                     const otherIsIntangible = !!other.actor?.statuses?.has('intangible');
                     if (movingIsIntangible !== otherIsIntangible)
                         return false;
                     const otherOffsets = getOccupiedOffsets(other);
-                    return otherOffsets.some(oo => oo.col === off.col && oo.row === off.row);
+                    return otherOffsets.some(otherOffset => otherOffset.col === sampleOffset.col && otherOffset.row === sampleOffset.row);
                 });
                 if (blocked) {
                     ui.notifications.warn(`Movement blocked by ${blocked.name}.`);
                     if (i === 0)
                         return null; // Blocked immediately, can't move
                     // Stop at last free hex
-                    const lastFree = pathOffsets[i - 1];
-                    const lastCenter = getHexCenter(lastFree.col, lastFree.row);
+                    const lastFreeOffset = pathOffsets[i - 1];
+                    const lastFreeCenter = getHexCenter(lastFreeOffset.col, lastFreeOffset.row);
                     destTopLeft = token.getSnappedPosition({
-                        x: lastCenter.x - token.w / 2,
-                        y: lastCenter.y - token.h / 2
+                        x: lastFreeCenter.x - token.w / 2,
+                        y: lastFreeCenter.y - token.h / 2
                     });
                     break;
                 }
@@ -360,10 +360,10 @@ export async function moveToken(token, options = {}) {
         const terrainAPI = globalThis.terrainHeightTools;
         if (terrainAPI) {
             let maxHeight = 0;
-            for (const o of getOccupiedOffsets(token, destTopLeft)) {
-                const h = getHexGroundElevation(o.col, o.row, terrainAPI);
-                if (h > maxHeight)
-                    maxHeight = h;
+            for (const cellOffset of getOccupiedOffsets(token, destTopLeft)) {
+                const groundHeight = getHexGroundElevation(cellOffset.col, cellOffset.row, terrainAPI);
+                if (groundHeight > maxHeight)
+                    maxHeight = groundHeight;
             }
             updateData.elevation = maxHeight;
         }

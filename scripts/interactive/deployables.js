@@ -242,8 +242,8 @@ export async function pickupWeaponToken(ownerToken) {
     }
 
     const ownerActor = ownerToken.actor;
-    const thrownTokens = canvas.tokens.placeables.filter(t => {
-        const flags = t.document.flags?.['lancer-automations'];
+    const thrownTokens = canvas.tokens.placeables.filter(token => {
+        const flags = token.document.flags?.['lancer-automations'];
         return flags?.thrownWeapon && flags?.ownerActorUuid === ownerActor.uuid;
     });
 
@@ -322,11 +322,11 @@ export async function resolveDeployable(deployableOrLid, ownerActor) {
     }
 
     // First, look in actor folder owned by this actor
-    let deployable = /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ a) => {
-        if (a.type !== 'deployable' || a.system?.lid !== lid) {
+    let deployable = /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ actor) => {
+        if (actor.type !== 'deployable' || actor.system?.lid !== lid) {
             return false;
         }
-        const ownerVal = a.system?.owner;
+        const ownerVal = actor.system?.owner;
         return ownerVal === ownerActor?.uuid ||
                ownerVal === ownerActor?.id ||
                ownerVal?.id === ownerActor?.uuid ||
@@ -523,13 +523,13 @@ const _deployableInfoCache = new Map();
  */
 function _findWorldDeployable(lid, ownerActor) {
     const all = /** @type {any[]} */ (game.actors?.contents ?? []).filter(
-        a => a.type === 'deployable' && a.system?.lid === lid
+        actor => actor.type === 'deployable' && actor.system?.lid === lid
     );
     if (!all.length)
         return null;
     if (ownerActor) {
-        const owned = all.find(a => {
-            const ownerVal = a.system?.owner;
+        const owned = all.find(actor => {
+            const ownerVal = actor.system?.owner;
             return ownerVal === ownerActor.uuid || ownerVal === ownerActor.id ||
                    ownerVal?.id === ownerActor.uuid || ownerVal?.id === ownerActor.id;
         });
@@ -647,7 +647,7 @@ export async function placeDeployable(options = /** @type {any} */({})) {
         if (actor?.system?.type === 'Drone')
             return true;
         const tagHas = (tags) => Array.isArray(tags)
-            && tags.some(t => /drone/i.test(t?.lid ?? '') || /drone/i.test(t?.id ?? ''));
+            && tags.some(tag => /drone/i.test(tag?.lid ?? '') || /drone/i.test(tag?.id ?? ''));
         return tagHas(actor?.system?.tags) || tagHas(item?.system?.tags);
     };
 
@@ -1185,31 +1185,31 @@ export async function addExtraActions(target, actions) {
         // source of truth for that tag.
         const CONSUMABLE_LIDS = new Set(['tg_loading', 'tg_recharge', 'tg_limited']);
         const FIELD_FOR = { tg_loading: 'loaded', tg_recharge: 'charged', tg_limited: 'uses' };
-        const itemTagLids = new Set(((doc.system?.tags ?? [])).map((/** @type {any} */ t) => t.lid));
+        const itemTagLids = new Set(((doc.system?.tags ?? [])).map((/** @type {any} */ tag) => tag.lid));
         for (const action of newActions) {
-            const a = /** @type {any} */ (action);
-            if (Array.isArray(a.tags) && a.tags.length) {
+            const actionAny = /** @type {any} */ (action);
+            if (Array.isArray(actionAny.tags) && actionAny.tags.length) {
                 const dropped = [];
-                a.tags = a.tags.filter((/** @type {any} */ t) => {
-                    if (CONSUMABLE_LIDS.has(t.lid) && itemTagLids.has(t.lid)) {
-                        dropped.push(t.lid);
-                        const f = FIELD_FOR[t.lid];
-                        if (f && f in a)
-                            delete a[f];
-                        if (t.lid === 'tg_recharge' && 'recharge' in a)
-                            delete a.recharge;
+                actionAny.tags = actionAny.tags.filter((/** @type {any} */ tag) => {
+                    if (CONSUMABLE_LIDS.has(tag.lid) && itemTagLids.has(tag.lid)) {
+                        dropped.push(tag.lid);
+                        const f = FIELD_FOR[tag.lid];
+                        if (f && f in actionAny)
+                            delete actionAny[f];
+                        if (tag.lid === 'tg_recharge' && 'recharge' in actionAny)
+                            delete actionAny.recharge;
                         return false;
                     }
                     return true;
                 });
                 if (dropped.length)
-                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}; removed from extra action "${a.name}".`);
+                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}; removed from extra action "${actionAny.name}".`);
             }
         }
         for (const action of newActions) {
-            const a = /** @type {any} */ (action);
-            if (!a._sourceItemId)
-                a._sourceItemId = doc.id;
+            const actionAny = /** @type {any} */ (action);
+            if (!actionAny._sourceItemId)
+                actionAny._sourceItemId = doc.id;
         }
     }
 
@@ -1255,10 +1255,10 @@ export async function removeExtraActions(target, filter = null) {
     if (!filter) {
         kept = [];
     } else if (typeof filter === 'function') {
-        kept = existing.filter(a => !filter(a));
+        kept = existing.filter(action => !filter(action));
     } else {
         const names = Array.isArray(filter) ? filter : [filter];
-        kept = existing.filter(a => !names.includes(a.name));
+        kept = existing.filter(action => !names.includes(action.name));
     }
 
     await doc.setFlag('lancer-automations', 'extraActions', kept);
@@ -1270,16 +1270,16 @@ export async function consumeExtraAction(actor, actionName) {
     if (!actor)
         return true;
     const all = actor.getFlag('lancer-automations', 'extraActions') || [];
-    const idx = all.findIndex(a => a.name === actionName);
+    const idx = all.findIndex(action => action.name === actionName);
     if (idx < 0)
         return true;
     const entry = { ...all[idx] };
     const tags = entry.tags ?? [];
-    const hasLoading = tags.some(t => t.lid === 'tg_loading');
-    const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
-    const hasLimited = tags.some(t => t.lid === 'tg_limited');
-    const hasPerTurn = tags.some(t => t.lid === 'tg_turn');
-    const hasPerRound = tags.some(t => t.lid === 'tg_round');
+    const hasLoading = tags.some(tag => tag.lid === 'tg_loading');
+    const hasRecharge = tags.some(tag => tag.lid === 'tg_recharge');
+    const hasLimited = tags.some(tag => tag.lid === 'tg_limited');
+    const hasPerTurn = tags.some(tag => tag.lid === 'tg_turn');
+    const hasPerRound = tags.some(tag => tag.lid === 'tg_round');
     let needsWrite = false;
 
     if (hasLoading) {
@@ -1339,21 +1339,21 @@ export async function reloadExtraAction(actor, actionName) {
     if (!actor)
         return;
     const all = actor.getFlag('lancer-automations', 'extraActions') || [];
-    const idx = all.findIndex(a => a.name === actionName);
+    const idx = all.findIndex(action => action.name === actionName);
     if (idx < 0)
         return;
     const entry = { ...all[idx] };
     const tags = entry.tags ?? [];
     let changed = false;
-    if (tags.some(t => t.lid === 'tg_loading') && entry.loaded !== true) {
+    if (tags.some(tag => tag.lid === 'tg_loading') && entry.loaded !== true) {
         entry.loaded = true;
         changed = true;
     }
-    if (tags.some(t => t.lid === 'tg_recharge') && entry.charged !== true) {
+    if (tags.some(tag => tag.lid === 'tg_recharge') && entry.charged !== true) {
         entry.charged = true;
         changed = true;
     }
-    if (tags.some(t => t.lid === 'tg_limited') && entry.uses?.max != null && entry.uses?.value !== entry.uses.max) {
+    if (tags.some(tag => tag.lid === 'tg_limited') && entry.uses?.max != null && entry.uses?.value !== entry.uses.max) {
         entry.uses = { ...entry.uses, value: entry.uses.max };
         changed = true;
     }
@@ -1419,21 +1419,21 @@ export async function rechargeExtraActionsForActor(actor) {
     const rollFor = (list) => {
         let mutated = false;
         const next = list.map(entry => {
-            let e = entry;
+            let current = entry;
             const tags = entry?.tags ?? [];
-            if (tags.some(t => t.lid === 'tg_recharge') && e.charged === false) {
-                const threshold = Number(e.recharge ?? 6);
+            if (tags.some(tag => tag.lid === 'tg_recharge') && current.charged === false) {
+                const threshold = Number(current.recharge ?? 6);
                 if (1 + Math.floor(Math.random() * 6) >= threshold) {
-                    e = { ...e, charged: true };
+                    current = { ...current, charged: true };
                     mutated = true;
                 }
             }
             // Per-turn usage resets at the actor's turn start.
-            if (e.usesPerTurn?.max != null && e.usesPerTurn.value !== e.usesPerTurn.max) {
-                e = { ...e, usesPerTurn: { ...e.usesPerTurn, value: e.usesPerTurn.max } };
+            if (current.usesPerTurn?.max != null && current.usesPerTurn.value !== current.usesPerTurn.max) {
+                current = { ...current, usesPerTurn: { ...current.usesPerTurn, value: current.usesPerTurn.max } };
                 mutated = true;
             }
-            return e;
+            return current;
         });
         return { next, mutated };
     };
@@ -2246,8 +2246,8 @@ export async function recallDeployable(ownerToken) {
     }
 
     const ownerActor = ownerToken.actor;
-    const deployedTokens = canvas.tokens.placeables.filter(t => {
-        const flags = t.document.flags?.['lancer-automations'];
+    const deployedTokens = canvas.tokens.placeables.filter(token => {
+        const flags = token.document.flags?.['lancer-automations'];
         return flags?.deployedItem && flags?.ownerActorUuid === ownerActor.uuid;
     });
 
@@ -2266,8 +2266,8 @@ export async function recallDeployable(ownerToken) {
             hl.beginFill(0xff4444, 0.25);
             if (isHexGrid()) {
                 const offsets = getOccupiedOffsets(token);
-                for (const o of offsets) {
-                    drawHexAt(hl, o.col, o.row);
+                for (const offset of offsets) {
+                    drawHexAt(hl, offset.col, offset.row);
                 }
             } else {
                 const gridSize = canvas.grid.size;
@@ -2425,9 +2425,9 @@ export async function reloadOneWeapon(actorOrToken, targetName) {
     }
 
     const weapons = getWeapons(actor);
-    const unloadedWeapons = weapons.filter(w => {
-        const tags = [...(w.system.active_profile?.tags ?? []), ...(w.system.all_base_tags ?? w.system.tags ?? [])];
-        return tags.some(t => t.lid === 'tg_loading') && w.system.loaded === false;
+    const unloadedWeapons = weapons.filter(weapon => {
+        const tags = [...(weapon.system.active_profile?.tags ?? []), ...(weapon.system.all_base_tags ?? weapon.system.tags ?? [])];
+        return tags.some(tag => tag.lid === 'tg_loading') && weapon.system.loaded === false;
     });
 
     if (unloadedWeapons.length === 0) {
@@ -2477,8 +2477,8 @@ export async function rechargeSystem(actorOrToken, targetName) {
             return false;
         const sys = item.system;
         const tags = [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
-        const hasLimited = tags.some(t => t.lid === 'tg_limited');
-        const hasRecharge = tags.some(t => t.lid === 'tg_recharge');
+        const hasLimited = tags.some(tag => tag.lid === 'tg_limited');
+        const hasRecharge = tags.some(tag => tag.lid === 'tg_recharge');
         if (hasLimited) {
             const val = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
             if (val <= 0)
@@ -2561,19 +2561,19 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
     const directOwner = ownerUuid ? await fromUuid(ownerUuid) : null;
     if (directOwner && (directOwner.type === 'mech' || directOwner.type === 'pilot')) {
         ownerActor = directOwner;
-        ownerToken = allTokens.find(t => t.actor?.uuid === directOwner.uuid) ?? null;
+        ownerToken = allTokens.find(token => token.actor?.uuid === directOwner.uuid) ?? null;
         if (!ownerToken) {
             // Owner has no token on this scene — don't link
             return;
         }
     } else {
         // NPC path: filter scene tokens whose actor owns an item producing this LID
-        const candidateTokens = allTokens.filter(t => {
-            if (t.document.id === tokenDocument.id)
+        const candidateTokens = allTokens.filter(token => {
+            if (token.document.id === tokenDocument.id)
                 return false;
-            if (!t.actor)
+            if (!token.actor)
                 return false;
-            return t.actor.items.some(item => getItemDeployables(item, t.actor).includes(deployableLid));
+            return token.actor.items.some(item => getItemDeployables(item, token.actor).includes(deployableLid));
         });
 
         if (candidateTokens.length === 0)

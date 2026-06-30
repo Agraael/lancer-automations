@@ -43,13 +43,13 @@ export async function openThrowMenu(actor) {
         return;
     }
 
-    const available = throwWeapons.filter(w => {
-        const uses = w.system?.uses;
+    const available = throwWeapons.filter(weapon => {
+        const uses = weapon.system?.uses;
         const hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
         const noUsesLeft = hasUses && uses.value <= 0;
-        const isDestroyed = w.system?.destroyed ?? false;
-        const isLoaded = w.type === 'mech_weapon' ? (w.system?.loaded ?? true) : true;
-        return !noUsesLeft && !isDestroyed && isLoaded && !w.system?.disabled;
+        const isDestroyed = weapon.system?.destroyed ?? false;
+        const isLoaded = weapon.type === 'mech_weapon' ? (weapon.system?.loaded ?? true) : true;
+        return !noUsesLeft && !isDestroyed && isLoaded && !weapon.system?.disabled;
     });
 
     if (available.length === 0) {
@@ -62,17 +62,17 @@ export async function openThrowMenu(actor) {
         description: "Select a throwable weapon to attack with.",
         icon: "cci cci-weapon-range",
         relatedToken: token,
-        formatText: (w) => {
-            const profile = getWeaponProfiles_WithBonus(w, activeActor)?.[w.system?.selected_profile_index ?? 0];
-            const tags = profile?.all_tags ?? profile?.tags ?? w.system?.tags ?? [];
-            const thrown = tags.find(t => t.lid === 'tg_thrown' || t.id === 'tg_thrown');
+        formatText: (weapon) => {
+            const profile = getWeaponProfiles_WithBonus(weapon, activeActor)?.[weapon.system?.selected_profile_index ?? 0];
+            const tags = profile?.all_tags ?? profile?.tags ?? weapon.system?.tags ?? [];
+            const thrown = tags.find(tag => tag.lid === 'tg_thrown' || tag.id === 'tg_thrown');
             const throwRange = thrown?.val || thrown?.num_val || '?';
-            const dmg = (profile?.damage ?? []).map(d => `${d.val} ${d.type}`).join(' + ');
+            const dmg = (profile?.damage ?? []).map(dmgPart => `${dmgPart.val} ${dmgPart.type}`).join(' + ');
             const parts = [];
             if (dmg)
                 parts.push(dmg);
             parts.push(`Throw ${throwRange}`);
-            return `${w.name} (${parts.join(' — ')})`;
+            return `${weapon.name} (${parts.join(' — ')})`;
         }
     });
 
@@ -174,7 +174,7 @@ export async function clearMovementHistory(tokens, revert = false) {
         await clearTokenMovementHistory(token);
         lancerAutomations?.api?.clearMoveData?.(token.document.id);
     }
-    const tokenNames = tokenList.map(t => t.name).join(", ");
+    const tokenNames = tokenList.map(token => token.name).join(", ");
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
 }
 
@@ -189,7 +189,7 @@ export async function resetMovementCap(token) {
  * @returns {Promise<void>}
  */
 export async function openChoiceMenu() {
-    const activeUsers = game.users.filter(u => u.active);
+    const activeUsers = game.users.filter(user => user.active);
     if (activeUsers.length === 0) {
         ui.notifications.warn("No active users found.");
         return;
@@ -208,15 +208,15 @@ export async function openChoiceMenu() {
 
     function refresh(html) {
         // Render users grid - Compact 3-column grid
-        const usersHtml = activeUsers.map(u => {
-            const isSelected = selectedUserIds.includes(u.id);
+        const usersHtml = activeUsers.map(user => {
+            const isSelected = selectedUserIds.includes(user.id);
             return `
             <div class="la-choice-user-card ${isSelected ? 'selected' : ''}"
-                 data-user-id="${u.id}"
+                 data-user-id="${user.id}"
                  style="padding: 4px 6px; min-height: 28px; display: flex; align-items: center; border: 1px solid #7a7971; border-radius: 4px; background: rgba(0,0,0,0.1); cursor: pointer; margin: 0; gap: 4px; overflow: hidden;">
-                <img src="${u.avatar || 'icons/svg/user.svg'}" style="width: 18px; height: 18px; border: none; flex-shrink: 0;" />
-                <div style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${u.name}</div>
-                ${u.isGM ? '<i class="fas fa-crown" style="font-size: 0.6em; color: #ff6400; flex-shrink: 0;"></i>' : ''}
+                <img src="${user.avatar || 'icons/svg/user.svg'}" style="width: 18px; height: 18px; border: none; flex-shrink: 0;" />
+                <div style="font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${user.name}</div>
+                ${user.isGM ? '<i class="fas fa-crown" style="font-size: 0.6em; color: #ff6400; flex-shrink: 0;"></i>' : ''}
             </div>
         `;
         }).join('');
@@ -553,12 +553,12 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 return { item: mount, hidden: true };
 
             // Collect weapon data and their states
-            const weaponData = mount.slots.map(s => {
-                const w = s.weapon?.value;
-                if (!w) {
+            const weaponData = mount.slots.map(slot => {
+                const weapon = slot.weapon?.value;
+                if (!weapon) {
                     return null;
                 }
-                const sys = w.system;
+                const sys = weapon.system;
                 const profiles = sys?.profiles || [];
                 const activeProfileIndex = sys?.selected_profile_index ?? 0;
                 let profileName = "";
@@ -566,9 +566,9 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     profileName = profiles[activeProfileIndex].name;
                 }
                 const allTags     = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
-                const hasLoading  = allTags.some(t => t.lid === 'tg_loading'  || t.id === 'tg_loading');
-                const hasRecharge = allTags.some(t => t.lid === 'tg_recharge' || t.id === 'tg_recharge');
-                const hasLimited  = allTags.some(t => t.lid === 'tg_limited'  || t.id === 'tg_limited');
+                const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading'  || tag.id === 'tg_loading');
+                const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge' || tag.id === 'tg_recharge');
+                const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited'  || tag.id === 'tg_limited');
                 const loadStatus   = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')   : '';
                 const chargeStatus = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED')  : '';
                 let usesText = '';
@@ -579,30 +579,30 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 }
 
                 return {
-                    id: w.id,
-                    name: w.name,
-                    img: w.img,
-                    mod: s.mod?.value?.name || null,
-                    modItem: s.mod?.value || null,
+                    id: weapon.id,
+                    name: weapon.name,
+                    img: weapon.img,
+                    mod: slot.mod?.value?.name || null,
+                    modItem: slot.mod?.value || null,
                     destroyed: !!sys.destroyed,
                     disabled: !!sys.disabled,
                     unloaded: loadStatus === 'UNLOADED',
                     loadStatus,
                     chargeStatus,
                     usesText,
-                    fitsFilter: !filterPredicate || filterPredicate(w),
+                    fitsFilter: !filterPredicate || filterPredicate(weapon),
                     type: sys?.active_profile?.type || sys?.type || "",
                     size: sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || ""),
                     profileName: profileName,
-                    value: w
+                    value: weapon
                 };
             }).filter(Boolean);
 
             const hasWeapon = weaponData.length > 0;
             // A mount is destroyed only if ALL weapons are destroyed
-            const allDestroyed = hasWeapon && weaponData.every(w => w.destroyed);
+            const allDestroyed = hasWeapon && weaponData.every(weapon => weapon.destroyed);
             // A mount is only selectable if ALL weapons pass the filter and at least one is not destroyed
-            const allFitFilter = weaponData.every(w => w.fitsFilter);
+            const allFitFilter = weaponData.every(weapon => weapon.fitsFilter);
 
             return {
                 item: mount,
@@ -612,7 +612,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 selectable: allFitFilter && !allDestroyed && hasWeapon,
                 hidden: false
             };
-        }).filter(m => !m.hidden);
+        }).filter(mountEntry => !mountEntry.hidden);
     } else {
         allItems = actor.items.filter(item => {
             const isWeapon = ['mech_weapon', 'npc_feature', 'pilot_weapon'].includes(item.type);
@@ -637,9 +637,9 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 profileName = profiles[activeProfileIndex].name;
             }
             const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
-            const hasLoadingNM    = allTagsNonMech.some(t => t.lid === 'tg_loading');
-            const hasRechargeNM   = allTagsNonMech.some(t => t.lid === 'tg_recharge');
-            const hasLimitedNM    = allTagsNonMech.some(t => t.lid === 'tg_limited');
+            const hasLoadingNM    = allTagsNonMech.some(tag => tag.lid === 'tg_loading');
+            const hasRechargeNM   = allTagsNonMech.some(tag => tag.lid === 'tg_recharge');
+            const hasLimitedNM    = allTagsNonMech.some(tag => tag.lid === 'tg_limited');
             const loadStatusNM    = hasLoadingNM  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
             const chargeStatusNM  = hasRechargeNM ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
             let usesTextNM = '';
@@ -689,54 +689,54 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             // Group identical weapons for display
             const counts = {};
             const uniqueWeapons = [];
-            for (const w of weaponData) {
-                const key = `${w.name}|${w.mod || ""}|${w.destroyed}|${w.disabled}|${w.loadStatus}|${w.chargeStatus}|${w.usesText}`;
+            for (const weapon of weaponData) {
+                const key = `${weapon.name}|${weapon.mod || ""}|${weapon.destroyed}|${weapon.disabled}|${weapon.loadStatus}|${weapon.chargeStatus}|${weapon.usesText}`;
                 if (!counts[key]) {
                     counts[key] = 0;
-                    uniqueWeapons.push({ ...w, key });
+                    uniqueWeapons.push({ ...weapon, key });
                 }
                 counts[key]++;
             }
 
-            const labelHtml = uniqueWeapons.map(w => {
+            const labelHtml = uniqueWeapons.map(weapon => {
                 let style = "display: block; margin-bottom: 2px;";
                 let nameStyle = "font-weight: bold;";
                 let statusTags = "";
 
-                if (w.disabled) {
+                if (weapon.disabled) {
                     nameStyle += " color: #ff9800;";
                     statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
                 }
 
-                const sizeTypeArr = [w.size, w.type].filter(Boolean);
+                const sizeTypeArr = [weapon.size, weapon.type].filter(Boolean);
                 let typeText = "";
                 if (sizeTypeArr.length > 0) {
                     typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeArr.join(' ')}</span>`;
                 }
 
-                if (w.profileName) {
-                    typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${w.profileName})</span>`;
+                if (weapon.profileName) {
+                    typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${weapon.profileName})</span>`;
                 }
 
-                const countStr = counts[w.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[w.key]}</span>` : "";
+                const countStr = counts[weapon.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[weapon.key]}</span>` : "";
                 const S_TAG     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
                 const S_TAG_RED = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
                 const bottomParts = [];
-                if (w.destroyed)
+                if (weapon.destroyed)
                     bottomParts.push(`<span style="${S_TAG_RED}">✕ DESTROYED</span>`);
-                if (w.mod)
-                    bottomParts.push(`<span style="${S_TAG}">MOD: ${w.mod}</span>`);
-                if (w.loadStatus)
-                    bottomParts.push(`<span style="${S_TAG}">${w.loadStatus}</span>`);
-                if (w.chargeStatus)
-                    bottomParts.push(`<span style="${S_TAG}">${w.chargeStatus}</span>`);
-                if (w.usesText)
-                    bottomParts.push(`<span style="${S_TAG}">${w.usesText}</span>`);
+                if (weapon.mod)
+                    bottomParts.push(`<span style="${S_TAG}">MOD: ${weapon.mod}</span>`);
+                if (weapon.loadStatus)
+                    bottomParts.push(`<span style="${S_TAG}">${weapon.loadStatus}</span>`);
+                if (weapon.chargeStatus)
+                    bottomParts.push(`<span style="${S_TAG}">${weapon.chargeStatus}</span>`);
+                if (weapon.usesText)
+                    bottomParts.push(`<span style="${S_TAG}">${weapon.usesText}</span>`);
                 const modHtml = bottomParts.length ? `<div style="margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;">${bottomParts.join('')}</div>` : "";
 
                 return `
                     <div style="${style}">
-                        <span style="${nameStyle}">${w.name}${typeText}${countStr}${statusTags}</span>
+                        <span style="${nameStyle}">${weapon.name}${typeText}${countStr}${statusTags}</span>
                         ${modHtml}
                     </div>
                 `;
@@ -760,12 +760,12 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     const tierIndex = Math.max(0, Math.min(2, effectiveTier - 1));
                     const tierDmg = (sys.damage ?? [])[tierIndex] ?? [];
                     const _tierRegex = /\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g;
-                    const _resolveTier = s => String(s ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
-                    const resolvedTags = (sys.tags ?? []).map(t => {
-                        const raw = t.name ?? t.lid ?? t.id ?? '';
-                        const resolvedVal = _resolveTier(t.val);
+                    const _resolveTier = str => String(str ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
+                    const resolvedTags = (sys.tags ?? []).map(tag => {
+                        const raw = tag.name ?? tag.lid ?? tag.id ?? '';
+                        const resolvedVal = _resolveTier(tag.val);
                         const resolved = _resolveTier(raw).replace(/\{VAL\}/gi, resolvedVal);
-                        return { ...t, _resolvedName: resolved };
+                        return { ...tag, _resolvedName: resolved };
                     });
                     allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
                 } else {
@@ -809,7 +809,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
 
                 const title = choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '');
                 const subtitle = choice.weaponDetails.length > 1
-                    ? choice.weaponDetails.map(w => w.name).join(' / ')
+                    ? choice.weaponDetails.map(detail => detail.name).join(' / ')
                     : [choice.weaponDetails[0]?.size, choice.weaponDetails[0]?.type].filter(Boolean).join(' · ');
                 const popup = laDetailPopup('la-weapon-detail-popup', title, subtitle, detailHtml, 'weapon');
                 laPositionPopup(popup, html);
@@ -908,7 +908,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             const resolved = await Promise.all(
                 entry.deployableLids.map(lid => resolveDeployable(lid, actor))
             );
-            entry.deployableActors = resolved.map(r => r.deployable).filter(Boolean);
+            entry.deployableActors = resolved.map(resolution => resolution.deployable).filter(Boolean);
         }
     }
 

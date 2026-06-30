@@ -243,14 +243,14 @@ function _scrollTextContainer() {
 // Only set while it holds the iso recipe. The text wrapper maps origins through it.
 let _scrollContainer = null;
 
-function _tokenAtPoint(p) {
+function _tokenAtPoint(point) {
     const toks = canvas.tokens?.placeables ?? [];
-    for (const t of toks) {
-        const c = t.center;
-        if (c && Math.abs(c.x - p.x) < 1 && Math.abs(c.y - p.y) < 1)
-            return t;
+    for (const token of toks) {
+        const center = token.center;
+        if (center && Math.abs(center.x - point.x) < 1 && Math.abs(center.y - point.y) < 1)
+            return token;
     }
-    return toks.find(t => t.bounds?.contains?.(p.x, p.y)) ?? null;
+    return toks.find(token => token.bounds?.contains?.(point.x, point.y)) ?? null;
 }
 
 // Give the container the stat-bar recipe so the text reads the same way as the bars.
@@ -282,30 +282,30 @@ function _marqueeActive() {
 
 // The drawn screen rectangle as a world quad, so the marquee and selection match what's boxed.
 function _isoSelectQuad() {
-    const id = canvas.mouseInteractionManager?.interactionData;
-    if (!id?.origin || !id?.destination)
+    const interaction = canvas.mouseInteractionManager?.interactionData;
+    if (!interaction?.origin || !interaction?.destination)
         return null;
-    const wt = canvas.stage.worldTransform;
-    const sO = wt.apply(new PIXI.Point(id.origin.x, id.origin.y));
-    const sD = wt.apply(new PIXI.Point(id.destination.x, id.destination.y));
+    const worldTransform = canvas.stage.worldTransform;
+    const screenOrigin = worldTransform.apply(new PIXI.Point(interaction.origin.x, interaction.origin.y));
+    const screenDest = worldTransform.apply(new PIXI.Point(interaction.destination.x, interaction.destination.y));
     const screen = [
-        new PIXI.Point(sO.x, sO.y), new PIXI.Point(sD.x, sO.y),
-        new PIXI.Point(sD.x, sD.y), new PIXI.Point(sO.x, sD.y),
+        new PIXI.Point(screenOrigin.x, screenOrigin.y), new PIXI.Point(screenDest.x, screenOrigin.y),
+        new PIXI.Point(screenDest.x, screenDest.y), new PIXI.Point(screenOrigin.x, screenDest.y),
     ];
-    return screen.map(p => wt.applyInverse(p));
+    return screen.map(screenPoint => worldTransform.applyInverse(screenPoint));
 }
 
 function _isoSelectPolygon(quad) {
-    return new PIXI.Polygon(quad.flatMap(p => [p.x, p.y]));
+    return new PIXI.Polygon(quad.flatMap(vertex => [vertex.x, vertex.y]));
 }
 
 // In iso the sprite (and its click zone) sits away from the cell center, so box either point.
-function _inSelectPoly(poly, p) {
-    const c = p.center;
-    if (c && poly.contains(c.x, c.y))
+function _inSelectPoly(poly, placeable) {
+    const center = placeable.center;
+    if (center && poly.contains(center.x, center.y))
         return true;
-    const m = p.mesh?.position;
-    return !!(m && poly.contains(m.x, m.y));
+    const meshPos = placeable.mesh?.position;
+    return !!(meshPos && poly.contains(meshPos.x, meshPos.y));
 }
 
 Hooks.once('ready', () => {

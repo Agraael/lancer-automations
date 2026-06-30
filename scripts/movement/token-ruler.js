@@ -193,10 +193,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
         const outlineThickness = outline.thickness ?? 1;
         const outlineColor = outline.color ?? 0x000000;
 
-        const lerpColor = (a, b, t) => {
-            const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-            const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-            return ((Math.round(ar + (br - ar) * t) << 16) | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t));
+        const lerpColor = (fromColor, toColor, t) => {
+            const fromR = (fromColor >> 16) & 0xff, fromG = (fromColor >> 8) & 0xff, fromB = fromColor & 0xff;
+            const toR = (toColor >> 16) & 0xff, toG = (toColor >> 8) & 0xff, toB = toColor & 0xff;
+            return ((Math.round(fromR + (toR - fromR) * t) << 16) | (Math.round(fromG + (toG - fromG) * t) << 8) | Math.round(fromB + (toB - fromB) * t));
         };
 
 
@@ -213,25 +213,25 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
             const hexOrdered = (_g._laHexPaintCellsOrdered ?? []).slice().reverse();
             const renderPts = [];
             const seenKey = new Set();
-            for (const e of hexOrdered) {
-                const key = e.waypointKey ?? `fallback:${e.cellKey}`;
+            for (const entry of hexOrdered) {
+                const key = entry.waypointKey ?? `fallback:${entry.cellKey}`;
                 if (seenKey.has(key))
                     continue;
                 seenKey.add(key);
                 let px, py;
-                if (e.waypointCenter) {
-                    px = e.waypointCenter.x;
-                    py = e.waypointCenter.y;
+                if (entry.waypointCenter) {
+                    px = entry.waypointCenter.x;
+                    py = entry.waypointCenter.y;
                 } else {
-                    const c = canvas.grid.getCenterPoint(e.offset);
+                    const c = canvas.grid.getCenterPoint(entry.offset);
                     px = c.x; py = c.y;
                 }
-                const raw = e.isForce
+                const raw = entry.isForce
                     ? forceMoveColor()
-                    : (e.isFree
+                    : (entry.isFree
                         ? freeMoveColor()
-                        : (e.tierColor ?? fallback));
-                renderPts.push({ x: px, y: py, color: PIXI.Color.shared.setValue(raw).toNumber(), waypointKey: e.waypointKey, isForce: !!e.isForce, isFree: !!e.isFree });
+                        : (entry.tierColor ?? fallback));
+                renderPts.push({ x: px, y: py, color: PIXI.Color.shared.setValue(raw).toNumber(), waypointKey: entry.waypointKey, isForce: !!entry.isForce, isFree: !!entry.isFree });
             }
 
             if (renderPts.length >= 2 && widthRef > 0) {
@@ -255,22 +255,22 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                     let drawing = true;
                     let remaining = blinkDashLen;
                     for (let i = 1; i < renderPts.length; i++) {
-                        const a = renderPts[i - 1];
-                        const b = renderPts[i];
-                        if (!isBlinkPair(b)) {
-                            outlineG.lineTo(b.x, b.y);
-                            cursor = { x: b.x, y: b.y };
+                        const segStart = renderPts[i - 1];
+                        const segEnd = renderPts[i];
+                        if (!isBlinkPair(segEnd)) {
+                            outlineG.lineTo(segEnd.x, segEnd.y);
+                            cursor = { x: segEnd.x, y: segEnd.y };
                             drawing = true;
                             remaining = blinkDashLen;
                             continue;
                         }
-                        const dx = b.x - a.x;
-                        const dy = b.y - a.y;
-                        const segDist = Math.hypot(dx, dy);
+                        const deltaX = segEnd.x - segStart.x;
+                        const deltaY = segEnd.y - segStart.y;
+                        const segDist = Math.hypot(deltaX, deltaY);
                         if (segDist === 0)
                             continue;
-                        const dirX = dx / segDist;
-                        const dirY = dy / segDist;
+                        const dirX = deltaX / segDist;
+                        const dirY = deltaY / segDist;
                         let walked = 0;
                         while (walked < segDist) {
                             const step = Math.min(segDist - walked, remaining);
@@ -311,27 +311,27 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                 let currentColor = renderPts[0].color;
                 innerG.lineStyle({ ...lineOpts, color: currentColor });
                 for (let i = 1; i < renderPts.length; i++) {
-                    const a = renderPts[i - 1];
-                    const b = renderPts[i];
-                    const dx = b.x - a.x;
-                    const dy = b.y - a.y;
-                    const segDist = Math.hypot(dx, dy);
+                    const segStart = renderPts[i - 1];
+                    const segEnd = renderPts[i];
+                    const deltaX = segEnd.x - segStart.x;
+                    const deltaY = segEnd.y - segStart.y;
+                    const segDist = Math.hypot(deltaX, deltaY);
                     if (segDist === 0)
                         continue;
-                    if (!isBlinkPair(b)) {
-                        if (a.color === b.color) {
-                            if (a.color !== currentColor) {
-                                innerG.lineStyle({ ...lineOpts, color: a.color });
-                                currentColor = a.color;
+                    if (!isBlinkPair(segEnd)) {
+                        if (segStart.color === segEnd.color) {
+                            if (segStart.color !== currentColor) {
+                                innerG.lineStyle({ ...lineOpts, color: segStart.color });
+                                currentColor = segStart.color;
                             }
-                            innerG.lineTo(b.x, b.y);
+                            innerG.lineTo(segEnd.x, segEnd.y);
                         } else {
                             const N = 8;
                             for (let k = 1; k <= N; k++) {
                                 const t = k / N;
-                                const x = a.x + (b.x - a.x) * t;
-                                const y = a.y + (b.y - a.y) * t;
-                                const col = lerpColor(a.color, b.color, (k - 0.5) / N);
+                                const x = segStart.x + (segEnd.x - segStart.x) * t;
+                                const y = segStart.y + (segEnd.y - segStart.y) * t;
+                                const col = lerpColor(segStart.color, segEnd.color, (k - 0.5) / N);
                                 if (col !== currentColor) {
                                     innerG.lineStyle({ ...lineOpts, color: col });
                                     currentColor = col;
@@ -339,14 +339,14 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
                                 innerG.lineTo(x, y);
                             }
                         }
-                        cursor = { x: b.x, y: b.y };
+                        cursor = { x: segEnd.x, y: segEnd.y };
                         drawing = true;
                         remaining = blinkDashLen;
                         continue;
                     }
-                    const segInfo = segByKey.get(b.waypointKey);
-                    const dirX = dx / segDist;
-                    const dirY = dy / segDist;
+                    const segInfo = segByKey.get(segEnd.waypointKey);
+                    const dirX = deltaX / segDist;
+                    const dirY = deltaY / segDist;
                     let walked = 0;
                     while (walked < segDist) {
                         const step = Math.min(segDist - walked, remaining);
