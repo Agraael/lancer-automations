@@ -18,7 +18,7 @@ Right-click a mech weapon, mech system, NPC feature, or weapon mod on its sheet 
 
 <img align="right" src="../img/sa-ammo.png" width="45%"/>
 
-Mech systems can carry **ammo**. Each entry shows on the system's sheet with its name, description, and cost; clicking **USE** spends that cost from the system's charges and prints a chat card. Entries can be restricted by weapon type and size.
+The module handles a system's **ammo** a bit better, surfacing each entry on the system's sheet with a one-click **USE**.
 
 <br clear="right"/>
 

@@ -284,7 +284,7 @@ When a unit is destroyed, the module drops a dedicated wreck on the field, with 
 
 <img align="right" src="doc/img/feature-system.png" width="53%"/>
 
-Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry so your whole table benefits without installing anything extra: an item-disabled state for dropped or jammed gear, an ammo system for mech systems, extra status effects, and extra trackable attributes for token bars (Move, Reaction). The GM setup and maintenance tools have their own guide.
+Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry so your whole table benefits without installing anything extra: item-disabled state for dropped or jammed gear, smoother handling of a system's ammo, extra status effects, and extra trackable attributes for token bars (Move, Reaction). The GM setup and maintenance tools have their own guide.
 
 → Full guide: [`doc/feature/SYSTEM_ADDITIONS.md`](doc/feature/SYSTEM_ADDITIONS.md) ・ setup & tools: [`doc/feature/SETUP_AND_TOOLS.md`](doc/feature/SETUP_AND_TOOLS.md)
 
