@@ -7,11 +7,11 @@ const HAND_SIGNATURE_OVERRIDES = {
 const HAND_RETURN_OVERRIDES = {
 };
 
-const SIG_BY_NAME = new Map(AUTO_API_MANIFEST.map((e) => [e.name, e.args]));
-const RETURNS_BY_NAME = new Map(AUTO_API_MANIFEST.map((e) => [e.name, e.returns ?? '']));
-const SUMMARY_BY_NAME = new Map(AUTO_API_MANIFEST.map((e) => [e.name, e.summary ?? '']));
-const PARAMS_BY_NAME = new Map(AUTO_API_MANIFEST.map((e) => [e.name, e.params ?? []]));
-const HAS_DOC_BY_NAME = new Map(AUTO_API_MANIFEST.map((e) => [e.name, !!e.hasDoc]));
+const SIG_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, entry.args]));
+const RETURNS_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, entry.returns ?? '']));
+const SUMMARY_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, entry.summary ?? '']));
+const PARAMS_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, entry.params ?? []]));
+const HAS_DOC_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, !!entry.hasDoc]));
 
 
 const TRIGGER_MANIFEST = [
@@ -494,18 +494,18 @@ function _getApiList() {
     if (_apiCache)
         return _apiCache;
     const apiObj = game?.modules?.get?.('lancer-automations')?.api ?? {};
-    const out = [];
-    for (const k of Object.keys(apiObj)) {
-        if (typeof apiObj[k] !== 'function')
+    const entries = [];
+    for (const apiName of Object.keys(apiObj)) {
+        if (typeof apiObj[apiName] !== 'function')
             continue;
-        const args = HAND_SIGNATURE_OVERRIDES[k] ?? SIG_BY_NAME.get(k) ?? '(...)';
-        const returns = HAND_RETURN_OVERRIDES[k] ?? RETURNS_BY_NAME.get(k) ?? '';
-        const summary = SUMMARY_BY_NAME.get(k) ?? '';
-        const params = PARAMS_BY_NAME.get(k) ?? [];
-        const hasDoc = HAS_DOC_BY_NAME.get(k) ?? false;
-        out.push({ name: k, args, returns, summary, params, hasDoc });
+        const args = HAND_SIGNATURE_OVERRIDES[apiName] ?? SIG_BY_NAME.get(apiName) ?? '(...)';
+        const returns = HAND_RETURN_OVERRIDES[apiName] ?? RETURNS_BY_NAME.get(apiName) ?? '';
+        const summary = SUMMARY_BY_NAME.get(apiName) ?? '';
+        const params = PARAMS_BY_NAME.get(apiName) ?? [];
+        const hasDoc = HAS_DOC_BY_NAME.get(apiName) ?? false;
+        entries.push({ name: apiName, args, returns, summary, params, hasDoc });
     }
-    _apiCache = out.sort((a, b) => a.name.localeCompare(b.name));
+    _apiCache = entries.sort((a, b) => a.name.localeCompare(b.name));
     return _apiCache;
 }
 
@@ -518,18 +518,18 @@ function _splitArgs(args) {
     const parts = [];
     let depth = 0;
     let buf = '';
-    for (const ch of inner) {
-        if (ch === '(' || ch === '{' || ch === '[') {
+    for (const char of inner) {
+        if (char === '(' || char === '{' || char === '[') {
             depth++;
-            buf += ch;
-        } else if (ch === ')' || ch === '}' || ch === ']') {
+            buf += char;
+        } else if (char === ')' || char === '}' || char === ']') {
             depth--;
-            buf += ch;
-        } else if (ch === ',' && depth === 0) {
+            buf += char;
+        } else if (char === ',' && depth === 0) {
             parts.push(buf.trim());
             buf = '';
         } else {
-            buf += ch;
+            buf += char;
         }
     }
     if (buf.trim())
@@ -693,15 +693,15 @@ function _toCompletion(entry) {
 function _filter(entries, prefix) {
     if (!prefix)
         return entries.map(_toCompletion);
-    const lo = prefix.toLowerCase();
+    const prefixLo = prefix.toLowerCase();
     const starts = [];
     const contains = [];
-    for (const e of entries) {
-        const n = e.name.toLowerCase();
-        if (n.startsWith(lo))
-            starts.push(e);
-        else if (n.includes(lo))
-            contains.push(e);
+    for (const entry of entries) {
+        const nameLo = entry.name.toLowerCase();
+        if (nameLo.startsWith(prefixLo))
+            starts.push(entry);
+        else if (nameLo.includes(prefixLo))
+            contains.push(entry);
     }
     return [...starts, ...contains].map(_toCompletion);
 }
@@ -735,11 +735,11 @@ function _getSelectedTriggers(cm) {
     if (!form)
         return null;
     const selected = new Set();
-    for (const input of form.querySelectorAll('input[type="checkbox"][name^="trigger."]')) {
-        if (input.checked) {
-            const key = input.name.slice('trigger.'.length);
-            if (key)
-                selected.add(key);
+    for (const checkbox of form.querySelectorAll('input[type="checkbox"][name^="trigger."]')) {
+        if (checkbox.checked) {
+            const triggerName = checkbox.name.slice('trigger.'.length);
+            if (triggerName)
+                selected.add(triggerName);
         }
     }
     return selected.size > 0 ? selected : null;
@@ -750,13 +750,13 @@ function _filterTriggerManifestByForm(cm) {
     if (!selected)
         return TRIGGER_MANIFEST;
     const allowed = new Set(COMMON_TRIGGER_FIELDS);
-    for (const trig of selected) {
-        const fields = TRIGGER_FIELDS_BY_TRIGGER[trig];
+    for (const triggerName of selected) {
+        const fields = TRIGGER_FIELDS_BY_TRIGGER[triggerName];
         if (fields)
-            for (const f of fields)
-                allowed.add(f);
+            for (const fieldName of fields)
+                allowed.add(fieldName);
     }
-    return TRIGGER_MANIFEST.filter((e) => allowed.has(e.name));
+    return TRIGGER_MANIFEST.filter((entry) => allowed.has(entry.name));
 }
 
 function _hint(cm, kind) {
@@ -961,12 +961,12 @@ function _installLancerArgOverlay(cm, kind) {
     if (!params.length)
         return;
     _ensureLancerArgStyle();
-    const re = new RegExp(`\\b(${params.join('|')})\\b`);
+    const paramRe = new RegExp(`\\b(${params.join('|')})\\b`);
     cm.addOverlay({
         token: (stream) => {
-            if (stream.match(re))
+            if (stream.match(paramRe))
                 return 'la-arg';
-            while (stream.next() != null && !re.test(stream.peek() ?? '')) { /* advance */ }
+            while (stream.next() != null && !paramRe.test(stream.peek() ?? '')) { /* advance */ }
             return null;
         }
     });

@@ -21,11 +21,11 @@ const _terrainCache = {
 function _refreshSolidCache(terrainAPI) {
     const now = Date.now();
     if (now - _terrainCache.timestamp > _terrainCache.ttl) {
-        const types = terrainAPI.getTerrainTypes?.() || [];
+        const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
         _terrainCache.solidMap.clear();
-        for (const t of types) {
-            if (t.usesHeight && t.isSolid)
-                _terrainCache.solidMap.set(t.id, t);
+        for (const terrainType of terrainTypes) {
+            if (terrainType.usesHeight && terrainType.isSolid)
+                _terrainCache.solidMap.set(terrainType.id, terrainType);
         }
         _terrainCache.timestamp = now;
     }
@@ -42,16 +42,16 @@ export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainH
     if (!terrainAPI)
         return 0;
     _refreshSolidCache(terrainAPI);
-    let maxHeight = 0;
-    const cell = terrainAPI.getCell(col, row) || [];
-    for (const terrain of cell) {
+    let maxTopElevation = 0;
+    const terrainStack = terrainAPI.getCell(col, row) || [];
+    for (const terrain of terrainStack) {
         if (_terrainCache.solidMap.has(terrain.terrainTypeId)) {
-            const h = (terrain.elevation || 0) + (terrain.height || 0);
-            if (h > maxHeight)
-                maxHeight = h;
+            const topElevation = (terrain.elevation || 0) + (terrain.height || 0);
+            if (topElevation > maxTopElevation)
+                maxTopElevation = topElevation;
         }
     }
-    return maxHeight;
+    return maxTopElevation;
 }
 
 /**
@@ -62,13 +62,13 @@ export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainH
  */
 export function getMaxGroundHeightUnderToken(token, terrainAPI) {
     const cells = getTokenCells(token);
-    let maxGroundHeight = 0;
-    for (const [x, y] of cells) {
-        const h = getHexGroundElevation(y, x, terrainAPI);
-        if (h > maxGroundHeight)
-            maxGroundHeight = h;
+    let maxGroundElevation = 0;
+    for (const [row, col] of cells) {
+        const cellElevation = getHexGroundElevation(col, row, terrainAPI);
+        if (cellElevation > maxGroundElevation)
+            maxGroundElevation = cellElevation;
     }
-    return maxGroundHeight;
+    return maxGroundElevation;
 }
 
 /**
@@ -80,19 +80,19 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
 export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHeightTools) {
     if (!terrainAPI)
         return false;
-    const elevation = token?.document?.elevation || 0;
+    const tokenElevation = token?.document?.elevation || 0;
     const ownCells = getTokenCells(token);
-    const ownSet = new Set(ownCells.map(([r, c]) => r + "," + c));
-    for (const [r, c] of ownCells) {
-        for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-                if (dr === 0 && dc === 0)
+    const ownCellKeys = new Set(ownCells.map(([row, col]) => row + "," + col));
+    for (const [row, col] of ownCells) {
+        for (let rowDelta = -1; rowDelta <= 1; rowDelta++) {
+            for (let colDelta = -1; colDelta <= 1; colDelta++) {
+                if (rowDelta === 0 && colDelta === 0)
                     continue;
-                const nr = r + dr;
-                const nc = c + dc;
-                if (ownSet.has(nr + "," + nc))
+                const neighborRow = row + rowDelta;
+                const neighborCol = col + colDelta;
+                if (ownCellKeys.has(neighborRow + "," + neighborCol))
                     continue;
-                if (getHexGroundElevation(nc, nr, terrainAPI) > elevation)
+                if (getHexGroundElevation(neighborCol, neighborRow, terrainAPI) > tokenElevation)
                     return true;
             }
         }
@@ -112,19 +112,19 @@ async function _runDangerousZone(token, damageType, damageValue) {
     const actor = token?.actor;
     if (!actor)
         return;
-    const curRound = game.combat?.round || 0;
-    const lastRound = actor.getFlag("lancer-automations", "dangerousZoneRound");
+    const currentRound = game.combat?.round || 0;
+    const lastTriggeredRound = actor.getFlag("lancer-automations", "dangerousZoneRound");
 
-    if (lastRound === curRound && game.combat?.started)
+    if (lastTriggeredRound === currentRound && game.combat?.started)
         return;
 
     if (game.combat?.started) {
-        await actor.setFlag("lancer-automations", "dangerousZoneRound", curRound);
-    } else if (lastRound !== undefined) {
+        await actor.setFlag("lancer-automations", "dangerousZoneRound", currentRound);
+    } else if (lastTriggeredRound !== undefined) {
         await actor.unsetFlag("lancer-automations", "dangerousZoneRound");
     }
 
-    const typeMap = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
+    const damageTypeLabels = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
 
     const StatRollFlow = game.lancer?.flows?.get?.("StatRollFlow");
     if (!StatRollFlow)
@@ -134,22 +134,22 @@ async function _runDangerousZone(token, damageType, damageValue) {
     const completed = await flow.begin();
 
     if (completed && (flow.state.data?.result?.roll?.total ?? 10) < 10) {
-        const t = /** @type {any} */ (token).object || token;
-        if (t?.setTarget) {
-            t.setTarget(true, { releaseOthers: true, groupSelection: false });
+        const targetToken = /** @type {any} */ (token).object || token;
+        if (targetToken?.setTarget) {
+            targetToken.setTarget(true, { releaseOthers: true, groupSelection: false });
         }
 
         const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
         if (!DamageRollFlow)
             return;
-        const dmgFlow = new DamageRollFlow(actor.uuid, {
+        const damageFlow = new DamageRollFlow(actor.uuid, {
             title: "Dangerous Terrain",
-            damage: [{ val: String(damageValue), type: typeMap[String(damageType).toLowerCase()] || "Kinetic" }],
+            damage: [{ val: String(damageValue), type: damageTypeLabels[String(damageType).toLowerCase()] || "Kinetic" }],
             tags: [],
             hit_results: [],
             has_normal_hit: true
         });
-        await dmgFlow.begin();
+        await damageFlow.begin();
     }
 }
 
@@ -173,18 +173,18 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
     if (!hasStatusImmunity && immunityBonuses.length === 0)
         return _runDangerousZone(token, damageType, damageValue);
 
-    const sources = [
-        ...immunityBonuses.map(b => b.name || b.id),
+    const immunitySourceNames = [
+        ...immunityBonuses.map(bonus => bonus.name || bonus.id),
         ...(hasStatusImmunity ? ["Terrain Immunity"] : [])
     ];
-    const tokenObj = /** @type {any} */ (token).object ?? token;
+    const tokenPlaceable = /** @type {any} */ (token).object ?? token;
     const actorName = actor.name ?? "Token";
     await startChoiceCard({
         title: "TERRAIN IMMUNITY",
-        description: `<b>${actorName}</b> entered dangerous terrain.<hr>Immunity from: <i>${sources.join(", ")}</i>`,
+        description: `<b>${actorName}</b> entered dangerous terrain.<hr>Immunity from: <i>${immunitySourceNames.join(", ")}</i>`,
         icon: "mdi mdi-boot",
         mode: "or",
-        relatedToken: tokenObj,
+        relatedToken: tokenPlaceable,
         userIdControl: getActiveGMId(),
         choices: [
             {

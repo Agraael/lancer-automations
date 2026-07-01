@@ -14,7 +14,7 @@ function _getItemBaseData(item) {
         tags = item.system?.tags ?? [];
         range = item.system?.range ?? [];
     }
-    return { tags: tags.map(t => ({ ...t })), range: range.map(r => ({ ...r })) };
+    return { tags: tags.map(tag => ({ ...tag })), range: range.map(rangeEntry => ({ ...rangeEntry })) };
 }
 
 /** Resolves input (Actor | Token | Item | mixed array) to { weapons, actor }. */
@@ -47,11 +47,11 @@ function _resolveWeaponsAndActor(input) {
 }
 
 function _getActorWeapons(actor) {
-    return (actor?.items ?? []).filter(i => {
-        if (i.system?.destroyed) return false;
-        return i.type === "mech_weapon" ||
-            i.type === "pilot_weapon" ||
-            (i.type === "npc_feature" && i.system?.type === "Weapon");
+    return (actor?.items ?? []).filter(item => {
+        if (item.system?.destroyed) return false;
+        return item.type === "mech_weapon" ||
+            item.type === "pilot_weapon" ||
+            (item.type === "npc_feature" && item.system?.type === "Weapon");
     });
 }
 
@@ -86,36 +86,36 @@ function _applyItemBonuses(item, actor, tags, range) {
 export function getWeaponProfiles_WithBonus(weapon, actor) {
     if (!weapon?.system)
         return [];
-    const a = actor ?? weapon.parent ?? null;
+    const resolvedActor = actor ?? weapon.parent ?? null;
     const rawProfiles = weapon.system.profiles;
 
     if (rawProfiles?.length > 0) {
-        return rawProfiles.map(p => {
-            const base = (p.all_range ?? p.range ?? []).map(r => ({ ...r }));
-            const base_range = (p.range ?? []).map(r => ({ ...r }));
-            const tags = (p.all_tags ?? p.tags ?? []).map(t => ({ ...t }));
-            const mockState = { actor: a, item: weapon, data: { tags, range: base } };
+        return rawProfiles.map(profile => {
+            const base = (profile.all_range ?? profile.range ?? []).map(rangeEntry => ({ ...rangeEntry }));
+            const base_range = (profile.range ?? []).map(rangeEntry => ({ ...rangeEntry }));
+            const tags = (profile.all_tags ?? profile.tags ?? []).map(tag => ({ ...tag }));
+            const mockState = { actor: resolvedActor, item: weapon, data: { tags, range: base } };
             const bonuses = flattenBonuses([
-                ...(a?.getFlag("lancer-automations", "global_bonuses") || []),
-                ...(a?.getFlag("lancer-automations", "constant_bonuses") || [])
+                ...(resolvedActor?.getFlag("lancer-automations", "global_bonuses") || []),
+                ...(resolvedActor?.getFlag("lancer-automations", "constant_bonuses") || [])
             ]);
             const flowTags = new Set(["all", "attack"]);
             for (const bonus of bonuses) {
                 if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
                     mutateRangeWithBonus(mockState, bonus);
             }
-            return { ...p, range: base, all_range: base, base_range };
+            return { ...profile, range: base, all_range: base, base_range };
         });
     }
 
     // pilot weapon / simple item: single synthetic profile
-    const base = (weapon.system.range ?? []).map(r => ({ ...r }));
-    const base_range = base.map(r => ({ ...r }));
-    const tags = (weapon.system.tags ?? []).map(t => ({ ...t }));
-    const mockState = { actor: a, item: weapon, data: { tags, range: base } };
+    const base = (weapon.system.range ?? []).map(rangeEntry => ({ ...rangeEntry }));
+    const base_range = base.map(rangeEntry => ({ ...rangeEntry }));
+    const tags = (weapon.system.tags ?? []).map(tag => ({ ...tag }));
+    const mockState = { actor: resolvedActor, item: weapon, data: { tags, range: base } };
     const bonuses = flattenBonuses([
-        ...(a?.getFlag("lancer-automations", "global_bonuses") || []),
-        ...(a?.getFlag("lancer-automations", "constant_bonuses") || [])
+        ...(resolvedActor?.getFlag("lancer-automations", "global_bonuses") || []),
+        ...(resolvedActor?.getFlag("lancer-automations", "constant_bonuses") || [])
     ]);
     const flowTags = new Set(["all", "attack"]);
     for (const bonus of bonuses) {
@@ -128,7 +128,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor) {
     let accuracy = weapon.system.accuracy;
     if (weapon.type === 'npc_feature') {
         const tierOverride = weapon.system.tier_override ?? 0;
-        const tier = tierOverride > 0 ? tierOverride : (a?.system?.tier ?? 1);
+        const tier = tierOverride > 0 ? tierOverride : (resolvedActor?.system?.tier ?? 1);
         const tierIdx = Math.max(0, Math.min(2, tier - 1));
         if (Array.isArray(damage?.[0]))
             damage = damage[tierIdx] ?? [];
@@ -145,9 +145,9 @@ export async function getItemTags_WithBonus(item, actor) {
     if (!item) {
         return [];
     }
-    const a = actor ?? item.parent ?? null;
+    const resolvedActor = actor ?? item.parent ?? null;
     const { tags, range } = _getItemBaseData(item);
-    await _applyItemBonuses(item, a, tags, range);
+    await _applyItemBonuses(item, resolvedActor, tags, range);
     return tags;
 }
 
@@ -196,7 +196,7 @@ export async function getMaxWeaponReach_WithBonus(input) {
                 }
             }
         }
-        const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+        const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
         if (thrownTag) {
             const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
             if (throwVal > max) {
@@ -214,15 +214,15 @@ export async function getMaxWeaponReach_WithBonus(input) {
 export async function getMaxItemRanges_WithBonus(item, actor) {
     if (!item)
         return {};
-    const a = actor ?? item.parent ?? null;
+    const resolvedActor = actor ?? item.parent ?? null;
 
     const { tags, range: baseRange } = _getItemBaseData(item);
-    const actionRanges = (item.system?.actions ?? []).flatMap(action => (action.range ?? []).map(r => ({ ...r })));
+    const actionRanges = (item.system?.actions ?? []).flatMap(action => (action.range ?? []).map(rangeEntry => ({ ...rangeEntry })));
     const allRanges = [...baseRange, ...actionRanges];
 
-    await _applyItemBonuses(item, a, tags, allRanges);
+    await _applyItemBonuses(item, resolvedActor, tags, allRanges);
 
-    const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+    const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
     if (thrownTag) {
         const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
         if (throwVal > 0)

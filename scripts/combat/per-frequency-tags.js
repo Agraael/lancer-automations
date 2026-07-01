@@ -15,8 +15,8 @@ function inCombat() {
 function tagLimit(item, lid) {
     const tag = item?.system?.tags?.find?.(t => t.lid === lid);
     if (!tag) return 0;
-    const v = Number(tag.val ?? 1);
-    return Number.isFinite(v) && v > 0 ? v : 1;
+    const rawLimit = Number(tag.val ?? 1);
+    return Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 1;
 }
 
 export function getPerRoundLimit(item) { return tagLimit(item, 'tg_round'); }
@@ -28,10 +28,10 @@ export function getPerSceneLimit(item) {
     const sys = item.system ?? {};
     let best = 0;
     const bump = (n) => { if (Number.isFinite(n) && n > best) best = n; };
-    const fromFreq = (arr) => {
-        for (const x of arr ?? []) {
-            const m = _RX_SCENE.exec(String(x?.frequency ?? ''));
-            if (m) bump(parseInt(m[1]) || 0);
+    const fromFreq = (entries) => {
+        for (const entry of entries ?? []) {
+            const match = _RX_SCENE.exec(String(entry?.frequency ?? ''));
+            if (match) bump(parseInt(match[1]) || 0);
         }
     };
     const fromText = (s) => {
@@ -62,12 +62,12 @@ export function getPerSceneLimit(item) {
 export function getPerSceneLimitFromSub(sub) {
     if (!sub) return 0;
     let best = 0;
-    const m1 = _RX_SCENE.exec(String(sub.frequency ?? ''));
-    if (m1) { const n = parseInt(m1[1]); if (n > best) best = n; }
-    const m2 = _RX_SCENE.exec(String(sub.description ?? ''));
-    if (m2) { const n = parseInt(m2[1]); if (n > best) best = n; }
-    const m3 = _RX_SCENE.exec(String(sub.effect ?? sub.detail ?? ''));
-    if (m3) { const n = parseInt(m3[1]); if (n > best) best = n; }
+    const freqMatch = _RX_SCENE.exec(String(sub.frequency ?? ''));
+    if (freqMatch) { const count = parseInt(freqMatch[1]); if (count > best) best = count; }
+    const descMatch = _RX_SCENE.exec(String(sub.description ?? ''));
+    if (descMatch) { const count = parseInt(descMatch[1]); if (count > best) best = count; }
+    const effectMatch = _RX_SCENE.exec(String(sub.effect ?? sub.detail ?? ''));
+    if (effectMatch) { const count = parseInt(effectMatch[1]); if (count > best) best = count; }
     if (sub.use && _USE_SCENE.has(String(sub.use).toLowerCase())) best = Math.max(best, 1);
     return best;
 }
@@ -226,48 +226,48 @@ export function initPerFrequencyHooks() {
 
 function pipsHtmlStandard(max, used, iconReady, iconConsumed, field) {
     const ready = Math.max(0, max - Math.min(max, used));
-    const dim = !inCombat() ? 'opacity:0.5;' : '';
-    const out = [];
+    const dimStyle = !inCombat() ? 'opacity:0.5;' : '';
+    const pips = [];
     for (let i = 0; i < max; i++) {
         const isReady = i < ready;
-        out.push(`<span class="la-pf-pip mdi ${isReady ? iconReady : iconConsumed}" data-field="${field}" data-index="${i + 1}" style="cursor:pointer;font-size:1.3em;color:#ffffff;${dim}padding:0 1px;"></span>`);
+        pips.push(`<span class="la-pf-pip mdi ${isReady ? iconReady : iconConsumed}" data-field="${field}" data-index="${i + 1}" style="cursor:pointer;font-size:1.3em;color:#ffffff;${dimStyle}padding:0 1px;"></span>`);
     }
-    return out.join('');
+    return pips.join('');
 }
 
 function pipsHtmlAlt(max, used, iconReady, iconConsumed, field) {
     const ready = Math.max(0, max - Math.min(max, used));
-    const dim = !inCombat() ? 'opacity:0.5;' : '';
-    const out = [];
+    const dimStyle = !inCombat() ? 'opacity:0.5;' : '';
+    const pips = [];
     for (let i = 0; i < max; i++) {
         const isReady = i < ready;
-        out.push(`<button type="button" class="la-pf-pip la-counterbox__button mdi ${isReady ? iconReady : iconConsumed} la-prmy-header -glow-prmy la-scdy-primary -glow-scdy-hover -fontsize7" data-field="${field}" data-index="${i + 1}" data-available="${isReady}" style="${dim}"></button>`);
+        pips.push(`<button type="button" class="la-pf-pip la-counterbox__button mdi ${isReady ? iconReady : iconConsumed} la-prmy-header -glow-prmy la-scdy-primary -glow-scdy-hover -fontsize7" data-field="${field}" data-index="${i + 1}" data-available="${isReady}" style="${dimStyle}"></button>`);
     }
-    return out.join('');
+    return pips.join('');
 }
 
 function buildBadgeStandard(item) {
-    const r = getPerRoundLimit(item);
-    const t = getPerTurnLimit(item);
-    const s = getPerSceneLimit(item);
-    if (!r && !t && !s) return '';
+    const roundLimit = getPerRoundLimit(item);
+    const turnLimit = getPerTurnLimit(item);
+    const sceneLimit = getPerSceneLimit(item);
+    if (!roundLimit && !turnLimit && !sceneLimit) return '';
     const blocks = [];
-    if (r) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER ROUND</span>${pipsHtmlStandard(r, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')}</div>`);
-    if (t) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER TURN</span>${pipsHtmlStandard(t, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')}</div>`);
-    if (s) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER SCENE</span>${pipsHtmlStandard(s, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')}</div>`);
+    if (roundLimit) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER ROUND</span>${pipsHtmlStandard(roundLimit, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')}</div>`);
+    if (turnLimit) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER TURN</span>${pipsHtmlStandard(turnLimit, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')}</div>`);
+    if (sceneLimit) blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER SCENE</span>${pipsHtmlStandard(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')}</div>`);
     return blocks.join('');
 }
 
 function buildBadgeAlt(item) {
-    const r = getPerRoundLimit(item);
-    const t = getPerTurnLimit(item);
-    const s = getPerSceneLimit(item);
-    if (!r && !t && !s) return '';
+    const roundLimit = getPerRoundLimit(item);
+    const turnLimit = getPerTurnLimit(item);
+    const sceneLimit = getPerSceneLimit(item);
+    if (!roundLimit && !turnLimit && !sceneLimit) return '';
     const blocks = [];
     const wrap = (label, pips) => `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${item.id}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`;
-    if (r) blocks.push(wrap('PER ROUND', pipsHtmlAlt(r, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')));
-    if (t) blocks.push(wrap('PER TURN', pipsHtmlAlt(t, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')));
-    if (s) blocks.push(wrap('PER SCENE', pipsHtmlAlt(s, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')));
+    if (roundLimit) blocks.push(wrap('PER ROUND', pipsHtmlAlt(roundLimit, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')));
+    if (turnLimit) blocks.push(wrap('PER TURN', pipsHtmlAlt(turnLimit, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')));
+    if (sceneLimit) blocks.push(wrap('PER SCENE', pipsHtmlAlt(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')));
     return blocks.join('');
 }
 
@@ -280,10 +280,10 @@ function bindPipClicks(root, actor) {
             const item = itemId && actor?.items?.get(itemId);
             if (!item) return;
             const field = pip.getAttribute('data-field');
-            const idx = Number(pip.getAttribute('data-index'));
-            const current = Number(item.system?.[field]?.value ?? 0);
-            const next = idx === current ? idx - 1 : idx;
-            await item.update({ [`system.${field}.value`]: Math.max(0, next) });
+            const clickedPip = Number(pip.getAttribute('data-index'));
+            const currentUsed = Number(item.system?.[field]?.value ?? 0);
+            const nextUsed = clickedPip === currentUsed ? clickedPip - 1 : clickedPip;
+            await item.update({ [`system.${field}.value`]: Math.max(0, nextUsed) });
         });
     });
 }
@@ -321,34 +321,34 @@ export function onRenderActorSheetPerFrequency(app, html) {
     }
     // Per-trait per-scene injection.
     const seenTraitKeys = new Set();
-    for (const btn of root.querySelectorAll('[data-type="trait"][data-uuid][data-index]')) {
-        const uuid = /** @type {any} */ (btn).dataset.uuid;
-        const idx = Number(/** @type {any} */ (btn).dataset.index);
-        const key = `${uuid}::${idx}`;
+    for (const traitBtn of root.querySelectorAll('[data-type="trait"][data-uuid][data-index]')) {
+        const uuid = /** @type {any} */ (traitBtn).dataset.uuid;
+        const traitIdx = Number(/** @type {any} */ (traitBtn).dataset.index);
+        const key = `${uuid}::${traitIdx}`;
         if (seenTraitKeys.has(key)) continue;
         seenTraitKeys.add(key);
-        let frame = [...actor.items.values()].find(/** @type {any} */ i => i.uuid === uuid);
+        let frame = [...actor.items.values()].find(/** @type {any} */ frameItem => frameItem.uuid === uuid);
         if (!frame) {
             const tailId = /Item\.([^.]+)$/.exec(uuid)?.[1];
             if (tailId) frame = actor.items.get(tailId);
         }
-        const trait = /** @type {any} */ (frame)?.system?.traits?.[idx];
+        const trait = /** @type {any} */ (frame)?.system?.traits?.[traitIdx];
         if (!frame || !trait) continue;
         const sceneMax = getPerSceneLimitFromSub(trait);
         if (!sceneMax) continue;
-        let body = btn.closest('.frame-trait')?.querySelector(':scope > .lancer-body') ?? null;
-        const altBody = root.querySelector(`[data-la-collapse-id="${actor.uuid}_${frame.id}_trait_${idx}"]`);
+        let body = traitBtn.closest('.frame-trait')?.querySelector(':scope > .lancer-body') ?? null;
+        const altBody = root.querySelector(`[data-la-collapse-id="${actor.uuid}_${frame.id}_trait_${traitIdx}"]`);
         if (!body) body = altBody;
         if (!body) continue;
         const useAlt = !!altBody && body === altBody;
-        if (body.querySelector(`:scope > .la-pf-card[data-item-id="${frame.id}"][data-trait-idx="${idx}"]`)) continue;
-        const used = Number(/** @type {any} */ (frame).system?.uses_per_scene?.value ?? 0);
+        if (body.querySelector(`:scope > .la-pf-card[data-item-id="${frame.id}"][data-trait-idx="${traitIdx}"]`)) continue;
+        const sceneUsed = Number(/** @type {any} */ (frame).system?.uses_per_scene?.value ?? 0);
         const pips = useAlt
-            ? pipsHtmlAlt(sceneMax, used, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')
-            : pipsHtmlStandard(sceneMax, used, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene');
+            ? pipsHtmlAlt(sceneMax, sceneUsed, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')
+            : pipsHtmlStandard(sceneMax, sceneUsed, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene');
         const card = useAlt
-            ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${frame.id}" data-trait-idx="${idx}"><span class="la-counterbox__span -fontsizemedium">PER SCENE</span>${pips}</div>`
-            : `<div class="clipped card charged-box la-pf-card" data-item-id="${frame.id}" data-trait-idx="${idx}"><span style="margin:4px;">PER SCENE</span>${pips}</div>`;
+            ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span class="la-counterbox__span -fontsizemedium">PER SCENE</span>${pips}</div>`
+            : `<div class="clipped card charged-box la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span style="margin:4px;">PER SCENE</span>${pips}</div>`;
         body.insertAdjacentHTML('beforeend', card);
     }
     bindPipClicks(root, actor);

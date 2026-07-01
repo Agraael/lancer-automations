@@ -49,85 +49,85 @@ async function _fetchReleases() {
 }
 
 function _filterEntries(entries, { seen, role, version, isGM }) {
-    return entries.filter(e => {
-        if (!e?.id || seen.has(e.id))
+    return entries.filter(entry => {
+        if (!entry?.id || seen.has(entry.id))
             return false;
-        if (e.minVersion && foundry.utils.isNewerVersion(e.minVersion, version))
+        if (entry.minVersion && foundry.utils.isNewerVersion(entry.minVersion, version))
             return false;
-        if (e.maxVersion && foundry.utils.isNewerVersion(version, e.maxVersion))
+        if (entry.maxVersion && foundry.utils.isNewerVersion(version, entry.maxVersion))
             return false;
-        if (e.gmOnly && !isGM)
+        if (entry.gmOnly && !isGM)
             return false;
-        if (Array.isArray(e.roles) && e.roles.length) {
-            if (!role || !e.roles.includes(role))
+        if (Array.isArray(entry.roles) && entry.roles.length) {
+            if (!role || !entry.roles.includes(role))
                 return false;
         }
         return true;
     });
 }
 
-function _renderEntry(e) {
-    const dateLine = e.date ? `<div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${e.date}</div>` : "";
-    const body = Array.isArray(e.body) ? e.body.join("") : (e.body ?? "");
+function _renderEntry(entry) {
+    const dateLine = entry.date ? `<div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${entry.date}</div>` : "";
+    const body = Array.isArray(entry.body) ? entry.body.join("") : (entry.body ?? "");
     return `
         <div style="border-bottom: 1px solid rgba(120,46,34,0.2); padding: 10px 4px;">
-            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${e.title ?? ""}</div>
+            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${entry.title ?? ""}</div>
             ${dateLine}
             <div style="line-height: 1.5;">${body}</div>
-            ${_renderPoll(e)}
+            ${_renderPoll(entry)}
         </div>
     `;
 }
 
-function _pollState(e) {
-    const p = e?.poll;
-    if (!p?.tableName || !Array.isArray(p.fields) || p.fields.length === 0) return null;
+function _pollState(entry) {
+    const poll = entry?.poll;
+    if (!poll?.tableName || !Array.isArray(poll.fields) || poll.fields.length === 0) return null;
     const now = new Date();
-    const expired = p.expiresAt ? (new Date(p.expiresAt) < now) : false;
+    const expired = poll.expiresAt ? (new Date(poll.expiresAt) < now) : false;
     let responded = false;
     try {
         const list = game.settings.get(NEWS_MODULE_ID, POLL_RESPONDED_SETTING) || [];
-        responded = list.includes(e.id);
+        responded = list.includes(entry.id);
     } catch { /* not registered yet */ }
-    return { poll: p, expired, responded };
+    return { poll, expired, responded };
 }
 
-function _renderField(f) {
-    const name = String(f?.name ?? "").trim();
+function _renderField(field) {
+    const name = String(field?.name ?? "").trim();
     if (!name) return "";
-    const label = String(f?.label ?? name);
-    const ph = f?.placeholder ? `placeholder="${String(f.placeholder).replaceAll('"', "&quot;")}"` : "";
-    const required = f?.required ? "required" : "";
+    const label = String(field?.label ?? name);
+    const ph = field?.placeholder ? `placeholder="${String(field.placeholder).replaceAll('"', "&quot;")}"` : "";
+    const required = field?.required ? "required" : "";
     let input;
-    if (f?.type === "select" && Array.isArray(f.options)) {
-        const opts = f.options.map(o => {
-            const value = typeof o === "object" ? String(o.value ?? "") : String(o);
-            const lbl = typeof o === "object" ? String(o.label ?? o.value ?? "") : String(o);
+    if (field?.type === "select" && Array.isArray(field.options)) {
+        const opts = field.options.map(opt => {
+            const value = typeof opt === "object" ? String(opt.value ?? "") : String(opt);
+            const lbl = typeof opt === "object" ? String(opt.label ?? opt.value ?? "") : String(opt);
             return `<option value="${value.replaceAll('"', "&quot;")}">${lbl}</option>`;
         }).join("");
         input = `<select name="${name}" ${required} style="width:100%;"><option value=""></option>${opts}</select>`;
-    } else if (f?.type === "textarea") {
+    } else if (field?.type === "textarea") {
         input = `<textarea name="${name}" ${required} ${ph} rows="3" style="width:100%; resize:vertical;"></textarea>`;
     } else {
-        const type = f?.type === "number" ? "number" : "text";
-        const min = f?.min != null ? `min="${f.min}"` : "";
-        const max = f?.max != null ? `max="${f.max}"` : "";
+        const type = field?.type === "number" ? "number" : "text";
+        const min = field?.min != null ? `min="${field.min}"` : "";
+        const max = field?.max != null ? `max="${field.max}"` : "";
         input = `<input type="${type}" name="${name}" ${required} ${ph} ${min} ${max} style="width:100%;"/>`;
     }
     return `
         <label style="display:flex; flex-direction:column; gap:2px; font-size:0.9em;">
-            <span>${label}${f?.required ? ' <span style="opacity:0.6">*</span>' : ""}</span>
+            <span>${label}${field?.required ? ' <span style="opacity:0.6">*</span>' : ""}</span>
             ${input}
         </label>
     `;
 }
 
-function _renderPoll(e) {
-    const s = _pollState(e);
-    if (!s) return "";
-    const { poll, expired, responded } = s;
+function _renderPoll(entry) {
+    const pollInfo = _pollState(entry);
+    if (!pollInfo) return "";
+    const { poll, expired, responded } = pollInfo;
     const wrap = (inner) => `
-        <div class="lancer-poll" data-poll-id="${e.id}" data-poll-table="${poll.tableName}"
+        <div class="lancer-poll" data-poll-id="${entry.id}" data-poll-table="${poll.tableName}"
              style="margin-top: 12px; padding: 10px 12px; background: rgba(120,46,34,0.05); border: 1px solid rgba(120,46,34,0.2); border-radius: 4px;">
             ${poll.title ? `<div style="font-weight:bold; margin-bottom:4px;">${poll.title}</div>` : ""}
             ${poll.intro ? `<div style="font-size:0.9em; margin-bottom:8px;">${poll.intro}</div>` : ""}
@@ -222,19 +222,19 @@ function _attachPollHandlers(rootEl) {
     }
 }
 
-function _renderRelease(r) {
-    const date = r.published_at ? r.published_at.split("T")[0] : "";
+function _renderRelease(release) {
+    const date = release.published_at ? release.published_at.split("T")[0] : "";
     let bodyHtml = "";
-    if (r.body) {
+    if (release.body) {
         try {
-            bodyHtml = new window.showdown.Converter().makeHtml(r.body);
+            bodyHtml = new window.showdown.Converter().makeHtml(release.body);
         } catch {
-            bodyHtml = `<pre>${r.body}</pre>`;
+            bodyHtml = `<pre>${release.body}</pre>`;
         }
     }
     return `
         <div style="border-bottom: 1px solid rgba(120,46,34,0.2); padding: 10px 4px;">
-            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${r.tag_name ?? ""}</div>
+            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${release.tag_name ?? ""}</div>
             <div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${date}</div>
             <div style="line-height: 1.5;">${bodyHtml}</div>
         </div>
@@ -243,8 +243,8 @@ function _renderRelease(r) {
 
 async function _markSeen(entries) {
     const current = new Set(game.settings.get(NEWS_MODULE_ID, SEEN_SETTING) || []);
-    for (const e of entries)
-        current.add(e.id);
+    for (const entry of entries)
+        current.add(entry.id);
     await game.settings.set(NEWS_MODULE_ID, SEEN_SETTING, [...current]);
 }
 

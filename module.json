@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "3.4.1",
+    "version": "3.4.4",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
@@ -11,7 +11,7 @@
     ],
     "url": "https://github.com/Agraael/lancer-automations",
     "manifest": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.4.1/module.zip",
+    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.4.4/module.zip",
     "esmodules": [
         "scripts/combat/overwatch.js",
         "scripts/main.js",
@@ -73,10 +73,6 @@
             {
                 "id": "sequencer",
                 "type": "module"
-            },
-            {
-                "id": "JB2A_DnD5e",
-                "type": "module"
             }
         ],
         "recommends": [
@@ -124,6 +120,14 @@
                 "id": "wall-height",
                 "type": "module",
                 "reason": "Required for elevation-aware Token Blocks Line of Sight (lets same-height tokens peek over each other)."
+            },
+            {
+                "id": "jb2a_patreon",
+                "type": "module"
+            },
+            {
+                "id": "JB2A_DnD5e",
+                "type": "module"
             },
             {
                 "id": "force-client-settings",

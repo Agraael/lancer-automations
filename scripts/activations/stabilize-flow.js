@@ -11,12 +11,12 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
     }
     return new Promise((resolve) => {
         let done = false;
-        const finish = (v) => {
+        const finish = (pickedEffectId) => {
             if (done)
                 return;
             done = true;
             popup.remove();
-            resolve(v);
+            resolve(pickedEffectId);
         };
         const rows = effects.map(e => `
             <div class="la-pick-cond" data-id="${e.id}" style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:3px;cursor:pointer;border:1px solid transparent;margin-bottom:4px;">
@@ -38,22 +38,22 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
             $(this).css({ background: '', borderColor: 'transparent' });
         });
         $('body').append(popup);
-        const dlg = anchorHtml.closest('.app, .application, .window-app').first();
-        const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
-        const dlgW = dlg.outerWidth() ?? 480;
-        const pw = popup.outerWidth();
-        const ph = popup.outerHeight();
-        const wx = window.innerWidth;
-        const wy = window.innerHeight;
-        let px = dlgOffset.left + dlgW + 8;
-        if (px + pw > wx - 10)
-            px = dlgOffset.left - pw - 8;
-        let py = dlgOffset.top;
-        if (py + ph > wy - 10)
-            py = wy - ph - 10;
-        const finalLeft = Math.max(10, px);
-        popup.css({ left: finalLeft - 20, top: Math.max(10, py), opacity: 0 });
-        popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
+        const anchorDialog = anchorHtml.closest('.app, .application, .window-app').first();
+        const anchorDialogOffset = anchorDialog.offset() ?? { left: 100, top: 100 };
+        const anchorDialogWidthPx = anchorDialog.outerWidth() ?? 480;
+        const popupWidthPx = popup.outerWidth();
+        const popupHeightPx = popup.outerHeight();
+        const viewportWidthPx = window.innerWidth;
+        const viewportHeightPx = window.innerHeight;
+        let popupLeftPx = anchorDialogOffset.left + anchorDialogWidthPx + 8;
+        if (popupLeftPx + popupWidthPx > viewportWidthPx - 10)
+            popupLeftPx = anchorDialogOffset.left - popupWidthPx - 8;
+        let popupTopPx = anchorDialogOffset.top;
+        if (popupTopPx + popupHeightPx > viewportHeightPx - 10)
+            popupTopPx = viewportHeightPx - popupHeightPx - 10;
+        const finalLeftPx = Math.max(10, popupLeftPx);
+        popup.css({ left: finalLeftPx - 20, top: Math.max(10, popupTopPx), opacity: 0 });
+        popup.animate({ left: finalLeftPx, opacity: 1 }, { duration: 150, easing: 'swing' });
         popup.on('click', e => e.stopPropagation());
         $(document).one('click', () => finish(null));
     });
@@ -129,14 +129,14 @@ export async function laStabilizePrompt(state) {
             <div class="lancer-list">${opt2.map(o => card(o, '2', false)).join('')}</div>
         </div>`;
     return new Promise((resolve) => {
-        let picked1 = state.data.option1 ?? 'Cool';
-        let picked2 = state.data.option2 ?? 'Reload';
-        if (picked1 === 'Repair' && noRepair)
-            picked1 = 'Cool';
+        let pickedOption1 = state.data.option1 ?? 'Cool';
+        let pickedOption2 = state.data.option2 ?? 'Reload';
+        if (pickedOption1 === 'Repair' && noRepair)
+            pickedOption1 = 'Cool';
         let clearTargetUuid = null;
         let clearEffectId = null;
         let clearLabel = '';
-        const dlg = new Dialog({
+        const stabilizeDialog = new Dialog({
             title: `Stabilize - ${actor.name}`,
             content,
             buttons: {
@@ -144,16 +144,16 @@ export async function laStabilizePrompt(state) {
                     icon: '<i class="fas fa-check"></i>',
                     label: 'Submit',
                     callback: () => {
-                        if (!picked1 || !picked2) {
+                        if (!pickedOption1 || !pickedOption2) {
                             ui.notifications.warn('Pick one option from each group.');
                             return false;
                         }
-                        if ((picked2 === 'ClearOwnCond' || picked2 === 'ClearOtherCond') && !clearEffectId) {
+                        if ((pickedOption2 === 'ClearOwnCond' || pickedOption2 === 'ClearOtherCond') && !clearEffectId) {
                             ui.notifications.warn('Select a condition to clear first.');
                             return false;
                         }
-                        state.data.option1 = picked1;
-                        state.data.option2 = picked2;
+                        state.data.option1 = pickedOption1;
+                        state.data.option2 = pickedOption2;
                         if (clearEffectId) {
                             state.data.la_clearTargetUuid = clearTargetUuid;
                             state.data.la_clearEffectId = clearEffectId;
@@ -171,23 +171,23 @@ export async function laStabilizePrompt(state) {
             close: () => resolve(false),
             render: (html) => {
                 const $h = html instanceof $ ? html : $(html);
-                $h.find(`.la-stab-card[data-group="1"][data-val="${picked1}"]`).addClass('selected');
-                $h.find(`.la-stab-card[data-group="2"][data-val="${picked2}"]`).addClass('selected');
-                const refreshLabel = ($card) => {
-                    const $detail = $card.find('.la-stab-detail');
+                $h.find(`.la-stab-card[data-group="1"][data-val="${pickedOption1}"]`).addClass('selected');
+                $h.find(`.la-stab-card[data-group="2"][data-val="${pickedOption2}"]`).addClass('selected');
+                const refreshCardTargetLabel = ($card) => {
+                    const $detailSpan = $card.find('.la-stab-detail');
                     if (clearLabel)
-                        $detail.text(`Target: ${clearLabel}`);
+                        $detailSpan.text(`Target: ${clearLabel}`);
                 };
                 $h.find('.la-stab-card').on('click', async function (ev) {
                     ev.stopPropagation();
                     if ($(this).attr('data-disabled') === 'true')
                         return;
-                    const g = String($(this).data('group'));
-                    const v = String($(this).data('val'));
-                    if (g === '2' && (v === 'ClearOwnCond' || v === 'ClearOtherCond')) {
+                    const groupId = String($(this).data('group'));
+                    const optionValue = String($(this).data('val'));
+                    if (groupId === '2' && (optionValue === 'ClearOwnCond' || optionValue === 'ClearOtherCond')) {
                         let targetActor = actor;
                         let labelPrefix = '';
-                        if (v === 'ClearOtherCond') {
+                        if (optionValue === 'ClearOtherCond') {
                             const origin = actor.getActiveTokens?.()?.[0];
                             const picked = await chooseToken(origin, { title: 'PICK ALLY', includeSelf: false, count: 1 });
                             targetActor = picked?.[0]?.actor;
@@ -195,30 +195,30 @@ export async function laStabilizePrompt(state) {
                                 return;
                             labelPrefix = `${targetActor.name}: `;
                         }
-                        const sid = await laPickConditionFromActor(targetActor, 'Clear which condition?', $h);
-                        if (!sid)
+                        const pickedEffectId = await laPickConditionFromActor(targetActor, 'Clear which condition?', $h);
+                        if (!pickedEffectId)
                             return;
-                        const eff = targetActor.effects.get(sid);
+                        const effect = targetActor.effects.get(pickedEffectId);
                         clearTargetUuid = targetActor.uuid;
-                        clearEffectId = sid;
-                        clearLabel = `${labelPrefix}${eff?.name ?? 'Condition'}`;
-                    } else if (g === '2') {
+                        clearEffectId = pickedEffectId;
+                        clearLabel = `${labelPrefix}${effect?.name ?? 'Condition'}`;
+                    } else if (groupId === '2') {
                         clearTargetUuid = null;
                         clearEffectId = null;
                         clearLabel = '';
                     }
-                    $h.find(`.la-stab-card[data-group="${g}"]`).removeClass('selected');
+                    $h.find(`.la-stab-card[data-group="${groupId}"]`).removeClass('selected');
                     $(this).addClass('selected');
-                    if (g === '1')
-                        picked1 = v;
+                    if (groupId === '1')
+                        pickedOption1 = optionValue;
                     else {
-                        picked2 = v;
-                        refreshLabel($(this));
+                        pickedOption2 = optionValue;
+                        refreshCardTargetLabel($(this));
                     }
                 });
             }
         }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520, top: 450, left: 150 });
-        dlg.render(true);
+        stabilizeDialog.render(true);
     });
 }
 

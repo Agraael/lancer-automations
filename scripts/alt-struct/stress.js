@@ -38,9 +38,9 @@ function stressTableDescriptions(roll, remStress) {
     return "";
 }
 
-const getRollCount = (roll, num_to_count) => {
+const getRollCount = (roll, targetFace) => {
     return roll
-        ? roll.terms[0].results.filter((v) => v.result === num_to_count).length
+        ? roll.terms[0].results.filter((dieResult) => dieResult.result === targetFace).length
         : 0;
 };
 
@@ -55,16 +55,16 @@ export async function altRollStress(state) {
 
     // Skip this step for 1-stress NPCs.
     if (actor.is_npc() && actor.system.stress.max === 1) {
-        const one_roll = 3;
-        const one_stress = 1;
+        const forcedRollIndex = 3;
+        const forcedRemStress = 1;
         state.data = {
             type: "stress",
-            title: stressTableTitles[one_roll],
-            desc: stressTableDescriptions(one_roll, one_stress),
-            remStress: one_stress,
+            title: stressTableTitles[forcedRollIndex],
+            desc: stressTableDescriptions(forcedRollIndex, forcedRemStress),
+            remStress: forcedRemStress,
             val: actor.system.stress.value,
             max: actor.system.stress.max,
-            roll_str: String(one_roll),
+            roll_str: String(forcedRollIndex),
             result: undefined,
         };
         return true;
@@ -79,24 +79,24 @@ export async function altRollStress(state) {
     }
 
     let remStress = state.data?.reroll_data?.stress ?? actor.system.stress.value;
-    let damage = actor.system.stress.max - remStress;
-    let formula = `${damage}d6kl1`;
+    let stressLost = actor.system.stress.max - remStress;
+    let formula = `${stressLost}d6kl1`;
     // If it's an NPC with legendary, change the formula to roll twice and keep the best result.
     if (actor.is_npc() &&
-    actor.items.some((i) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(i.system.lid)
+    actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
     )) {
         formula = `{${formula}, ${formula}}kh`;
     }
     let roll = await new Roll(formula).evaluate();
 
-    let result = roll.total;
-    if (result === undefined)
+    let rollTotal = roll.total;
+    if (rollTotal === undefined)
         return false;
 
     state.data = {
         type: "stress",
-        title: stressTableTitles[result],
-        desc: stressTableDescriptions(result, remStress),
+        title: stressTableTitles[rollTotal],
+        desc: stressTableDescriptions(rollTotal, remStress),
         remStress: remStress,
         val: actor.system.stress.value,
         max: actor.system.stress.max,
@@ -126,8 +126,8 @@ export async function stressCheckMultipleOnes(state) {
         throw new TypeError(`Stress check hasn't been rolled yet!`);
 
     // Crushing hits
-    let one_count = getRollCount(roll, 1);
-    if (one_count > 1) {
+    let onesRolled = getRollCount(roll, 1);
+    if (onesRolled > 1) {
         state.data.title = stressTableTitles[0];
         state.data.desc = stressTableDescriptions(0, 1);
     }
@@ -145,7 +145,7 @@ export async function insertEngheckButton(state) {
         return false;
     }
 
-    let show_button = false;
+    let showEngCheckButton = false;
     const result = state.data.result;
     if (!result)
         throw new TypeError(`Stress check hasn't been rolled yet!`);
@@ -154,13 +154,13 @@ export async function insertEngheckButton(state) {
 
     switch (roll.total) {
     case 1:
-        show_button = true;
+        showEngCheckButton = true;
         break;
     }
 
-    let one_count = getRollCount(roll, 1);
+    let onesRolled = getRollCount(roll, 1);
 
-    if (show_button && !(one_count > 1)) {
+    if (showEngCheckButton && !(onesRolled > 1)) {
         state.data.embedButtons = state.data.embedButtons || [];
         state.data.embedButtons.push(`<a
             class="alt-struct-flow-button lancer-button"
@@ -206,8 +206,8 @@ export async function applyStressEffects(state) {
     const token = tokens[0];
 
     // Check for multiple 1s
-    const one_count = getRollCount(roll, 1);
-    const hasMultipleOnes = one_count > 1;
+    const onesRolled = getRollCount(roll, 1);
+    const hasMultipleOnes = onesRolled > 1;
 
     // Apply effects based on roll result
     if (hasMultipleOnes) {

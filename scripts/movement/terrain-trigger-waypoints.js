@@ -3,20 +3,20 @@
 const MODULE_ID = 'lancer-automations';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
 
-function _thtMatchKey(m) {
-    const r = m?.shape?.polygon?.boundingRect;
-    return `tht::${m?.shape?.terrainTypeId}::${m?.shape?.bottom}::${m?.shape?.top}::${r?.x},${r?.y}`;
+function _thtMatchKey(thtMatch) {
+    const bounds = thtMatch?.shape?.polygon?.boundingRect;
+    return `tht::${thtMatch?.shape?.terrainTypeId}::${thtMatch?.shape?.bottom}::${thtMatch?.shape?.top}::${bounds?.x},${bounds?.y}`;
 }
 
 const _GAA_EFFECT_BOUNDARY = new Set(['APPLY_ON_ENTER', 'APPLY_ON_LEAVE', 'REMOVE_ON_ENTER', 'REMOVE_ON_LEAVE']);
 const _GAA_MACRO_BOUNDARY = new Set(['ENTER_LEAVE', 'ENTER', 'LEAVE', 'PREVIEW_ENTER_LEAVE', 'PREVIEW_ENTER', 'PREVIEW_LEAVE']);
 const _GAA_SEQ_BOUNDARY = new Set(['ON_ENTER', 'ON_LEAVE']);
 
-function _gaaAuraHasBoundaryTrigger(cfg) {
-    if (!cfg) return false;
-    if (Array.isArray(cfg.effects)) for (const e of cfg.effects) if (_GAA_EFFECT_BOUNDARY.has(e?.mode)) return true;
-    if (Array.isArray(cfg.macros)) for (const m of cfg.macros) if (_GAA_MACRO_BOUNDARY.has(m?.mode)) return true;
-    if (Array.isArray(cfg.sequencerEffects)) for (const s of cfg.sequencerEffects) if (_GAA_SEQ_BOUNDARY.has(s?.trigger)) return true;
+function _gaaAuraHasBoundaryTrigger(auraCfg) {
+    if (!auraCfg) return false;
+    if (Array.isArray(auraCfg.effects)) for (const effect of auraCfg.effects) if (_GAA_EFFECT_BOUNDARY.has(effect?.mode)) return true;
+    if (Array.isArray(auraCfg.macros)) for (const macro of auraCfg.macros) if (_GAA_MACRO_BOUNDARY.has(macro?.mode)) return true;
+    if (Array.isArray(auraCfg.sequencerEffects)) for (const seqEffect of auraCfg.sequencerEffects) if (_GAA_SEQ_BOUNDARY.has(seqEffect?.trigger)) return true;
     return false;
 }
 
@@ -26,7 +26,7 @@ function _getTriggerKeys(tokenDoc, pos) {
     if (tht?.getContainingTriggerMatches) {
         try {
             const matches = tht.getContainingTriggerMatches(tokenDoc, pos) ?? [];
-            for (const m of matches) keys.add(_thtMatchKey(m));
+            for (const thtMatch of matches) keys.add(_thtMatchKey(thtMatch));
         } catch {}
     }
     const tmApi = /** @type {any} */ (game.modules.get('templatemacro'))?.api;
@@ -40,7 +40,7 @@ function _getTriggerKeys(tokenDoc, pos) {
                 // TM stores triggers either at when<X>.command (legacy) or in actions[] (UI).
                 const hasLegacy = !!(tf.whenEntered?.command || tf.whenLeft?.command);
                 const hasAction = Array.isArray(tf.actions) && tf.actions.some(
-                    /** @type {any} */ (a) => a?.trigger === 'whenEntered' || a?.trigger === 'whenLeft'
+                    /** @type {any} */ (action) => action?.trigger === 'whenEntered' || action?.trigger === 'whenLeft'
                 );
                 if (!hasLegacy && !hasAction) continue;
                 keys.add(`tm::${id}`);
@@ -63,20 +63,20 @@ function _getTriggerKeys(tokenDoc, pos) {
     const gaaLayer = /** @type {any} */ (canvas)?.gaaAuraLayer;
     if (gaaLayer?._auraManager?.getAllAuras) {
         try {
-            const c = tokenDoc.getCenterPoint?.({ x: pos.x, y: pos.y }) ?? {
+            const centerPoint = tokenDoc.getCenterPoint?.({ x: pos.x, y: pos.y }) ?? {
                 x: pos.x + (tokenDoc.width ?? 1) * (canvas.grid.sizeX ?? canvas.grid.size) / 2,
                 y: pos.y + (tokenDoc.height ?? 1) * (canvas.grid.sizeY ?? canvas.grid.size) / 2
             };
             const inCombat = !!game.combat;
             const selfId = tokenDoc.id;
             for (const { parent, aura } of gaaLayer._auraManager.getAllAuras({ preview: false })) {
-                const cfg = aura?.config;
-                if (!cfg?.enabled) continue;
-                if (cfg.onlyEnabledInCombat && !inCombat) continue;
+                const auraCfg = aura?.config;
+                if (!auraCfg?.enabled) continue;
+                if (auraCfg.onlyEnabledInCombat && !inCombat) continue;
                 if (parent?.document?.id === selfId) continue;
-                if (!_gaaAuraHasBoundaryTrigger(cfg)) continue;
-                if (!aura.isWorldPointInside?.(c.x, c.y)) continue;
-                keys.add(`gaa::${parent.document?.id}::${cfg.id}`);
+                if (!_gaaAuraHasBoundaryTrigger(auraCfg)) continue;
+                if (!aura.isWorldPointInside?.(centerPoint.x, centerPoint.y)) continue;
+                keys.add(`gaa::${parent.document?.id}::${auraCfg.id}`);
             }
         } catch {}
     }
@@ -111,25 +111,25 @@ function _injectSilents(doc, context) {
     // Two silents per transition (auto-elev pattern): last OUT then first IN, so the trigger
     // fires when the token visually reaches the boundary cell.
     const inserted = [];
-    const _mkSilent = (wp) => ({
-        x: wp.x, y: wp.y, elevation: wp.elevation,
+    const _mkSilent = (waypoint) => ({
+        x: waypoint.x, y: waypoint.y, elevation: waypoint.elevation,
         width: refW, height: refH, shape: refS,
-        action: wp.action,
+        action: waypoint.action,
         snapped: true, explicit: false, checkpoint: true, intermediate: false,
         _laSilent: true
     });
     for (let i = 1; i < densePath.length; i++) {
-        const wp = densePath[i];
+        const waypoint = densePath[i];
         const prev = densePath[i - 1];
         const currentKeys = _getTriggerKeys(doc, {
-            x: wp.x, y: wp.y, elevation: wp.elevation
+            x: waypoint.x, y: waypoint.y, elevation: waypoint.elevation
         });
         let transition = false;
-        for (const k of currentKeys) if (!prevKeys.has(k)) { transition = true; break; }
-        if (!transition) for (const k of prevKeys) if (!currentKeys.has(k)) { transition = true; break; }
-        if (transition && !_AUTO_ELEV_ACTIONS.has(wp.action) && !_AUTO_ELEV_ACTIONS.has(prev?.action)) {
+        for (const key of currentKeys) if (!prevKeys.has(key)) { transition = true; break; }
+        if (!transition) for (const key of prevKeys) if (!currentKeys.has(key)) { transition = true; break; }
+        if (transition && !_AUTO_ELEV_ACTIONS.has(waypoint.action) && !_AUTO_ELEV_ACTIONS.has(prev?.action)) {
             if (prev) inserted.push(_mkSilent(prev));
-            inserted.push(_mkSilent(wp));
+            inserted.push(_mkSilent(waypoint));
         }
         prevKeys = currentKeys;
     }
@@ -150,11 +150,11 @@ export function injectTriggerSilentsAtDrop(event) {
         if (!game.settings.get(MODULE_ID, SPLIT_AT_TRIGGER_BOUNDARIES)) return;
     } catch { return; }
     const contexts = event?.interactionData?.contexts ?? {};
-    for (const [id, ctx] of Object.entries(contexts)) {
-        const token = canvas.tokens.get(id);
+    for (const [tokenId, ctx] of Object.entries(contexts)) {
+        const token = canvas.tokens.get(tokenId);
         if (!token) continue;
         try { _injectSilents(token.document, /** @type {any} */ (ctx)); }
-        catch (e) { console.warn(`${MODULE_ID} | silent injection failed for ${id}`, e); }
+        catch (err) { console.warn(`${MODULE_ID} | silent injection failed for ${tokenId}`, err); }
     }
 }
 

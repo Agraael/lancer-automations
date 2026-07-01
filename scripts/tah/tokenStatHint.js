@@ -226,26 +226,26 @@ function hpColorCss(val, max) {
         return '#cccccc';
     const t = Math.max(0, Math.min(1, val / max));
     if (t < 0.5) {
-        const k = t * 2;
-        return rgbToHex(lerp(244, 255, k), lerp(67, 215, k), lerp(54, 0, k));
+        const bandT = t * 2;
+        return rgbToHex(lerp(244, 255, bandT), lerp(67, 215, bandT), lerp(54, 0, bandT));
     }
-    const k = (t - 0.5) * 2;
-    return rgbToHex(lerp(255, 76, k), lerp(215, 175, k), lerp(0, 80, k));
+    const bandT = (t - 0.5) * 2;
+    return rgbToHex(lerp(255, 76, bandT), lerp(215, 175, bandT), lerp(0, 80, bandT));
 }
 function heatColorCss(val, max) {
     if (max <= 0)
         return '#888888';
     const t = Math.max(0, Math.min(1, val / max));
     if (t < 1 / 3) {
-        const k = t * 3;
-        return rgbToHex(lerp(136, 255, k), lerp(136, 215, k), lerp(136, 0, k));
+        const bandT = t * 3;
+        return rgbToHex(lerp(136, 255, bandT), lerp(136, 215, bandT), lerp(136, 0, bandT));
     }
     if (t < 2 / 3) {
-        const k = (t - 1 / 3) * 3;
-        return rgbToHex(255, lerp(215, 140, k), 0);
+        const bandT = (t - 1 / 3) * 3;
+        return rgbToHex(255, lerp(215, 140, bandT), 0);
     }
-    const k = (t - 2 / 3) * 3;
-    return rgbToHex(lerp(255, 244, k), lerp(140, 67, k), lerp(0, 54, k));
+    const bandT = (t - 2 / 3) * 3;
+    return rgbToHex(lerp(255, 244, bandT), lerp(140, 67, bandT), lerp(0, 54, bandT));
 }
 function ocColorCss(value, max) {
     if (max <= 0)
@@ -289,14 +289,14 @@ function getActorSubtitleText(actor) {
     }
     if (actor.type === 'npc') {
         try {
-            const cls = actor.items?.find?.(i => i.is_npc_class?.());
-            const templates = actor.items?.filter?.(i => i.is_npc_template?.()) ?? [];
+            const cls = actor.items?.find?.(item => item.is_npc_class?.());
+            const templates = actor.items?.filter?.(item => item.is_npc_template?.()) ?? [];
             const parts = [];
             if (cls?.name) {
                 parts.push(cls.name);
             }
             if (templates.length > 0) {
-                parts.push(templates.map(t => t.name).join(', '));
+                parts.push(templates.map(tmpl => tmpl.name).join(', '));
             }
             return parts.join(' · ');
         } catch { /* ignore */ }
@@ -451,7 +451,7 @@ function buildRevealRowsHtml(actor, s) {
     if (s.type === 'mech') {
         const parts = [cell(svgIcon(ICON.save), signed(s.save))];
         const ocSeq = typeof s.ocSequence === 'string'
-            ? s.ocSequence.split(',').map(x => x.trim())
+            ? s.ocSequence.split(',').map(step => step.trim())
             : [];
         if (ocSeq.length > 0) {
             const ocLabel = ocSeq[Math.min(s.overcharge, ocSeq.length - 1)] ?? '—';
@@ -459,23 +459,23 @@ function buildRevealRowsHtml(actor, s) {
             parts.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
         if (s.hasRepairs) {
-            const rCol = s.repairs > 0 ? '#66cc66' : '#555';
-            const rLabel = s.repairsMax > 0
+            const repairsColor = s.repairs > 0 ? '#66cc66' : '#555';
+            const repairsLabel = s.repairsMax > 0
                 ? `${s.repairs}/${s.repairsMax}`
                 : String(s.repairs);
-            parts.push(cell(svgIcon(ICON.repair), rLabel, rCol));
+            parts.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
         }
         if (s.coreEnergy != null) {
-            const cc = corePowerColor(s.coreEnergy, s.coreActive);
+            const corePwrColor = corePowerColor(s.coreEnergy, s.coreActive);
             const label = s.coreEnergy > 0 ? (s.coreActive ? 'ON' : '✓') : '✗';
-            parts.push(cell(svgIcon(ICON.corePwr), label, cc));
+            parts.push(cell(svgIcon(ICON.corePwr), label, corePwrColor));
         }
         rows.push(parts.join(''));
     }
 
-    return rows.map((r, i) => {
+    return rows.map((rowHtml, i) => {
         const sep = (i === 2 && rows.length > 2) ? '<div class="la-stat-hint-sep"></div>' : '';
-        return sep + `<div class="la-stat-hint-row">${r}</div>`;
+        return sep + `<div class="la-stat-hint-row">${rowHtml}</div>`;
     }).join('');
 }
 
@@ -704,15 +704,15 @@ function buildExtrasHintHtml(token, actor) {
     const extras = tokenDoc.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
     if (!extras.length)
         return '';
-    const visible = extras.filter(e => _resolveExtraBarValues(actor, e).ownerOk);
+    const visible = extras.filter(extra => _resolveExtraBarValues(actor, extra).ownerOk);
     if (!visible.length)
         return '';
-    const rows = visible.map(e => {
-        const { value, max } = _resolveExtraBarValues(actor, e);
-        const color = e.color?.stops?.[0] ?? '#cccccc';
-        const iconSrc = e.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg';
-        const labelHtml = e.showLabelInHint && e.label
-            ? `<span class="la-stat-hint-extra-label">${esc(e.label)}</span>`
+    const rows = visible.map(extra => {
+        const { value, max } = _resolveExtraBarValues(actor, extra);
+        const color = extra.color?.stops?.[0] ?? '#cccccc';
+        const iconSrc = extra.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg';
+        const labelHtml = extra.showLabelInHint && extra.label
+            ? `<span class="la-stat-hint-extra-label">${esc(extra.label)}</span>`
             : '';
         return `<div class="la-stat-hint-extra-row">
             <img class="la-stat-hint-extra-icon" src="${esc(iconSrc)}" alt="">
@@ -767,9 +767,9 @@ function usableScreenBounds() {
             || document.querySelector('#ui-left')
             || document.querySelector('#scene-controls');
         if (controls) {
-            const r = controls.getBoundingClientRect();
-            if (r.width > 0 && r.right > leftEdge && r.left < viewW * 0.4) {
-                leftEdge = r.right;
+            const controlsRect = controls.getBoundingClientRect();
+            if (controlsRect.width > 0 && controlsRect.right > leftEdge && controlsRect.left < viewW * 0.4) {
+                leftEdge = controlsRect.right;
             }
         }
     } catch { /* ignore */ }
@@ -778,9 +778,9 @@ function usableScreenBounds() {
             || ui?.sidebar?.element
             || document.getElementById('ui-right');
         if (sidebar) {
-            const r = sidebar.getBoundingClientRect();
-            if (r.width > 0 && r.left > viewW * 0.5 && r.left < rightEdge) {
-                rightEdge = r.left;
+            const sidebarRect = sidebar.getBoundingClientRect();
+            if (sidebarRect.width > 0 && sidebarRect.left > viewW * 0.5 && sidebarRect.left < rightEdge) {
+                rightEdge = sidebarRect.left;
             }
         }
     } catch { /* ignore */ }
@@ -792,21 +792,21 @@ function tokenScreenRect(token) {
         return { left: 0, top: 0, right: 0, bottom: 0, w: 0, h: 0, cy: 0 };
     }
     // toGlobal handles pivot/skew that plain stage.position+scale would miss.
-    const tx = token.x ?? 0;
-    const ty = token.y ?? 0;
-    const tw = token.w ?? 0;
-    const th = token.h ?? 0;
-    const topLeft = canvas.stage.toGlobal(new PIXI.Point(tx, ty));
-    const bottomRight = canvas.stage.toGlobal(new PIXI.Point(tx + tw, ty + th));
+    const tokenLocalX = token.x ?? 0;
+    const tokenLocalY = token.y ?? 0;
+    const tokenLocalW = token.w ?? 0;
+    const tokenLocalH = token.h ?? 0;
+    const topLeft = canvas.stage.toGlobal(new PIXI.Point(tokenLocalX, tokenLocalY));
+    const bottomRight = canvas.stage.toGlobal(new PIXI.Point(tokenLocalX + tokenLocalW, tokenLocalY + tokenLocalH));
     const view = canvas.app.view;
-    const r = view.getBoundingClientRect?.() ?? { left: 0, top: 0, width: view.width, height: view.height };
+    const viewRect = view.getBoundingClientRect?.() ?? { left: 0, top: 0, width: view.width, height: view.height };
     // widthRatio = 1/dpr when autoDensity=false. Yields CSS pixels in both modes.
-    const widthRatio = view.width > 0 ? (r.width / view.width) : 1;
+    const widthRatio = view.width > 0 ? (viewRect.width / view.width) : 1;
     const cssScale = widthRatio > 0 ? widthRatio : 1;
-    const left = r.left + topLeft.x * cssScale;
-    const top = r.top + topLeft.y * cssScale;
-    const right = r.left + bottomRight.x * cssScale;
-    const bottom = r.top + bottomRight.y * cssScale;
+    const left = viewRect.left + topLeft.x * cssScale;
+    const top = viewRect.top + topLeft.y * cssScale;
+    const right = viewRect.left + bottomRight.x * cssScale;
+    const bottom = viewRect.top + bottomRight.y * cssScale;
     return { left, top, right, bottom, w: right - left, h: bottom - top, cy: (top + bottom) / 2 };
 }
 
@@ -834,21 +834,21 @@ function applyPosition(token) {
     const rect = tokenScreenRect(token);
     const anchorX = _placeRight ? rect.right : rect.left;
     const anchorY = rect.cy;
-    const us = getUserScale();
-    const popW = _popupEl.offsetWidth || 0;
-    const popH = _popupEl.offsetHeight || 0;
+    const userScale = getUserScale();
+    const popupW = _popupEl.offsetWidth || 0;
+    const popupH = _popupEl.offsetHeight || 0;
     if (_placeRight) {
-        _popupEl.style.left = `${anchorX + ANCHOR_GAP * us}px`;
-        _popupEl.style.top = `${anchorY - (popH * us) / 2}px`;
+        _popupEl.style.left = `${anchorX + ANCHOR_GAP * userScale}px`;
+        _popupEl.style.top = `${anchorY - (popupH * userScale) / 2}px`;
         _popupEl.style.setProperty('--la-hint-origin', '0% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${SLIDE_OFFSET}px`);
     } else {
-        _popupEl.style.left = `${anchorX - ANCHOR_GAP * us - popW * us}px`;
-        _popupEl.style.top = `${anchorY - (popH * us) / 2}px`;
+        _popupEl.style.left = `${anchorX - ANCHOR_GAP * userScale - popupW * userScale}px`;
+        _popupEl.style.top = `${anchorY - (popupH * userScale) / 2}px`;
         _popupEl.style.setProperty('--la-hint-origin', '100% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${-SLIDE_OFFSET}px`);
     }
-    _popupEl.style.setProperty('--la-hint-scale', String(us));
+    _popupEl.style.setProperty('--la-hint-scale', String(userScale));
 }
 
 function clearDelay() {

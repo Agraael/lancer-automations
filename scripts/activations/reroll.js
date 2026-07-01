@@ -39,18 +39,18 @@ const ROLL_TYPES = {
             const attackResults = state.data?.attack_results ?? [];
             const hitResults = state.data?.hit_results ?? [];
             for (let i = 0; i < attackResults.length; i++) {
-                const r = attackResults[i]?.roll;
-                if (r)
-                    r._total = newTotal;
-                const hr = hitResults[i];
-                if (hr) {
+                const attackRoll = attackResults[i]?.roll;
+                if (attackRoll)
+                    attackRoll._total = newTotal;
+                const hitResult = hitResults[i];
+                if (hitResult) {
                     const isSmart = state.data?.is_smart ?? false;
                     const targetStat = isSmart
-                        ? (hr.target?.actor?.system?.edef ?? 8)
-                        : (hr.target?.actor?.system?.evasion ?? 5);
-                    hr.total = String(newTotal).padStart(2, '0');
-                    hr.hit = newTotal >= targetStat;
-                    hr.crit = state.data?.attack_type !== 'Tech' && newTotal >= 20;
+                        ? (hitResult.target?.actor?.system?.edef ?? 8)
+                        : (hitResult.target?.actor?.system?.evasion ?? 5);
+                    hitResult.total = String(newTotal).padStart(2, '0');
+                    hitResult.hit = newTotal >= targetStat;
+                    hitResult.crit = state.data?.attack_type !== 'Tech' && newTotal >= 20;
                 }
             }
         }
@@ -72,14 +72,14 @@ const ROLL_TYPES = {
             const attackResults = state.data?.attack_results ?? [];
             const hitResults = state.data?.hit_results ?? [];
             for (let i = 0; i < attackResults.length; i++) {
-                const r = attackResults[i]?.roll;
-                if (r)
-                    r._total = newTotal;
-                const hr = hitResults[i];
-                if (hr) {
-                    const edef = hr.target?.actor?.system?.edef ?? 8;
-                    hr.total = String(newTotal).padStart(2, '0');
-                    hr.hit = newTotal >= edef;
+                const techRoll = attackResults[i]?.roll;
+                if (techRoll)
+                    techRoll._total = newTotal;
+                const hitResult = hitResults[i];
+                if (hitResult) {
+                    const edef = hitResult.target?.actor?.system?.edef ?? 8;
+                    hitResult.total = String(newTotal).padStart(2, '0');
+                    hitResult.hit = newTotal >= edef;
                 }
             }
         }
@@ -115,9 +115,9 @@ const ROLL_TYPES = {
             state.data.targets = snap.targets;
         },
         applyChangeRoll: (state, newTotal) => {
-            const r = state.data?.damage_results?.[0]?.roll;
-            if (r)
-                r._total = newTotal;
+            const damageRoll = state.data?.damage_results?.[0]?.roll;
+            if (damageRoll)
+                damageRoll._total = newTotal;
         }
     },
     skillRoll: {
@@ -357,29 +357,29 @@ async function applyBonusRerolls(state, rollType, def) {
     const globals = api.getGlobalBonuses?.(actor) ?? [];
     const constants = api.getConstantBonuses?.(actor) ?? [];
     const candidates = [
-        ...globals.map(b => ({ b, source: 'global' })),
-        ...constants.map(b => ({ b, source: 'constant' }))
-    ].filter(({ b }) => b.type === 'reroll'
-        && (!b.rollTypes || b.rollTypes.length === 0 || b.rollTypes.includes(rollType)));
+        ...globals.map(bonus => ({ b: bonus, source: 'global' })),
+        ...constants.map(bonus => ({ b: bonus, source: 'constant' }))
+    ].filter(({ b: bonus }) => bonus.type === 'reroll'
+        && (!bonus.rollTypes || bonus.rollTypes.length === 0 || bonus.rollTypes.includes(rollType)));
 
-    candidates.sort((a, b) =>
-        _SUBTYPE_PRIORITY[_normalizeSubtype(a.b.subtype)] - _SUBTYPE_PRIORITY[_normalizeSubtype(b.b.subtype)]);
+    candidates.sort((left, right) =>
+        _SUBTYPE_PRIORITY[_normalizeSubtype(left.b.subtype)] - _SUBTYPE_PRIORITY[_normalizeSubtype(right.b.subtype)]);
 
     const consumed = [];
     const token = actor.token ? actor.token.object : actor.getActiveTokens?.()?.[0] ?? null;
     const userIdControl = api.getTokenOwnerUserId?.(token) ?? api.getActiveGMId?.();
 
-    for (const entry of candidates) {
-        const bonus = entry.b;
+    for (const candidate of candidates) {
+        const bonus = candidate.b;
         const subtype = _normalizeSubtype(bonus.subtype);
         const name = bonus.name || 'Reroll';
         const upperName = String(name).toUpperCase();
 
         const currentRoll = def.getRoll(state);
-        const rollLine = currentRoll ? `<code>${currentRoll.formula}</code> = <b>${currentRoll.total}</b>` : null;
+        const rollLineHtml = currentRoll ? `<code>${currentRoll.formula}</code> = <b>${currentRoll.total}</b>` : null;
         const offer = await api.startChoiceCard({
             title: `${upperName} \u2014 USE REROLL?`,
-            description: rollLine ?? undefined,
+            description: rollLineHtml ?? undefined,
             originToken: token,
             userIdControl,
             choices: [
@@ -409,31 +409,31 @@ async function applyBonusRerolls(state, rollType, def) {
             break;
         }
 
-        consumed.push(entry);
+        consumed.push(candidate);
     }
 
-    for (const { b, source } of consumed) {
-        if (!b.id)
+    for (const { b: bonus, source } of consumed) {
+        if (!bonus.id)
             continue;
-        const usesCur = typeof b.uses === 'number' ? b.uses : null;
+        const usesCur = typeof bonus.uses === 'number' ? bonus.uses : null;
         if (usesCur !== null && usesCur > 1) {
             const newUses = usesCur - 1;
             if (source === 'constant' && api.addConstantBonus) {
-                await api.addConstantBonus(actor, { ...b, uses: newUses });
+                await api.addConstantBonus(actor, { ...bonus, uses: newUses });
             } else if (source === 'global') {
                 const bonuses = actor.getFlag('lancer-automations', 'global_bonuses') || [];
-                const updated = bonuses.map(x => x.id === b.id ? { ...x, uses: newUses } : x);
+                const updated = bonuses.map(existing => existing.id === bonus.id ? { ...existing, uses: newUses } : existing);
                 await actor.setFlag('lancer-automations', 'global_bonuses', updated);
-                const effect = actor.effects.find(e => e.getFlag('lancer-automations', 'linkedBonusId') === b.id);
-                if (effect)
-                    await effect.update({ 'flags.statuscounter.value': newUses });
+                const linkedEffect = actor.effects.find(effect => effect.getFlag('lancer-automations', 'linkedBonusId') === bonus.id);
+                if (linkedEffect)
+                    await linkedEffect.update({ 'flags.statuscounter.value': newUses });
             }
             continue;
         }
         if (source === 'global' && api.removeGlobalBonus)
-            await api.removeGlobalBonus(actor, b.id, false);
+            await api.removeGlobalBonus(actor, bonus.id, false);
         else if (source === 'constant' && api.removeConstantBonus)
-            await api.removeConstantBonus(actor, b.id);
+            await api.removeConstantBonus(actor, bonus.id);
     }
 }
 
