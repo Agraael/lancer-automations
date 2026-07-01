@@ -746,7 +746,10 @@ function _thtGroundAt(point) {
 }
 
 function _measureTerrainElevDisabled() {
-    try { return !!game.settings.get(MODULE_ID, 'disableAutoElevationOnMeasure'); }
+    try {
+        return !!game.settings.get(MODULE_ID, 'disableAutoElevationOnMeasure')
+            || !!game.settings.get(MODULE_ID, 'disableAutoTerrainElevation');
+    }
     catch { return false; }
 }
 

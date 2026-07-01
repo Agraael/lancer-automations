@@ -97,9 +97,9 @@ export function createCursorPreview() {
 // A small green "+" near the cursor while Shift is held, signalling multi add/select mode.
 // Call move(shiftHeld, x, y) from the picker's pointermove; it also tracks Shift keydown/keyup.
 export function createMultiPlusIndicator() {
-    const label = new PIXI.Text('+', {
+    const label = makeText('+', {
         fontFamily: 'Arial', fontSize: Math.max(18, canvas.grid.size * 0.32),
-        fill: 0x33ff66, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+        fill: 0x33ff66, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold',
     });
     label.anchor.set(0.5);
     label.visible = false;
@@ -148,6 +148,27 @@ export function _paintCells(graphics, cells, { gridSize = canvas.grid.size } = {
     }
 }
 
+/** World-space stroke width scaled to the grid (calibrated on a 100px grid), min 1px. */
+export function gridLineWidth(base = 2) {
+    return Math.max(1, base * canvas.grid.size / 100);
+}
+
+/** Text rasterisation resolution that keeps labels crisp when zoomed in (small grids upscale more). */
+export function gridTextResolution() {
+    const dpr = canvas.app?.renderer?.resolution ?? 1;
+    const zoom = canvas.stage?.scale?.x ?? 1;
+    // Scale with zoom; the grid floor keeps it sharp even if the label was created zoomed out.
+    const factor = Math.max(1, zoom, 100 / canvas.grid.size);
+    return Math.min(10, dpr * factor * 1.5);
+}
+
+/** PIXI.Text with zoom-aware resolution (crisp when zoomed in on small grids). */
+export function makeText(text, style) {
+    const t = new PIXI.Text(text, style);
+    t.resolution = gridTextResolution();
+    return t;
+}
+
 /** Group cells by min distance from any origin offset. Skips dist 0. */
 export function _groupCellsByDistance(originOffsets, cellKeys) {
     const hex = isHexGrid();
@@ -188,6 +209,9 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     } = opts;
     const basePeriod = msPerCell * (range + 1);
     const periodMs = opts.periodMs ?? (range < slowRangeThreshold ? Math.max(slowFloorMs, basePeriod) : basePeriod);
+    const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
+    const lineW = Math.max(1, lineWidth * gridScale);
+    const haloW = lineW + Math.max(1, gridScale);
     return () => {
         pulseGraphic.clear();
         const phase = (performance.now() % periodMs) / periodMs;
@@ -200,10 +224,10 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
             if (lineAlpha > 0) {
                 // dark halo under the bright pulse line so the wave reads on light + dark maps
-                pulseGraphic.lineStyle(lineWidth + 1, 0x000000, lineAlpha);
+                pulseGraphic.lineStyle(haloW, 0x000000, lineAlpha);
                 _paintCells(pulseGraphic, ringCells);
             }
-            pulseGraphic.lineStyle(lineWidth, lineColor, lineAlpha);
+            pulseGraphic.lineStyle(lineW, lineColor, lineAlpha);
             pulseGraphic.beginFill(color, fillAlpha);
             _paintCells(pulseGraphic, ringCells);
             pulseGraphic.endFill();
@@ -214,13 +238,16 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
 export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false, opts = {}) {
     const highlight = new PIXI.Graphics();
     const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
+    const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
     const lineAlpha = opts.lineAlpha ?? (isHexGrid() ? 0.4 : 0.7);
-    const lineWidth = opts.lineWidth ?? 2;
+    const rawLineWidth = opts.lineWidth ?? 2;
+    const lineWidth = rawLineWidth > 0 ? Math.max(1, rawLineWidth * gridScale) : 0;
+    const haloWidth = lineWidth > 0 ? lineWidth + Math.max(1, 2 * gridScale) : 0;
     const lineColor = opts.lineColor ?? 0xFFFFFF;
 
     // Dark halo under a bright line so the border reads on light AND dark maps.
     if (lineWidth > 0 && lineAlpha > 0) {
-        highlight.lineStyle(lineWidth + 2, 0x000000, Math.min(1, lineAlpha + 0.25));
+        highlight.lineStyle(haloWidth, 0x000000, Math.min(1, lineAlpha + 0.25));
         _paintCells(highlight, inRange);
         highlight.lineStyle(lineWidth, lineColor, Math.min(1, lineAlpha + 0.2));
     }
@@ -308,7 +335,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
     const gridSize = canvas.grid.size;
 
     const drawFootprint = (targetX, targetY, lineColor, fillColor) => {
-        trace.lineStyle(3, lineColor, 0.8);
+        trace.lineStyle(gridLineWidth(3), lineColor, 0.8);
         trace.beginFill(fillColor, 0.3);
         const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
         for (const cellOffset of offsets) {
@@ -331,7 +358,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
     drawFootprint(originalEndPos.x, originalEndPos.y, originalColor, originalColor);
 
     // Line to Original End
-    trace.lineStyle(4, 0xffffff, 0.5); // white fading line
+    trace.lineStyle(gridLineWidth(4), 0xffffff, 0.5); // white fading line
     trace.moveTo(centerStart.x, centerStart.y);
     trace.lineTo(centerOriginal.x, centerOriginal.y);
 
@@ -341,15 +368,14 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
         drawFootprint(newEndPos.x, newEndPos.y, 0xff6400, 0xff6400);
 
         // Line to New End
-        trace.lineStyle(4, 0xffffff, 1);
+        trace.lineStyle(gridLineWidth(4), 0xffffff, 1);
         trace.moveTo(centerStart.x, centerStart.y);
         trace.lineTo(centerNew.x, centerNew.y);
     }
 
     addGraphicsBelowTokens(trace);
 
-    // Mirror the trace to other clients: start (yellow), base destination (cells), new destination (placed), lines.
-    // Relay sites (socket/network GM trace) pass suppressBroadcast so only the originating client broadcasts.
+    // Mirror the trace to other clients (relay sites pass suppressBroadcast so only the origin broadcasts).
     if (!suppressBroadcast) {
         const kind = `moveTrace:${token.id}:${++_moveTraceSeq}`;
         const startCells = getOccupiedOffsets(token).map(o => `${o.col},${o.row}`);

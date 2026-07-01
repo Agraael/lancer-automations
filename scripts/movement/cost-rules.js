@@ -606,6 +606,8 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     const dragType = getCurrentMovementType();
     const defaultFlying = dragType === 'fly';
     const defaultIgnoreElev = dragType === 'ignore';
+    // Global "no auto-elevation": terrain contributes zero elevation to the drag, whatever the action.
+    const ignoreTerrainElev = _autoElevDisabled();
     const climbImmune = isClimbingImmune(tokenDoc);
     const freeMode = isForceFreeMovement();
     const terrainImmune = isTerrainImmune(tokenDoc) || freeMode;
@@ -641,7 +643,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     } catch { /* ignore */ }
     let prevTerrainTop = groundElevGrid;
     let prevCellTop = groundElevGrid;
-    let tokenElev = defaultIgnoreElev ? storedElevGrid : Math.max(storedElevGrid, groundElevGrid);
+    let tokenElev = (defaultIgnoreElev || ignoreTerrainElev) ? storedElevGrid : Math.max(storedElevGrid, groundElevGrid);
     const dragOffsetGrid = getDragElevationOffset?.() ?? 0;
     let userOffsetApplied = false;
 
@@ -669,7 +671,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
 
         const segAction = toWp.action;
         const flying = segAction === 'fly' || (segAction == null && defaultFlying);
-        const noTerrainClimb = segAction === 'ignore' || (segAction == null && defaultIgnoreElev);
+        const noTerrainClimb = ignoreTerrainElev || segAction === 'ignore' || (segAction == null && defaultIgnoreElev);
 
         const isLastSegment = (keepIdxPos === keepIdx.length - 2);
         let horizontalCost = 0;
@@ -972,11 +974,16 @@ function applyLancerCost(tokenDoc, inputWaypoints, result) {
     return result;
 }
 
-// Gate: Lancer ruler on AND auto-terrain-elevation not disabled.
+function _autoElevDisabled() {
+    try { return !!game.settings.get(MODULE_ID, 'disableAutoTerrainElevation'); }
+    catch { return false; }
+}
+
+// Gate: Lancer ruler (cost + per-cell render) on. Auto-elevation is handled
+// separately via defaultIgnoreElev, so disabling it keeps the cost pass alive.
 function _isLancerCostActive() {
     try {
         if (!game.settings.get(MODULE_ID, 'enableBuiltinSpeedProvider')) return false;
-        if (game.settings.get(MODULE_ID, 'disableAutoTerrainElevation')) return false;
     } catch { return false; }
     return true;
 }

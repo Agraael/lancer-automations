@@ -15,7 +15,7 @@ import {
 import {
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     makeSafe, createCursorPreview, drawRangeHighlight,
-    _paintCells, _groupCellsByDistance, _makeRangePulseTick,
+    _paintCells, _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
 } from "../canvas-helpers.js";
 import { computeArea } from "../area-geometry.js";
 import { keyCodesFor } from "../keybindings.js";
@@ -200,7 +200,7 @@ export function chooseToken(casterToken, options = {}) {
             if (!hoverPulseToken)
                 return;
             const alpha = 0.35 + 0.55 * Math.abs(Math.sin(performance.now() / 220));
-            hoverPulseGraphic.lineStyle(4, 0xff9900, alpha);
+            hoverPulseGraphic.lineStyle(gridLineWidth(4), 0xff9900, alpha);
             hoverPulseGraphic.beginFill(0xff9900, alpha * 0.25);
             if (isHexGrid()) {
                 const occupiedOffsets = getOccupiedOffsets(hoverPulseToken);
@@ -232,8 +232,8 @@ export function chooseToken(casterToken, options = {}) {
             hoverPulseToken = tokenId ? (canvas.tokens.get(tokenId) ?? null) : null;
         };
 
-        const cursorElevLabel = new PIXI.Text('', {
-            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold', align: 'center',
+        const cursorElevLabel = makeText('', {
+            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold', align: 'center',
         });
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
@@ -254,7 +254,7 @@ export function chooseToken(casterToken, options = {}) {
         if (selection) {
             for (const token of selection) {
                 const highlight = new PIXI.Graphics();
-                highlight.lineStyle(4, 0x00ff00, 0.8);
+                highlight.lineStyle(gridLineWidth(4), 0x00ff00, 0.8);
                 highlight.beginFill(0x00ff00, 0.2);
                 const offsets = getOccupiedOffsets(token);
                 for (const offset of offsets) {
@@ -690,12 +690,12 @@ export function chooseToken(casterToken, options = {}) {
         // Top/bottom band ±areaRange around elevation (blast/cone/burst reach).
         const bandStr = (elevation) => `↑ ${Math.round((Number(elevation) || 0) + areaRange)}\n↓ ${Math.round((Number(elevation) || 0) - areaRange)}`;
         const makeElevationLabel = (elev, center, gridSize) => {
-            const label = new PIXI.Text(elevArrow(elev), {
+            const label = makeText(elevArrow(elev), {
                 fontFamily: 'Arial',
                 fontSize: Math.max(14, gridSize * 0.22),
                 fill: 0xffffff,
                 stroke: 0x000000,
-                strokeThickness: 4,
+                strokeThickness: gridLineWidth(4),
                 fontWeight: 'bold',
             });
             label.anchor.set(0.5);
@@ -705,12 +705,12 @@ export function chooseToken(casterToken, options = {}) {
         };
         // Two-line ↑top/↓bot label.
         const makeBandLabel = (top, bot, center) => {
-            const label = new PIXI.Text(`↑ ${Math.round(top)}\n↓ ${Math.round(bot)}`, {
+            const label = makeText(`↑ ${Math.round(top)}\n↓ ${Math.round(bot)}`, {
                 fontFamily: 'Arial',
                 fontSize: Math.max(14, canvas.grid.size * 0.22),
                 fill: 0xffffff,
                 stroke: 0x000000,
-                strokeThickness: 4,
+                strokeThickness: gridLineWidth(4),
                 fontWeight: 'bold',
                 align: 'center',
             });
@@ -722,12 +722,12 @@ export function chooseToken(casterToken, options = {}) {
         // Arrow label on one cell (tilted line).
         const makeCellNumber = (elevation, col, row) => {
             const cellCenter = getHexCenter(col, row);
-            const label = new PIXI.Text(elevArrow(elevation), {
+            const label = makeText(elevArrow(elevation), {
                 fontFamily: 'Arial',
                 fontSize: Math.max(11, canvas.grid.size * 0.18),
                 fill: 0xffffff,
                 stroke: 0x000000,
-                strokeThickness: 3,
+                strokeThickness: gridLineWidth(3),
                 fontWeight: 'bold',
             });
             label.anchor.set(0.5);
@@ -747,7 +747,7 @@ export function chooseToken(casterToken, options = {}) {
             const container = new PIXI.Container();
             const g = new PIXI.Graphics();
             if (lineAlpha > 0)
-                g.lineStyle(2, color, lineAlpha);
+                g.lineStyle(gridLineWidth(2), color, lineAlpha);
             if (fillAlpha > 0)
                 g.beginFill(color, fillAlpha);
             _paintCells(g, affected);
@@ -1071,7 +1071,7 @@ export function chooseToken(casterToken, options = {}) {
 
         const drawSelectionHighlight = (token) => {
             const highlight = new PIXI.Graphics();
-            highlight.lineStyle(4, 0x00ffff, 0.8);
+            highlight.lineStyle(gridLineWidth(4), 0x00ffff, 0.8);
             highlight.beginFill(0x00ffff, 0.2);
 
             if (isHexGrid()) {
@@ -1121,7 +1121,7 @@ export function chooseToken(casterToken, options = {}) {
             const alpha = 0.4;
             const gridSize = canvas.grid.size;
 
-            cursorPreview.lineStyle(2, color, 0.8);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
             cursorPreview.beginFill(color, alpha);
 
             if (hoveredToken) {
@@ -1207,14 +1207,14 @@ export function chooseToken(casterToken, options = {}) {
                 affected = getInRangeOffsets({ x: centerPt.x, y: centerPt.y }, areaRange, { includeSelf: true, elevationAware: false });
             }
             affected = propagate(affected, [`${off.col},${off.row}`]);
-            cursorPreview.lineStyle(2, color, 0.6);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.6);
             cursorPreview.beginFill(color, 0.12);
             _paintCells(cursorPreview, affected);
             cursorPreview.endFill();
 
             // Cyan outline on tokens that would be caught (mirrors point-mode selection visual).
             const { caught: previewCaught } = tokensInBlast({ x: centerPt.x, y: centerPt.y }, areaRange, previewElev || 0);
-            previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
+            previewSelectHighlight.lineStyle(gridLineWidth(4), 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
             for (const token of previewCaught) {
                 if (filter && !filter(token))
@@ -1275,7 +1275,7 @@ export function chooseToken(casterToken, options = {}) {
             const hovered = tokenUnderCursor(tx, ty);
             if (!hovered) {
                 // Small ring at cursor — distinct from point-mode hex highlight, but visible enough.
-                cursorPreview.lineStyle(2, 0xffaa00, 0.85);
+                cursorPreview.lineStyle(gridLineWidth(2), 0xffaa00, 0.85);
                 cursorPreview.beginFill(0xffaa00, 0.25);
                 cursorPreview.drawCircle(tx, ty, Math.max(6, canvas.grid.size * 0.12));
                 cursorPreview.endFill();
@@ -1291,13 +1291,13 @@ export function chooseToken(casterToken, options = {}) {
             const outOfRange = range !== null && casterToken
                 && !isPositionInRange(casterToken, hovered, range);
             const color = outOfRange ? 0xff0000 : 0x0088ff;
-            cursorPreview.lineStyle(2, color, 0.6);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.6);
             cursorPreview.beginFill(color, 0.12);
             _paintCells(cursorPreview, affected);
             cursorPreview.endFill();
 
             const { caught } = tokensInBurst(hovered, areaRange);
-            previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
+            previewSelectHighlight.lineStyle(gridLineWidth(4), 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
             for (const token of caught) {
                 if (filter && !filter(token))
@@ -1354,12 +1354,12 @@ export function chooseToken(casterToken, options = {}) {
             const { caught: previewCaught, affected, elevByCell } = computeAreaFor(
                 { x: centerPt.x, y: centerPt.y }, previewElev, pendingRotation
             );
-            cursorPreview.lineStyle(2, color, 0.6);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.6);
             cursorPreview.beginFill(color, 0.12);
             _paintCells(cursorPreview, affected);
             cursorPreview.endFill();
 
-            previewSelectHighlight.lineStyle(4, 0x00ffff, 0.8);
+            previewSelectHighlight.lineStyle(gridLineWidth(4), 0x00ffff, 0.8);
             previewSelectHighlight.beginFill(0x00ffff, 0.2);
             for (const token of previewCaught) {
                 if (filter && !filter(token))

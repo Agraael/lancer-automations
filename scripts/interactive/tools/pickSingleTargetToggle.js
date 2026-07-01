@@ -6,7 +6,7 @@ import {
 } from "../../combat/grid-helpers.js";
 
 import {
-    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator,
+    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator, gridLineWidth,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { broadcastToolPresence, clearToolPresence } from "../presence.js";
@@ -92,7 +92,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             }) || null;
             const color = hoveredToken ? 0x0088ff : 0xff0000;
             const gridSize = canvas.grid.size;
-            cursorPreview.lineStyle(2, color, 0.8);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
             cursorPreview.beginFill(color, 0.4);
             if (hoveredToken) {
                 if (isHexGrid()) {

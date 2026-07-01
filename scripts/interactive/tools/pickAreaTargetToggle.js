@@ -8,6 +8,7 @@ import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 import {
     pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview,
     addGraphicsBelowTokens, destroyGraphics, _paintCells, createMultiPlusIndicator,
+    gridLineWidth, makeText,
 } from "../canvas-helpers.js";
 import { computeArea, rotationStepsFor } from "../area-geometry.js";
 import { playUiSound, playTargetingMove } from "../../tah/sound.js";
@@ -157,8 +158,8 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         const plus = createMultiPlusIndicator();
         const selectHighlight = new PIXI.Graphics();
         canvas.stage.addChild(selectHighlight); // above tokens
-        const elevLabel = new PIXI.Text('', {
-            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold', align: 'center',
+        const elevLabel = makeText('', {
+            fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold', align: 'center',
         });
         elevLabel.anchor.set(0.5);
         elevLabel.visible = false;
@@ -172,9 +173,9 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         };
         const makeCellLabel = (col, row, elev) => {
             const c = getHexCenter(col, row);
-            const t = new PIXI.Text(elevText(elev), {
+            const t = makeText(elevText(elev), {
                 fontFamily: 'Arial', fontSize: Math.max(11, canvas.grid.size * 0.18),
-                fill: 0xffffff, stroke: 0x000000, strokeThickness: 3, fontWeight: 'bold',
+                fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(3), fontWeight: 'bold',
             });
             t.anchor.set(0.5);
             t.x = c.x;
@@ -256,7 +257,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
         };
 
         const drawCaught = (g, caught) => {
-            g.lineStyle(4, 0x00ffff, 0.8);
+            g.lineStyle(gridLineWidth(4), 0x00ffff, 0.8);
             g.beginFill(0x00ffff, 0.2);
             for (const t of caught) {
                 if (isHexGrid()) {
@@ -276,7 +277,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
             const r = computeAt(tx, ty);
             if (!r) {
                 // burst with no host: ring marker
-                cursorPreview.lineStyle(2, 0xffaa00, 0.85);
+                cursorPreview.lineStyle(gridLineWidth(2), 0xffaa00, 0.85);
                 cursorPreview.beginFill(0xffaa00, 0.25);
                 cursorPreview.drawCircle(tx, ty, Math.max(6, canvas.grid.size * 0.12));
                 cursorPreview.endFill();
@@ -284,7 +285,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
                 broadcastToolPresence('areaPick', { cells: [], tokens: [], placedCells: _persistCellKeys, labels: _persistLabels, relatedToken: _persistRelated });
                 return;
             }
-            cursorPreview.lineStyle(2, 0x0088ff, 0.6);
+            cursorPreview.lineStyle(gridLineWidth(2), 0x0088ff, 0.6);
             cursorPreview.beginFill(0x0088ff, 0.12);
             _paintCells(cursorPreview, r.affected);
             cursorPreview.endFill();
@@ -340,7 +341,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
                 };
                 canvas.app.ticker.add(_persistPulse);
             }
-            _persistGfx.lineStyle(2, 0xffd84a, 0.7);
+            _persistGfx.lineStyle(gridLineWidth(2), 0xffd84a, 0.7);
             _persistGfx.beginFill(0xffd84a, 0.22);
             _paintCells(_persistGfx, r.affected);
             _persistGfx.endFill();
@@ -355,9 +356,9 @@ export function pickAreaTargetToggle(casterToken = null, opts = {}) {
                 }
             } else if (r.elevAware && r.labelPt) {
                 // flat line -> single arrow; blast/cone/burst -> top/bottom band
-                const label = new PIXI.Text(r.elevByCell ? elevText(r.elev) : bandLabel(r), {
+                const label = makeText(r.elevByCell ? elevText(r.elev) : bandLabel(r), {
                     fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
-                    fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold', align: 'center',
+                    fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold', align: 'center',
                 });
                 label.anchor.set(0.5);
                 label.x = r.labelPt.x;

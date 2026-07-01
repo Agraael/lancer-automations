@@ -1,10 +1,10 @@
 /* global canvas, PIXI, game, Hooks, performance */
 
 import { isHexGrid, drawHexAt, getOccupiedOffsets } from "../combat/grid-helpers.js";
+import { gridLineWidth } from "./canvas-helpers.js";
 
-// Single-target shapes: a yellow pulsing footprint per game.user.target, EXCEPT tokens whose
-// footprint overlaps a placed AoE shape (the big shape represents those). Live only during a
-// targeting session (attack HUD open / a picker active); reconciled on every target change.
+// Yellow pulsing footprint per game.user.target, minus tokens under a placed AoE shape.
+// Live only during a targeting session (HUD/picker); reconciled on every target change.
 
 let _persistG = null;              // Container above tokens
 const _persistShapes = new Map();  // tokenId -> Graphics
@@ -33,7 +33,7 @@ function ensureContainer() {
 
 function drawShape(token) {
     const g = new PIXI.Graphics();
-    g.lineStyle(4, 0xffd84a, 0.85);
+    g.lineStyle(gridLineWidth(4), 0xffd84a, 0.85);
     g.beginFill(0xffd84a, 0.22);
     if (isHexGrid()) {
         for (const o of getOccupiedOffsets(token))

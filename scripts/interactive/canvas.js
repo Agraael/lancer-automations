@@ -11,6 +11,7 @@ export {
     showOverlapStackPicker,
     cancelRulerDrag,
     applyKnockbackMoves,
+    gridLineWidth,
 } from "./canvas-helpers.js";
 
 export { chooseToken } from "./tools/chooseToken.js";

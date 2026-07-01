@@ -17,7 +17,7 @@ import {
 import {
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     makeSafe, createCursorPreview, drawRangeHighlight,
-    _groupCellsByDistance, _makeRangePulseTick,
+    _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
@@ -139,7 +139,7 @@ export function placeToken(options = {}) {
                     rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.1, false);
                 } else {
                     const hl = new PIXI.Graphics();
-                    hl.lineStyle(2, 0x888888, 0.3);
+                    hl.lineStyle(gridLineWidth(2), 0x888888, 0.3);
                     hl.beginFill(0x888888, 0.1);
                     for (const key of inRangeSet) {
                         const [col, row] = key.split(',').map(Number);
@@ -174,9 +174,9 @@ export function placeToken(options = {}) {
             return tAPI ? (Number(getHexGroundElevation(offset.col, offset.row, tAPI)) || 0) : 0;
         };
         const elevAt = (offset) => (autoElevation ? groundAt(offset) : 0) + pendingElevationOffset;
-        const cursorElevLabel = new PIXI.Text('', {
+        const cursorElevLabel = makeText('', {
             fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
-            fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+            fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold',
         });
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
@@ -402,19 +402,19 @@ export function placeToken(options = {}) {
         const drawPlacementMarker = (centerCol, centerRow, elev) => {
             const container = new PIXI.Container();
             const graphics = new PIXI.Graphics();
-            graphics.lineStyle(2, 0xff6400, 0.8);
+            graphics.lineStyle(gridLineWidth(2), 0xff6400, 0.8);
             graphics.beginFill(0xff6400, 0.3);
             drawOffsets(graphics, getProtoOffsets(centerCol, centerRow));
             graphics.endFill();
             container.addChild(graphics);
 
             const center = getHexCenter(centerCol, centerRow);
-            const label = new PIXI.Text(elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`, {
+            const label = makeText(elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`, {
                 fontFamily: 'Arial',
                 fontSize: Math.max(14, gridSize * 0.22),
                 fill: 0xffffff,
                 stroke: 0x000000,
-                strokeThickness: 4,
+                strokeThickness: gridLineWidth(4),
                 fontWeight: 'bold'
             });
             label.anchor.set(0.5);
@@ -453,7 +453,7 @@ export function placeToken(options = {}) {
             const color = inRange ? 0x0088ff : 0xff0000;
             lastCursorColor = color;
             cursorPreview.clear();
-            cursorPreview.lineStyle(2, color, 0.8);
+            cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
             cursorPreview.beginFill(color, 0.4);
             drawOffsets(cursorPreview, getProtoOffsets(offset.col, offset.row));
             cursorPreview.endFill();

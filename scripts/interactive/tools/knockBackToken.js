@@ -15,7 +15,7 @@ import {
 
 import {
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    makeSafe, createCursorPreview, drawRangeHighlight, applyKnockbackMoves,
+    makeSafe, createCursorPreview, drawRangeHighlight, applyKnockbackMoves, gridLineWidth, makeText,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
@@ -68,9 +68,9 @@ export function knockBackToken(tokens, distance, options = {}) {
         };
         const elevAtDest = (token, dest) => groundUnder(token, dest) + pendingElevationOffset;
         const elevStr = (elevation) => elevation > 0 ? `↑ ${elevation}` : elevation < 0 ? `↓ ${-elevation}` : `↕ 0`;
-        const cursorElevLabel = new PIXI.Text('', {
+        const cursorElevLabel = makeText('', {
             fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
-            fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+            fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold',
         });
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
@@ -242,7 +242,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             const gridSize = canvas.grid.size;
 
             // Draw Original Position (Yellow)
-            trace.lineStyle(2, 0xffff00, 0.8);
+            trace.lineStyle(gridLineWidth(2), 0xffff00, 0.8);
             trace.beginFill(0xffff00, 0.3);
             for (const cellOffset of getOccupiedOffsets(token)) {
                 if (isHexGrid())
@@ -254,7 +254,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             trace.endFill();
 
             // Draw Target Position (Orange)
-            trace.lineStyle(2, 0xff6400, 0.8);
+            trace.lineStyle(gridLineWidth(2), 0xff6400, 0.8);
             trace.beginFill(0xff6400, 0.3);
             for (const cellOffset of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
                 if (isHexGrid())
@@ -268,7 +268,7 @@ export function knockBackToken(tokens, distance, options = {}) {
             // Draw Line
             const centerStart = token.center;
             const centerEnd = { x: targetX + token.w/2, y: targetY + token.h/2 };
-            trace.lineStyle(3, 0xffffff, 1);
+            trace.lineStyle(gridLineWidth(3), 0xffffff, 1);
             trace.moveTo(centerStart.x, centerStart.y);
             trace.lineTo(centerEnd.x, centerEnd.y);
 
@@ -351,7 +351,7 @@ export function knockBackToken(tokens, distance, options = {}) {
                     color = 0xff0000;
                 }
 
-                cursorPreview.lineStyle(2, color, 0.8);
+                cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
                 cursorPreview.beginFill(color, alpha);
                 if (isHexGrid()) {
                     drawHexAt(cursorPreview, o.col, o.row);

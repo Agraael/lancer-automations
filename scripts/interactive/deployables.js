@@ -6,7 +6,7 @@ import {
 } from "./cards.js";
 
 import {
-    drawRangeHighlight, placeToken, chooseToken
+    drawRangeHighlight, placeToken, chooseToken, gridLineWidth
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
@@ -2262,7 +2262,7 @@ export async function recallDeployable(ownerToken) {
         const tokenActor = token.actor;
         if (!tokenActor?.system?.recall) {
             const hl = new PIXI.Graphics();
-            hl.lineStyle(2, 0xff4444, 0.8);
+            hl.lineStyle(gridLineWidth(2), 0xff4444, 0.8);
             hl.beginFill(0xff4444, 0.25);
             if (isHexGrid()) {
                 const offsets = getOccupiedOffsets(token);

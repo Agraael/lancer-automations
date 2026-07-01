@@ -1,10 +1,9 @@
 /* global game, canvas, PIXI, Hooks, setInterval, clearInterval */
 
 import { isHexGrid, getHexCenter, drawHexAt, getOccupiedOffsets } from "../combat/grid-helpers.js";
-import { addGraphicsBelowTokens, destroyGraphics } from "./canvas-helpers.js";
+import { addGraphicsBelowTokens, destroyGraphics, gridLineWidth, makeText } from "./canvas-helpers.js";
 
-// Live overlay of other clients' interactive tools (target pickers, chooseToken, placement, moves).
-// Same colours as the local tool but more transparent, so each client can tell it's a remote ghost.
+// Live overlay of other clients' interactive tools, same colours but dimmer (remote ghost).
 
 const CHANNEL = 'module.lancer-automations';
 const STALE_MS = 2500;
@@ -26,7 +25,7 @@ function drawCell(g, col, row) {
     }
 }
 
-// --- Broadcast (local tool -> other clients) ---
+// Broadcast: local tool -> other clients.
 const _lastSig = new Map(); // kind -> signature
 const _lastAt = new Map();  // kind -> timestamp
 
@@ -95,7 +94,7 @@ export function startToolHeartbeat(kind, getData) {
     };
 }
 
-// --- Remote render (other clients -> me) ---
+// Remote render: other clients -> me.
 const _ghosts = new Map(); // `${userId}|${kind}` -> { container, ts }
 
 const ghostKey = (userId, kind) => `${userId}|${kind}`;
@@ -114,7 +113,7 @@ export function onRemotePresence(payload) {
     const g = new PIXI.Graphics();
     // Trace origin footprints: mirror the local origin colour (yellow by default), more transparent.
     const originColor = payload.originColor ?? 0xffff00;
-    g.lineStyle(2, originColor, 0.45);
+    g.lineStyle(gridLineWidth(2), originColor, 0.45);
     g.beginFill(originColor, 0.08);
     for (const ckey of payload.originCells ?? []) {
         const [col, row] = ckey.split(',').map(Number);
@@ -123,7 +122,7 @@ export function onRemotePresence(payload) {
     g.endFill();
     // Placed/confirmed shapes: mirror the local placed colour (yellow by default), more transparent.
     const placedColor = payload.placedColor ?? 0xffd84a;
-    g.lineStyle(2, placedColor, 0.5);
+    g.lineStyle(gridLineWidth(2), placedColor, 0.5);
     g.beginFill(placedColor, 0.1);
     for (const ckey of payload.placedCells ?? []) {
         const [col, row] = ckey.split(',').map(Number);
@@ -132,7 +131,7 @@ export function onRemotePresence(payload) {
     g.endFill();
     // Live cursor preview: mirror the local cursor colour (blue by default), more transparent.
     const cellColor = payload.cellColor ?? 0x0088ff;
-    g.lineStyle(2, cellColor, 0.4);
+    g.lineStyle(gridLineWidth(2), cellColor, 0.4);
     g.beginFill(cellColor, 0.06);
     for (const ckey of payload.cells ?? []) {
         const [col, row] = ckey.split(',').map(Number);
@@ -140,7 +139,7 @@ export function onRemotePresence(payload) {
     }
     g.endFill();
     // Highlighted tokens: same cyan as the local highlight, more transparent.
-    g.lineStyle(3, 0x00ffff, 0.45);
+    g.lineStyle(gridLineWidth(3), 0x00ffff, 0.45);
     g.beginFill(0x00ffff, 0.07);
     for (const id of payload.tokens ?? []) {
         const t = canvas.tokens.get(id);
@@ -151,7 +150,7 @@ export function onRemotePresence(payload) {
     g.endFill();
     // Trace lines (origin -> chosen destination); drawn last so no fill bleeds in.
     const lineColor = payload.lineColor ?? 0xffffff;
-    g.lineStyle(3, lineColor, 0.5);
+    g.lineStyle(gridLineWidth(3), lineColor, 0.5);
     for (const ln of payload.lines ?? []) {
         g.moveTo(ln.x1, ln.y1);
         g.lineTo(ln.x2, ln.y2);
@@ -159,12 +158,12 @@ export function onRemotePresence(payload) {
     container.addChild(g);
     // Elevation labels (band / per-cell), white, semi-transparent.
     for (const l of payload.labels ?? []) {
-        const txt = new PIXI.Text(l.text, {
+        const txt = makeText(l.text, {
             fontFamily: 'Arial',
             fontSize: Math.max(12, canvas.grid.size * 0.18),
             fill: 0xffffff,
             stroke: 0x000000,
-            strokeThickness: 3,
+            strokeThickness: gridLineWidth(3),
             fontWeight: 'bold',
             align: 'center',
         });

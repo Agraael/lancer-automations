@@ -17,7 +17,7 @@ import {
 import {
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     makeSafe, createCursorPreview, drawRangeHighlight,
-    _groupCellsByDistance, _makeRangePulseTick,
+    _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
@@ -83,9 +83,9 @@ export async function moveToken(token, options = {}) {
             };
             const elevAtDest = (dest) => (autoElevation ? groundUnder(dest) : 0) + pendingElevationOffset;
             const elevStr = (elev) => elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`;
-            const cursorElevLabel = new PIXI.Text('', {
+            const cursorElevLabel = makeText('', {
                 fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
-                fill: 0xffffff, stroke: 0x000000, strokeThickness: 4, fontWeight: 'bold',
+                fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold',
             });
             cursorElevLabel.anchor.set(0.5);
             cursorElevLabel.visible = false;
@@ -185,7 +185,7 @@ export async function moveToken(token, options = {}) {
                 trace = new PIXI.Graphics();
                 const gridSize = canvas.grid.size;
                 // Original position (yellow)
-                trace.lineStyle(2, 0xffff00, 0.8);
+                trace.lineStyle(gridLineWidth(2), 0xffff00, 0.8);
                 trace.beginFill(0xffff00, 0.3);
                 for (const cellOffset of getOccupiedOffsets(token)) {
                     if (isHexGrid())
@@ -196,7 +196,7 @@ export async function moveToken(token, options = {}) {
                 }
                 trace.endFill();
                 // Target position (green for teleport)
-                trace.lineStyle(2, 0x00cc66, 0.8);
+                trace.lineStyle(gridLineWidth(2), 0x00cc66, 0.8);
                 trace.beginFill(0x00cc66, 0.3);
                 for (const cellOffset of getOccupiedOffsets(token, { x: targetX, y: targetY })) {
                     if (isHexGrid())
@@ -207,7 +207,7 @@ export async function moveToken(token, options = {}) {
                 }
                 trace.endFill();
                 // Dashed line
-                trace.lineStyle(3, 0x00cc66, 0.8);
+                trace.lineStyle(gridLineWidth(3), 0x00cc66, 0.8);
                 const startCenter = token.center;
                 trace.moveTo(startCenter.x, startCenter.y);
                 trace.lineTo(targetX + token.w / 2, targetY + token.h / 2);
@@ -225,7 +225,7 @@ export async function moveToken(token, options = {}) {
                 const color = inRange ? 0x00cc66 : 0xff0000;
                 lastCursorColor = color;
                 const alpha = inRange ? 0.4 : 0.5;
-                cursorPreview.lineStyle(2, color, 0.8);
+                cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
                 cursorPreview.beginFill(color, alpha);
                 for (const cellOffset of offsets) {
                     if (isHexGrid())
