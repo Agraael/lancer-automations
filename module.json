@@ -73,6 +73,10 @@
             {
                 "id": "sequencer",
                 "type": "module"
+            },
+            {
+                "id": "JB2A_DnD5e",
+                "type": "module"
             }
         ],
         "recommends": [
@@ -120,14 +124,6 @@
                 "id": "wall-height",
                 "type": "module",
                 "reason": "Required for elevation-aware Token Blocks Line of Sight (lets same-height tokens peek over each other)."
-            },
-            {
-                "id": "jb2a_patreon",
-                "type": "module"
-            },
-            {
-                "id": "JB2A_DnD5e",
-                "type": "module"
             },
             {
                 "id": "force-client-settings",
