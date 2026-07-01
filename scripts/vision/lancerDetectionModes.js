@@ -385,10 +385,11 @@ function _sanitizeMode(m) {
 function _augmentDetectionModes(existing) {
     const original = [...(existing ?? [])];
     const byId = new Map(original.filter(m => m?.id).map(m => [m.id, _sanitizeMode(m)]));
+    // range null = unlimited (Foundry preps it to Infinity); 0 would mean "detects nothing"
     if (!byId.has('lancerSensor'))
-        byId.set('lancerSensor', { id: 'lancerSensor', enabled: true, range: 0 });
+        byId.set('lancerSensor', { id: 'lancerSensor', enabled: true, range: null });
     if (!byId.has('lancerAwareness'))
-        byId.set('lancerAwareness', { id: 'lancerAwareness', enabled: true, range: 0 });
+        byId.set('lancerAwareness', { id: 'lancerAwareness', enabled: true, range: null });
     const ordered = [];
     for (const id of _CANONICAL_ORDER) {
         if (byId.has(id)) {

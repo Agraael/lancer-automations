@@ -198,6 +198,11 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             const waveAlpha = wrappedDist > ringWidth ? 0 : peakAlpha * (1 - wrappedDist / ringWidth);
             const fillAlpha = Math.min(1, baseAlpha + waveAlpha);
             const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
+            if (lineAlpha > 0) {
+                // dark halo under the bright pulse line so the wave reads on light + dark maps
+                pulseGraphic.lineStyle(lineWidth + 1, 0x000000, lineAlpha);
+                _paintCells(pulseGraphic, ringCells);
+            }
             pulseGraphic.lineStyle(lineWidth, lineColor, lineAlpha);
             pulseGraphic.beginFill(color, fillAlpha);
             _paintCells(pulseGraphic, ringCells);
@@ -211,10 +216,14 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
     const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
     const lineAlpha = opts.lineAlpha ?? (isHexGrid() ? 0.4 : 0.7);
     const lineWidth = opts.lineWidth ?? 2;
-    const lineColor = opts.lineColor ?? color;
+    const lineColor = opts.lineColor ?? 0xFFFFFF;
 
-    if (lineWidth > 0 && lineAlpha > 0)
-        highlight.lineStyle(lineWidth, lineColor, lineAlpha);
+    // Dark halo under a bright line so the border reads on light AND dark maps.
+    if (lineWidth > 0 && lineAlpha > 0) {
+        highlight.lineStyle(lineWidth + 2, 0x000000, Math.min(1, lineAlpha + 0.25));
+        _paintCells(highlight, inRange);
+        highlight.lineStyle(lineWidth, lineColor, Math.min(1, lineAlpha + 0.2));
+    }
     if (alpha > 0)
         highlight.beginFill(color, alpha);
     _paintCells(highlight, inRange);

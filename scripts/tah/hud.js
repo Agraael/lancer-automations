@@ -1552,7 +1552,7 @@ export class LancerHUD {
     _catActionsPilot(/** @type {any} */ actor) {
         const ap = a => this._actionPopup(a);
         const token = this._token;
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
+        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
         const basicQuick = () => [
             this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, 'When you BOOST, you move at least 1 space, up to your SPEED. This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
             this._simpleItem('Hide',     'systems/lancer/assets/icons/status_hidden.svg',    { name: 'Hide',     activation: 'Quick'          }, 'Obscure your position, becoming HIDDEN and unable to be identified, precisely located, or targeted directly by attacks or hostile actions.'),
@@ -1805,7 +1805,7 @@ export class LancerHUD {
     _catQuickActions() {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
+        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
         const basicChildren = () => {
             const items = [
                 this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, 'When you BOOST, you move at least 1 space, up to your SPEED. This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
@@ -1895,7 +1895,7 @@ export class LancerHUD {
 
     _catFreeActions() {
         const actor = this._actor;
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? true;
+        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
         return {
             label: 'Free Actions',
             colLabel: 'Free Actions',

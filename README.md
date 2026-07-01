@@ -23,7 +23,7 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 ---
 
-Welcome to Lancer Automations. What began as a tiny Lancer QoL tweak for my own games grew into something much bigger: a way to play Lancer on Foundry VTT with a deep layer of automation, UI, and quality-of-life on top.
+Welcome to Lancer Automations. What began as a tiny Lancer QoL tweak for my own games grew into something much bigger: a way to play Lancer on Foundry VTT with a layer of automation, UI, and quality-of-life on top.
 
 At its heart is a powerful automation engine that can automate almost any item from any LCP, plus a large toolbox for picking tokens, spawning tokens, handling network messages, asking players for choices, and much more.
 
@@ -33,7 +33,7 @@ A lot of it weaves right into the interface, so if you aren't deep in the Lancer
 
 > This is a very dense, heavy module with hundreds of features. Think of it as a game-system extension, not a simple add-on: it overlaps with, and in many ways replaces, two of the most-used Lancer modules (Token Action HUD and Lancer QoL), and some of its changes reach as deep as GPU performance. You'll meet options and tweaks in every corner, so it helps to already know Foundry VTT and the Lancer system well. If you're new to Foundry, hold off and get comfortable with the platform first, or you risk losing a lot of time.
 >
-> **The default setup is more than enough for most Lancer GMs.** The engine underneath is extremely powerful but genuinely complex, and writing your own custom activations and effects takes real coding know-how. If you want to go there and get stuck, ask me on Discord, I'm happy to help.
+> **The default setup is more than enough for most Lancer GMs.** The engine underneath is capable but genuinely complex, and writing your own custom activations and effects takes real coding know-how. If you want to go there and get stuck, ask me on Discord, I'm happy to help.
 >
 > **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, but that's the extent of it for now. The optional personal activation set is a separate thing: it's literally my own automations for my own games (my NPCs, my items), shared as-is. Do not treat that list as part of the core module, and don't install expecting your NPCs to be automated out of the box. People keep assuming otherwise.
 >
@@ -254,7 +254,7 @@ Through the automation engine and many tweaks to the Lancer system, Lancer Autom
 
 <img align="right" src="doc/img/feature-fx.png" width="53%"/>
 
-There's a lot more flavor in Lancer Automations than just JB2A and Lancer Weapon FX. You get many sounds and graphical effects throughout the module that feel good and break up the plain Foundry VTT experience. Almost all of them can be tweaked or disabled.
+There's more flavor in Lancer Automations than just JB2A and Lancer Weapon FX. Sounds and graphical effects run throughout the module, and almost all of them can be tweaked or disabled.
 
 → Full guide: [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md)
 

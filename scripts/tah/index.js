@@ -174,7 +174,7 @@ Hooks.on('init', () => {
         scope: 'client',
         config: false,
         type: Boolean,
-        default: true,
+        default: false,
     });
     game.settings.register(MODULE, 'tah.rangePreviewOnAttackCard', {
         name: 'Range Preview on Attack Card',
