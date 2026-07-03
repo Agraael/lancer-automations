@@ -1239,6 +1239,16 @@ export class ReactionConfig extends FormApplication {
             }
         });
 
+        html.find('.export-pack-btn').click(async () => {
+            const mod = await import('./reaction-export-import.js');
+            mod.openPackExport();
+        });
+
+        html.find('.import-pack-btn').click(async () => {
+            const mod = await import('./reaction-export-import.js');
+            mod.openPackImport(() => self.render());
+        });
+
         html.find('.rename-folder-btn').click(async function (ev) {
             ev.stopPropagation();
             const oldName = $(this).closest('.category-folder').data('folder');
