@@ -3,7 +3,9 @@ import { getSupabase } from "./supabase-client.js";
 
 const NEWS_MODULE_ID = "lancer-automations";
 const NEWS_REPO = "Agraael/lancer-automations";
-const NEWS_URL = `modules/lancer-automations/news.json`;
+const NEWS_BRANCH = "main";
+const NEWS_URL = `https://raw.githubusercontent.com/${NEWS_REPO}/${NEWS_BRANCH}/news.json`;
+const NEWS_URL_LOCAL = `modules/lancer-automations/news.json`;
 const RELEASES_URL = `https://api.github.com/repos/${NEWS_REPO}/releases`;
 const SEEN_SETTING = "seenNewsIds";
 const NEWS_CONSENT_KEY = "dataConsent";
@@ -25,15 +27,17 @@ function _getRole() {
 }
 
 async function _fetchNews() {
-    try {
-        const res = await fetch(NEWS_URL, { cache: "no-store" });
-        if (!res.ok)
-            return null;
-        return await res.json();
-    } catch (err) {
-        console.warn("Lancer Automations | News fetch failed:", err);
-        return null;
+    // Remote first (live, decoupled from module version); local bundled copy as offline fallback.
+    for (const url of [NEWS_URL, NEWS_URL_LOCAL]) {
+        try {
+            const res = await fetch(url, { cache: "no-store" });
+            if (res.ok)
+                return await res.json();
+        } catch (err) {
+            console.warn(`Lancer Automations | News fetch failed (${url}):`, err);
+        }
     }
+    return null;
 }
 
 async function _fetchReleases() {
@@ -81,7 +85,8 @@ function _renderEntry(entry) {
 
 function _pollState(entry) {
     const poll = entry?.poll;
-    if (!poll?.tableName || !Array.isArray(poll.fields) || poll.fields.length === 0) return null;
+    if (!poll?.tableName || !Array.isArray(poll.fields) || poll.fields.length === 0)
+        return null;
     const now = new Date();
     const expired = poll.expiresAt ? (new Date(poll.expiresAt) < now) : false;
     let responded = false;
@@ -94,7 +99,8 @@ function _pollState(entry) {
 
 function _renderField(field) {
     const name = String(field?.name ?? "").trim();
-    if (!name) return "";
+    if (!name)
+        return "";
     const label = String(field?.label ?? name);
     const ph = field?.placeholder ? `placeholder="${String(field.placeholder).replaceAll('"', "&quot;")}"` : "";
     const required = field?.required ? "required" : "";
@@ -124,7 +130,8 @@ function _renderField(field) {
 
 function _renderPoll(entry) {
     const pollInfo = _pollState(entry);
-    if (!pollInfo) return "";
+    if (!pollInfo)
+        return "";
     const { poll, expired, responded } = pollInfo;
     const wrap = (inner) => `
         <div class="lancer-poll" data-poll-id="${entry.id}" data-poll-table="${poll.tableName}"
@@ -158,10 +165,15 @@ function _collectInstallContext() {
     const ctx = {};
     try {
         const consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
-        if (consent === "gm" || consent === "player") ctx.role = consent;
+        if (consent === "gm" || consent === "player")
+            ctx.role = consent;
     } catch { /* ignore */ }
-    try { ctx.language = game.i18n?.lang ?? null; } catch { /* ignore */ }
-    for (const k of Object.keys(ctx)) if (ctx[k] == null) delete ctx[k];
+    try {
+        ctx.language = game.i18n?.lang ?? null;
+    } catch { /* ignore */ }
+    for (const k of Object.keys(ctx))
+        if (ctx[k] == null)
+            delete ctx[k];
     return ctx;
 }
 
@@ -183,11 +195,13 @@ async function _submitPoll(pollEl) {
     const table = pollEl.dataset.pollTable;
     const form = pollEl.querySelector("form.poll-form");
     const status = pollEl.querySelector(".poll-status");
-    if (!form || !table || !pollId) return;
+    if (!form || !table || !pollId)
+        return;
     const data = {};
     for (const el of form.querySelectorAll("[name]")) {
         const v = (el.value ?? "").trim();
-        if (v !== "") data[el.name] = v;
+        if (v !== "")
+            data[el.name] = v;
     }
     const installId = await _getOrCreateInstallId();
     const context = _collectInstallContext();
@@ -196,7 +210,8 @@ async function _submitPoll(pollEl) {
     form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = true);
     try {
         const { error } = await getSupabase().from(table).upsert(payload, { onConflict: "install_id" });
-        if (error) throw error;
+        if (error)
+            throw error;
         const list = new Set(game.settings.get(NEWS_MODULE_ID, POLL_RESPONDED_SETTING) || []);
         list.add(pollId);
         await game.settings.set(NEWS_MODULE_ID, POLL_RESPONDED_SETTING, [...list]);
@@ -210,10 +225,12 @@ async function _submitPoll(pollEl) {
 }
 
 function _attachPollHandlers(rootEl) {
-    if (!rootEl) return;
+    if (!rootEl)
+        return;
     for (const pollEl of rootEl.querySelectorAll(".lancer-poll")) {
         const form = pollEl.querySelector("form.poll-form");
-        if (!form || form.dataset.bound === "1") continue;
+        if (!form || form.dataset.bound === "1")
+            continue;
         form.dataset.bound = "1";
         form.addEventListener("submit", (ev) => {
             ev.preventDefault();
@@ -341,12 +358,13 @@ function _showCombinedDialog({ news, update, firstRun }) {
         },
         default: "ok",
         close: () => {
-            ackNews(); /* don't auto-ack update on X — let it remind next time */
+            ackNews(); /* don't auto-ack update on X, let it remind next time */
         },
         render: (html) => {
             const root = /** @type {HTMLElement} */ (html instanceof jQuery ? html[0] : html);
             _attachPollHandlers(root);
-            if (!bindTabs) return;
+            if (!bindTabs)
+                return;
             root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} item */ (item) => {
                 item.addEventListener("click", () => {
                     const tab = item.dataset.tab;

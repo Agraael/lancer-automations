@@ -144,6 +144,14 @@
                 "<p>Hi there. There are a lot of you using this module, but not a lot of bug reports or feature requests come back. Not that I'm wishing for more, I just want to make sure you know where to find me.</p>",
                 "<p>The most common spot is <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">my channel on the Lancer Discord</a>. If you support me on <a href=\"https://www.patreon.com/cw/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a>, you can DM me directly. There aren't that many of you yet, so it stays manageable.</p>"
             ]
+        },
+        {
+            "id": "2026-07-11-battle-log-preview",
+            "date": "2026-07-11",
+            "title": "Battle Log is on the way",
+            "body": [
+                "<p>Hello! Quick little news: Battle Log is on the way. Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/little-news-163459252\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
         }
     ]
 }
