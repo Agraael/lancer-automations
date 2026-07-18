@@ -152,6 +152,15 @@
             "body": [
                 "<p>Hello! Quick little news: Battle Log is on the way. Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/little-news-163459252\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
             ]
+        },
+        {
+            "id": "2026-07-18-road-to-4-0-0",
+            "date": "2026-07-18",
+            "title": "Road to 4.0.0 + battle preview",
+            "body": [
+                "<p>Hey! New update on the way from the upcoming 4.0.0, plus a battle preview. Check it out, it's cool.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/road-to-4-0-0-164169571\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
         }
     ]
 }
