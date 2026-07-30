@@ -171,6 +171,15 @@
                 "<p>New dev update on what's coming in 4.0.0: HASE Contest, new targeting tools, an advanced measuring tool bar, and no-code resource options. Previews and visuals in the post.</p>",
                 "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advanced-tool-164616129\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
             ]
+        },
+        {
+            "id": "2026-07-31-advance-measure-pathfinding-3-9-9",
+            "date": "2026-07-31",
+            "title": "Advanced Measuring, Pathfinding, Early 3.9.9 test",
+            "body": [
+                "<p>New update: Advanced Measure tool rework, pathfinding matching the movement-range display, and the new onboarding. An early 3.9.9 test build is up for paid members, Battle Log still cooking for 4.0.0.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advance-early-3-165292586\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
         }
     ]
 }
