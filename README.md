@@ -52,19 +52,23 @@ A lot of it weaves right into the interface, so if you aren't deep in the Lancer
 
 A heads-up: not all of it is built to be fully customizable, a lot is just how I see the game. A game for everyone is a game for no one, and Lancer Automations will shape how you play. Once you're in, it's hard to leave, so be careful.
 
-### ⚠️ Please read before you install
+<details>
+<summary><h2>⚠️ Please read before you install ⚠️</h2></summary>
+<br>
 
-> **First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
->
-> This is a very dense, heavy module with hundreds of features, closer to a game-system extension than a simple add-on. It's modular, and many of its systems are built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, combat tooltips, and more), with some changes reaching as deep as GPU performance. It helps to already know Foundry VTT and the Lancer system well; if you're new to Foundry, get comfortable there first or you risk losing a lot of time.
->
-> **The default setup is more than enough for most Lancer GMs.** The engine underneath is capable but genuinely complex, and writing your own custom activations and effects takes real coding know-how. If you want to go there and get stuck, ask me on Discord.
->
-> **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, but that's the extent of it for now. The optional personal activation set is separate: my own automations for my own games (my NPCs, my items), shared as-is. Don't treat it as part of the core module, and don't install expecting your NPCs automated by default.
->
-> **Docs are split in two:** feature guides (this README links to each) explain what a feature does and how to reach it, and the `doc/API_*.md` files cover the code side. For the very latest additions, the blog posts on my [Patreon](https://www.patreon.com/cw/LaSossis) are the fastest way to keep up (with illustrations).
->
-> **Before asking questions**, please inform yourself, explore, and try stuff first. It's a lot easier on me if I don't have to answer the same obvious questions, and it may be that I just haven't documented it yet. Thanks.
+**First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
+
+This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well; if you're new to Foundry, get comfortable there first or you risk losing a lot of time.
+
+**The default setup is more than enough for most Lancer GMs.** Writing your own activations and effects takes real coding know-how; if you go there and get stuck, ask me on Discord.
+
+**It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal activation set is my own automations for my own games, shared as-is, not part of the core module.
+
+**Docs are split in two:** feature guides for what a feature does and how to reach it, `doc/API_*.md` for the code side. The very latest additions land first on my [Patreon](https://www.patreon.com/cw/LaSossis), with illustrations.
+
+**Before asking questions**, explore and try stuff first. It's a lot easier on me if I don't have to answer the same obvious questions, and it may be that I just haven't documented it yet. Thanks.
+
+</details>
 
 ## Where to reach me
 
