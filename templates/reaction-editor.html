@@ -6,7 +6,7 @@
         <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
             <span>General Activation</span>
-            <span style="font-weight: normal; font-size: 0.85em; color: #666;">(applies to all tokens, no item
+            <span style="font-weight: normal; font-size: 0.85em; color: var(--la-ink-dim);">(applies to all tokens, no item
                 required)</span>
         </label>
         <div
@@ -37,14 +37,14 @@
 
     <!-- Only On Source Match (General only - matches action name) -->
     <div class="form-group general-only"
-        style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--primary-color), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--primary-color), transparent 70%);">
+        style="{{#unless isGeneral}}display:none{{/unless}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--la-accent), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--la-accent), transparent 70%);">
         <label class="checkbox ps-tooltip"
-            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onInitAttack, onInitTechAttack, onInvoluntaryMove, onRoll) will work in this mode."
+            title="When enabled, this activation will only trigger when an action with a matching name is performed. The Activation Name above will be used to match against action names from flows. Only triggers that provide action names (onAttack, onHit, onMiss, onPreDamage, onDamage, onTechAttack, onTechHit, onTechMiss, onInitActivation, onActivation, onInitAttack, onInitTechAttack, onInvoluntaryMove, onRoll) will work in this mode."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
-        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches action name from trigger
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: var(--la-ink-dim);">Matches action name from trigger
         </p>
     </div>
 
@@ -79,11 +79,11 @@
                 style="margin-left: 8px; color: var(--primary-color); cursor: pointer; {{#unless foundItemUuid}}display:none;{{/unless}}"><i
                     class="fas fa-eye"></i></a>
             <a class="find-item-btn" title="Find Item"
-                style="margin-left: 6px; color: var(--primary-color); cursor: pointer;"><i class="fas fa-search"></i>
+                style="margin-left: 6px; color: var(--la-accent); cursor: pointer;"><i class="fas fa-search"></i>
                 Item Finder</a>
         </span>
         <a class="find-deployable-btn" title="Find Deployable LID"
-            style="color: var(--primary-color); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
+            style="color: var(--la-accent); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
             <i class="fas fa-rocket"></i> Deployable Finder
         </a>
     </div>
@@ -102,14 +102,14 @@
 
     <!-- Only On Source Match (Item-based only - matches item LID) -->
     <div class="form-group item-only"
-        style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--primary-color), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--primary-color), transparent 70%);">
+        style="{{#if isGeneral}}display:none{{/if}}; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--la-accent), transparent 90%); border-radius: 4px; border: 1px solid color-mix(in srgb, var(--la-accent), transparent 70%);">
         <label class="checkbox ps-tooltip"
             title="When enabled, this activation will only trigger when the trigger source matches this LID/UUID. Compared against the triggering item's LID, the triggering deployable's LID, and the triggering actor's UUID."
             style="display: flex; align-items: center; gap: 8px; font-weight: bold;">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
             <span>Only On Source Match</span>
         </label>
-        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: #888;">Matches triggering item LID,
+        <p class="notes" style="margin: 5px 0 0 26px; font-size: 0.85em; color: var(--la-ink-dim);">Matches triggering item LID,
             deployable LID, or actor UUID.</p>
     </div>
 
@@ -150,7 +150,7 @@
                     <div>
                         <label>Action Type <a
                                 title="For UI display only. Exception: 'Reaction' enables the 'Check Reaction' checkbox, which blocks activation if the token has no reaction available."
-                                style="color: #888; cursor: help;"><i class="fas fa-question-circle"></i></a></label>
+                                style="color: var(--la-ink-dim); cursor: help;"><i class="fas fa-question-circle"></i></a></label>
                         <select name="actionType" id="actionType">
                             {{#each actionTypeOptions}}
                             <option value="{{this}}" {{#if (eq ../actionType this)}}selected{{/if}}>{{this}}</option>
@@ -162,7 +162,7 @@
                     <div>
                         <label>Frequency <a
                                 title="For UI display only. Not currently enforced by the automation system."
-                                style="color: #888; cursor: help;"><i class="fas fa-question-circle"></i></a></label>
+                                style="color: var(--la-ink-dim); cursor: help;"><i class="fas fa-question-circle"></i></a></label>
                         <select name="frequency" id="frequency">
                             {{#each frequencyOptions}}
                             <option value="{{this}}" {{#if (eq ../frequency this)}}selected{{/if}}>{{this}}</option>
@@ -286,7 +286,7 @@
 
     <div style="margin-bottom: 6px; text-align: right;">
         <a id="open-trigger-ref"
-            style="font-size: 0.8em; cursor: pointer; color: var(--primary-color); text-decoration: none;"><i
+            style="font-size: 0.8em; cursor: pointer; color: var(--la-accent); text-decoration: none;"><i
                 class="fas fa-book"></i> Trigger Data Reference</a>
     </div>
 
@@ -418,7 +418,7 @@
         font-weight: bold;
         font-size: 0.95em;
         padding: 5px 8px;
-        color: #333;
+        color: var(--la-ink);
         user-select: none;
         list-style: none;
         display: flex;
@@ -474,8 +474,8 @@
     }
 
     #reaction-editor .window-content {
-        background: #f5f5f5;
-        color: #000;
+        background: var(--la-plate);
+        color: var(--la-ink);
         padding: 10px;
     }
 
@@ -501,7 +501,7 @@
 
     /* ===== Panels ===== */
     .panel-section {
-        background: #fff;
+        background: var(--la-plate);
         border: 1px solid #ccc;
         border-radius: 6px;
         padding: 10px;
@@ -519,7 +519,7 @@
         border-bottom: 2px solid var(--primary-color);
         font-size: 1.1em;
         font-weight: bold;
-        color: var(--primary-color);
+        color: var(--la-accent);
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
@@ -537,7 +537,7 @@
         font-weight: bold;
         font-size: 0.9em;
         margin-bottom: 3px;
-        color: #333;
+        color: var(--la-ink);
     }
 
     .options-grid {
@@ -575,7 +575,7 @@
         font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: var(--primary-color);
+        color: var(--la-accent);
         border-bottom: 1px solid color-mix(in srgb, var(--primary-color), transparent 80%);
         cursor: pointer;
         user-select: none;
@@ -637,7 +637,7 @@
     #reaction-editor textarea {
         border: 2px solid #999;
         background: #fff;
-        color: #000;
+        color: var(--la-ink);
         border-radius: 4px;
     }
 
@@ -655,16 +655,16 @@
 
     /* ===== Labels & Notes ===== */
     #reaction-editor label {
-        color: #333;
+        color: var(--la-ink);
     }
 
     #reaction-editor .notes {
-        color: #555;
+        color: var(--la-ink-dim);
     }
 
     #reaction-editor code {
         background: color-mix(in srgb, var(--primary-color), transparent 92%);
-        color: var(--primary-color);
+        color: var(--la-accent);
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 0.9em;
@@ -674,7 +674,7 @@
     .sheet-footer {
         position: sticky;
         bottom: 0;
-        background: #f5f5f5;
+        background: var(--la-plate);
         padding: 8px 0;
         z-index: 10;
         border-top: 1px solid #ccc;
@@ -703,7 +703,7 @@
     .optional {
         font-weight: normal;
         font-size: 0.8em;
-        color: #888;
+        color: var(--la-ink-dim);
         margin-left: 4px;
     }
 

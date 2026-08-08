@@ -1,6 +1,7 @@
 /*global game, console, fetch, Dialog, foundry, window */
 
-export async function getPendingUpdate(moduleId) {
+export async function getPendingUpdate(moduleId)
+{
     if (!game.user.isGM)
         return null;
 
@@ -12,40 +13,51 @@ export async function getPendingUpdate(moduleId) {
     if (!manifestUrl)
         return null;
 
-    try {
+    try
+    {
         let remoteVersion;
         let releaseNotes = "";
 
-        if (manifestUrl.includes("github.com") && manifestUrl.includes("/releases/")) {
+        if (manifestUrl.includes("github.com") && manifestUrl.includes("/releases/"))
+        {
             const parts = manifestUrl.split("/");
             const owner = parts[3];
             const repo = parts[4];
 
             const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
             const apiResponse = await fetch(apiUrl);
-            if (apiResponse.ok) {
+            if (apiResponse.ok)
+            {
                 const allReleases = await apiResponse.json();
-                const missed = allReleases.filter(r => {
+                const missed = allReleases.filter(r =>
+                {
                     const v = r.tag_name.replace(/^v/, "");
                     return foundry.utils.isNewerVersion(v, module.version);
                 });
-                if (missed.length > 0) {
+                if (missed.length > 0)
+                {
                     remoteVersion = missed[0].tag_name.replace(/^v/, "");
                     releaseNotes = missed
                         .map(r => `## ${r.tag_name}\n${r.body || ""}`)
                         .join("\n\n---\n\n");
                 }
-            } else {
+            }
+            else
+            {
                 const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/module.json`;
                 const rawResponse = await fetch(rawUrl);
-                if (rawResponse.ok) {
+                if (rawResponse.ok)
+                {
                     const remoteManifest = await rawResponse.json();
                     remoteVersion = remoteManifest.version;
                 }
             }
-        } else {
+        }
+        else
+        {
             const response = await fetch(manifestUrl);
-            if (response.ok) {
+            if (response.ok)
+            {
                 const remoteManifest = await response.json();
                 remoteVersion = remoteManifest.version;
             }
@@ -59,22 +71,27 @@ export async function getPendingUpdate(moduleId) {
             return null;
 
         return { module, newVersion: remoteVersion, releaseNotes };
-    } catch (error) {
+    }
+    catch (error)
+    {
         console.error(`${moduleId} | Version check failed:`, error);
         return null;
     }
 }
 
-export async function checkModuleUpdate(moduleId) {
+export async function checkModuleUpdate(moduleId)
+{
     const pending = await getPendingUpdate(moduleId);
     if (!pending)
         return;
     showUpdateDialog(pending.module, pending.newVersion, pending.releaseNotes);
 }
 
-function showUpdateDialog(module, newVersion, releaseNotes = "") {
+function showUpdateDialog(module, newVersion, releaseNotes = "")
+{
     let notesHtml = "";
-    if (releaseNotes) {
+    if (releaseNotes)
+    {
         const converter = new window.showdown.Converter();
         const htmlNotes = converter.makeHtml(releaseNotes);
         notesHtml = `
@@ -107,7 +124,8 @@ function showUpdateDialog(module, newVersion, releaseNotes = "") {
             dismiss: {
                 icon: '<i class="fas fa-times"></i>',
                 label: "Dismiss",
-                callback: () => {
+                callback: () =>
+                {
                     game.settings.set(module.id, 'lastNotifiedVersion', newVersion);
                 }
             },

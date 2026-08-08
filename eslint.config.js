@@ -1,9 +1,11 @@
 import globals from "globals";
+import stylistic from "@stylistic/eslint-plugin";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
     {
         files: ["**/*.js"],
+        plugins: { "@stylistic": stylistic },
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "module",
@@ -69,16 +71,18 @@ export default defineConfig([
             "use-isnan": "error",
             "no-loss-of-precision": "error",
 
-            // ── Formatting ─────────────────────────────────────────────────────────
-            indent: ["error", 4],
-            semi: ["error", "always"],
-            curly: "off",
-            "nonblock-statement-body-position": ["error", "below"],
-            "brace-style": ["error", "1tbs"],
-            "no-trailing-spaces": "error",
-            "eol-last": ["error", "always"],
+            // ── Brace style ────────────────────────────────────────────────────────
+            curly: ["error", "multi-or-nest"],
+            "@stylistic/brace-style": ["error", "allman"],
+            "@stylistic/nonblock-statement-body-position": ["error", "below"],
 
-            "max-len": ["error", {
+            // ── Formatting (@stylistic; core versions removed in ESLint 10) ──────────
+            "@stylistic/indent": ["error", 4],
+            "@stylistic/semi": ["error", "always"],
+            "@stylistic/no-trailing-spaces": "error",
+            "@stylistic/eol-last": ["error", "always"],
+
+            "@stylistic/max-len": ["error", {
                 code: 300,
                 ignoreComments: true,
                 ignoreUrls: true,
@@ -86,7 +90,7 @@ export default defineConfig([
                 ignoreTemplateLiterals: true
             }],
 
-            "object-property-newline": ["error", {
+            "@stylistic/object-property-newline": ["error", {
                 allowAllPropertiesOnSameLine: true
             }]
         }

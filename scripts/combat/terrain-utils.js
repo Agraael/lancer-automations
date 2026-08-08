@@ -1,34 +1,54 @@
 import { getOccupiedOffsets } from "./grid-helpers.js";
-import { getImmunityBonuses } from "../bonuses/genericBonuses.js";
+import { getImmunityBonuses, consumeImmunityUse } from "../bonuses/genericBonuses.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/network.js";
 
 /**
  * Get all grid cells occupied by a token.
- * @param {Token} token - The token to get cells for
+ * @param {Token} token
  * @returns {Array<[number, number]>} Array of [row, col] coordinates
  */
-export function getTokenCells(token) {
+export function getTokenCells(token)
+{
     const offsets = getOccupiedOffsets(token);
-    return offsets.map(o => [o.row, o.col]);
+    return offsets.map(offset => [offset.row, offset.col]);
 }
 
 const _terrainCache = {
     solidMap: new Map(),
+    cellStacks: new Map(),
     timestamp: 0,
     ttl: 2000
 };
 
-function _refreshSolidCache(terrainAPI) {
+function _refreshSolidCache(terrainAPI)
+{
     const now = Date.now();
-    if (now - _terrainCache.timestamp > _terrainCache.ttl) {
+    if (now - _terrainCache.timestamp > _terrainCache.ttl)
+    {
         const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
         _terrainCache.solidMap.clear();
-        for (const terrainType of terrainTypes) {
+        _terrainCache.cellStacks.clear();
+        for (const terrainType of terrainTypes)
+        {
             if (terrainType.usesHeight && terrainType.isSolid)
                 _terrainCache.solidMap.set(terrainType.id, terrainType);
         }
         _terrainCache.timestamp = now;
     }
+}
+
+// getCell is a THT terrain-stack lookup; cache the raw stack per cell (same 2s TTL as solidMap).
+// The solidity check still runs per call, so terrain-type edits apply without a stale result.
+function _cellTerrainStack(terrainAPI, col, row)
+{
+    const key = `${col},${row}`;
+    let stack = _terrainCache.cellStacks.get(key);
+    if (stack === undefined)
+    {
+        stack = terrainAPI.getCell(col, row) || [];
+        _terrainCache.cellStacks.set(key, stack);
+    }
+    return stack;
 }
 
 /**
@@ -38,14 +58,17 @@ function _refreshSolidCache(terrainAPI) {
  * @param {Object} [terrainAPI]
  * @returns {number}
  */
-export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainHeightTools) {
+export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainHeightTools)
+{
     if (!terrainAPI)
         return 0;
     _refreshSolidCache(terrainAPI);
     let maxTopElevation = 0;
-    const terrainStack = terrainAPI.getCell(col, row) || [];
-    for (const terrain of terrainStack) {
-        if (_terrainCache.solidMap.has(terrain.terrainTypeId)) {
+    const terrainStack = _cellTerrainStack(terrainAPI, col, row);
+    for (const terrain of terrainStack)
+    {
+        if (_terrainCache.solidMap.has(terrain.terrainTypeId))
+        {
             const topElevation = (terrain.elevation || 0) + (terrain.height || 0);
             if (topElevation > maxTopElevation)
                 maxTopElevation = topElevation;
@@ -56,14 +79,16 @@ export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainH
 
 /**
  * Get the maximum ground height under a token considering all occupied cells.
- * @param {Token} token - The token to check ground height for
+ * @param {Token} token
  * @param {Object} terrainAPI - The Terrain Height Tools API
- * @returns {number} Maximum ground height across all occupied cells
+ * @returns {number}
  */
-export function getMaxGroundHeightUnderToken(token, terrainAPI) {
+export function getMaxGroundHeightUnderToken(token, terrainAPI)
+{
     const cells = getTokenCells(token);
     let maxGroundElevation = 0;
-    for (const [row, col] of cells) {
+    for (const [row, col] of cells)
+    {
         const cellElevation = getHexGroundElevation(col, row, terrainAPI);
         if (cellElevation > maxGroundElevation)
             maxGroundElevation = cellElevation;
@@ -77,15 +102,19 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI) {
  * @param {Object} [terrainAPI]
  * @returns {boolean}
  */
-export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHeightTools) {
+export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHeightTools)
+{
     if (!terrainAPI)
         return false;
     const tokenElevation = token?.document?.elevation || 0;
     const ownCells = getTokenCells(token);
     const ownCellKeys = new Set(ownCells.map(([row, col]) => row + "," + col));
-    for (const [row, col] of ownCells) {
-        for (let rowDelta = -1; rowDelta <= 1; rowDelta++) {
-            for (let colDelta = -1; colDelta <= 1; colDelta++) {
+    for (const [row, col] of ownCells)
+    {
+        for (let rowDelta = -1; rowDelta <= 1; rowDelta++)
+        {
+            for (let colDelta = -1; colDelta <= 1; colDelta++)
+            {
                 if (rowDelta === 0 && colDelta === 0)
                     continue;
                 const neighborRow = row + rowDelta;
@@ -108,7 +137,8 @@ export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHei
  * @param {number | string} [damageValue=5]
  * @returns {Promise<void>}
  */
-async function _runDangerousZone(token, damageType, damageValue) {
+async function _runDangerousZone(token, damageType, damageValue)
+{
     const actor = token?.actor;
     if (!actor)
         return;
@@ -118,11 +148,10 @@ async function _runDangerousZone(token, damageType, damageValue) {
     if (lastTriggeredRound === currentRound && game.combat?.started)
         return;
 
-    if (game.combat?.started) {
+    if (game.combat?.started)
         await actor.setFlag("lancer-automations", "dangerousZoneRound", currentRound);
-    } else if (lastTriggeredRound !== undefined) {
+    else if (lastTriggeredRound !== undefined)
         await actor.unsetFlag("lancer-automations", "dangerousZoneRound");
-    }
 
     const damageTypeLabels = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
 
@@ -133,11 +162,11 @@ async function _runDangerousZone(token, damageType, damageValue) {
     const flow = new StatRollFlow(actor, { path: "system.eng", title: "Dangerous Terrain :: ENG" });
     const completed = await flow.begin();
 
-    if (completed && (flow.state.data?.result?.roll?.total ?? 10) < 10) {
+    if (completed && (flow.state.data?.result?.roll?.total ?? 10) < 10)
+    {
         const targetToken = /** @type {any} */ (token).object || token;
-        if (targetToken?.setTarget) {
+        if (targetToken?.setTarget)
             targetToken.setTarget(true, { releaseOthers: true, groupSelection: false });
-        }
 
         const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
         if (!DamageRollFlow)
@@ -163,7 +192,8 @@ async function _runDangerousZone(token, damageType, damageValue) {
  * @param {number | string} [damageValue=5]
  * @returns {Promise<void>}
  */
-export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5) {
+export async function triggerDangerousZoneFlow(token, damageType = "kinetic", damageValue = 5)
+{
     const actor = token?.actor;
     if (!actor)
         return;
@@ -190,14 +220,18 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
             {
                 text: "Activate (Ignore Terrain)",
                 icon: "fas fa-shield-alt",
-                callback: async () => {
+                callback: async () =>
+                {
                     ui.notifications.info(`${actorName} ignored dangerous terrain.`);
+                    if (immunityBonuses.length > 0)
+                        await consumeImmunityUse(actor, 'terrain');
                 }
             },
             {
                 text: "No (Apply Effect)",
                 icon: "fas fa-times",
-                callback: async () => {
+                callback: async () =>
+                {
                     await _runDangerousZone(token, damageType, damageValue);
                 }
             }

@@ -2,14 +2,17 @@
 
 import { injectExtraDataUtility } from './flows.js';
 import { accDiffTargetToken } from '../combat/grid-helpers.js';
-import { applyDamageImmunities, hasCritImmunity, hasHitImmunity, hasMissImmunity } from '../bonuses/genericBonuses.js';
+import { applyDamageImmunities, convertHeatToEnergyIfHeatless, hasCritImmunity, hasHitImmunity, hasMissImmunity, consumeImmunityUse, burnBonusUsageForFlow } from '../bonuses/genericBonuses.js';
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
 import { hasReactionAvailable } from '../tools/misc-tools.js';
+import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
+import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
 
-export async function onAttackStep(state) {
+export async function onAttackStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
@@ -43,7 +46,8 @@ export async function onAttackStep(state) {
     return true;
 }
 
-export async function onHitMissStep(state) {
+export async function onHitMissStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
@@ -67,7 +71,8 @@ export async function onHitMissStep(state) {
     const hitTargets = [];
     const missTargets = [];
 
-    for (let i = 0; i < hitResults.length; i++) {
+    for (let i = 0; i < hitResults.length; i++)
+    {
         const hitResult = hitResults[i];
         const targetToken = hitResult?.target ?? accDiffTargetToken(targetInfos[i]);
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
@@ -75,46 +80,58 @@ export async function onHitMissStep(state) {
         if (!targetToken)
             continue;
 
-        if (await hasCritImmunity(targetToken.actor, state.actor, state) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit)) {
+        if (await hasCritImmunity(targetToken.actor, state.actor, state) && (hitResult?.crit || state.data?.attack_results?.[i]?.crit))
+        {
             if (hitResult)
                 hitResult.crit = false;
             if (state.data?.attack_results?.[i])
                 state.data.attack_results[i].crit = false;
             ui.notifications.info(`${targetToken.name} is immune to Critical Hits!`);
+            await consumeImmunityUse(targetToken.actor, 'crit', state);
         }
 
         const missImmunity = await hasMissImmunity(targetToken.actor, state.actor, state);
         const hitImmunity = await hasHitImmunity(targetToken.actor, state.actor, state);
         if (missImmunity && hitImmunity)
             ui.notifications.info(`${targetToken.name} is immune to miss and hit - these effects cancel each other`);
-        else {
-            if (missImmunity && (hitResult?.miss || state.data?.attack_results?.[i]?.miss)) {
+        else
+        {
+            if (missImmunity && (hitResult?.miss || state.data?.attack_results?.[i]?.miss))
+            {
                 if (hitResult)
                     hitResult.hit = true;
                 if (state.data?.attack_results?.[i])
                     state.data.attack_results[i].hit = true;
                 ui.notifications.info(`${targetToken.name} is immune to miss - attack hits!`);
+                await consumeImmunityUse(targetToken.actor, 'miss', state);
             }
 
-            if (hitImmunity && (hitResult?.hit || state.data?.attack_results?.[i]?.hit)) {
-                if (hitResult) {
+            if (hitImmunity && (hitResult?.hit || state.data?.attack_results?.[i]?.hit))
+            {
+                if (hitResult)
+                {
                     hitResult.hit = false;
                     hitResult.crit = false;
                 }
-                if (state.data?.attack_results?.[i]) {
+                if (state.data?.attack_results?.[i])
+                {
                     state.data.attack_results[i].hit = false;
                     state.data.attack_results[i].crit = false;
                 }
                 ui.notifications.info(`${targetToken.name} is immune to Hits: attack misses!`);
+                await consumeImmunityUse(targetToken.actor, 'hit', state);
             }
         }
-        if (hitResult?.hit) {
+        if (hitResult?.hit)
+        {
             hitTargets.push({
                 target: targetToken,
                 roll: roll,
                 crit: hitResult?.crit || false
             });
-        } else {
+        }
+        else
+        {
             missTargets.push({
                 target: targetToken,
                 roll: roll
@@ -122,7 +139,8 @@ export async function onHitMissStep(state) {
         }
     }
 
-    if (hitTargets.length > 0) {
+    if (hitTargets.length > 0)
+    {
         await handleTrigger('onHit', {
             triggeringToken: token,
             weapon,
@@ -134,7 +152,8 @@ export async function onHitMissStep(state) {
             flowState: state
         });
     }
-    if (missTargets.length > 0) {
+    if (missTargets.length > 0)
+    {
         await handleTrigger('onMiss', {
             triggeringToken: token,
             weapon,
@@ -147,10 +166,44 @@ export async function onHitMissStep(state) {
         });
     }
 
+    await burnBonusUsageForFlow(state);
     return true;
 }
 
-export async function onDamageStep(state) {
+export async function onPreDamageStep(state)
+{
+    state = injectExtraDataUtility(state);
+    const actor = state.actor;
+    const item = state.item;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const weapon = item;
+
+    const actionData = {
+        type: state.data?.type || "attack",
+        title: state.data?.title || weapon?.name || "Attack",
+        action: { name: state.data?.title || weapon?.name || "Attack" },
+        detail: state.data?.effect || weapon?.system?.effect || "",
+        attack_type: state.data?.attack_type || "Ranged",
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        flowState: state
+    };
+
+    await handleTrigger('onPreDamage', {
+        triggeringToken: token,
+        weapon,
+        targets: (state.data?.hit_results ?? []).map(hitResult => hitResult.target).filter(Boolean),
+        attackType: actionData.attack_type,
+        actionName: actionData.title,
+        tags: actionData.tags,
+        actionData,
+        flowState: state
+    });
+
+    return true;
+}
+
+export async function onDamageStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
@@ -172,19 +225,29 @@ export async function onDamageStep(state) {
         flowState: state
     };
 
-    for (const targetInfo of targets) {
+    for (const targetInfo of targets)
+    {
         const targetToken = targetInfo.target;
         const isCrit = targetInfo.crit || false;
         const isHit = targetInfo.hit || false;
 
-        if (targetInfo.damage && targetToken.actor) {
+        if (targetInfo.damage && targetToken.actor)
+        {
+            const preTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state);
+            const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
+            if (postTotal < preTotal)
+                await consumeImmunityUse(targetToken.actor, 'damage', state);
+            targetInfo.damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.damage);
         }
+        if (Array.isArray(targetInfo.bonus_damage) && targetToken.actor)
+            targetInfo.bonus_damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.bonus_damage);
 
-        const targetDamages = targetInfo.damage?.map(d => d.amount ?? d.val) || [];
-        const targetTypes = targetInfo.damage?.map(d => d.type) || [];
+        const targetDamages = targetInfo.damage?.map(damage => damage.amount ?? damage.val) || [];
+        const targetTypes = targetInfo.damage?.map(damage => damage.type) || [];
 
-        if (targetDamages.length > 0) {
+        if (targetDamages.length > 0)
+        {
             await handleTrigger('onDamage', {
                 triggeringToken: token,
                 weapon,
@@ -202,10 +265,12 @@ export async function onDamageStep(state) {
         }
     }
 
+    await burnBonusUsageForFlow(state);
     return true;
 }
 
-export async function onPreStructureStep(state) {
+export async function onPreStructureStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -217,11 +282,13 @@ export async function onPreStructureStep(state) {
 
     let cancelStructureTriggered = false;
     const cancelStructure = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelStructureTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "Structure damage has been prevented.",
         defaultTitle: "STRUCTURE PREVENTED",
     });
@@ -234,21 +301,23 @@ export async function onPreStructureStep(state) {
         flowState: state
     });
 
-    if (cancelStructureTriggered) {
+    if (cancelStructureTriggered)
+    {
         await cancelStructure.wait();
         return false;
     }
     return true;
 }
 
-export async function onStructureStep(state) {
+export async function onStructureStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStructure = actor?.system?.structure?.value ?? 0;
     const roll = state.data?.result?.roll;
     const rollResult = roll?.total;
-    const rollDice = roll?.dice?.[0]?.results?.map(r => r.result) ?? [];
+    const rollDice = roll?.dice?.[0]?.results?.map(die => die.result) ?? [];
     if (!state.data)
         state.data = {};
     if (!state.data._cancelledBy)
@@ -256,19 +325,21 @@ export async function onStructureStep(state) {
 
     let cancelTriggered = false;
     const cancelStructureOutcome = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "Structure outcome has been overridden.",
         defaultTitle: "STRUCTURE OUTCOME OVERRIDDEN",
     });
 
-    const modifyRoll = (newTotal) => {
-        if (state.data?.result?.roll) {
+    const modifyRoll = (newTotal) =>
+    {
+        if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
-        }
     };
 
     await handleTrigger('onStructure', {
@@ -282,14 +353,16 @@ export async function onStructureStep(state) {
         flowState: state,
     });
 
-    if (cancelTriggered) {
+    if (cancelTriggered)
+    {
         await cancelStructureOutcome.wait?.();
         return false;
     }
     return true;
 }
 
-export async function onPreStressStep(state) {
+export async function onPreStressStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -301,11 +374,13 @@ export async function onPreStressStep(state) {
 
     let cancelStressTriggered = false;
     const cancelStress = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelStressTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "Stress damage has been prevented.",
         defaultTitle: "STRESS PREVENTED",
     });
@@ -318,21 +393,23 @@ export async function onPreStressStep(state) {
         flowState: state
     });
 
-    if (cancelStressTriggered) {
+    if (cancelStressTriggered)
+    {
         await cancelStress.wait();
         return false;
     }
     return true;
 }
 
-export async function onStressStep(state) {
+export async function onStressStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const remainingStress = actor?.system?.stress?.value ?? 0;
     const roll = state.data?.result?.roll;
     const rollResult = roll?.total;
-    const rollDice = roll?.dice?.[0]?.results?.map(r => r.result) ?? [];
+    const rollDice = roll?.dice?.[0]?.results?.map(die => die.result) ?? [];
     if (!state.data)
         state.data = {};
     if (!state.data._cancelledBy)
@@ -340,19 +417,21 @@ export async function onStressStep(state) {
 
     let cancelTriggered = false;
     const cancelStressOutcome = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "Stress outcome has been overridden.",
         defaultTitle: "STRESS OUTCOME OVERRIDDEN",
     });
 
-    const modifyRoll = (newTotal) => {
-        if (state.data?.result?.roll) {
+    const modifyRoll = (newTotal) =>
+    {
+        if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
-        }
     };
 
     await handleTrigger('onStress', {
@@ -366,14 +445,16 @@ export async function onStressStep(state) {
         flowState: state,
     });
 
-    if (cancelTriggered) {
+    if (cancelTriggered)
+    {
         await cancelStressOutcome.wait?.();
         return false;
     }
     return true;
 }
 
-export async function onTechAttackStep(state) {
+export async function onTechAttackStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
@@ -407,7 +488,8 @@ export async function onTechAttackStep(state) {
     return true;
 }
 
-export async function onTechHitMissStep(state) {
+export async function onTechHitMissStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const item = state.item;
@@ -431,7 +513,8 @@ export async function onTechHitMissStep(state) {
     const hitTargets = [];
     const missTargets = [];
 
-    for (let i = 0; i < hitResults.length; i++) {
+    for (let i = 0; i < hitResults.length; i++)
+    {
         const hitResult = hitResults[i];
         const targetToken = hitResult?.target ?? accDiffTargetToken(targetInfos[i]);
         const roll = hitResult?.roll || state.data?.attack_results?.[i]?.roll;
@@ -439,13 +522,16 @@ export async function onTechHitMissStep(state) {
         if (!targetToken)
             continue;
 
-        if (hitResult?.hit) {
+        if (hitResult?.hit)
+        {
             hitTargets.push({
                 target: targetToken,
                 roll: roll,
                 crit: hitResult?.crit || false
             });
-        } else {
+        }
+        else
+        {
             missTargets.push({
                 target: targetToken,
                 roll: roll
@@ -453,7 +539,8 @@ export async function onTechHitMissStep(state) {
         }
     }
 
-    if (hitTargets.length > 0) {
+    if (hitTargets.length > 0)
+    {
         await handleTrigger('onTechHit', {
             triggeringToken: token,
             techItem,
@@ -465,7 +552,8 @@ export async function onTechHitMissStep(state) {
             flowState: state
         });
     }
-    if (missTargets.length > 0) {
+    if (missTargets.length > 0)
+    {
         await handleTrigger('onTechMiss', {
             triggeringToken: token,
             techItem,
@@ -478,10 +566,12 @@ export async function onTechHitMissStep(state) {
         });
     }
 
+    await burnBonusUsageForFlow(state);
     return true;
 }
 
-export async function onCheckStep(state) {
+export async function onCheckStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -504,6 +594,7 @@ export async function onCheckStep(state) {
         targetVal: targetVal,
         flowState: state
     });
+    await burnBonusUsageForFlow(state);
     return true;
 }
 
@@ -520,9 +611,9 @@ export async function onCheckStep(state) {
  * @param {((uc: string|null) => Object)|null} [opts.getExtraCardOptions]
  * @param {(() => Promise<void>)|null} [opts.onBefore] - Called before card, after preConfirms.
  * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
- * @returns {any}
  */
-export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null }) {
+export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null })
+{
     if (!cancelledBy)
         console.error('lancer-automations | _buildCancelFn: missing cancelledBy array');
     const cancelledReasons = [];
@@ -531,17 +622,18 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
     let _promise = null;
 
     /** @type {any} */
-    const fn = (reasonText = defaultReason, title = defaultTitle, allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) => {
+    const cancelFn = (reasonText = defaultReason, title = defaultTitle, allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) =>
+    {
         setFlag();
-        if (!fn._reactorIdentity && !fn._engineCancel)
+        if (!cancelFn._reactorIdentity && !cancelFn._engineCancel)
             console.error('lancer-automations | cancel called without _reactorIdentity');
-        if (fn._reactorIdentity && cancelledBy)
-            cancelledBy.push(fn._reactorIdentity);
+        if (cancelFn._reactorIdentity && cancelledBy)
+            cancelledBy.push(cancelFn._reactorIdentity);
         // Fall back to reactor-dispatch context when caller omits opts
-        const def = fn._defaultContext ?? {};
-        const item = opts.item ?? def.item ?? null;
-        const originToken = opts.originToken ?? def.originToken ?? null;
-        const relatedToken = opts.relatedToken ?? def.relatedToken ?? null;
+        const defaultContext = cancelFn._defaultContext ?? {};
+        const item = opts.item ?? defaultContext.item ?? null;
+        const originToken = opts.originToken ?? defaultContext.originToken ?? null;
+        const relatedToken = opts.relatedToken ?? defaultContext.relatedToken ?? null;
         if (reasonText)
             cancelledReasons.push(reasonText);
         if (preConfirm)
@@ -549,23 +641,27 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
         if (cardPending)
             return _promise;
         cardPending = true;
-        _promise = (async () => {
+        _promise = (async () =>
+        {
             await Promise.resolve();
             const ignoreCallback = getIgnoreCallback();
-            if (preConfirms.length > 0) {
-                const results = await Promise.all(preConfirms.map(f => f()));
-                if (results.every(r => !r)) {
+            if (preConfirms.length > 0)
+            {
+                const results = await Promise.all(preConfirms.map(preConfirmFn => preConfirmFn()));
+                if (results.every(result => !result))
+                {
                     await ignoreCallback();
                     return;
                 }
             }
-            if (!allowConfirm) {
+            if (!allowConfirm)
+            {
                 // Auto-pick choice1 (cancel-equivalent = keep blocked)
                 await postChoice?.(true);
                 return;
             }
             const description = cancelledReasons.length > 1
-                ? cancelledReasons.map(r => `• ${r}`).join('<br>')
+                ? cancelledReasons.map(reason => `• ${reason}`).join('<br>')
                 : (cancelledReasons[0] ?? defaultReason);
             if (onBefore)
                 await onBefore();
@@ -583,14 +679,16 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
                     {
                         text: choice1Text,
                         icon: "fas fa-check",
-                        callback: async () => {
+                        callback: async () =>
+                        {
                             await postChoice?.(true);
                         }
                     },
                     {
                         text: choice2Text,
                         icon: "fas fa-times",
-                        callback: async () => {
+                        callback: async () =>
+                        {
                             await postChoice?.(false);
                             await ignoreCallback();
                         }
@@ -602,11 +700,12 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
         })();
         return _promise;
     };
-    fn.wait = () => _promise;
-    return fn;
+    cancelFn.wait = () => _promise;
+    return cancelFn;
 }
 
-export async function stunnedAutoFailStep(state) {
+export async function stunnedAutoFailStep(state)
+{
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     if (!token)
@@ -636,7 +735,8 @@ export async function stunnedAutoFailStep(state) {
     return true;
 }
 
-export async function onInitCheckStep(state) {
+export async function onInitCheckStep(state)
+{
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -649,11 +749,13 @@ export async function onInitCheckStep(state) {
 
     let cancelCheckTriggered = false;
     const cancelCheck = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelCheckTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "This check has been canceled.",
         defaultTitle: "CHECK CANCELED",
     });
@@ -668,18 +770,19 @@ export async function onInitCheckStep(state) {
         flowState: state
     });
 
-    if (cancelCheckTriggered) {
+    if (cancelCheckTriggered)
+    {
         await cancelCheck.wait();
         return false;
     }
 
-    if (token) {
+    if (token)
         state.actor = token.actor;
-    }
     return true;
 }
 
-export async function onInitAttackStep(state) {
+export async function onInitAttackStep(state)
+{
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -704,11 +807,13 @@ export async function onInitAttackStep(state) {
 
     let cancelAttackTriggered = false;
     const cancelAttack = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelAttackTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "This attack has been canceled.",
         defaultTitle: "ATTACK CANCELED",
     });
@@ -725,18 +830,19 @@ export async function onInitAttackStep(state) {
         flowState: state
     });
 
-    if (cancelAttackTriggered) {
+    if (cancelAttackTriggered)
+    {
         await cancelAttack.wait();
         return false;
     }
 
-    if (token) {
+    if (token)
         state.actor = token.actor;
-    }
     return true;
 }
 
-export async function onInitTechAttackStep(state) {
+export async function onInitTechAttackStep(state)
+{
     const actor = state.actor;
     const item = state.item;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
@@ -761,11 +867,13 @@ export async function onInitTechAttackStep(state) {
 
     let cancelTechAttackTriggered = false;
     const cancelTechAttack = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelTechAttackTriggered = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {},
+        getIgnoreCallback: () => async () =>
+        {},
         defaultReason: "This tech attack has been canceled.",
         defaultTitle: "TECH ATTACK CANCELED",
     });
@@ -783,36 +891,39 @@ export async function onInitTechAttackStep(state) {
         flowState: state
     });
 
-    if (cancelTechAttackTriggered) {
+    if (cancelTechAttackTriggered)
+    {
         await cancelTechAttack.wait();
         return false;
     }
 
-    if (token) {
+    if (token)
         state.actor = token.actor;
-    }
     return true;
 }
 
-export async function onActivationStep(state) {
+export async function onActivationStep(state)
+{
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     let item = state.item;
 
     // Resolve source item for extra actions (SimpleActivationFlow has no item by default).
     // _sourceItemId is stamped by addExtraActions; the item ref is also passed from TAH.
-    if (!item && state.data?.action?._sourceItemId && actor) {
+    if (!item && state.data?.action?._sourceItemId && actor)
+    {
         item = actor.items.get(state.data.action._sourceItemId) ?? null;
         if (item)
             state.item = item;
     }
 
-    // Deployable: surface the actor's LID and resolve the source item (the parent
-    // item whose system.deployables[] contains this LID) so reactions can match.
+    // Deployable: resolve source item so reactions can match.
     let deployable = null;
-    if (actor?.type === 'deployable') {
+    if (actor?.type === 'deployable')
+    {
         deployable = { actor, lid: actor.system?.lid ?? null };
-        if (!item) {
+        if (!item)
+        {
             item = await resolveDeployableSourceItem(actor) ?? null;
             if (item)
                 state.item = item;
@@ -826,16 +937,20 @@ export async function onActivationStep(state) {
 
     // Normalize built-in flows that have no item and use actor-prefixed titles
     const flowClass = state.name ?? '';
-    if (flowClass === 'OverchargeFlow') {
+    if (flowClass === 'OverchargeFlow')
+    {
         actionType = 'Protocol';
         actionName = 'Overcharge';
-    } else if (flowClass === 'StabilizeFlow') {
+    }
+    else if (flowClass === 'StabilizeFlow')
+    {
         actionType = 'Full';
         actionName = 'Stabilize';
     }
 
     const tags = state.data?.tags || item?.system?.tags || [];
-    if (Array.isArray(tags)) {
+    if (!state.data?.action?.activation && Array.isArray(tags))
+    {
         const tagMap = {
             "tg_quick_action": "Quick",
             "tg_full_action": "Full",
@@ -844,8 +959,10 @@ export async function onActivationStep(state) {
             "tg_free_action": "Free"
         };
 
-        for (const tag of tags) {
-            if (tag.lid && tagMap[tag.lid]) {
+        for (const tag of tags)
+        {
+            if (tag.lid && tagMap[tag.lid])
+            {
                 actionType = tagMap[tag.lid];
                 break;
             }
@@ -865,6 +982,19 @@ export async function onActivationStep(state) {
         deployable
     };
 
+    let reactionJustConsumed = false;
+    if (actionType === 'Reaction' && token && game.settings.get('lancer-automations', 'consumeReaction'))
+    {
+        if (hasReactionAvailable(token))
+        {
+            const updatedReactionCount = (token.actor.system.action_tracker.reaction ?? 1) - 1;
+            await token.actor.update({ 'system.action_tracker.reaction': updatedReactionCount });
+            reactionJustConsumed = true;
+        }
+        else
+            ui.notifications.warn(`${token.name} has no reaction available!`);
+    }
+
     await handleTrigger('onActivation', {
         triggeringToken: token,
         actionType: actionType,
@@ -872,51 +1002,75 @@ export async function onActivationStep(state) {
         item,
         actionData,
         deployable,
+        reactionJustConsumed,
         endActivation: state.la_extraData?.endActivation || false,
         extraData: state.la_extraData ?? {},
         flowState: state
     });
 
-    if (token) {
+    if (token)
+    {
         state.actor = token.actor;
-        // Advance the move stack now that the activation is fully complete (post-effects).
-        // Fire-and-forget, same reason as in the onMove handler.
+        // Advance move stack post-effects; fire-and-forget.
         _advanceMoveStack('awaitActivation', token.id, false, { actionName });
     }
 
     // Auto-discharge extra actions that carry a `recharge` field after activation
     const activatedAction = state.data?.action;
-    if (activatedAction?.recharge && activatedAction?.charged !== false) {
-        for (const itm of (state.actor?.items ?? [])) {
-            const ea = itm.getFlag('lancer-automations', 'extraActions') || [];
-            const match = ea.find(a => a.name === activatedAction.name && a.recharge);
-            if (match) {
+    if (activatedAction?.recharge && activatedAction?.charged !== false)
+    {
+        for (const actorItem of (state.actor?.items ?? []))
+        {
+            const itemExtraActions = actorItem.getFlag('lancer-automations', 'extraActions') || [];
+            const match = itemExtraActions.find(action => action.name === activatedAction.name && action.recharge);
+            if (match)
+            {
                 match.charged = false;
-                await itm.setFlag('lancer-automations', 'extraActions', ea);
+                await actorItem.setFlag('lancer-automations', 'extraActions', itemExtraActions);
                 break;
             }
         }
-        const actorEa = state.actor?.getFlag('lancer-automations', 'extraActions') || [];
-        const actorMatch = actorEa.find(a => a.name === activatedAction.name && a.recharge);
-        if (actorMatch) {
+        const actorExtraActions = state.actor?.getFlag('lancer-automations', 'extraActions') || [];
+        const actorMatch = actorExtraActions.find(action => action.name === activatedAction.name && action.recharge);
+        if (actorMatch)
+        {
             actorMatch.charged = false;
-            await state.actor.setFlag('lancer-automations', 'extraActions', actorEa);
-        }
-    }
-
-    if (actionType === 'Reaction' && token && game.settings.get('lancer-automations', 'consumeReaction')) {
-        if (hasReactionAvailable(token)) {
-            const newVal = (token.actor.system.action_tracker.reaction ?? 1) - 1;
-            await token.actor.update({ 'system.action_tracker.reaction': newVal });
-        } else {
-            ui.notifications.warn(`${token.name} has no reaction available!`);
+            await state.actor.setFlag('lancer-automations', 'extraActions', actorExtraActions);
         }
     }
 
     return true;
 }
 
-export async function onInitActivationStep(state) {
+export async function consumeGenericPrintResourcesStep(state)
+{
+    const item = state.item;
+    if (!item?.system)
+        return true;
+    const itemSystem = item.system;
+    const tags = itemAllTags(itemSystem);
+    const hasTag = (lid) => tags.some(tag => tag?.lid === lid);
+    const disabled = getAutoConsumeDisabled(item);
+    const updates = {};
+    if (!disabled.has('uses') && hasTag('tg_limited') && itemSystem.uses != null)
+    {
+        const usesIsNested = typeof itemSystem.uses !== 'number';
+        const currentUses = usesIsNested ? Number(itemSystem.uses.value ?? 0) : Number(itemSystem.uses);
+        if (currentUses > 0)
+            updates[usesIsNested ? 'system.uses.value' : 'system.uses'] = currentUses - 1;
+    }
+    if (!disabled.has('loading') && hasTag('tg_loading') && itemSystem.loaded === true)
+        updates['system.loaded'] = false;
+    if (!disabled.has('charged') && hasTag('tg_recharge') && itemSystem.charged !== false)
+        updates['system.charged'] = false;
+    if (Object.keys(updates).length)
+        await item.update(updates);
+    await consumePerFrequencyForItem(item, { skipTypes: disabled });
+    return true;
+}
+
+export async function onInitActivationStep(state)
+{
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     let item = state.item;
@@ -927,9 +1081,11 @@ export async function onInitActivationStep(state) {
 
     // Deployable: surface the actor's LID and resolve the source item.
     let deployable = null;
-    if (actor?.type === 'deployable') {
+    if (actor?.type === 'deployable')
+    {
         deployable = { actor, lid: actor.system?.lid ?? null };
-        if (!item) {
+        if (!item)
+        {
             item = await resolveDeployableSourceItem(actor) ?? null;
             if (item)
                 state.item = item;
@@ -940,7 +1096,8 @@ export async function onInitActivationStep(state) {
     const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
 
     const tags = state.data?.tags || item?.system?.tags || [];
-    if (Array.isArray(tags)) {
+    if (!state.data?.action?.activation && Array.isArray(tags))
+    {
         const tagMap = {
             "tg_quick_action": "Quick",
             "tg_full_action": "Full",
@@ -948,8 +1105,10 @@ export async function onInitActivationStep(state) {
             "tg_protocol": "Protocol",
             "tg_free_action": "Free"
         };
-        for (const tag of tags) {
-            if (tag.lid && tagMap[tag.lid]) {
+        for (const tag of tags)
+        {
+            if (tag.lid && tagMap[tag.lid])
+            {
                 actionType = tagMap[tag.lid];
                 break;
             }
@@ -968,19 +1127,23 @@ export async function onInitActivationStep(state) {
 
     let cancelActivation = false;
     const cancelAction = _buildCancelFn({
-        setFlag: () => {
+        setFlag: () =>
+        {
             cancelActivation = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () => {
+        getIgnoreCallback: () => async () =>
+        {
             const flowClass = game.lancer?.flows?.get?.(state.name);
-            if (flowClass) {
+            if (flowClass)
+            {
                 let newFlow;
-                if (state.name === "SimpleActivationFlow") {
+                if (state.name === "SimpleActivationFlow")
                     newFlow = new flowClass(state.actor.uuid, { ...state.data });
-                } else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name)) {
+                else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name))
                     newFlow = new flowClass(state.item, { ...state.data });
-                } else {
+                else
+                {
                     ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
                     return;
                 }
@@ -1004,10 +1167,10 @@ export async function onInitActivationStep(state) {
         flowState: state
     });
 
-    if (cancelActivation) {
-        if (token && _isActiveMoveStackFor(token.id)) {
+    if (cancelActivation)
+    {
+        if (token && _isActiveMoveStackFor(token.id))
             _wipeMoveStack();
-        }
         await cancelAction.wait();
         return false;
     }

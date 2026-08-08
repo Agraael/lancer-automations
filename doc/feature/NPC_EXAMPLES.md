@@ -26,7 +26,6 @@ const npcInsulatedBonus = {
             if (!api || !token.actor) return;
             const bonusId = `insulated_${item.id}`;
             const bonuses = api.getConstantBonuses(token.actor);
-            // Guard against adding it twice (onInit can run on every refresh).
             if (!bonuses.some(b => b.id === bonusId)) {
                 await api.addConstantBonus(token.actor, {
                     id: bonusId,
@@ -44,13 +43,11 @@ const npcInsulatedBonus = {
 ```
 
 > [!TIP]
-> `onInit` runs once on token creation, no trigger needed - ideal for passive setup. Check `getConstantBonuses` first so it isn't added twice. Constant bonuses are invisible and persistent (see [EFFECTS_AND_BONUSES.md](./EFFECTS_AND_BONUSES.md)).
+> `onInit` runs once on token creation, no trigger needed. Check `getConstantBonuses` first so it isn't added twice. Constant bonuses are invisible and persistent (see [EFFECTS_AND_BONUSES.md](./EFFECTS_AND_BONUSES.md)).
 
 ---
 
 ## 2. Sapper Smoke Grenade - an action that drops a zone
-
-<img align="right" src="../img/npc-smoke-zone.png" width="53%"/>
 
 **What it does.** A quick action that places a Blast 1 soft-cover smoke zone within Range 5.
 
@@ -65,7 +62,7 @@ const npcInsulatedBonus = {
         triggerSelf: true,
         actionType: "Quick Action",
         usesPerRound: 1,
-        onlyOnSourceMatch: true,   // only fire for THIS feature
+        onlyOnSourceMatch: true, // only fire for THIS feature
         autoActivate: true,
         activationType: "code",
         activationMode: "instead",
@@ -73,7 +70,7 @@ const npcInsulatedBonus = {
             await api.placeZone(reactorToken, {
                 range: 5, size: 1, type: "Blast",
                 fillColor: "#808080", borderColor: "#ffffff",
-                statusEffects: ["cover_soft"],   // anyone inside gets soft cover
+                statusEffects: ["cover_soft"],
                 title: "SMOKE GRENADE", icon: "fas fa-smog", centerLabel: "Smoke"
             });
         }
@@ -81,16 +78,14 @@ const npcInsulatedBonus = {
 }
 ```
 
-> [!TIP]
-> The simplest active automation: `onActivation` + `onlyOnSourceMatch` (so it fires only when *this* feature is used) + `autoActivate`, then one call to `placeZone`. The `statusEffects` array applies those effects to any token inside the zone automatically.
+<img src="../img/npc-smoke-zone.png" width="53%"/>
 
-<br clear="right"/>
+> [!TIP]
+> The simplest active automation: `onActivation` + `onlyOnSourceMatch` + `autoActivate`, then one call to `placeZone`. The `statusEffects` array applies those effects to any token inside the zone automatically.
 
 ---
 
 ## 3. Veterancy - a combat-lifecycle pair with a choice card
-
-<img align="right" src="../img/npc-choice-card.png" width="53%"/>
 
 **What it does.** On entering combat the NPC picks a skill (Hull / Agility / Systems / Engineering) and gains +1 accuracy on that kind of check; on leaving combat the bonus is removed.
 
@@ -142,10 +137,10 @@ const veterancyVeteranReaction = {
 };
 ```
 
+<img src="../img/npc-choice-card.png" width="53%"/>
+
 > [!TIP]
 > Two reactions tied to the combat lifecycle. The `evaluate` gate stops it re-firing, `startChoiceCard` shows the buttons (each with a `callback`), and pairing add-on-enter with remove-on-exit keeps the bonus from lingering.
-
-<br clear="right"/>
 
 ---
 
@@ -227,7 +222,6 @@ const veterancyVeteranReaction = {
                 fillColor: "#808080", borderColor: "#ffffff",
                 statusEffects: ["cover_soft"]
             }, 2);
-            // Remember the template so we can delete it next turn.
             if (result?.template) {
                 const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
                 existing.push(result.template.id);
@@ -270,11 +264,11 @@ const movingTargetSniperReaction = {
     itemType: "npc_feature",
     reactions: [{
         triggers: ["onPreMove"],
-        triggerOther: true,            // react to OTHERS moving, not ourselves
+        triggerOther: true, // react to OTHERS moving, not ourselves
         actionType: "Reaction",
         frequency: "1/Round",
         autoActivate: true,
-        awaitActivationCompletion: true,  // required: this cancels a move
+        awaitActivationCompletion: true, // required: this cancels a move
         requireCanProvoke: true,
         checkReaction: true,
         activationType: "code",
@@ -289,7 +283,6 @@ const movingTargetSniperReaction = {
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const mover = triggerData.triggeringToken;
             let responderIds = [];
-            // preConfirm: ask the sniper's owner whether to interrupt, BEFORE the move is cancelled.
             const preConfirm = async () => {
                 const result = await api.startChoiceCard({
                     title: "INTERRUPT MOVEMENT?",
@@ -303,7 +296,7 @@ const movingTargetSniperReaction = {
                 });
                 responderIds = result?.responderIds ?? [];
                 if (result?.choiceIdx === 0) triggerData.startRelatedFlowToReactor(responderIds[0]);
-                return result?.choiceIdx === 0;   // true cancels the move
+                return result?.choiceIdx === 0; // true cancels the move
             };
             triggerData.cancelTriggeredMove?.(
                 `${reactorToken.name} is interrupting ${mover.name}'s movement.`,
@@ -311,7 +304,6 @@ const movingTargetSniperReaction = {
                 { item, originToken: reactorToken, relatedToken: mover }
             );
         },
-        // onMessage runs on the sniper owner's client, to actually fire the weapon.
         onMessage: async function (triggerType, data, reactorToken, item, activationName, api) {
             const mover = canvas.tokens.get(data.moverTokenId) ?? null;
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
@@ -331,8 +323,6 @@ const movingTargetSniperReaction = {
 
 ## 7. Restock Drone - a deployable on an NPC
 
-<img align="right" src="../img/npc-restock-aura.png" width="53%"/>
-
 **What it does.** A support feature that can deploy a Restock Drone. When the drone lands it gets a healing aura; allies that enter the aura can spend it to heal (or reload, in the rebake variant).
 
 **Triggers:** `onDeploy` (+ `onInit` to register the deployable)  ·  **Level:** advanced
@@ -342,7 +332,6 @@ const restockDroneSupportReaction = {
     category: "NPC",
     itemType: "npc_feature",
     reactions: [{
-        // React when WE deploy this feature's drone.
         triggers: ["onDeploy"],
         triggerSelf: true,
         onlyOnSourceMatch: true,
@@ -355,7 +344,7 @@ const restockDroneSupportReaction = {
             if (!deployedToken) return;
             const tier = reactorToken.actor.system.tier;
             const healAmount = tier === 3 ? 15 : tier === 2 ? 10 : 5;
-            // Build the aura ON THE DEPLOYED DRONE, not on us.
+            // Build the aura on the drone itself.
             await api.createAura(deployedToken, {
                 name: "Restock Drone Zone",
                 radius: 1, elevationAware: true, disposition: 1,
@@ -375,7 +364,7 @@ const restockDroneSupportReaction = {
                                 callback: async () => {
                                     const hp = token.actor.system.hp;
                                     await token.actor.update({ "system.hp.value": Math.min(hp.max, hp.value + healAmount) });
-                                    await parent.delete();   // consume the drone
+                                    await parent.delete(); // consume the drone
                                 }
                             }]
                         });
@@ -384,26 +373,27 @@ const restockDroneSupportReaction = {
             });
         }
     }, {
-        // Register the deployable(s) on this feature so the deploy macro can place them.
         triggers: [],
         activationType: "none",
         onInit: async function (token, item, api) {
             await api.addItemFlags(item, { deployRange: 5 });
-            // These drone LIDs are from a custom LCP - point them at any deployable LID you want.
+            // These drone LIDs are from a custom LCP.
             await api.addExtraDeploymentLids(item, [
-                "dep_(npc)_support_restock_drone_t1",
-                "dep_(npc)_support_restock_drone_t2",
-                "dep_(npc)_support_restock_drone_t3"
+                { lid: "dep_(npc)_support_restock_drone_t1", tier: 1 },
+                { lid: "dep_(npc)_support_restock_drone_t2", tier: 2 },
+                { lid: "dep_(npc)_support_restock_drone_t3", tier: 3 }
             ]);
+            // Deploy-only feature: hide the base action, leaving just the deploy row.
+            await api.setHidePrimaryAction(item);
         }
     }]
 };
 ```
 
+<img src="../img/npc-restock-aura.png" width="53%"/>
+
 > [!TIP]
 > Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. See [self-deploy in AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md#self-deployable-reacting-to-your-own-deploy).
-
-<br clear="right"/>
 
 ---
 
@@ -426,7 +416,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
             activationType: "code",
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (triggerData.endActivation) {                 // toggled off via End Activation
+                if (triggerData.endActivation) {
                     await teardownDefenseNet(reactorToken, item, api, false);
                     return;
                 }
@@ -437,13 +427,12 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                 );
                 await api.createAura(reactorToken, {
                     name: 'Defense Net', radius, elevationAware: true,
-                    macros: [{ function: buildDefenseNetAuraCallback() }]   // applies bonuses to allies inside
+                    macros: [{ function: buildDefenseNetAuraCallback() }] // applies bonuses to allies inside
                 });
                 // ... optional Sequencer shield VFX ...
             }
         },
         {
-            // Collapse if we get stunned or jammed while it's up.
             triggers: ["onStatusApplied"],
             triggerSelf: true,
             autoActivate: true,
@@ -460,7 +449,6 @@ function buildDefenseNetReaction(radius, isRebake = false) {
     ];
 
     if (isRebake) {
-        // The variant LAYERS two more reactions onto the same base.
         reactions.push(
             { triggers: ["onHeatGain"], /* ... collapse when heat hits the cap ... */ },
             { triggers: ["onTechMiss"], /* ... retaliate with Heat damage on a tech miss ... */ }
@@ -474,7 +462,7 @@ const defenseNetRebakeReaction = buildDefenseNetReaction(2, true);
 ```
 
 > [!TIP]
-> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`); a second reaction tears it down on stun/jam. The whole thing is a `buildDefenseNetReaction(radius, isRebake)` factory, so the variant just *layers* extra reactions (`onHeatGain`, `onTechMiss`) onto the same base - that's how you build tiered or variant abilities without copy-pasting.
+> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`); a second reaction tears it down on stun/jam. The whole thing is a `buildDefenseNetReaction(radius, isRebake)` factory, so the variant *layers* extra reactions (`onHeatGain`, `onTechMiss`) onto the same base - that's how you build tiered or variant abilities without copy-pasting.
 
 ---
 
@@ -493,4 +481,4 @@ These eight cover the core toolbox. Patterns they don't touch, with an example t
 - **Reroll auras** (`onRoll`) - *Nano-Repair Cloud*, *Voice of Authority*
 - **General (item-less) reactions** registered for everyone - *Guardian*, *Fall Prone*, *Break Free*
 
-That is only a slice. My personal set has many more abilities than these, so browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.
+My personal set has many more; browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.

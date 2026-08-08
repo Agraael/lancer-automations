@@ -40,6 +40,10 @@
     pointer-events: none;
 }
 
+.la-dark .la-hud-fav-mark {
+    color: #eee;
+}
+
 /* Columns / rows / labels. Hover + active bg toggled in JS. */
 .la-hud-col {
     display: flex;
@@ -73,23 +77,42 @@
 
 /* On red active/hover rows/cells: dark icons invert to white, white-source icons drop their invert filter. */
 .la-hud-row.la-hud-active .la-hud-icon--dark,
+.la-hud-row.la-hud-kbfocus .la-hud-icon--dark,
 .la-hud-row:hover .la-hud-icon--dark,
 .la-hud-cell.la-hud-active .la-hud-icon--dark,
+.la-hud-cell.la-hud-kbfocus .la-hud-icon--dark,
 .la-hud-cell:hover .la-hud-icon--dark {
     filter: invert(1) !important;
 }
 
 .la-hud-row.la-hud-active .la-hud-icon--white,
+.la-hud-row.la-hud-kbfocus .la-hud-icon--white,
 .la-hud-row:hover .la-hud-icon--white,
 .la-hud-cell.la-hud-active .la-hud-icon--white,
+.la-hud-cell.la-hud-kbfocus .la-hud-icon--white,
 .la-hud-cell:hover .la-hud-icon--white {
     filter: none !important;
 }
 
+/* Dark mode: hud.js stamps .la-dark on <html> when --la-plate is dark. Flip icons permanently
+   (resting = the hover flip), overriding the light-mode inline filter from laHudRenderIcon. */
+.la-dark .la-hud-icon--dark { filter: invert(1) !important; }
+.la-dark .la-hud-icon--white { filter: none !important; }
+
 /* Automation-presence tick: red on default bg, white on red active/hover. */
 .la-hud-row.la-hud-active .la-hud-auto-tick,
+.la-hud-row.la-hud-kbfocus .la-hud-auto-tick,
 .la-hud-row:hover .la-hud-auto-tick {
     border-left-color: #fff !important;
+}
+
+/* Category label (search / favorites results): red at rest, white on the red active/hover row. */
+.la-hud-cat {
+    color: var(--la-accent);
+}
+.la-hud-row:hover .la-hud-cat,
+.la-hud-row.la-hud-active .la-hud-cat {
+    color: #fff;
 }
 
 .la-hud-col-label {
@@ -122,7 +145,7 @@
     height: 30px;
     padding: 6px 12px;
     background: #f5f5f5;
-    border: 2px solid #bbb;
+    border: 2px solid var(--la-edge);
     border-left: 3px solid var(--primary-color);
     font-size: 1em;
     font-weight: 600;
@@ -141,7 +164,7 @@
 .la-hud-muted {
     padding: 5px 12px;
     background: #f5f5f5;
-    border: 1px solid #ddd;
+    border: 1px solid var(--la-edge);
     font-size: 0.8em;
     color: #888;
     font-style: italic;
@@ -542,7 +565,7 @@
     height: 30px;
     padding: 6px 12px;
     background: #f5f5f5;
-    border: 2px solid #bbb;
+    border: 2px solid var(--la-edge);
     border-left: 3px solid var(--primary-color);
     font-size: 1em;
     font-weight: 600;
@@ -568,7 +591,7 @@
 }
 
 .la-hud-cell__btn {
-    color: #111;
+    color: var(--la-ink);
     cursor: pointer;
     font-size: 0.7em;
     line-height: 1;
@@ -597,14 +620,14 @@
 /* Log panel rows */
 .la-log-empty {
     font-size: 0.9em;
-    color: #666;
+    color: var(--la-ink-dim);
     text-align: center;
     padding: 16px 0;
 }
 
 .la-log-row {
     padding: 4px 8px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--la-edge);
     cursor: pointer;
 }
 
@@ -617,21 +640,21 @@
 .la-log-row__name {
     font-size: 0.9em;
     font-weight: bold;
-    color: #333;
+    color: var(--la-ink);
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
 .la-log-row__time {
     font-size: 0.78em;
-    color: #999;
+    color: var(--la-ink-dim);
 }
 
 .la-log-content {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.25s ease;
-    color: #555;
+    color: var(--la-ink-dim);
     font-size: 0.85em;
     margin-top: 0;
 }
@@ -643,7 +666,7 @@
     gap: 6px;
     padding: 4px 6px;
     background: #fff;
-    border: 1px solid #ddd;
+    border: 1px solid var(--la-edge);
     border-left: 3px solid var(--primary-color);
     border-radius: 2px;
     cursor: pointer;
@@ -702,14 +725,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* v13 Lancer's @layer lancer rules inject a light text color in dark themes; force black on
-       the panel's light status rows so labels stay readable. */
-    color: #000;
+    /* Follow the row's per-state color (plate ink when inactive, dark on the light active rows,
+       both set inline in JS). Unlayered so it beats v13 Lancer's @layer text color. */
+    color: inherit;
 }
 
 .la-status-badge {
     font-size: 0.78em;
-    color: #555;
+    color: inherit;
+    opacity: 0.6;
     flex-shrink: 0;
     margin-left: 3px;
 }
@@ -756,7 +780,7 @@ input.la-status-search {
 
 .la-status-empty {
     font-size: 0.78em;
-    color: #888;
+    color: var(--la-ink-dim);
     padding: 4px;
 }
 
@@ -782,7 +806,7 @@ input.la-status-search {
 }
 
 .la-bonus-row__detail {
-    color: #666;
+    color: var(--la-ink-dim);
 }
 
 .la-bonus-row__kind {
@@ -1006,4 +1030,19 @@ input.la-status-search {
     font-size: 0.75em;
     line-height: 1.25;
     color: rgba(255, 255, 255, 0.45);
+}
+
+/* Panel plate: module tone tinted by the active Lancer manufacturer color. */
+.la-hud-row,
+.la-hud-muted,
+.la-hud-cell,
+.la-hud-panel,
+.la-hud-status-panel,
+.la-glossary-row,
+.la-hud-fav-icon--open {
+    background: var(--la-plate);
+    color: var(--la-ink);
+}
+.la-hud-muted {
+    color: var(--la-ink-dim);
 }

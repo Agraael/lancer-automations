@@ -1,7 +1,7 @@
 /* global Hooks, game, canvas, libWrapper, Token, document, CONST */
 
 import { LancerHUD } from './hud.js';
-import { playUiSound } from './sound.js';
+import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from './sound.js';
 import { forceHideStatHint } from './tokenStatHint.js';
 
 const MODULE = 'lancer-automations';
@@ -9,39 +9,48 @@ const SETTING = 'tahEnabled';
 
 const hud = new LancerHUD();
 
-function enabled() {
+function enabled()
+{
     return game.settings.get(MODULE, SETTING);
 }
 
 /** True if actor is any bound token's actor OR its linked pilot. */
-function isRelevantActor(actorId) {
-    return (hud._tokens ?? []).some(t =>
-        t.actor?.id === actorId ||
-        t.actor?.system?.pilot?.value?.id === actorId
+function isRelevantActor(actorId)
+{
+    return (hud._tokens ?? []).some(token =>
+        token.actor?.id === actorId ||
+        token.actor?.system?.pilot?.value?.id === actorId
     );
 }
 
 const SETTING_ABOVE_SHEETS = 'tah.aboveActorSheets';
 
-function _isAboveSheetsEnabled() {
-    try {
+function _isAboveSheetsEnabled()
+{
+    try
+    {
         return !!game.settings.get(MODULE, SETTING_ABOVE_SHEETS);
-    } catch {
+    }
+    catch
+    {
         return true;
     }
 }
 
-function _updateTahZIndex() {
+function _updateTahZIndex()
+{
     const hudEl = document.getElementById('la-hud');
     if (!hudEl)
         return;
-    if (!_isAboveSheetsEnabled()) {
+    if (!_isAboveSheetsEnabled())
+    {
         hudEl.style.zIndex = '';
         return;
     }
     let maxZ = 0;
     const sheetEls = Array.from(document.querySelectorAll('.window-app.sheet.actor, .application.sheet.actor'));
-    for (const el of sheetEls) {
+    for (const el of sheetEls)
+    {
         const z = parseInt(/** @type {HTMLElement} */ (el).style.zIndex || '0');
         if (z > maxZ)
             maxZ = z;
@@ -50,17 +59,20 @@ function _updateTahZIndex() {
 }
 
 let _zRescheduled = false;
-function _scheduleTahZUpdate() {
+function _scheduleTahZUpdate()
+{
     if (_zRescheduled)
         return;
     _zRescheduled = true;
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() =>
+    {
         _zRescheduled = false;
         _updateTahZIndex();
     });
 }
 
-Hooks.on('init', () => {
+Hooks.on('init', () =>
+{
     game.settings.register(MODULE, SETTING, {
         name: 'Token Action HUD',
         hint: 'Show a cascading action HUD when a token is selected. Requires reload.',
@@ -69,8 +81,9 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
         requiresReload: true,
-        onChange: en => {
-            if (!en)
+        onChange: isEnabled =>
+        {
+            if (!isEnabled)
                 hud.unbind();
         },
     });
@@ -91,8 +104,9 @@ Hooks.on('init', () => {
     game.keybindings.register(MODULE, 'tah.toggleSearch', {
         name: 'TAH: Toggle Search',
         hint: 'Open or close the Token Action HUD search bar.',
-        editable: [{ key: 'KeyF', modifiers: ['Alt'] }],
-        onDown: () => {
+        editable: [{ key: 'KeyF', modifiers: ['Shift'] }],
+        onDown: () =>
+        {
             if (!enabled())
                 return false;
             if (!hud.toggleSearch())
@@ -116,10 +130,12 @@ Hooks.on('init', () => {
         config: false,
         type: Boolean,
         default: false,
-        onChange: () => {
-            const tokens = (canvas?.tokens?.controlled ?? []).filter(t =>
-                ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner);
-            if (tokens.length === 0) {
+        onChange: () =>
+        {
+            const tokens = (canvas?.tokens?.controlled ?? []).filter(token =>
+                ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type) && token.actor?.isOwner);
+            if (tokens.length === 0)
+            {
                 if (game.settings.get(MODULE, 'tah.narrativeMode'))
                     hud.bindNarrative();
                 else
@@ -151,6 +167,31 @@ Hooks.on('init', () => {
         default: 0.5,
         range: { min: 0, max: 3, step: 0.5 },
     });
+    game.settings.register(MODULE, 'tah.keyboardNav', {
+        name: 'Keyboard Navigation',
+        hint: 'Move around the HUD with Shift+WASD, Shift+E to click, Shift+Q to right-click.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register(MODULE, 'tah.keyboardNavResetDelay', {
+        name: 'Keyboard Nav Reset Delay (seconds)',
+        hint: 'How long the keyboard cursor stays after the last Shift+WASD key.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 5,
+        range: { min: 1, max: 10, step: 0.5 },
+    });
+    game.settings.register(MODULE, 'tah.preventWasdMovement', {
+        name: 'Block WASD / QE Movement',
+        hint: 'Stop bare W/A/S/D/Q/E from moving the token, to avoid keyboard-nav mis-inputs.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
     game.settings.register(MODULE, 'tah.maxColumnItems', {
         name: 'Max items per column',
         hint: 'Cap category and sub-columns to this many rows; columns with more items become scrollable. 0 disables the cap. The top menu is never capped.',
@@ -168,9 +209,19 @@ Hooks.on('init', () => {
         type: Boolean,
         default: true,
     });
+    game.settings.register(MODULE, 'tah.uiScale', {
+        name: 'HUD Scale',
+        hint: 'Size of the Token Action HUD and its popups.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0.6, max: 1.6, step: 0.05 },
+        onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
+    });
     game.settings.register(MODULE, 'tah.showAidHandleInteractSqueeze', {
         name: 'Aid / Handle / Interact / Squeeze Actions',
-        hint: 'Show these four basic actions in the Actions category.',
+        hint: 'Show these actions in the Actions category. They come from PPG (Prototype Pattern Group).',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -220,53 +271,104 @@ Hooks.on('init', () => {
         default: 1,
         range: { min: 0, max: 1, step: 0.05 },
     });
-
-    for (const v of ['hover', 'open', 'details', 'toggle', 'statusHover']) {
-        game.settings.register(MODULE, `tah.uiSound.${v}`, {
+    game.settings.register(MODULE, 'battleLogEnabled', {
+        name: 'Battle Log',
+        hint: 'Record combat telemetry and show the recap when a combat ends.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE, 'tah.battleLogVolume', {
+        name: 'Battle Log Sound Volume',
+        hint: 'Volume of the Battle Log intro sounds (fade-in, typing loop, result impact, ...). Set to 0 to disable.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
+    for (const soundKey of ['fadeIn', 'fadeOut', 'loopBackground', 'typingLoop', 'displayList', 'longResult', 'shortResult', 'resultImpact', 'resultImpactGood', 'resultImpactBad', 'logOpen', 'incomingTrans'])
+    {
+        game.settings.register(MODULE, `tah.battleLog.${soundKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const v of ['tokenHover', 'tokenSelect', 'tokenDeselect', 'tokenTarget',
-        'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm']) {
-        game.settings.register(MODULE, `tah.tokenSound.${v}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
+    for (const key of ['themeDefault', 'themeVictory', 'themeDefeat', 'themePartial'])
+    {
+        game.settings.register(MODULE, `tah.battleLog.${key}`, {
+            scope: 'world', config: false, type: String, default: '',
         });
     }
-    for (const t of ['kinetic', 'energy', 'explosive', 'variable', 'heat', 'burn',
-        'infection', 'armor', 'hit_overshield', 'overshield']) {
-        game.settings.register(MODULE, `tah.damageSound.${t}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
-        });
-    }
-    for (const e of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat']) {
-        game.settings.register(MODULE, `tah.statSound.${e}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
-        });
-    }
-    for (const e of ['bonus']) {
-        game.settings.register(MODULE, `tah.statusSfx.${e}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
-        });
-    }
-    for (const a of ['skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
-        'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
-        'protocol', 'reaction', 'fullAction', 'quickAction', 'standingUp',
-        'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
-        'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
-        'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-        'defaultThrow', 'targetFail', 'reload', 'fight']) {
-        game.settings.register(MODULE, `tah.actionFxSound.${a}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
-        });
-    }
-    game.settings.register(MODULE, 'tah.auraUseAltKey', {
-        name: 'Aura: THT Ruler on Alt Press & Targeted',
-        hint: "Show Terrain Height Tools rulers on auras only while Alt is held and tokens are targeted. Requires the grid-aware-auras fork (see lancer-automations README).",
+    game.settings.register(MODULE, 'tah.telemetryFriendlyMechAsSquad', {
+        name: 'Friendly mechs count as squad',
+        hint: 'Include FRIENDLY-disposition mechs (not owned by players) in the squad. Off: they render as friendlies.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register(MODULE, 'tah.disableAwards', {
+        name: 'Disable awards',
+        hint: 'No awards computed. No MVP auto-pick. GM can still pick MVP manually.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE, 'tah.telemetryDebug', {
+        name: 'Debug: log every telemetry event',
+        hint: 'Console-log every event written to the combat telemetry flag. Turn off for normal play.',
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
+
+    for (const soundKey of ['hover', 'open', 'details', 'toggle', 'statusHover', 'battleLogHover', 'battleLogClick'])
+    {
+        game.settings.register(MODULE, `tah.uiSound.${soundKey}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const soundKey of ['tokenHover', 'tokenSelect', 'tokenDeselect', 'tokenTarget',
+        'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'])
+    {
+        game.settings.register(MODULE, `tah.tokenSound.${soundKey}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const damageType of ['kinetic', 'energy', 'explosive', 'variable', 'heat', 'burn',
+        'infection', 'armor', 'hit_overshield', 'overshield'])
+    {
+        game.settings.register(MODULE, `tah.damageSound.${damageType}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const statKey of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'])
+    {
+        game.settings.register(MODULE, `tah.statSound.${statKey}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const sfxKey of ['bonus'])
+    {
+        game.settings.register(MODULE, `tah.statusSfx.${sfxKey}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const actionKey of ['skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
+        'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
+        'protocol', 'activation', 'reaction', 'fullAction', 'quickAction', 'standingUp',
+        'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
+        'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
+        'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
+        'defaultThrow', 'targetFail', 'reload', 'fight'])
+    {
+        game.settings.register(MODULE, `tah.actionFxSound.${actionKey}`, {
+            scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
     game.settings.register(MODULE, 'tah.showDisposition', {
         name: 'Show Team / Disposition Indicator',
         hint: 'Colored stripe on the title bar. Shows team name if Token Factions advanced teams is active, otherwise shows disposition.',
@@ -275,108 +377,13 @@ Hooks.on('init', () => {
         type: Boolean,
         default: false,
     });
-    // Persistent aura colors + opacity
-    game.settings.register(MODULE, 'tah.auraColorThreat', {
-        name: 'Threat Aura Color',
-        hint: 'Color of the Max Threat range aura.',
-        scope: 'client',
-        config: false,
-        type: String,
-        default: '#9514ff',
-    });
-    game.settings.register(MODULE, 'tah.auraColorSensor', {
-        name: 'Sensor Aura Color',
-        hint: 'Color of the Sensor range aura.',
-        scope: 'client',
-        config: false,
-        type: String,
-        default: '#549eff',
-    });
-    game.settings.register(MODULE, 'tah.auraColorRange', {
-        name: 'Weapon Range Aura Color',
-        hint: 'Color of the Weapon Range aura.',
-        scope: 'client',
-        config: false,
-        type: String,
-        default: '#ff0000',
-    });
-    game.settings.register(MODULE, 'tah.auraOpacityThreat', {
-        name: 'Threat Aura Opacity',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.1 },
-    });
-    game.settings.register(MODULE, 'tah.auraOpacitySensor', {
-        name: 'Sensor Aura Opacity',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.1 },
-    });
-    game.settings.register(MODULE, 'tah.auraOpacityRange', {
-        name: 'Weapon Range Aura Opacity',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.1 },
-    });
-    // Default toggle mode per aura
-    const auraDefaultChoices = { none: 'None', combat: 'In Combat', all: 'Always' };
-    game.settings.register(MODULE, 'tah.auraDefaultThreat', {
-        name: 'Threat Aura Default',
-        hint: 'When to auto-enable the Threat aura.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'none',
-        choices: auraDefaultChoices,
-    });
-    game.settings.register(MODULE, 'tah.auraDefaultSensor', {
-        name: 'Sensor Aura Default',
-        hint: 'When to auto-enable the Sensor aura.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'none',
-        choices: auraDefaultChoices,
-    });
-    game.settings.register(MODULE, 'tah.auraDefaultRange', {
-        name: 'Weapon Range Aura Default',
-        hint: 'When to auto-enable the Weapon Range aura.',
-        scope: 'world',
-        config: false,
-        type: String,
-        default: 'none',
-        choices: auraDefaultChoices,
-    });
-    game.settings.register(MODULE, 'tah.auraColorCustom', {
-        name: 'Custom Measure Aura Color',
-        hint: 'Color of the custom measure aura.',
-        scope: 'client',
-        config: false,
-        type: String,
-        default: '#ff8800',
-    });
-    game.settings.register(MODULE, 'tah.auraOpacityCustom', {
-        name: 'Custom Measure Aura Opacity',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.1 },
-    });
     game.settings.register(MODULE, 'tah.position', {
         scope: 'client',
         config: false,
         type: Object,
         default: null,
     });
-    // Per-client macro shortcuts shown in the TAH "Macros" category.
-    // Each entry: { macroId, name, icon }
+    // Per-client macro shortcuts for the TAH "Macros" category: { macroId, name, icon }.
     game.settings.register(MODULE, 'tah.macroList', {
         scope: 'client',
         config: false,
@@ -385,49 +392,56 @@ Hooks.on('init', () => {
     });
 });
 
-// ── Token selection ──────────────────────────────────────────────────────────
-
-Hooks.on('hoverToken', (token, hovered) => {
+Hooks.on('hoverToken', (token, hovered) =>
+{
     if (hovered && !token?.controlled)
         playUiSound('tokenHover');
 });
 
-Hooks.on('targetToken', (user, _token, targeted) => {
+Hooks.on('targetToken', (user, _token, targeted) =>
+{
     if (user?.id !== game.userId)
         return;
     playUiSound(targeted ? 'tokenTarget' : 'tokenUntarget');
 });
 
-Hooks.on('updateToken', (_doc, change, options) => {
+Hooks.on('updateToken', (_doc, change, options) =>
+{
     if (options?.teleport)
         return;
     if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
         playUiSound('tokenMove');
 });
 
-Hooks.once('ready', () => {
+Hooks.once('ready', () =>
+{
     const actionIds = [
         'freeMovement', 'debugMovement'
     ];
-    const getBoundKeys = () => {
+    const getBoundKeys = () =>
+    {
         const set = new Set();
         const bindings = /** @type {any} */ (game.keybindings)?.bindings;
         if (!bindings?.get)
             return set;
-        for (const id of actionIds) {
+        for (const id of actionIds)
+        {
             const list = bindings.get(`lancer-automations.${id}`) ?? [];
-            for (const b of list) {
-                if (b?.key)
-                    set.add(b.key);
+            for (const binding of list)
+            {
+                if (binding?.key)
+                    set.add(binding.key);
             }
         }
         return set;
     };
     let boundKeys = getBoundKeys();
-    Hooks.on('renderKeybindingsConfig', () => {
+    Hooks.on('renderKeybindingsConfig', () =>
+    {
         boundKeys = getBoundKeys();
     });
-    document.addEventListener('keydown', (ev) => {
+    document.addEventListener('keydown', (ev) =>
+    {
         if (ev.repeat)
             return;
         if (!boundKeys.has(ev.code))
@@ -440,58 +454,141 @@ Hooks.once('ready', () => {
             return;
         playUiSound('elevationKey');
     });
+
+    // document-bubble: after tools' capture (already stopped), before Foundry's window-bubble movement.
+    const WASD_QE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
+    const ELEVATION_KEYS = new Set(['KeyQ', 'KeyE']);
+    document.addEventListener('keydown', (ev) =>
+    {
+        try
+        {
+            if (!game.settings.get(MODULE, 'tah.preventWasdMovement'))
+                return;
+        }
+        catch
+        {
+            return;
+        }
+        if (ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.repeat)
+            return;
+        if (!WASD_QE.has(ev.code))
+            return;
+        // Let Q/E through mid-drag so elevation adjustments still work.
+        if (_activeTokenDrags > 0 && ELEVATION_KEYS.has(ev.code))
+            return;
+        const tag = /** @type {any} */ (ev.target)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || /** @type {any} */ (ev.target)?.isContentEditable)
+            return;
+        ev.preventDefault();
+        ev.stopPropagation();
+    }, false);
 });
 
 // v13's MouseInteractionManager captures callbacks at construction; wrapping Token._onDragLeftMove never fires.
 const _dragLastCell = new WeakMap();
-Hooks.once('ready', () => {
+let _activeTokenDrags = 0;
+Hooks.once('ready', () =>
+{
     if (!game.modules.get('lib-wrapper')?.active)
         return;
-    libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args) {
-        if (this.object instanceof foundry.canvas.placeables.Token) {
-            if (action === 'dragLeftStart' || action === 'dragLeftMove') {
+    libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args)
+    {
+        if (this.object instanceof foundry.canvas.placeables.Token)
+        {
+            if (action === 'dragLeftStart')
+            {
+                _activeTokenDrags++;
                 forceHideStatHint();
             }
-            if (action === 'dragLeftMove') {
-                try {
+            else if (action === 'dragLeftDrop' || action === 'dragLeftCancel')
+            {
+                if (_activeTokenDrags > 0)
+                    _activeTokenDrags--;
+            }
+            if (action === 'dragLeftMove')
+            {
+                forceHideStatHint();
+                try
+                {
                     const dest = event?.interactionData?.destination;
-                    if (dest) {
-                        const off = canvas.grid.getOffset(dest);
-                        const key = `${off.i},${off.j}`;
+                    if (dest)
+                    {
+                        const gridOffset = canvas.grid.getOffset(dest);
+                        const key = `${gridOffset.i},${gridOffset.j}`;
                         const prev = _dragLastCell.get(this.object);
-                        if (prev !== key) {
+                        if (prev !== key)
+                        {
                             _dragLastCell.set(this.object, key);
                             if (prev !== undefined)
                                 playUiSound('tokenDrag');
                         }
                     }
-                } catch { /* ignore */ }
+                }
+                catch
+                { /* ignore */ }
             }
         }
         return wrapped.call(this, action, event, ...args);
     }, 'WRAPPER');
+
+    // Waypoint feedback on token drag (F key / Ctrl+click add, right-click remove), matching the ruler.
+    libWrapper.register('lancer-automations', 'foundry.canvas.placeables.Token.prototype._addDragWaypoint', function (wrapped, ...args)
+    {
+        const before = _sumDragWaypoints(this);
+        const result = wrapped.call(this, ...args);
+        if (_sumDragWaypoints(this) > before)
+            playUiSound(WAYPOINT_ADD_SOUND);
+        return result;
+    }, 'WRAPPER');
+    libWrapper.register('lancer-automations', 'foundry.canvas.placeables.Token.prototype._removeDragWaypoint', function (wrapped, ...args)
+    {
+        const before = _sumDragWaypoints(this);
+        const result = wrapped.call(this, ...args);
+        if (before > 0 && _sumDragWaypoints(this) < before)
+            playUiSound(WAYPOINT_REMOVE_SOUND);
+        return result;
+    }, 'WRAPPER');
 });
+
+function _sumDragWaypoints(token)
+{
+    const contexts = token?.mouseInteractionManager?.interactionData?.contexts;
+    if (!contexts)
+        return 0;
+    let total = 0;
+    for (const context of Object.values(contexts))
+        total += context?.waypoints?.length ?? 0;
+    return total;
+}
 
 let _pendingDeselect = null;
 let _pendingSelectSound = false;
 let _pendingHudUpdate = false;
-Hooks.on('controlToken', (_token, controlled) => {
-    if (controlled) {
-        if (_pendingDeselect) {
+Hooks.on('controlToken', (_token, controlled) =>
+{
+    if (controlled)
+    {
+        if (_pendingDeselect)
+        {
             clearTimeout(_pendingDeselect);
             _pendingDeselect = null;
         }
-        if (!_pendingSelectSound) {
+        if (!_pendingSelectSound)
+        {
             _pendingSelectSound = true;
-            requestAnimationFrame(() => {
+            requestAnimationFrame(() =>
+            {
                 _pendingSelectSound = false;
                 playUiSound('tokenSelect');
             });
         }
-    } else {
+    }
+    else
+    {
         if (_pendingDeselect)
             clearTimeout(_pendingDeselect);
-        _pendingDeselect = setTimeout(() => {
+        _pendingDeselect = setTimeout(() =>
+        {
             _pendingDeselect = null;
             playUiSound('tokenDeselect');
         }, 50);
@@ -501,13 +598,14 @@ Hooks.on('controlToken', (_token, controlled) => {
     if (_pendingHudUpdate)
         return;
     _pendingHudUpdate = true;
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() =>
+    {
         _pendingHudUpdate = false;
-        const all = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(t =>
-            ['mech', 'npc', 'pilot', 'deployable'].includes(t.actor?.type) && t.actor?.isOwner
+        const ownedTokens = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(token =>
+            ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type) && token.actor?.isOwner
         );
-        if (all.length > 0)
-            hud.bind(all);
+        if (ownedTokens.length > 0)
+            hud.bind(ownedTokens);
         else if (game.settings.get('lancer-automations', 'tah.narrativeMode'))
             hud.bindNarrative();
         else
@@ -515,7 +613,8 @@ Hooks.on('controlToken', (_token, controlled) => {
     });
 });
 
-Hooks.on('canvasReady', () => {
+Hooks.on('canvasReady', () =>
+{
     if (!enabled())
         return;
     if ((canvas?.tokens?.controlled ?? []).length > 0)
@@ -524,10 +623,9 @@ Hooks.on('canvasReady', () => {
         hud.bindNarrative();
 });
 
-// ── Actor data changed (HP, heat, structure, action tracker…) ────────────────
-// Update only the stats bar — sub-columns stay open.
-
-Hooks.on('updateActor', (actor, change) => {
+// Actor stat change: update the stats bar in place, leave sub-columns open.
+Hooks.on('updateActor', (actor, change) =>
+{
     if (!enabled())
         return;
     if (!isRelevantActor(actor.id))
@@ -540,183 +638,189 @@ Hooks.on('updateActor', (actor, change) => {
         hud.updateStatsInPlace();
 });
 
-// ── Item changed (loaded, charged, limited uses, talent counters…) ───────────
-// Full debounced refresh so availability indicators update.
-
-Hooks.on('updateItem', (item) => {
+// Item change: full debounced refresh so availability indicators update.
+Hooks.on('updateItem', (item) =>
+{
     if (!enabled())
         return;
     if (isRelevantActor(item.parent?.id))
         hud.scheduleRefresh();
 });
 
-Hooks.on('createItem', (item) => {
+Hooks.on('createItem', (item) =>
+{
     if (!enabled())
         return;
     if (isRelevantActor(item.parent?.id))
         hud.scheduleRefresh();
 });
 
-Hooks.on('deleteItem', (item) => {
+Hooks.on('deleteItem', (item) =>
+{
     if (!enabled())
         return;
     if (isRelevantActor(item.parent?.id))
         hud.scheduleRefresh();
 });
 
-// ── Active effects (conditions) ──────────────────────────────────────────────
-
-Hooks.on('createActiveEffect', (effect) => {
+Hooks.on('createActiveEffect', (effect) =>
+{
     if (!enabled())
         return;
     if (isRelevantActor(effect.parent?.id))
         hud.scheduleRefresh();
 });
 
-Hooks.on('deleteActiveEffect', (effect) => {
+Hooks.on('deleteActiveEffect', (effect) =>
+{
     if (!enabled())
         return;
     if (isRelevantActor(effect.parent?.id))
         hud.scheduleRefresh();
 });
 
-// ── Token updated (name, disposition…) ──────────────────────────────────────
-
-Hooks.on('updateToken', (tokenDoc) => {
+Hooks.on('updateToken', (tokenDoc) =>
+{
     if (!enabled())
         return;
-    if ((hud._tokens ?? []).some(t => t.id === tokenDoc.id)) {
+    if ((hud._tokens ?? []).some(token => token.id === tokenDoc.id))
+    {
         hud.scheduleRefresh();
         hud.updateStatsInPlace();
     }
 });
 
-// ── Combat (turn/round advance resets action tracker) ────────────────────────
-
-Hooks.on('updateCombat', () => {
+Hooks.on('updateCombat', () =>
+{
     if (!enabled())
         return;
     if (hud._token)
         hud.scheduleRefresh(250);
 });
 
-Hooks.on('updateCombatant', (combatant) => {
+Hooks.on('updateCombatant', (combatant) =>
+{
     if (!enabled())
         return;
-    if ((hud._tokens ?? []).some(t => t.document?.id === combatant.tokenId)) {
+    if ((hud._tokens ?? []).some(token => token.document?.id === combatant.tokenId))
         hud._updateCombatBar?.();
-    }
     if (isRelevantActor(combatant.actorId))
         hud.scheduleRefresh();
 });
 
-// ── Action tracker changes (combat bar in-place update) ─────────────────
-
-Hooks.on('updateActor', (actor, change) => {
+// Action tracker change: in-place combat-bar update only.
+Hooks.on('updateActor', (actor, change) =>
+{
     if (!enabled())
         return;
-    if (change.system?.action_tracker && isRelevantActor(actor.id)) {
+    if (change.system?.action_tracker && isRelevantActor(actor.id))
         hud._updateCombatBar?.();
-    }
 });
 
-Hooks.on('createCombat', () => {
+Hooks.on('createCombat', () =>
+{
     if (!enabled())
         return;
     if (hud._token)
         hud.scheduleRefresh();
 });
 
-Hooks.on('deleteCombat', () => {
+Hooks.on('deleteCombat', () =>
+{
     if (!enabled())
         return;
     if (hud._token)
         hud.scheduleRefresh();
 });
 
-// ── Persistent range auras — combat auto-toggle + data refresh ─────────────
+import { activateRangePreview, deactivateRangePreview, getAttackRange, getRangeGlowForAction, FIXED_MELEE_ACTIONS } from './hover.js';
+import { getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
+import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 
-import { applyDefaultAuras, disableCombatAuras, updatePersistentAuraRadii, activateRangePreview, deactivateRangePreview, getAttackRange, FIXED_MELEE_ACTIONS } from './hover.js';
-import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
-import { createPulsingRangeHighlight } from '../interactive/canvas.js';
-
-Hooks.on('combatStart', (combat) => {
-    for (const c of combat.combatants) {
-        const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
-        if (tok)
-            applyDefaultAuras(tok);
-    }
-});
-
-Hooks.on('createCombatant', (combatant) => {
-    if (!game.users.activeGM?.isSelf)
+// One-shot cleanup: strip legacy LA_* range-preview aura entries left by the old GAA-based system.
+const _LA_LEGACY_AURA_IDS = new Set(['LA_max_Threat', 'LA_Sensor', 'LA_max_range', 'LA_custom_measure']);
+const _LA_LEGACY_AURA_NAME_PREFIXES = ['LA_max_Threat', 'LA_Sensor', 'LA_max_range', 'LA_custom_measure'];
+let _legacyAuraCleanupDone = false;
+async function _cleanupLegacyLARangeAuras()
+{
+    if (_legacyAuraCleanupDone || !game.user?.isGM)
         return;
-    const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
-    if (tok)
-        applyDefaultAuras(tok);
-});
-
-Hooks.on('createToken', (tokenDoc) => {
-    if (!game.users.activeGM?.isSelf)
-        return;
-    const tok = canvas.tokens?.get(tokenDoc.id);
-    if (tok)
-        applyDefaultAuras(tok);
-});
-
-Hooks.on('deleteCombat', (combat) => {
-    if (!game.users.activeGM?.isSelf)
-        return;
-    for (const c of combat.combatants) {
-        const tok = c.token ? canvas.tokens?.get(c.token.id) : null;
-        if (tok)
-            disableCombatAuras(tok);
-    }
-});
-
-Hooks.on('deleteCombatant', (/** @type {any} */ combatant) => {
-    if (!game.users.activeGM?.isSelf)
-        return;
-    const tok = combatant.token ? canvas.tokens?.get(combatant.token.id) : null;
-    if (!tok)
-        return;
-    // if token is still in another active combat, leave auras alone
-    let stillInCombat = false;
-    for (const c of (game.combats?.contents ?? [])) {
-        /** @type {any} */
-        const combat = c;
-        if (!combat.active)
-            continue;
-        if (combat.combatants?.some?.((/** @type {any} */ x) => x.token?.id === tok.id)) {
-            stillInCombat = true;
-            break;
+    _legacyAuraCleanupDone = true;
+    const stripLegacy = (entries) => entries.filter(entry =>
+    {
+        const id = String(entry?.id ?? '');
+        if (_LA_LEGACY_AURA_IDS.has(id))
+            return false;
+        const name = String(entry?.name ?? '');
+        return !_LA_LEGACY_AURA_NAME_PREFIXES.some(prefix => name === prefix || name.startsWith(`${prefix}__t`));
+    });
+    for (const scene of game.scenes ?? [])
+    {
+        for (const tokenDoc of scene.tokens ?? [])
+        {
+            const auras = tokenDoc.getFlag('grid-aware-auras', 'auras');
+            if (!Array.isArray(auras) || !auras.length)
+                continue;
+            const kept = stripLegacy(auras);
+            if (kept.length !== auras.length)
+            {
+                try
+                {
+                    await tokenDoc.setFlag('grid-aware-auras', 'auras', kept);
+                }
+                catch (err)
+                {
+                    console.warn('lancer-automations | legacy aura strip (scene token) failed:', err);
+                }
+            }
         }
     }
-    if (stillInCombat)
-        return;
-    disableCombatAuras(tok);
-});
-
-Hooks.on('updateActor', (actor) => {
-    for (const tok of actor.getActiveTokens()) {
-        updatePersistentAuraRadii(tok);
+    for (const actor of game.actors ?? [])
+    {
+        const proto = actor.prototypeToken;
+        const auras = proto?.getFlag?.('grid-aware-auras', 'auras');
+        if (!Array.isArray(auras) || !auras.length)
+            continue;
+        const kept = stripLegacy(auras);
+        if (kept.length !== auras.length)
+        {
+            try
+            {
+                await proto.setFlag('grid-aware-auras', 'auras', kept);
+            }
+            catch (err)
+            {
+                console.warn('lancer-automations | legacy aura strip (prototype) failed:', err);
+            }
+        }
     }
+}
+Hooks.on('canvasReady', () =>
+{
+    _cleanupLegacyLARangeAuras();
 });
 
-// ── Manual force-refresh (fired by lancer-automations flows and TAH lancer) ──
-
-Hooks.on('forceUpdateTokenActionHud', () => {
+Hooks.on('forceUpdateTokenActionHud', () =>
+{
     if (!enabled())
         return;
-    if (hud._token)
+    if (hud._token || hud._narrativeMode)
         hud.refresh();
 });
 
-// ── Range preview during attack AccDiff HUD ───────────────────────────────────
+// Knob-only repaint: a full refresh would close/reopen the columns (and is suppressed mid-toggle anyway).
+Hooks.on('lancer-automations.advancedMeasureStateChange', () =>
+{
+    if (!enabled())
+        return;
+    if (hud?._token)
+        hud.syncToggleCells();
+});
 
 const BASIC_MELEE_NAMES = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pickup weapon', 'pick up weapon']);
 
-function _getSensorRange(actor) {
+function _getSensorRange(actor)
+{
     if (!actor)
         return 10;
     if (actor.type === 'pilot')
@@ -724,15 +828,26 @@ function _getSensorRange(actor) {
     return actor.system?.sensor_range ?? 10;
 }
 
-async function _computeAttackHudRange(state) {
+async function _computeAttackHudRange(state)
+{
     const actor = state.actor;
     const item = state.item;
     const actionName = (state.data?.action?.name ?? state.data?.title ?? '').toLowerCase().trim();
 
-    if (item) {
+    if (item)
+    {
         const ranges = await getMaxItemRanges_WithBonus(item, actor);
-        const ALL = ['Range', 'Line', 'Cone', 'Blast', 'Burst', 'Threat', 'Thrown'];
-        const max = Math.max(0, ...ALL.map(t => ranges[t] ?? 0));
+        // throw-aware (unlike the TAH hover preview which shows the max)
+        const throwDist = ranges['Thrown'] ?? 0;
+        if (state.data?.acc_diff?.weapon?.thrown && throwDist > 0)
+            return Math.max(1, throwDist);
+        const shape = Math.max(0, ranges['Blast'] ?? 0, ranges['Cone'] ?? 0, ranges['Line'] ?? 0, ranges['Burst'] ?? 0);
+        // Range/Threat switch (accdiff button): follow the chosen mode when both exist and differ.
+        const rangeVal = ranges['Range'] ?? 0;
+        const threatVal = ranges['Threat'] ?? 0;
+        if (rangeVal > 0 && threatVal > 0 && rangeVal !== threatVal)
+            return Math.max(1, (state.__laUseThreat ? threatVal : rangeVal) + shape);
+        const max = weaponPulseRange(ranges);
         if (max > 0)
             return Math.max(1, max);
     }
@@ -740,55 +855,107 @@ async function _computeAttackHudRange(state) {
     if (BASIC_MELEE_NAMES.has(actionName))
         return 1;
 
-    const isTech = !!state.data?.invade
-        || /invade|tech/i.test(state.data?.action?.activation ?? '')
-        || /invade|tech/i.test(actionName);
-    if (isTech)
+    if (_isTechAttackState(state, actionName))
         return _getSensorRange(actor);
 
     return null;
 }
 
-Hooks.once('ready', () => {
+function _isTechAttackState(state, actionName)
+{
+    return state.item?.system?.tech_attack === true
+        || !!state.data?.invade
+        || /invade|tech/i.test(state.data?.action?.activation ?? '')
+        || /invade|tech/i.test(actionName);
+}
+
+function _computeAttackHudGlow(state)
+{
+    const actionName = (state.data?.action?.name ?? state.data?.title ?? '').toLowerCase().trim();
+    if (_isTechAttackState(state, actionName))
+        return RANGE_GLOW.sensor;
+    if (state.item || BASIC_MELEE_NAMES.has(actionName))
+        return RANGE_GLOW.weapon;
+    return RANGE_GLOW.manual;
+}
+
+Hooks.once('ready', () =>
+{
     const original = game.lancer?.flowSteps?.get?.('showAttackHUD');
     if (!original)
         return;
-    game.lancer.flowSteps.set('showAttackHUD', async function(state, options) {
-        let destroy = null;
-        try {
-            if (game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')) {
-                const token = state.actor?.getActiveTokens?.()[0];
-                if (token) {
-                    const range = await _computeAttackHudRange(state);
-                    if (range != null && range > 0) {
-                        destroy = createPulsingRangeHighlight(token, range, { includeSelf: true });
+    game.lancer.flowSteps.set('showAttackHUD', async function(state, options)
+    {
+        let poll = null;
+        const token = game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')
+            ? state.actor?.getActiveTokens?.()[0]
+            : null;
+        const redraw = async () =>
+        {
+            const range = await _computeAttackHudRange(state);
+            if (range != null && range > 0)
+                rangePulse.setRange('tah-attack-card', { token, range, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: _computeAttackHudGlow(state) });
+            else
+                rangePulse.clear('tah-attack-card');
+        };
+        const onRangeMode = (changedState) =>
+        {
+            if (changedState === state)
+                redraw();
+        };
+        try
+        {
+            if (token)
+            {
+                await redraw();
+                Hooks.on('lancer-automations.attackRangeMode', onRangeMode);
+                let lastThrown = !!state.data?.acc_diff?.weapon?.thrown;
+                poll = setInterval(() =>
+                {
+                    const isThrown = !!state.data?.acc_diff?.weapon?.thrown;
+                    if (isThrown !== lastThrown)
+                    {
+                        lastThrown = isThrown;
+                        redraw();
                     }
-                }
+                }, 200);
             }
             return await original(state, options);
-        } finally {
-            if (destroy)
-                destroy();
+        }
+        finally
+        {
+            Hooks.off('lancer-automations.attackRangeMode', onRangeMode);
+            if (poll)
+                clearInterval(poll);
+            rangePulse.clear('tah-attack-card');
         }
     });
 
     const origPrint = game.lancer?.flowSteps?.get?.('printActionUseCard');
-    if (origPrint) {
-        game.lancer.flowSteps.set('printActionUseCard', async function(state, options) {
-            try {
-                if (game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard')) {
+    if (origPrint)
+    {
+        game.lancer.flowSteps.set('printActionUseCard', async function(state, options)
+        {
+            try
+            {
+                if (game.settings.get(MODULE, 'tah.rangePreviewOnAttackCard'))
+                {
                     const actor = state.actor;
                     const actionName = state.data?.action?.name ?? state.data?.title ?? '';
                     const token = actor?.getActiveTokens?.()[0];
-                    if (token && actionName && !FIXED_MELEE_ACTIONS.has(actionName.toLowerCase().trim())) {
+                    if (token && actionName && !FIXED_MELEE_ACTIONS.has(actionName.toLowerCase().trim()))
+                    {
                         const range = await getAttackRange(actionName, actor, null);
-                        if (range != null && range > 0) {
-                            const destroy = createPulsingRangeHighlight(token, range, { includeSelf: true });
-                            setTimeout(() => destroy(), 3500);
+                        if (range != null && range > 0)
+                        {
+                            rangePulse.setRange('tah-action-card-print', { token, range, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: getRangeGlowForAction(null, actionName, null) });
+                            setTimeout(() => rangePulse.clear('tah-action-card-print'), 3500);
                         }
                     }
                 }
-            } catch (e) { /* non-fatal */ }
+            }
+            catch (err)
+            { /* non-fatal */ }
             return await origPrint(state, options);
         });
     }

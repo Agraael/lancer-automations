@@ -7,31 +7,39 @@ let activeReactionDialog = null;
 let activeDetailPanel = null;
 let selectedReactionKey = null;
 
-function runCustomActivation({ activationType, source, triggerType, triggerData, token, item, activationName }) {
-    if (activationType === "macro") {
+function runCustomActivation({ activationType, source, triggerType, triggerData, token, item, activationName })
+{
+    if (activationType === "macro")
+    {
         const macroName = source?.activationMacro;
-        if (macroName) {
+        if (macroName)
+        {
             const macro = game.macros.find(m => m.name === macroName);
-            if (macro) {
+            if (macro)
                 return macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
-            } else {
+            else
                 ui.notifications.warn(`Macro "${macroName}" not found`);
-            }
         }
-    } else if (activationType === "code") {
+    }
+    else if (activationType === "code")
+    {
         const code = source?.activationCode;
-        if (code) {
+        if (code)
+        {
             const api = game.modules.get('lancer-automations')?.api;
             const invoke = typeof code === 'function'
                 ? () => code(triggerType, triggerData, token, item, activationName, api)
                 : (typeof code === 'string'
-                    ? () => {
+                    ? () =>
+                    {
                         const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"]);
                         return fn(triggerType, triggerData, token, item, activationName, api);
                     }
                     : null);
-            if (invoke) {
-                return runInFlowBody(invoke).catch(e => {
+            if (invoke)
+            {
+                return runInFlowBody(invoke).catch(e =>
+                {
                     console.error(`lancer-automations | Error executing activation code:`, e);
                 });
             }
@@ -39,14 +47,15 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
     }
 }
 
-export function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral) {
-    // Skip controlling the token for silent code auto-activations — no UI is shown so there's no
-    // reason to steal focus from the currently controlled token.
+export function activateReaction(triggerType, triggerData, token, item, activationName, reaction, isGeneral)
+{
+    // Silent code auto-activations show no UI, so don't steal control from the current token.
     const isSilentCode = reaction?.autoActivate && reaction?.activationType === 'code';
     if (!isSilentCode)
         token.control({ releaseOthers: true });
 
-    if (item) {
+    if (item)
+    {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
         const reactionEntry = reaction || reactionConfig?.reactions?.[0];
@@ -61,25 +70,29 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             activationType, source: reactionEntry, triggerType, triggerData, token, item, activationName
         });
 
-        const itemActivation = async () => {
+        const itemActivation = async () =>
+        {
             const reactionPath = reactionEntry?.reactionPath;
             let activationPath = null;
 
-            if (reactionPath) {
+            if (reactionPath)
                 activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
-            }
 
-            if (activationPath) {
+            if (activationPath)
                 await item.beginActivationFlow(activationPath);
-            } else if (item.system?.actions?.length > 0) {
+            else if (item.system?.actions?.length > 0)
+            {
                 const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
                 const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
                 await item.beginActivationFlow(path);
-            } else if (item.beginSystemFlow && item.system.type !== "Weapon") {
+            }
+            else if (item.beginSystemFlow && item.system.type !== "Weapon")
                 await item.beginSystemFlow();
-            } else {
+            else
+            {
                 const sendUnknownToChatFlow = game.lancer?.flows?.get("SendUnknownToChat");
-                if (sendUnknownToChatFlow) {
+                if (sendUnknownToChatFlow)
+                {
                     new sendUnknownToChatFlow(item.uuid, {
                         title: item.name,
                         description: item.system.description,
@@ -89,9 +102,9 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                         onCrit: item.system.on_crit,
                         tags: item.system.tags
                     }).begin();
-                } else {
-                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
                 }
+                else
+                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
             }
         };
 
@@ -99,25 +112,32 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const wouldRecurse = (triggerType === 'onActivation' || triggerType === 'onInitActivation')
             && triggerData?.item?.uuid
             && triggerData.item.uuid === item?.uuid;
-        if (wouldRecurse) {
+        if (wouldRecurse)
             console.warn(`lancer-automations | Skipping itemActivation for "${item?.name}" to avoid onActivation recursion (reaction on same item). Using macro/code activation only.`);
-        }
 
-        if (activationType === "none") { /* empty */ } else if (activationType === "flow") {
-            if (wouldRecurse) return;
+        if (activationType === "none")
+        { /* empty */ }
+        else if (activationType === "flow")
+        {
+            if (wouldRecurse)
+                return;
             return itemActivation();
-        } else if (activationType === "macro" || activationType === "code") {
-            if (activationMode === "instead" || wouldRecurse) {
+        }
+        else if (activationType === "macro" || activationType === "code")
+        {
+            if (activationMode === "instead" || wouldRecurse)
                 return executeCustomActivation();
-            } else {
-                const p1 = itemActivation();
-                const p2 = executeCustomActivation();
-                if (p1 instanceof Promise || p2 instanceof Promise) {
-                    return Promise.all([p1 || Promise.resolve(), p2 || Promise.resolve()]);
-                }
+            else
+            {
+                const itemActivationResult = itemActivation();
+                const customActivationResult = executeCustomActivation();
+                if (itemActivationResult instanceof Promise || customActivationResult instanceof Promise)
+                    return Promise.all([itemActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]);
             }
         }
-    } else {
+    }
+    else
+    {
         const actor = token.actor;
         const registryEntry = ReactionManager.getGeneralReaction(activationName);
         const generalReaction = (registryEntry && !Array.isArray(registryEntry.reactions)) ? registryEntry : (reaction || registryEntry);
@@ -133,9 +153,11 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             activationType, source: generalReaction, triggerType, triggerData, token, item: null, activationName
         });
 
-        const showChatActivation = async () => {
+        const showChatActivation = async () =>
+        {
             let flowData;
-            if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
+            if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData)
+            {
                 const actionData = triggerData.actionData;
                 flowData = {
                     title: actionData.title || activationName,
@@ -145,7 +167,9 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                     },
                     detail: actionData.detail || "No description"
                 };
-            } else {
+            }
+            else
+            {
                 const triggerText = generalReaction?.triggerDescription || "No trigger description";
                 const effectText = generalReaction?.effectDescription || "No effect description";
                 flowData = {
@@ -161,24 +185,28 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             await game.modules.get('lancer-automations').api.executeSimpleActivation(actor, flowData);
         };
 
-        if (activationType === "none") { /* empty */ } else if (activationType === "flow") {
+        if (activationType === "none")
+        { /* empty */ }
+        else if (activationType === "flow")
             return showChatActivation();
-        } else if (activationType === "macro" || activationType === "code") {
-            if (activationMode === "instead") {
+        else if (activationType === "macro" || activationType === "code")
+        {
+            if (activationMode === "instead")
                 return executeCustomActivation();
-            } else {
-                const p1 = showChatActivation();
-                const p2 = executeCustomActivation();
-                if (p1 instanceof Promise || p2 instanceof Promise) {
-                    return Promise.all([p1 || Promise.resolve(), p2 || Promise.resolve()]);
-                }
+            else
+            {
+                const chatActivationResult = showChatActivation();
+                const customActivationResult = executeCustomActivation();
+                if (chatActivationResult instanceof Promise || customActivationResult instanceof Promise)
+                    return Promise.all([chatActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]);
             }
         }
     }
 
 }
 
-export function displayReactionPopup(triggerType, triggeredReactions) {
+export function displayReactionPopup(triggerType, triggeredReactions)
+{
     if (triggeredReactions.length === 0)
         return;
 
@@ -186,12 +214,15 @@ export function displayReactionPopup(triggerType, triggeredReactions) {
     renderReactionDialog(popupData);
 }
 
-function closeDetailPanel() {
-    if (activeDetailPanel) {
+function closeDetailPanel()
+{
+    if (activeDetailPanel)
+    {
         activeDetailPanel.animate(
             { opacity: 0, left: '-=20px' },
             150,
-            function () {
+            function ()
+            {
                 $(this).remove();
             }
         );
@@ -200,17 +231,20 @@ function closeDetailPanel() {
     }
 }
 
-function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = null, triggerData = null) {
+function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = null, triggerData = null)
+{
     const isGeneral = reactionData?.isGeneral || false;
     const reactionKey = isGeneral ? `${token.id}-general-${reactionData.reactionName}` : `${token.id}-${item.id}`;
 
-    if (selectedReactionKey === reactionKey) {
+    if (selectedReactionKey === reactionKey)
+    {
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
         return;
     }
 
-    if (activeDetailPanel) {
+    if (activeDetailPanel)
+    {
         activeDetailPanel.remove();
         activeDetailPanel = null;
     }
@@ -225,20 +259,27 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     let actionType = "Reaction";
     let frequency = "1/Round";
 
-    if (isGeneral) {
+    if (isGeneral)
+    {
         panelActivationName = reactionData.reactionName;
         const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
 
-        if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData) {
+        if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData)
+        {
             const actionData = triggerData.actionData;
-            if (actionData.action) {
+            if (actionData.action)
+            {
                 triggerText = generalReaction?.triggerDescription || actionData.action.trigger || "";
                 effectText = generalReaction?.effectDescription || actionData.detail || actionData.action.detail || "";
-            } else {
+            }
+            else
+            {
                 triggerText = generalReaction?.triggerDescription || "";
                 effectText = generalReaction?.effectDescription || actionData.detail || "";
             }
-        } else {
+        }
+        else
+        {
             triggerText = generalReaction?.triggerDescription || "";
             effectText = generalReaction?.effectDescription || "";
         }
@@ -246,7 +287,9 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         isReactionType = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         actionType = generalReaction?.actionType || (isReactionType ? "Reaction" : "Free Action");
         frequency = generalReaction?.frequency || "1/Round";
-    } else if (item) {
+    }
+    else if (item)
+    {
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
 
@@ -259,51 +302,52 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         actionType = reactionEntry?.actionType || (isReactionType ? "Reaction" : "Free Action");
         frequency = reactionEntry?.frequency || "1/Round";
 
-        const resolvePath = (obj, path) => {
+        const resolvePath = (obj, path) =>
+        {
             if (!path)
                 return undefined;
             const cleanPath = path.replaceAll(/\[(\d+)\]/g, '.$1').replace(/^\./, '');
 
-            let val = foundry.utils.getProperty(obj, cleanPath);
-            if (val !== undefined)
-                return val;
+            let resolved = foundry.utils.getProperty(obj, cleanPath);
+            if (resolved !== undefined)
+                return resolved;
 
-            if (!cleanPath.startsWith("system.")) {
-                val = foundry.utils.getProperty(obj, `system.${cleanPath}`);
-            }
-            return val;
+            if (!cleanPath.startsWith("system."))
+                resolved = foundry.utils.getProperty(obj, `system.${cleanPath}`);
+            return resolved;
         };
 
         const resolvedData = resolvePath(item, reactionPath);
         const rootSystem = item.system;
 
-        if (typeof resolvedData === 'string') {
+        if (typeof resolvedData === 'string')
+        {
             triggerText = resolvedData;
 
-            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
+            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit)
                 effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
-            }
 
             activationPath = null;
-        } else if (typeof resolvedData === 'object' && resolvedData !== null) {
+        }
+        else if (typeof resolvedData === 'object' && resolvedData !== null)
+        {
             triggerText = resolvedData.trigger || resolvedData.description || "";
 
             // Fallback chain: specific effect -> specific on_hit -> specific detail -> root effect -> root on_hit
             effectText = resolvedData.effect || resolvedData.on_hit || resolvedData.on_crit || resolvedData.detail || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
 
             activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
-        } else {
-            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit) {
+        }
+        else
+        {
+            if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit)
                 effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
-            }
         }
 
-        if (reactionEntry?.triggerDescription) {
+        if (reactionEntry?.triggerDescription)
             triggerText = reactionEntry.triggerDescription;
-        }
-        if (reactionEntry?.effectDescription) {
+        if (reactionEntry?.effectDescription)
             effectText = reactionEntry.effectDescription;
-        }
 
         panelActivationName = item.name;
     }
@@ -354,17 +398,17 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
                 <i class="fas fa-sync"></i> ${frequency}
             </span>
              ${actionType === "Reaction" ?
-        `<span style="background: color-mix(in srgb, var(--primary-color), transparent 70%); padding: 2px 8px; border-radius: 10px;">
+                        `<span style="background: color-mix(in srgb, var(--primary-color), transparent 70%); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-bolt"></i> Reaction
                 </span>` :
-        actionType === "Free Action" ?
-            `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
+                        actionType === "Free Action" ?
+                            `<span style="background: rgba(42, 153, 30, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-check"></i> Free Action
                 </span>` :
-            `<span style="background: rgba(42, 153, 200, 0.3); padding: 2px 8px; border-radius: 10px;">
+                            `<span style="background: rgba(42, 153, 200, 0.3); padding: 2px 8px; border-radius: 10px;">
                     <i class="fas fa-play"></i> ${actionType}
                 </span>`
-}
+                }
         </div>
 
         <button class="activate-btn" style="
@@ -383,7 +427,8 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     activeDetailPanel = $('#reaction-detail-panel');
 
     const mainDialog = mainDialogEl.closest('.dialog');
-    if (mainDialog.length) {
+    if (mainDialog.length)
+    {
         const rect = mainDialog[0].getBoundingClientRect();
         activeDetailPanel.css({
             top: rect.top + 'px',
@@ -396,22 +441,25 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         200
     );
 
-    activeDetailPanel.find('.detail-close').click(() => {
+    activeDetailPanel.find('.detail-close').click(() =>
+    {
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
     });
 
-    activeDetailPanel.find('.activate-btn').click(async () => {
+    activeDetailPanel.find('.activate-btn').click(async () =>
+    {
         let reaction = null;
-        if (item) {
+        if (item)
+        {
             const lid = item.system?.lid;
             const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
 
             const specificReaction = reactionData?.reaction;
             reaction = specificReaction || reactionConfig?.reactions?.[0];
-        } else {
-            reaction = ReactionManager.getGeneralReaction(panelActivationName);
         }
+        else
+            reaction = ReactionManager.getGeneralReaction(panelActivationName);
 
         await activateReaction(popupData.triggerType, triggerData, token, item, panelActivationName, reaction, isGeneral);
 
@@ -419,7 +467,8 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
 
         const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
-        if (reactionCount <= 0) {
+        if (reactionCount <= 0)
+        {
             const tokenBox = mainDialogEl.find(`.lancer-list-item[data-token-id="${token.id}"]`);
             tokenBox.addClass('reaction-exhausted');
             tokenBox.find('img').css('filter', 'grayscale(100%)');
@@ -427,56 +476,66 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     });
 }
 
-function renderReactionDialog(popupData) {
+function renderReactionDialog(popupData)
+{
     const { triggerType, triggeredReactions } = popupData;
 
     const byToken = new Map();
-    for (const tr of triggeredReactions) {
-        if (!byToken.has(tr.token.id)) {
-            byToken.set(tr.token.id, {
-                token: tr.token,
+    for (const entry of triggeredReactions)
+    {
+        if (!byToken.has(entry.token.id))
+        {
+            byToken.set(entry.token.id, {
+                token: entry.token,
                 reactions: []
             });
         }
-        byToken.get(tr.token.id).reactions.push(tr);
+        byToken.get(entry.token.id).reactions.push(entry);
     }
 
-    for (const [tokenId, data] of byToken) {
-        const actor = data.token.actor;
+    for (const [tokenId, tokenEntry] of byToken)
+    {
+        const actor = tokenEntry.token.actor;
         const hasReaction = hasReactionAvailable(actor);
-        if (!hasReaction) {
+        if (!hasReaction)
             byToken.delete(tokenId);
-        }
     }
 
-    if (byToken.size === 0) {
+    if (byToken.size === 0)
+    {
         closeDetailPanel();
-        if (activeReactionDialog) {
+        if (activeReactionDialog)
+        {
             activeReactionDialog.close();
             activeReactionDialog = null;
         }
         return;
     }
 
-    let tokenItems = "";
-    for (const [tokenId, data] of byToken) {
-        const token = data.token;
+    let tokenItemsHtml = "";
+    for (const [tokenId, tokenEntry] of byToken)
+    {
+        const token = tokenEntry.token;
         const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
 
         let reactionList = "";
-        for (const r of data.reactions) {
-            const isGeneral = r.isGeneral || false;
-            const isActionBased = isGeneral && r.reaction?.onlyOnSourceMatch;
-            const itemId = r.item?.id || '';
-            const itemName = isGeneral ? 'General' : r.itemName;
+        for (const reaction of tokenEntry.reactions)
+        {
+            const isGeneral = reaction.isGeneral || false;
+            const isActionBased = isGeneral && reaction.reaction?.onlyOnSourceMatch;
+            const itemId = reaction.item?.id || '';
+            const itemName = isGeneral ? 'General' : reaction.itemName;
 
             let icon = 'fa-eye';
             let iconColor = '#cc3333';
 
-            if (isActionBased) {
+            if (isActionBased)
+            {
                 icon = 'fa-angles-right';
                 iconColor = '#cc9933';
-            } else if (isGeneral) {
+            }
+            else if (isGeneral)
+            {
                 icon = 'fa-globe';
                 iconColor = '#3366cc';
             }
@@ -485,21 +544,21 @@ function renderReactionDialog(popupData) {
             <div class="lancer-reaction-item"
                  data-token-id="${tokenId}"
                  data-item-id="${itemId}"
-                 data-reaction-name="${r.reactionName}"
+                 data-reaction-name="${reaction.reactionName}"
                  data-general="${isGeneral}"
                  data-action-based="${isActionBased}">
                 <i class="fas ${icon}" style="color: ${iconColor}; margin-right: 6px;"></i>
-                <span class="lancer-reaction-name">${r.reactionName}</span>
-                ${(!isGeneral && r.reactionName !== r.itemName) ? `<span class="lancer-reaction-source">(${r.itemName})</span>` : ''}
+                <span class="lancer-reaction-name">${reaction.reactionName}</span>
+                ${(!isGeneral && reaction.reactionName !== reaction.itemName) ? `<span class="lancer-reaction-source">(${reaction.itemName})</span>` : ''}
             </div>`;
         }
 
-        tokenItems += `
+        tokenItemsHtml += `
         <div class="lancer-list-item" data-token-id="${tokenId}">
             <img src="${token.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid var(--primary-color); border-radius: 4px; background: #000; cursor: pointer;">
             <div class="lancer-item-content">
                 <div class="lancer-item-name">${token.name}</div>
-                <div class="lancer-item-details">${data.reactions.length} reaction(s) available</div>
+                <div class="lancer-item-details">${tokenEntry.reactions.length} reaction(s) available</div>
             </div>
         </div>
         <div class="lancer-reactions-sublist">
@@ -548,7 +607,7 @@ function renderReactionDialog(popupData) {
         </div>
 
         <div class="lancer-list">
-            ${tokenItems}
+            ${tokenItemsHtml}
         </div>
 
         <div class="lancer-info-box">
@@ -557,9 +616,8 @@ function renderReactionDialog(popupData) {
         </div>
     </div>`;
 
-    if (activeReactionDialog) {
+    if (activeReactionDialog)
         activeReactionDialog.close();
-    }
 
     activeReactionDialog = new Dialog({
         title: `Activation Opportunity: ${triggerDisplay}`,
@@ -568,21 +626,25 @@ function renderReactionDialog(popupData) {
             ok: { label: "ACKNOWLEDGE" }
         },
         default: "ok",
-        render: (htmlEl) => {
-            htmlEl.find('.lancer-list-item').click((event) => {
+        render: (htmlEl) =>
+        {
+            htmlEl.find('.lancer-list-item').click((event) =>
+            {
                 if (event.target.closest('.lancer-reaction-item'))
                     return;
 
                 event.stopPropagation();
                 const tokenId = event.currentTarget.dataset.tokenId;
                 const token = canvas.tokens.get(tokenId);
-                if (token) {
+                if (token)
+                {
                     token.control({ releaseOthers: true });
                     canvas.animatePan({ x: token.center.x, y: token.center.y, duration: 250 });
                 }
             });
 
-            htmlEl.find('.lancer-reaction-item').click((event) => {
+            htmlEl.find('.lancer-reaction-item').click((event) =>
+            {
                 const el = event.currentTarget;
                 const tokenId = el.dataset.tokenId;
                 const itemId = el.dataset.itemId;
@@ -595,14 +657,17 @@ function renderReactionDialog(popupData) {
                 let reactionData = null;
                 let triggerData = null;
 
-                if (isGeneral) {
-                    reactionData = triggeredReactions.find(r =>
-                        r.token.id === tokenId && r.isGeneral && r.reactionName === reactionName
+                if (isGeneral)
+                {
+                    reactionData = triggeredReactions.find(entry =>
+                        entry.token.id === tokenId && entry.isGeneral && entry.reactionName === reactionName
                     );
                     triggerData = reactionData?.triggerData;
-                } else {
-                    const reactionEntry = triggeredReactions.find(r =>
-                        r.token.id === tokenId && !r.isGeneral && r.item?.id === itemId && r.reactionName === reactionName
+                }
+                else
+                {
+                    const reactionEntry = triggeredReactions.find(entry =>
+                        entry.token.id === tokenId && !entry.isGeneral && entry.item?.id === itemId && entry.reactionName === reactionName
                     );
                     item = reactionEntry?.item;
                     triggerData = reactionEntry?.triggerData;
@@ -617,7 +682,8 @@ function renderReactionDialog(popupData) {
                 showDetailPanel(token, item, htmlEl, popupData, reactionData, triggerData);
             });
 
-            htmlEl.find('.lancer-reaction-item').on('contextmenu', (event) => {
+            htmlEl.find('.lancer-reaction-item').on('contextmenu', (event) =>
+            {
                 event.preventDefault();
                 const el = event.currentTarget;
                 if (el.dataset.general === 'true')
@@ -630,16 +696,21 @@ function renderReactionDialog(popupData) {
                     item.sheet.render(true);
             });
         },
-        close: () => {
+        close: () =>
+        {
             closeDetailPanel();
             activeReactionDialog = null;
-            if (!_suppressCloseEmit) {
-                try {
+            if (!_suppressCloseEmit)
+            {
+                try
+                {
                     game.socket.emit('module.lancer-automations', {
                         action: 'closeReactionPopup',
                         payload: {}
                     });
-                } catch { /* ignore */ }
+                }
+                catch
+                { /* ignore */ }
             }
         }
     }, { top: 450, left: 150, classes: ['dialog', 'lancer-dialog-base', 'lancer-no-title']});
@@ -648,9 +719,16 @@ function renderReactionDialog(popupData) {
 }
 
 let _suppressCloseEmit = false;
-export function closeReactionPopupFromRemote() {
-    if (!activeReactionDialog) return;
+export function closeReactionPopupFromRemote()
+{
+    if (!activeReactionDialog)
+        return;
     _suppressCloseEmit = true;
-    try { activeReactionDialog.close(); } catch { /* ignore */ }
+    try
+    {
+        activeReactionDialog.close();
+    }
+    catch
+    { /* ignore */ }
     _suppressCloseEmit = false;
 }

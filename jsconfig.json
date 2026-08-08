@@ -13,9 +13,7 @@
             "esnext",
             "dom"
         ],
-        "types": [
-            "@league-of-foundry-developers/foundry-vtt-types"
-        ],
+        "types": ["fvtt-types"],
         "skipLibCheck": true
     },
     "include": [

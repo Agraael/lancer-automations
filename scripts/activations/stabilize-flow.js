@@ -3,15 +3,19 @@ import { chooseToken } from "../interactive/index.js";
 import { consumeAction } from "../tools/misc-tools.js";
 import { _flowSourceToken, _flowResolveActivationLabel } from "../fx/actionFX.js";
 
-async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
+async function laPickConditionFromActor(targetActor, prompt, anchorHtml)
+{
     const effects = [...(targetActor?.effects ?? [])].filter(e => !e.disabled && (e.statuses?.size || e.name));
-    if (!effects.length) {
+    if (!effects.length)
+    {
         ui.notifications.warn(`${targetActor?.name ?? 'Actor'} has no conditions to clear.`);
         return null;
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve) =>
+    {
         let done = false;
-        const finish = (pickedEffectId) => {
+        const finish = (pickedEffectId) =>
+        {
             if (done)
                 return;
             done = true;
@@ -28,13 +32,16 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
             </div>`).join('');
         const popup = laDetailPopup('la-pick-cond-popup', prompt, targetActor.name, rows, 'system');
         popup.find('.la-detail-close').on('click', () => finish(null));
-        popup.on('click', '.la-pick-cond', function (ev) {
+        popup.on('click', '.la-pick-cond', function (ev)
+        {
             ev.stopPropagation();
             finish(String($(this).data('id')));
         });
-        popup.on('mouseenter', '.la-pick-cond', function () {
+        popup.on('mouseenter', '.la-pick-cond', function ()
+        {
             $(this).css({ background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.15)' });
-        }).on('mouseleave', '.la-pick-cond', function () {
+        }).on('mouseleave', '.la-pick-cond', function ()
+        {
             $(this).css({ background: '', borderColor: 'transparent' });
         });
         $('body').append(popup);
@@ -59,11 +66,13 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml) {
     });
 }
 
-export async function laStabilizePrompt(state) {
+export async function laStabilizePrompt(state)
+{
     if (!state.data)
         throw new TypeError('Stabilize flow state data missing!');
     const actor = state.actor;
-    if (actor?.is_npc?.()) {
+    if (actor?.is_npc?.())
+    {
         const npcContent = `
             <div class="lancer-dialog-header">
                 <h2 class="lancer-dialog-title">STABILIZE</h2>
@@ -73,7 +82,8 @@ export async function laStabilizePrompt(state) {
                 <p style="margin: 0 0 10px;">The NPC clears all heat and the EXPOSED status, and reloads all LOADING weapons.</p>
                 <div class="lancer-info-box"><i class="fas fa-info-circle"></i><span>NPC Stabilize is fixed: Cool + Reload.</span></div>
             </div>`;
-        return new Promise((resolve) => {
+        return new Promise((resolve) =>
+        {
             new Dialog({
                 title: `Stabilize - ${actor.name}`,
                 content: npcContent,
@@ -81,7 +91,8 @@ export async function laStabilizePrompt(state) {
                     submit: {
                         icon: '<i class="fas fa-check"></i>',
                         label: 'Stabilize',
-                        callback: () => {
+                        callback: () =>
+                        {
                             state.data.option1 = 'Cool';
                             state.data.option2 = 'Reload';
                             resolve(true);
@@ -128,7 +139,8 @@ export async function laStabilizePrompt(state) {
             <div class="lancer-section-title" style="margin-top:14px;">OPTION 2</div>
             <div class="lancer-list">${opt2.map(o => card(o, '2', false)).join('')}</div>
         </div>`;
-    return new Promise((resolve) => {
+    return new Promise((resolve) =>
+    {
         let pickedOption1 = state.data.option1 ?? 'Cool';
         let pickedOption2 = state.data.option2 ?? 'Reload';
         if (pickedOption1 === 'Repair' && noRepair)
@@ -143,18 +155,22 @@ export async function laStabilizePrompt(state) {
                 submit: {
                     icon: '<i class="fas fa-check"></i>',
                     label: 'Submit',
-                    callback: () => {
-                        if (!pickedOption1 || !pickedOption2) {
+                    callback: () =>
+                    {
+                        if (!pickedOption1 || !pickedOption2)
+                        {
                             ui.notifications.warn('Pick one option from each group.');
                             return false;
                         }
-                        if ((pickedOption2 === 'ClearOwnCond' || pickedOption2 === 'ClearOtherCond') && !clearEffectId) {
+                        if ((pickedOption2 === 'ClearOwnCond' || pickedOption2 === 'ClearOtherCond') && !clearEffectId)
+                        {
                             ui.notifications.warn('Select a condition to clear first.');
                             return false;
                         }
                         state.data.option1 = pickedOption1;
                         state.data.option2 = pickedOption2;
-                        if (clearEffectId) {
+                        if (clearEffectId)
+                        {
                             state.data.la_clearTargetUuid = clearTargetUuid;
                             state.data.la_clearEffectId = clearEffectId;
                         }
@@ -169,25 +185,30 @@ export async function laStabilizePrompt(state) {
             },
             default: 'submit',
             close: () => resolve(false),
-            render: (html) => {
+            render: (html) =>
+            {
                 const $h = html instanceof $ ? html : $(html);
                 $h.find(`.la-stab-card[data-group="1"][data-val="${pickedOption1}"]`).addClass('selected');
                 $h.find(`.la-stab-card[data-group="2"][data-val="${pickedOption2}"]`).addClass('selected');
-                const refreshCardTargetLabel = ($card) => {
+                const refreshCardTargetLabel = ($card) =>
+                {
                     const $detailSpan = $card.find('.la-stab-detail');
                     if (clearLabel)
                         $detailSpan.text(`Target: ${clearLabel}`);
                 };
-                $h.find('.la-stab-card').on('click', async function (ev) {
+                $h.find('.la-stab-card').on('click', async function (ev)
+                {
                     ev.stopPropagation();
                     if ($(this).attr('data-disabled') === 'true')
                         return;
                     const groupId = String($(this).data('group'));
                     const optionValue = String($(this).data('val'));
-                    if (groupId === '2' && (optionValue === 'ClearOwnCond' || optionValue === 'ClearOtherCond')) {
+                    if (groupId === '2' && (optionValue === 'ClearOwnCond' || optionValue === 'ClearOtherCond'))
+                    {
                         let targetActor = actor;
                         let labelPrefix = '';
-                        if (optionValue === 'ClearOtherCond') {
+                        if (optionValue === 'ClearOtherCond')
+                        {
                             const origin = actor.getActiveTokens?.()?.[0];
                             const picked = await chooseToken(origin, { title: 'PICK ALLY', includeSelf: false, count: 1 });
                             targetActor = picked?.[0]?.actor;
@@ -202,7 +223,9 @@ export async function laStabilizePrompt(state) {
                         clearTargetUuid = targetActor.uuid;
                         clearEffectId = pickedEffectId;
                         clearLabel = `${labelPrefix}${effect?.name ?? 'Condition'}`;
-                    } else if (groupId === '2') {
+                    }
+                    else if (groupId === '2')
+                    {
                         clearTargetUuid = null;
                         clearEffectId = null;
                         clearLabel = '';
@@ -211,7 +234,8 @@ export async function laStabilizePrompt(state) {
                     $(this).addClass('selected');
                     if (groupId === '1')
                         pickedOption1 = optionValue;
-                    else {
+                    else
+                    {
                         pickedOption2 = optionValue;
                         refreshCardTargetLabel($(this));
                     }
@@ -222,32 +246,42 @@ export async function laStabilizePrompt(state) {
     });
 }
 
-export async function laStabilizeExtras(state) {
+export async function laStabilizeExtras(state)
+{
     if (!state?.data)
         return true;
     const actor = state.actor;
-    if (state.data.la_clearEffectId && state.data.la_clearTargetUuid) {
-        try {
+    if (state.data.la_clearEffectId && state.data.la_clearTargetUuid)
+    {
+        try
+        {
             const target = await fromUuid(state.data.la_clearTargetUuid);
             if (target?.deleteEmbeddedDocuments)
                 await target.deleteEmbeddedDocuments('ActiveEffect', [state.data.la_clearEffectId]);
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn('lancer-automations | stabilize condition clear failed:', e);
         }
     }
     if (state.data.option2 === 'ClearBurn'
         && game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
-        && actor?.system?.infection > 0) {
-        try {
+        && actor?.system?.infection > 0)
+    {
+        try
+        {
             await actor.update({ 'system.infection': 0 });
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn('lancer-automations | stabilize infection clear failed:', e);
         }
     }
     return true;
 }
 
-async function _consumeFlowAction(flow, success) {
+async function _consumeFlowAction(flow, success)
+{
     if (!success)
         return;
     if (!game.settings.get('lancer-automations', 'consumeAction'))
@@ -255,7 +289,8 @@ async function _consumeFlowAction(flow, success) {
     const token = _flowSourceToken(flow);
     if (!token)
         return;
-    if (flow?.constructor?.name === 'StabilizeFlow') {
+    if (flow?.constructor?.name === 'StabilizeFlow')
+    {
         await consumeAction(token, 'full');
         return;
     }

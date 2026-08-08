@@ -16,7 +16,7 @@ Lancer Automations runs the procedural parts of play for you: combat actions and
 
 ## Built-in actions and reactions
 
-Almost all of Lancer's actions and reactions are automated here. These aren't new rules, just Lancer's own actions run for you, and each one can be turned off or rewritten in the Activation Manager (see [Automation Engine](./AUTOMATION_ENGINE.md)). Stabilize and Scan already have a version in the Lancer system, which the module swaps for a richer one.
+Almost all of Lancer's actions and reactions are automated here. These aren't new rules, only Lancer's own actions run for you, and each one can be turned off or rewritten in the Activation Manager (see [Automation Engine](./AUTOMATION_ENGINE.md)). Stabilize and Scan already have a version in the Lancer system, which the module swaps for a fuller one.
 
 <p align="center">
   <img src="../img/ga-skirmish.png" width="38%"/>
@@ -27,7 +27,11 @@ Almost all of Lancer's actions and reactions are automated here. These aren't ne
 
 Search, Break Free, and Lancer's other opposed checks are rolled for you as **stat contests**, and you can trigger one from code with **`executeContestedCheck(tokenA, statA, tokenB, statB)`**, which returns the winner.
 
-Auto-knockback (the damage dialog's **Knockback** checkbox, reading a weapon's Knockback tag) and throwing a weapon as a token are combat flows too, both covered in [Interactive Tools](./INTERACTIVE_TOOLS.md).
+**Force Check** (TAH Skills, or **`executeForceCheck`**) sends a HASE check to picked tokens, each rolled by its owner; give it a save target and it becomes a save vs that actor's SAVE, pre-targeted in the roller's HUD.
+
+Auto-knockback (the damage dialog's **Knockback** checkbox, reading a weapon's Knockback tag) is a combat flow covered in [Interactive Tools](./INTERACTIVE_TOOLS.md). Throwing is one too: with **`enableThrowFlow`** on, attacking a throwable weapon first asks whether to attack or throw, and a thrown attack lands the weapon as a token (see [Advanced Targeting and Measurement](./ATTACK_TARGETING.md#throwing)).
+
+With **`autoDamageRoll`** on, the damage roll opens on its own after an attack, and **`autoDamageApply`** applies the rolled damage to the targets.
 
 ## Overwatch
 
@@ -35,8 +39,8 @@ Auto-knockback (the damage dialog's **Knockback** checkbox, reading a weapon's K
 
 Overwatch is automated two ways; pick one in the Activation Manager.
 
-- **Alert (default)** - when a hostile moves through your threat range, a prompt lists which of your tokens could react; click one to select and pan to it. It flags the chance but doesn't stop the move.
-- **Interrupt (v2)** - pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues. Off by default; enable it and disable the alert in the Activation Manager.
+- **Alert (default)**: when a hostile moves through your threat range, a prompt lists which of your tokens could react; click one to select and pan to it. It flags the chance but doesn't stop the move.
+- **Interrupt (v2)**: pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues. Off by default; enable it and disable the alert in the Activation Manager.
 
 Threat range reads from Grid-Aware-Auras threat auras when present, otherwise from the actor's weapon threat.
 
@@ -52,13 +56,13 @@ Grapple is automated: on a melee hit it applies **Grappled** and **Grappling**, 
 
 ## Action limits
 
-**Brace**, **Dazed**, **Staggered**, and **Slow** grey out the actions they block in the HUD while the status is on.
+**Brace**, **Dazed**, **Staggered** (Dead Rings), and **Slow** grey out the actions they block in the HUD while the status is on; the action popup names the locking status. Dazed also shows no movement on the ruler.
 
 ## Stabilize
 
 <img align="right" src="../img/ga-stabilize.png" width="45%"/>
 
-Stabilize gets a clearer dialog for its two choices; an NPC just cools and reloads. Whether it spends a Full action is set by **`consumeAction`** (Activation Manager tab), and with infection integration on, clearing burn also clears [infection](./INFECTION.md).
+Stabilize gets a clearer dialog for its two choices; an NPC only cools and reloads. Whether it spends a Full action is set by **`consumeAction`** (Activation Manager tab), and with infection integration on, clearing burn also clears [infection](./INFECTION.md).
 
 <br clear="right"/>
 
@@ -76,13 +80,21 @@ The counters are drawn to match whichever sheet you use, both the default Lancer
 
 <br clear="right"/>
 
+## Skip resource consumption
+
+<img align="right" src="../img/ga-consume-optout.png" width="45%"/>
+
+Stop an item from spending its resources when it fires, per resource type. Toggle it from the item's popup in the [Token Action HUD](./HUD.md), or from **Extra Config** on the item sheet (same menu as [Add Extra](./INTERACTIVE_TOOLS.md#add-extra)).
+
+<br clear="right"/>
+
 ## Reinforcement
 
 <img align="right" src="../img/ga-reinforcement.png" width="45%"/>
 
 For units that arrive partway through a fight. Drag the new tokens onto the scene holding **Alt** to drop them hidden, then, in combat, select them, run the reinforcement tool, and set how many rounds until they land. They stay hidden until then.
 
-In their place it drops a countdown marker, but only if it can find one. For each token it looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on, and spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round. You make those placeholder actors yourself, one per size you use; without a match the token just hides with no marker.
+In their place it drops a countdown marker, but only if it can find one. For each token it looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on, and spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round. You make those placeholder actors yourself, one per size you use; without a match the token only hides with no marker.
 
 When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a checkbox each so you pick who actually shows up. The chosen ones reappear with a burst effect (needs Sequencer and JB2A) and their marker is cleared; the rest are deleted along with their markers.
 
@@ -101,7 +113,7 @@ Off by default, **`enableAltStruct`** swaps Lancer's structure and overheat roll
   <img src="../img/ga-scan-legacy-sheet.png" width="40%"/>
 </p>
 
-LA's scan runs on both the **legacy** scan and the **native** Lancer-system scan; **`scanJournalSource`** chooses which one produces the result. Routing it through LA is what makes a scan reusable: each one is recorded as **scan ownership**, granted to players by **`scanPlayerOwnershipMode`** (everyone, a player group, or just the scanner).
+LA's scan runs on both the **legacy** scan and the **native** Lancer-system scan; **`scanJournalSource`** chooses which one produces the result. Routing it through LA is what makes a scan reusable: each one is recorded as **scan ownership**, granted to players by **`scanPlayerOwnershipMode`** (everyone, a player group, or only the scanner).
 
 Other LA features read that ownership to tell whether a player may see a target's data, so an NPC's information stays hidden until it's scanned. The [token stat hint](./TOKEN_DISPLAY.md) reads **UNKNOWN** until then, the custom [stat bars](./TOKEN_DISPLAY.md) can be set to appear only once scanned, and the HUD glossary panel lists what you've scanned.
 
@@ -121,6 +133,6 @@ A guided downtime flow: pick the pilot, choose one of the nine downtime activiti
 
 <img align="right" src="../img/ga-reserves.png" width="40%"/>
 
-A faster way to add Lancer's pilot reserves and bonuses without digging through the compendium, including custom reserves, projects, and organizations. Search to filter, click to add it to the pilot.
+Add Lancer's pilot reserves and bonuses, including custom reserves, projects, and organizations, without opening the compendium. Search to filter, click to add it to the pilot.
 
 <br clear="right"/>

@@ -1,6 +1,6 @@
 # API - Registration, How-Tos & Auras
 
-[Back to API Reference](API_REFERENCE.md)
+[Back to API Reference](API_REFERENCE.md) · Feature guide: [Automation Engine](feature/AUTOMATION_ENGINE.md)
 
 ---
 
@@ -18,7 +18,7 @@ api.registerUserHelper(name, fn)   // register a shared utility function
 api.getUserHelper(name)             // retrieve it by name
 ```
 
-Useful for sharing logic between separate activation scripts.
+Shares logic between activation scripts.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -98,11 +98,11 @@ Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Awa
 await api.createAura(owner, auraConfig)
 ```
 
-Creates an aura using the Grid-Aware Auras module. This wrapper supports passing a Javascript `function` instead of a macro ID.
+Wrapper accepts a JS `function` in place of a macro ID.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>owner</kbd> | `Token\|Item` | The document that owns the aura |
+| <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura |
 | <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
 
 **`macros` Function Example:**
@@ -138,11 +138,11 @@ macros: [{
 await api.deleteAuras(owner, filter, options)
 ```
 
-Deletes auras from the specified owner. Safely cleans up any associated lambda callbacks from memory.
+Deletes the owner's auras and cleans up associated lambda callbacks.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>owner</kbd> | `Token\|Item` | *required* | The document that owns the auras |
+| <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | *required* | The document that owns the auras |
 | <kbd>filter</kbd> | `string\|Object` | *required* | String ID, name, or Object filter |
 | <kbd>options</kbd> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
 
@@ -159,7 +159,7 @@ Deletes auras from the specified owner. Safely cleans up any associated lambda c
 await api.toggleAura(actorOrToken, auraName, on?)
 ```
 
-Toggles the `enabled` flag of an existing Grid-Aware Aura by name. Does not create or delete the aura, just flips/sets its active state in the actor's `grid-aware-auras.auras` flag.
+Flips or sets the `enabled` flag in the actor's `grid-aware-auras.auras` flag. Does not create or delete the aura.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

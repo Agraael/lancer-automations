@@ -5,7 +5,7 @@
  */
 let FilterType = null;
 
-// FilterFracture — Voronoi F2-F1 glowing cracks with noise distortion.
+// FilterFracture: Voronoi F2-F1 glowing cracks with noise distortion.
 
 const fractureFragment = `
 precision mediump float;
@@ -112,7 +112,7 @@ void main()
     // F2-F1: zero at cell boundaries, large inside cells
     float edge = d2 - d1;
 
-    // Noise mask — randomly hide sections of cracks
+    // Noise mask: randomly hide sections of cracks
     // Uses position along the edge to break up continuous lines
     float mask = vnoise(uv * 2.5 + time * 0.05);
     mask = smoothstep(maskAmount, maskAmount + 0.3, mask);
@@ -167,8 +167,10 @@ void main(void)
 
 const _tempRect = new PIXI.Rectangle();
 
-export class FilterFracture extends PIXI.Filter {
-    constructor(params) {
+export class FilterFracture extends PIXI.Filter
+{
+    constructor(params)
+    {
         super(customVertex2D, fractureFragment);
 
         this.uniforms.color = new Float32Array([1.0, 1.0, 1.0]);
@@ -183,13 +185,13 @@ export class FilterFracture extends PIXI.Filter {
         this.zOrder = 200;
         this.animated = {};
         this.setTMParams(params);
-        if (!this.dummy) {
+        if (!this.dummy)
             this.normalizeTMParams();
-        }
     }
 
     // Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord + self-driven time.
-    apply(filterManager, input, output, clear) {
+    apply(filterManager, input, output, clear)
+    {
         const now = performance.now();
         const dt = (now - this._lastTime) / 1000;
         this._lastTime = now;
@@ -197,7 +199,8 @@ export class FilterFracture extends PIXI.Filter {
 
         const filterMatrix = this.uniforms.filterMatrix;
 
-        if (filterMatrix) {
+        if (filterMatrix)
+        {
             const { sourceFrame, destinationFrame, target } = filterManager.activeState;
 
             filterMatrix.set(
@@ -208,7 +211,8 @@ export class FilterFracture extends PIXI.Filter {
             const worldTransform = PIXI.Matrix.TEMP_MATRIX;
             const localBounds = target.getLocalBounds(_tempRect);
 
-            if (this.sticky) {
+            if (this.sticky)
+            {
                 worldTransform.copyFrom(target.transform.worldTransform);
                 worldTransform.invert();
 
@@ -225,7 +229,9 @@ export class FilterFracture extends PIXI.Filter {
                 );
 
                 localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            } else {
+            }
+            else
+            {
                 const transform = target.transform;
                 worldTransform.a = transform.scale.x;
                 worldTransform.b = 0;
@@ -247,7 +253,8 @@ export class FilterFracture extends PIXI.Filter {
             filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
 
             const filterMatrixInverse = this.uniforms.filterMatrixInverse;
-            if (filterMatrixInverse) {
+            if (filterMatrixInverse)
+            {
                 filterMatrixInverse.copyFrom(filterMatrix);
                 filterMatrixInverse.invert();
             }
@@ -256,73 +263,93 @@ export class FilterFracture extends PIXI.Filter {
         filterManager.applyFilter(this, input, output, clear);
     }
 
-    get time() {
+    get time()
+    {
         return this.uniforms.time;
     }
-    set time(value) {
+    set time(value)
+    {
         this.uniforms.time = value;
     }
 
-    get color() {
+    get color()
+    {
         return PIXI.utils.rgb2hex(this.uniforms.color);
     }
-    set color(value) {
+    set color(value)
+    {
         new PIXI.Color(value).toRgbArray(this.uniforms.color);
     }
 
-    get intensity() {
+    get intensity()
+    {
         return this.uniforms.intensity;
     }
-    set intensity(value) {
+    set intensity(value)
+    {
         this.uniforms.intensity = value;
     }
 
-    get scale() {
+    get scale()
+    {
         return this.uniforms.scale;
     }
-    set scale(value) {
+    set scale(value)
+    {
         this.uniforms.scale = value;
     }
 
-    get crackWidth() {
+    get crackWidth()
+    {
         return this.uniforms.crackWidth;
     }
-    set crackWidth(value) {
+    set crackWidth(value)
+    {
         this.uniforms.crackWidth = value;
     }
 
-    get opacity() {
+    get opacity()
+    {
         return this.uniforms.opacity;
     }
-    set opacity(value) {
+    set opacity(value)
+    {
         this.uniforms.opacity = value;
     }
 
-    get warpStrength() {
+    get warpStrength()
+    {
         return this.uniforms.warpStrength;
     }
-    set warpStrength(value) {
+    set warpStrength(value)
+    {
         this.uniforms.warpStrength = value;
     }
 
-    get noiseScale() {
+    get noiseScale()
+    {
         return this.uniforms.noiseScale;
     }
-    set noiseScale(value) {
+    set noiseScale(value)
+    {
         this.uniforms.noiseScale = value;
     }
 
-    get maskAmount() {
+    get maskAmount()
+    {
         return this.uniforms.maskAmount;
     }
-    set maskAmount(value) {
+    set maskAmount(value)
+    {
         this.uniforms.maskAmount = value;
     }
 
-    get blend() {
+    get blend()
+    {
         return this.uniforms.blend;
     }
-    set blend(value) {
+    set blend(value)
+    {
         this.uniforms.blend = Math.floor(value);
     }
 }
@@ -340,7 +367,7 @@ FilterFracture.defaults = {
     blend: 2,
 };
 
-// FilterChains — crossing chain-link pattern overlay.
+// FilterChains: crossing chain-link pattern overlay.
 
 const chainsFragment = `
 precision mediump float;
@@ -444,8 +471,10 @@ void main()
 }
 `;
 
-export class FilterChains extends PIXI.Filter {
-    constructor(params) {
+export class FilterChains extends PIXI.Filter
+{
+    constructor(params)
+    {
         super(customVertex2D, chainsFragment);
 
         this.uniforms.color = new Float32Array([1.0, 1.0, 1.0]);
@@ -460,12 +489,12 @@ export class FilterChains extends PIXI.Filter {
         this.zOrder = 200;
         this.animated = {};
         this.setTMParams(params);
-        if (!this.dummy) {
+        if (!this.dummy)
             this.normalizeTMParams();
-        }
     }
 
-    apply(filterManager, input, output, clear) {
+    apply(filterManager, input, output, clear)
+    {
         const now = performance.now();
         const dt = (now - this._lastTime) / 1000;
         this._lastTime = now;
@@ -473,7 +502,8 @@ export class FilterChains extends PIXI.Filter {
 
         const filterMatrix = this.uniforms.filterMatrix;
 
-        if (filterMatrix) {
+        if (filterMatrix)
+        {
             const { sourceFrame, destinationFrame, target } = filterManager.activeState;
 
             filterMatrix.set(
@@ -484,7 +514,8 @@ export class FilterChains extends PIXI.Filter {
             const worldTransform = PIXI.Matrix.TEMP_MATRIX;
             const localBounds = target.getLocalBounds(_tempRect);
 
-            if (this.sticky) {
+            if (this.sticky)
+            {
                 worldTransform.copyFrom(target.transform.worldTransform);
                 worldTransform.invert();
 
@@ -501,7 +532,9 @@ export class FilterChains extends PIXI.Filter {
                 );
 
                 localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            } else {
+            }
+            else
+            {
                 const transform = target.transform;
                 worldTransform.a = transform.scale.x;
                 worldTransform.b = 0;
@@ -523,7 +556,8 @@ export class FilterChains extends PIXI.Filter {
             filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
 
             const filterMatrixInverse = this.uniforms.filterMatrixInverse;
-            if (filterMatrixInverse) {
+            if (filterMatrixInverse)
+            {
                 filterMatrixInverse.copyFrom(filterMatrix);
                 filterMatrixInverse.invert();
             }
@@ -532,59 +566,75 @@ export class FilterChains extends PIXI.Filter {
         filterManager.applyFilter(this, input, output, clear);
     }
 
-    get time() {
+    get time()
+    {
         return this.uniforms.time;
     }
-    set time(value) {
+    set time(value)
+    {
         this.uniforms.time = value;
     }
 
-    get color() {
+    get color()
+    {
         return PIXI.utils.rgb2hex(this.uniforms.color);
     }
-    set color(value) {
+    set color(value)
+    {
         new PIXI.Color(value).toRgbArray(this.uniforms.color);
     }
 
-    get intensity() {
+    get intensity()
+    {
         return this.uniforms.intensity;
     }
-    set intensity(value) {
+    set intensity(value)
+    {
         this.uniforms.intensity = value;
     }
 
-    get scale() {
+    get scale()
+    {
         return this.uniforms.scale;
     }
-    set scale(value) {
+    set scale(value)
+    {
         this.uniforms.scale = value;
     }
 
-    get linkWidth() {
+    get linkWidth()
+    {
         return this.uniforms.linkWidth;
     }
-    set linkWidth(value) {
+    set linkWidth(value)
+    {
         this.uniforms.linkWidth = value;
     }
 
-    get linkGap() {
+    get linkGap()
+    {
         return this.uniforms.linkGap;
     }
-    set linkGap(value) {
+    set linkGap(value)
+    {
         this.uniforms.linkGap = value;
     }
 
-    get opacity() {
+    get opacity()
+    {
         return this.uniforms.opacity;
     }
-    set opacity(value) {
+    set opacity(value)
+    {
         this.uniforms.opacity = value;
     }
 
-    get blend() {
+    get blend()
+    {
         return this.uniforms.blend;
     }
-    set blend(value) {
+    set blend(value)
+    {
         this.uniforms.blend = Math.floor(value);
     }
 }
@@ -605,19 +655,24 @@ FilterChains.defaults = {
  * FilterType (so the effect renders) and the bundle's internal one (so TokenMagic's updateToken
  * reconstruction doesn't error). webpack minifies the bundle export name, so we find it by shape.
  */
-Hooks.once('ready', async () => {
+Hooks.once('ready', async () =>
+{
     if (!game.modules.get('tokenmagic')?.active)
         return;
 
     // 1) Source-module patch (keeps the visual effect rendering).
-    try {
+    try
+    {
         const mod = await import('/modules/tokenmagic/module/tokenmagic.js');
         FilterType = mod?.FilterType ?? null;
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn('lancer-automations | TokenMagic source import failed; custom filters disabled.', e);
         return;
     }
-    if (!FilterType) {
+    if (!FilterType)
+    {
         console.warn('lancer-automations | TokenMagic FilterType export not found; custom filters disabled.');
         return;
     }
@@ -626,46 +681,56 @@ Hooks.once('ready', async () => {
     console.log('lancer-automations | Registered fracture/chains on source FilterType');
 
     // 2) Bundle-internal patch: scan bundle module exports for the FilterType by shape (stock keys).
-    try {
+    try
+    {
         const chunkArr = /** @type {any} */ (self).webpackChunktokenmagic;
         if (!Array.isArray(chunkArr))
             return;
         let webpackRequire = null;
-        chunkArr.push([['__la_capture_tmfx_filterType__'], {}, (r) => {
+        chunkArr.push([['__la_capture_tmfx_filterType__'], {}, (r) =>
+        {
             webpackRequire = r;
         }]);
         if (!webpackRequire?.m)
             return;
         const STOCK_KEYS = ['adjustment', 'glow', 'outline', 'blur'];
         let bundleFT = null;
-        for (const id of Object.keys(webpackRequire.m)) {
+        for (const id of Object.keys(webpackRequire.m))
+        {
             let mod;
-            try {
+            try
+            {
                 mod = webpackRequire(id);
-            } catch {
+            }
+            catch
+            {
                 continue;
             }
             if (!mod)
                 continue;
-            for (const key of Object.keys(mod)) {
-                const v = mod[key];
-                if (!v || typeof v !== 'object')
+            for (const key of Object.keys(mod))
+            {
+                const exportVal = mod[key];
+                if (!exportVal || typeof exportVal !== 'object')
                     continue;
-                if (!STOCK_KEYS.every(k => k in v))
+                if (!STOCK_KEYS.every(k => k in exportVal))
                     continue;
-                bundleFT = v;
+                bundleFT = exportVal;
                 console.log('lancer-automations | Found bundle FilterType (module', id, ', export', key, ')');
                 break;
             }
             if (bundleFT)
                 break;
         }
-        if (bundleFT && bundleFT !== FilterType) {
+        if (bundleFT && bundleFT !== FilterType)
+        {
             bundleFT.fracture = FilterFracture;
             bundleFT.chains = FilterChains;
             console.log('lancer-automations | Registered fracture/chains on bundle FilterType');
         }
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn('lancer-automations | Bundle FilterType patch failed; updateToken reconstruction may still log errors.', e);
     }
 });

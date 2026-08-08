@@ -12,11 +12,13 @@ const CONSENT_PENDING = "pending";
 
 const TABLE = "seen_users";
 
-async function _upsertUser(userHash, role) {
+async function _upsertUser(userHash, role)
+{
     const moduleVersion = game.modules.get(MODULE_NAMESPACE)?.version || "unknown";
     const language = game.i18n.lang || "unknown";
 
-    try {
+    try
+    {
         const { error } = await getSupabase()
             .from(TABLE)
             .upsert({
@@ -28,45 +30,61 @@ async function _upsertUser(userHash, role) {
             }, { onConflict: "user_hash" });
         if (error)
             throw error;
-    } catch (err) {
+    }
+    catch (err)
+    {
         console.error("Lancer Automation | Supabase error:", err);
     }
 }
 
-async function _pingDaily(_userHash, role) {
-    try {
+async function _pingDaily(_userHash, role)
+{
+    try
+    {
         const { error } = await getSupabase().rpc("record_ping", { p_role: role });
         if (error)
             throw error;
-    } catch (err) {
+    }
+    catch (err)
+    {
         console.error("Lancer Automation | Supabase daily ping error:", err);
     }
 }
 
-async function _maybeDailyTouch(userHash, role) {
+async function _maybeDailyTouch(userHash, role)
+{
     const today = new Date().toISOString().slice(0, 10);
     let last = "";
-    try {
+    try
+    {
         last = game.settings.get(MODULE_NAMESPACE, LAST_PING_SETTING) || "";
-    } catch {
+    }
+    catch
+    {
         // Setting not registered yet.
     }
     if (last === today)
         return;
     await _pingDaily(userHash, role);
     await _upsertUser(userHash, role);
-    try {
+    try
+    {
         await game.settings.set(MODULE_NAMESPACE, LAST_PING_SETTING, today);
-    } catch {
+    }
+    catch
+    {
         // Setting not registered yet.
     }
 }
 
 // Modal: re-shows itself if dismissed without a button.
-async function _showFirstLaunchPopup() {
-    return new Promise((resolve) => {
+async function _showFirstLaunchPopup()
+{
+    return new Promise((resolve) =>
+    {
         let answered = false;
-        const pick = (value) => {
+        const pick = (value) =>
+        {
             answered = true;
             resolve(value);
         };
@@ -101,7 +119,8 @@ async function _showFirstLaunchPopup() {
                 },
             },
             default: "gm",
-            close: () => {
+            close: () =>
+            {
                 if (!answered)
                     pick(CONSENT_DECLINED);
             },
@@ -109,9 +128,11 @@ async function _showFirstLaunchPopup() {
     });
 }
 
-async function _runFirstLaunch() {
+async function _runFirstLaunch()
+{
     const role = await _showFirstLaunchPopup();
-    if (role === CONSENT_DECLINED) {
+    if (role === CONSENT_DECLINED)
+    {
         await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
         console.log("Lancer Automation | User declined; no data sent.");
         return;
@@ -123,14 +144,18 @@ async function _runFirstLaunch() {
     console.log(`Lancer Automation | Counted as ${role}.`);
 }
 
-async function _handleStartup() {
+async function _handleStartup()
+{
     if (!game.user?.id)
         return;
 
     let consent = CONSENT_PENDING;
-    try {
+    try
+    {
         consent = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING) || CONSENT_PENDING;
-    } catch {
+    }
+    catch
+    {
         // Setting not registered yet; treat as pending.
     }
 
@@ -142,12 +167,17 @@ async function _handleStartup() {
     if (consent === CONSENT_DECLINED)
         return;
 
-    if (consent === ROLE_GM || consent === ROLE_PLAYER) {
+    if (consent === ROLE_GM || consent === ROLE_PLAYER)
+    {
         let installId = "";
-        try {
+        try
+        {
             installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
-        } catch { /* not registered yet */ }
-        if (!installId) {
+        }
+        catch
+        { /* not registered yet */ }
+        if (!installId)
+        {
             installId = foundry.utils.randomID();
             await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
         }
@@ -158,17 +188,21 @@ async function _handleStartup() {
     await _runFirstLaunch();
 }
 
-class ConsentMenu extends FormApplication {
-    render() {
+class ConsentMenu extends FormApplication
+{
+    render()
+    {
         const current = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING);
         const label = current === ROLE_GM ? "currently counted as GM"
             : current === ROLE_PLAYER ? "currently counted as Player"
                 : current === CONSENT_DECLINED ? "currently opted out"
                     : "not decided";
 
-        const switchTo = async (role) => {
+        const switchTo = async (role) =>
+        {
             let installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
-            if (!installId) {
+            if (!installId)
+            {
                 installId = foundry.utils.randomID();
                 await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
             }
@@ -186,7 +220,8 @@ class ConsentMenu extends FormApplication {
                 decline: {
                     icon: '<i class="fas fa-times"></i>',
                     label: "Opt out",
-                    callback: async () => {
+                    callback: async () =>
+                    {
                         await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
                         ui.notifications.info("Opted out. No more data will be sent.");
                     },
@@ -195,10 +230,12 @@ class ConsentMenu extends FormApplication {
         }, { width: 420 }).render(true);
         return this;
     }
-    async _updateObject() {}
+    async _updateObject()
+    {}
 }
 
-Hooks.once("setup", () => {
+Hooks.once("setup", () =>
+{
     // client scope: per browser; random per install.
     game.settings.register(MODULE_NAMESPACE, INSTALL_ID_SETTING, {
         scope: "client",
@@ -231,7 +268,8 @@ Hooks.once("setup", () => {
     });
 });
 
-Hooks.on("ready", async () => {
+Hooks.on("ready", async () =>
+{
     if (!game.user?.id)
         return;
     await _handleStartup();

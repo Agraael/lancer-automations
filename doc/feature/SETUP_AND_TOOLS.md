@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-The setup and housekeeping side of the module: optional content, actor and data cleanup, news, the guided tours, and a couple of scene helpers.
+Setup and housekeeping: optional content, actor and data cleanup, news, guided tours, and scene helpers.
 
 ---
 
@@ -38,7 +38,7 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 
 <img align="right" src="../img/st-tour.png" width="45%"/>
 
-Five in-app walkthroughs, config, the activation manager, the effect manager, the HUD, and the ruler, run from the **Tutorial & Help** tab. A welcome dialog offers them on first install.
+There are guided in-app tours to explain the main systems, from the **Tutorial & Help** tab. A welcome dialog offers them on first install, along with a **Setup Wizard** for the main settings.
 
 <br clear="right"/>
 

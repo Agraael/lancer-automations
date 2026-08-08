@@ -13,5 +13,14 @@ Thumbs.db
 *.suo
 *.user
 
+# Dev tooling; keep the generated hints data (imported at runtime)
+tools/*
+!tools/codemirror-hints-data.generated.js
+
 .vtt_ignore
 release-diff.sh
+
+
+extra/package_lcp.ps1
+extra/package_lcp.bat
+extra/*.zip

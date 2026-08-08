@@ -1,7 +1,8 @@
 /* global game */
 
-export function registerSettings() {
-    // ── Core ──
+export function registerSettings()
+{
+    // Core
     game.settings.register('lancer-automations', 'reactionNotificationMode', {
         name: 'Activation Notification Mode',
         hint: 'Who sees the activation popup.',
@@ -88,7 +89,7 @@ export function registerSettings() {
         default: true
     });
 
-    // ── Features ──
+    // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register('lancer-automations', 'additionalStatuses', {
         name: 'LaSossis Additional statuses and effects',
@@ -119,6 +120,42 @@ export function registerSettings() {
         requiresReload: true
     });
 
+    game.settings.register('lancer-automations', 'convertHeatToEnergyOnHeatless', {
+        name: 'Heat as Energy on heatless targets',
+        hint: 'Convert Heat damage to Energy when the target has no heat capacity (pilots, biological NPCs). Mirrors what Lancer does natively for pilots.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'resistSelfHeat', {
+        name: 'Resist Self-Inflicted Heat',
+        hint: 'Halve self-inflicted heat from self-heat, overkill, and overcharge when the mech resists Heat.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoDamageRoll', {
+        name: 'Auto Damage Roll',
+        hint: 'Open the Damage HUD automatically after an attack.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoDamageApply', {
+        name: 'Auto Apply Damage',
+        hint: 'Apply rolled damage to targets automatically. Unowned targets are applied by the GM client.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
@@ -138,8 +175,8 @@ export function registerSettings() {
     });
 
     game.settings.register('lancer-automations', 'statRollTargeting', {
-        name: 'Enable Stat Roll Target Selection',
-        hint: 'Stat rolls prompt for a target to auto-calculate difficulty.',
+        name: 'Stat Roll Targeting',
+        hint: 'Adds an optional single-target picker to the stat-roll HUD to auto-calculate save difficulty.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -153,6 +190,25 @@ export function registerSettings() {
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register('lancer-automations', 'enableDamageTargeting', {
+        name: 'LA Damage Targeting',
+        hint: 'Adds the LA target/range picker to the damage HUD; hold Shift to target multiple.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'targetInfoDisplay', {
+        name: 'Target Info Labels',
+        hint: 'Who sees the hit-chance and damage-range labels while targeting.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: { off: 'No', gm: 'GM only', all: 'GM and players' },
+        default: 'gm'
     });
 
     game.settings.register('lancer-automations', 'autoStartTargetPicking', {
@@ -180,15 +236,6 @@ export function registerSettings() {
         config: false,
         type: Boolean,
         default: false
-    });
-
-    game.settings.register('lancer-automations', 'enablePathHexCalculation', {
-        name: 'Enable Path Hex Calculation',
-        hint: 'Tracks exact path hexes during movement. Needed for movement interception.',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: true
     });
 
     game.settings.register('lancer-automations', 'experimentalBoostDetection', {
@@ -227,7 +274,7 @@ export function registerSettings() {
         default: true
     });
 
-    // ── Alt Structure ──
+    // Alt Structure
     game.settings.register('lancer-automations', 'enableAltStruct', {
         name: "Maria's Alternate Structure & Stress Rules",
         hint: "Integrated implementation of Maria's Alternate Structure & Stress rules. Disable if using the standalone lancer-alt-structure module.",
@@ -238,7 +285,7 @@ export function registerSettings() {
         requiresReload: true,
     });
 
-    // ── One-Structure NPC Auto-Destroy ──
+    // One-Structure NPC Auto-Destroy
     game.settings.register('lancer-automations', 'enableOneStructNpc', {
         name: 'One-Structure NPC Auto-Destroy',
         hint: 'NPCs with max structure 1 skip the structure table and are destroyed on the first structure hit.',
@@ -248,7 +295,7 @@ export function registerSettings() {
         default: false,
     });
 
-    // ── Vision ──
+    // Vision
     game.settings.register('lancer-automations', 'dragVisionMultiplier', {
         name: 'Drag Vision Radius Multiplier',
         hint: '1 = full vision while dragging, 0.5 = half, 0 = none.',
@@ -259,7 +306,7 @@ export function registerSettings() {
         default: 1
     });
 
-    // ── Wreck system ──
+    // Wreck system
     game.settings.register('lancer-automations', 'enableWrecks', {
         name: 'Wreck Automation',
         hint: 'Automate wrecking on structure reaching 0.',
@@ -270,7 +317,8 @@ export function registerSettings() {
     });
     // Per-category wreck mode + terrain.
     const wreckModeChoices = { token: 'Token', tile: 'Tile', none: 'Skip (do nothing)' };
-    for (const cat of ['mech', 'human', 'monstrosity', 'biological']) {
+    for (const cat of ['mech', 'human', 'monstrosity', 'biological'])
+    {
         const label = cat.charAt(0).toUpperCase() + cat.slice(1);
         game.settings.register('lancer-automations', `wreckMode_${cat}`, {
             name: `${label}: Wreck Mode`,
@@ -302,6 +350,12 @@ export function registerSettings() {
         config: false,
         type: String,
         default: '',
+    });
+    game.settings.register('lancer-automations', 'wreckFactionOnDeath', {
+        scope: 'world',
+        config: false,
+        type: String,
+        default: 'same',
     });
     game.settings.register('lancer-automations', 'enableRemoveFromCombat', {
         name: 'Remove Wrecks from Combat',
@@ -431,7 +485,7 @@ export function registerSettings() {
         type: Boolean,
         default: false,
     });
-    // ── Debug ──
+    // Debug
     game.settings.register('lancer-automations', 'debugBoostDetection', {
         name: 'Debug: Boost Detection',
         hint: 'Show UI notifications when boost detection triggers.',

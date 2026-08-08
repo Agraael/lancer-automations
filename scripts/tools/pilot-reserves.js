@@ -1,4 +1,5 @@
-function _resolvePilot(tokenOrActor) {
+function _resolvePilot(tokenOrActor)
+{
     const actor = tokenOrActor?.actor ?? tokenOrActor;
     if (!actor)
         return null;
@@ -12,7 +13,8 @@ function _resolvePilot(tokenOrActor) {
 const _ORG_TYPES = ['Military', 'Scientific', 'Academic', 'Criminal', 'Humanitarian', 'Industrial', 'Entertainment', 'Political'];
 const _PROJECT_REQS = ['Quality materials', 'Specific knowledge or techniques', 'Specialized tools', 'A good workspace'];
 
-async function _fetchReservesByType() {
+async function _fetchReservesByType()
+{
     const map = { Bonus: [], Resources: [], Tactical: [], Mech: [] };
     const RESOURCE_NAMES = new Set([
         'Access', 'Backing', 'Supplies', 'Disguise', 'Diversion', 'Blackmail',
@@ -20,35 +22,39 @@ async function _fetchReservesByType() {
         'Stash Of Private Moonshine', "Governor's Farm Advanced Access",
         "Fielding's Workshop Access", 'Patience Hookup', 'Causality Fragment',
     ]);
-    const normalize = (t, name) => {
-        if (!t)
+    const normalize = (type, name) =>
+    {
+        if (!type)
             return null;
-        if (t === 'Resource' || RESOURCE_NAMES.has(name))
+        if (type === 'Resource' || RESOURCE_NAMES.has(name))
             return 'Resources';
-        return t;
+        return type;
     };
-    for (const pack of game.packs) {
+    for (const pack of game.packs)
+    {
         if (pack.documentName !== 'Item')
             continue;
         const index = await pack.getIndex({ fields: ['system.lid', 'system.type', 'system.description', 'type'] });
-        for (const e of index) {
-            if (e.type !== 'reserve')
+        for (const entry of index)
+        {
+            if (entry.type !== 'reserve')
                 continue;
-            const rawType = e.system?.type;
-            const t = normalize(rawType, e.name);
-            if (t && map[t])
-                map[t].push({ name: e.name, lid: e.system?.lid ?? '', desc: e.system?.description ?? '', uuid: e.uuid });
+            const rawType = entry.system?.type;
+            const reserveType = normalize(rawType, entry.name);
+            if (reserveType && map[reserveType])
+                map[reserveType].push({ name: entry.name, lid: entry.system?.lid ?? '', desc: entry.system?.description ?? '', uuid: entry.uuid });
         }
     }
-    for (const arr of Object.values(map)) {
-        arr.sort((a, b) => a.name.localeCompare(b.name));
-    }
+    for (const reserveList of Object.values(map))
+        reserveList.sort((a, b) => a.name.localeCompare(b.name));
     return map;
 }
 
-export async function openAddReserveDialog(tokenOrActor) {
+export async function openAddReserveDialog(tokenOrActor)
+{
     const pilot = _resolvePilot(tokenOrActor);
-    if (!pilot) {
+    if (!pilot)
+    {
         ui.notifications.warn('Select a pilot or mech token.'); return;
     }
 
@@ -63,24 +69,25 @@ export async function openAddReserveDialog(tokenOrActor) {
         { key: 'project',  label: 'Project' },
         { key: 'org',      label: 'Organization' },
     ];
-    const tabNav = TABS.map((t, i) =>
-        `<a class="la-rtab${i === 0 ? ' active' : ''}" data-tab="${t.key}" style="padding:4px 6px;font-size:0.78em;white-space:nowrap;cursor:pointer;text-align:center;border:1px solid #999;border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : '#eee'};color:${i === 0 ? '#fff' : '#333'};user-select:none;">${t.label}</a>`
+    const tabNav = TABS.map((tab, i) =>
+        `<a class="la-rtab${i === 0 ? ' active' : ''}" data-tab="${tab.key}" style="padding:4px 6px;font-size:0.78em;white-space:nowrap;cursor:pointer;text-align:center;border:1px solid var(--la-edge);border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)'};color:${i === 0 ? '#fff' : 'var(--la-ink)'};user-select:none;">${tab.label}</a>`
     ).join('');
 
-    const buildList = (items) => items.map(r => {
-        const shortDesc = r.desc.replace(/<[^>]+>/g, '').slice(0, 80);
-        return `<div class="la-reserve-row" data-uuid="${r.uuid}" style="padding:5px 8px;border-bottom:1px solid rgba(0,0,0,0.08);cursor:pointer;display:flex !important;flex-direction:row !important;align-items:center;gap:6px;">
+    const buildList = (items) => items.map(reserve =>
+    {
+        const shortDesc = reserve.desc.replace(/<[^>]+>/g, '').slice(0, 80);
+        return `<div class="la-reserve-row" data-uuid="${reserve.uuid}" style="padding:5px 8px;border-bottom:1px solid color-mix(in srgb, var(--la-ink), transparent 90%);cursor:pointer;display:flex !important;flex-direction:row !important;align-items:center;gap:6px;">
             <div style="flex:1;min-width:0;overflow:hidden;">
-                <div style="font-weight:bold;font-size:0.88em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
-                ${shortDesc ? `<div style="font-size:0.72em;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortDesc}</div>` : ''}
+                <div style="font-weight:bold;font-size:0.88em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${reserve.name}</div>
+                ${shortDesc ? `<div style="font-size:0.72em;color:var(--la-ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortDesc}</div>` : ''}
             </div>
-            <a class="la-add-btn" data-uuid="${r.uuid}" style="flex-shrink:0;padding:2px 8px;font-size:0.78em;cursor:pointer;border:1px solid #999;border-radius:3px;background:#eee;color:#333;"><i class="fas fa-plus"></i></a>
+            <a class="la-add-btn" data-uuid="${reserve.uuid}" style="flex-shrink:0;padding:2px 8px;font-size:0.78em;cursor:pointer;border:1px solid var(--la-edge);border-radius:3px;background:color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);color:var(--la-ink);"><i class="fas fa-plus"></i></a>
         </div>`;
-    }).join('') || '<div style="padding:20px;text-align:center;color:#888;">No items found.</div>';
+    }).join('') || '<div style="padding:20px;text-align:center;color:var(--la-ink-dim);">No items found.</div>';
 
-    const orgOpts = _ORG_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
-    const reqCbs = _PROJECT_REQS.map(r => `<label style="display:flex;align-items:center;gap:4px;font-size:0.82em;"><input type="checkbox" class="proj-req" value="${r}"> ${r}</label>`).join('');
-    const subtypeBtns = ['Resources', 'Mech', 'Tactical'].map((t, i) => `<a class="la-subtype-btn${i === 0 ? ' active' : ''}" data-val="${t}" style="flex:1;padding:3px;font-size:0.8em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : '#eee'};color:${i === 0 ? '#fff' : '#333'};user-select:none;">${t}</a>`).join('');
+    const orgOpts = _ORG_TYPES.map(orgType => `<option value="${orgType}">${orgType}</option>`).join('');
+    const requirementCheckboxes = _PROJECT_REQS.map(requirement => `<label style="display:flex;align-items:center;gap:4px;font-size:0.82em;"><input type="checkbox" class="proj-req" value="${requirement}"> ${requirement}</label>`).join('');
+    const subtypeBtns = ['Resources', 'Mech', 'Tactical'].map((subtype, i) => `<a class="la-subtype-btn${i === 0 ? ' active' : ''}" data-val="${subtype}" style="flex:1;padding:3px;font-size:0.8em;text-align:center;cursor:pointer;border:1px solid var(--la-edge);border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)'};color:${i === 0 ? '#fff' : 'var(--la-ink)'};user-select:none;">${subtype}</a>`).join('');
 
     const BODY = `
         <div class="lancer-dialog-header" style="margin:-8px -8px 8px -8px;">
@@ -106,7 +113,7 @@ export async function openAddReserveDialog(tokenOrActor) {
                     <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-complicated"> Complicated</label>
                     <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-finished"> Finished</label>
                 </div>
-                <div class="form-group"><label style="font-size:0.85em;">Requirements</label>${reqCbs}</div>
+                <div class="form-group"><label style="font-size:0.85em;">Requirements</label>${requirementCheckboxes}</div>
                 <div class="form-group"><label style="font-size:0.85em;">Other</label><input type="text" id="pj-custom-req" placeholder="Custom requirement"></div>
                 <button type="button" id="pj-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Project</button>
             </div>
@@ -116,8 +123,8 @@ export async function openAddReserveDialog(tokenOrActor) {
                 <div class="form-group"><label style="font-size:0.85em;">Description</label><textarea id="org-desc" rows="2" style="width:100%;" placeholder="Purpose / Goal"></textarea></div>
                 <div class="form-group"><label style="font-size:0.85em;">Start with</label>
                     <div style="display:flex;gap:3px;">
-                        <a class="la-org-start active" data-val="efficiency" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:var(--primary-color);color:#fff;user-select:none;">Efficiency (+2)</a>
-                        <a class="la-org-start" data-val="influence" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid #999;border-radius:3px;background:#eee;color:#333;user-select:none;">Influence (+2)</a>
+                        <a class="la-org-start active" data-val="efficiency" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid var(--la-edge);border-radius:3px;background:var(--primary-color);color:#fff;user-select:none;">Efficiency (+2)</a>
+                        <a class="la-org-start" data-val="influence" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid var(--la-edge);border-radius:3px;background:color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);color:var(--la-ink);user-select:none;">Influence (+2)</a>
                     </div>
                 </div>
                 <button type="button" id="org-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Organization</button>
@@ -128,36 +135,43 @@ export async function openAddReserveDialog(tokenOrActor) {
         title: `Reserves — ${pilot.name}`,
         content: BODY,
         buttons: { close: { label: 'Close' } },
-        render: (html) => {
-            html.find('.la-rtab').on('click', function () {
-                html.find('.la-rtab').removeClass('active').css({ background: '#eee', color: '#333' });
+        render: (html) =>
+        {
+            html.find('.la-rtab').on('click', function ()
+            {
+                html.find('.la-rtab').removeClass('active').css({ background: 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)', color: 'var(--la-ink)' });
                 $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
                 html.find('.la-rtab-content').hide();
                 html.find(`.la-rtab-content[data-tab="${$(this).data('tab')}"]`).show();
                 html.find('#la-reserve-body').scrollTop(0);
             });
-            html.find('.la-subtype-btn').on('click', function () {
-                html.find('.la-subtype-btn').removeClass('active').css({ background: '#eee', color: '#333' });
+            html.find('.la-subtype-btn').on('click', function ()
+            {
+                html.find('.la-subtype-btn').removeClass('active').css({ background: 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)', color: 'var(--la-ink)' });
                 $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
             });
-            html.find('.la-org-start').on('click', function () {
-                html.find('.la-org-start').removeClass('active').css({ background: '#eee', color: '#333' });
+            html.find('.la-org-start').on('click', function ()
+            {
+                html.find('.la-org-start').removeClass('active').css({ background: 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)', color: 'var(--la-ink)' });
                 $(this).addClass('active').css({ background: 'var(--primary-color)', color: '#fff' });
             });
 
-            html.on('click', '.la-add-btn', async (ev) => {
+            html.on('click', '.la-add-btn', async (ev) =>
+            {
                 ev.preventDefault(); ev.stopPropagation();
                 const uuid = $(ev.currentTarget).data('uuid');
                 const doc = await fromUuid(uuid);
                 if (!doc)
                     return;
-                const data = doc.toObject(); delete data._id;
-                await pilot.createEmbeddedDocuments('Item', [data]);
+                const itemData = doc.toObject(); delete itemData._id;
+                await pilot.createEmbeddedDocuments('Item', [itemData]);
                 ui.notifications.info(`Added "${doc.name}" to ${pilot.name}.`);
             });
-            html.find('#cr-add').on('click', async () => {
+            html.find('#cr-add').on('click', async () =>
+            {
                 const name = String(html.find('#cr-name').val()).trim();
-                if (!name) {
+                if (!name)
+                {
                     ui.notifications.warn('Enter a name.'); return;
                 }
                 await pilot.createEmbeddedDocuments('Item', [{ name,
@@ -166,17 +180,20 @@ export async function openAddReserveDialog(tokenOrActor) {
                     system: { lid: 'reserve_custom', type: html.find('.la-subtype-btn.active').data('val') || 'Resources', description: String(html.find('#cr-desc').val()), consumable: true, used: false } }]);
                 ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
             });
-            html.find('#pj-add').on('click', async () => {
+            html.find('#pj-add').on('click', async () =>
+            {
                 const name = String(html.find('#pj-name').val()).trim();
-                if (!name) {
+                if (!name)
+                {
                     ui.notifications.warn('Enter a name.'); return;
                 }
                 const finished = html.find('#pj-finished').is(':checked');
-                const reqs = []; html.find('.proj-req:checked').each(function () {
+                const reqs = []; html.find('.proj-req:checked').each(function ()
+                {
                     reqs.push($(this).val());
                 });
-                const cr = String(html.find('#pj-custom-req').val()).trim(); if (cr)
-                    reqs.push(cr);
+                const customReq = String(html.find('#pj-custom-req').val()).trim(); if (customReq)
+                    reqs.push(customReq);
                 let desc = String(html.find('#pj-desc').val());
                 if (html.find('#pj-complicated').is(':checked'))
                     desc += '\n<b>Complicated</b>';
@@ -188,16 +205,18 @@ export async function openAddReserveDialog(tokenOrActor) {
                     system: { lid: 'reserve_project', type: 'Project', label: 'Project', description: desc, consumable: false, used: false } }]);
                 ui.notifications.info(`Added project "${name}" to ${pilot.name}.`);
             });
-            html.find('#org-add').on('click', async () => {
+            html.find('#org-add').on('click', async () =>
+            {
                 const name = String(html.find('#org-name').val()).trim();
-                if (!name) {
+                if (!name)
+                {
                     ui.notifications.warn('Enter a name.'); return;
                 }
-                const s = html.find('.la-org-start.active').data('val') || 'efficiency';
+                const startStat = html.find('.la-org-start.active').data('val') || 'efficiency';
                 await pilot.createEmbeddedDocuments('Item', [{ name,
                     type: 'organization',
                     img: 'systems/lancer/assets/icons/encounter.svg',
-                    system: { purpose: html.find('#org-type').val(), description: String(html.find('#org-desc').val()), efficiency: s === 'efficiency' ? 2 : 0, influence: s === 'influence' ? 2 : 0, actions: '' } }]);
+                    system: { purpose: html.find('#org-type').val(), description: String(html.find('#org-desc').val()), efficiency: startStat === 'efficiency' ? 2 : 0, influence: startStat === 'influence' ? 2 : 0, actions: '' } }]);
                 ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
             });
         }

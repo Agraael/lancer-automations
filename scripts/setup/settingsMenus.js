@@ -4,6 +4,11 @@ import { ReactionReset } from '../activations/reaction-reset.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
 import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
 import { openNewsHistory } from './news.js';
+import { openBattleLogGMCardTest, openBattleLogRecapTest } from '../Battelog/battlelog.js';
+import { openTelemetryDebugWindow } from '../Battelog/telemetry-debug.js';
+import { getFCSData, toggleFCSForce } from './fcs.js';
+import { runSettingsOnboarding } from './settings-onboarding.js';
+import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 
 const MODULE_ID = 'lancer-automations';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
@@ -23,7 +28,8 @@ const ACTIVATIONS_FIELDS = [
         label: 'Regenerate All Scan Journals',
         icon: 'fas fa-book',
         hint: 'Walk every entry in the SCAN Database folder and re-render its page using the current template (LA legacy mode).',
-        onClick: async () => {
+        onClick: async () =>
+        {
             const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
             await api?.regenerateScans?.();
         },
@@ -35,26 +41,31 @@ const COMBAT_MOVEMENT_FIELDS = [
 
     { type: 'section', label: 'Targeting', subsection: true },
     { key: 'enableAttackTargeting', type: 'boolean' },
+    { key: 'enableDamageTargeting', type: 'boolean' },
     { key: 'autoStartTargetPicking', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
-    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack Card' },
+    { key: 'targetInfoDisplay', type: 'select' },
+    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack/Damage HUD' },
     { key: 'displayToolsToOthers', type: 'boolean', label: 'Share Interactive Tools' },
 
     { type: 'section', label: 'Attacks', subsection: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
+    { key: 'autoDamageRoll', type: 'boolean' },
+    { key: 'autoDamageApply', type: 'boolean' },
 
     { type: 'section', label: 'Movement & Boost', subsection: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
-    { key: 'enablePathHexCalculation', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
 
     { type: 'section', label: 'Structure & Damage', subsection: true },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
+    { key: 'convertHeatToEnergyOnHeatless', type: 'boolean' },
+    { key: 'resistSelfHeat', type: 'boolean' },
 
     { type: 'section', label: 'Turns & Actions', subsection: true },
     { key: 'enablePerRoundTurnTags', type: 'boolean' },
@@ -63,47 +74,52 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' },
     { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' },
     { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end.' },
+    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler tier changes, so events fire per tier.' },
+    { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.' },
     { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.' },
     { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the canvas measure ruler labels. Token drag and drop unaffected.' },
-    { key: 'resetMovementTypeOnDragStart', type: 'boolean', label: 'Reset Movement Type on Drag Start', hint: 'Each drag starts on the token\'s natural action (walk, or fly if the token is flying). Use M to cycle mid-drag.' },
     { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
+    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the elevation delta on the label to the nearest multiple of this (0.5 by default). Gridless scenes unaffected.' },
 
-    { type: 'section', label: 'Ruler Speed Colors', collapsible: true, collapsed: true, subsection: true },
-    { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
-    { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
-    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Over-boost' },
-    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' },
-    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Force Movement' },
+    { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
+    { key: 'ctrlRulerMode', type: 'select', label: 'Ctrl Ruler', hint: 'Hold Ctrl to switch to the Measure Distance ruler.' },
+    { key: 'advMeasureScale', type: 'slider', label: 'Measure Toolbar Scale', min: 0.6, max: 1.6, step: 0.05 },
+    { key: 'rulerToolCursor', type: 'boolean', label: 'Measure cursor', hint: 'While the Measure Distance tool is active, replace the cursor with the ruler icon and play a sound on toggle.' },
+    { key: 'targetToolCursor', type: 'boolean', label: 'Select Target cursor', hint: 'While the Select Target tool is active, replace the cursor with the target icon and play a sound on toggle.' },
 ];
 
 const WRECKS_FIELDS = [
     { type: 'section', label: 'Wreck Generation' },
     { key: 'enableWrecks', type: 'boolean' },
-    { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' },
     { key: 'enableRemoveFromCombat', type: 'boolean' },
-    { key: 'enableWreckAnimation', type: 'boolean' },
-    { key: 'enableWreckAudio', type: 'boolean' },
     { key: 'squadLostOnDeath', type: 'boolean' },
+
+    { type: 'section', label: 'Per-Category Wrecks', collapsible: true, collapsed: true },
     { key: 'wreckTerrainType',
         type: 'select',
         label: 'Wreck Terrain Type',
-        getChoices: () => {
+        getChoices: () =>
+        {
             const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
             const choices = [{ value: '', label: 'None (disabled)', selected: current === '' }];
-            try {
+            try
+            {
                 const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
-                for (const t of types)
-                    choices.push({ value: t.id, label: t.name || t.id, selected: t.id === current });
-            } catch { /* ignore */ }
+                for (const terrainType of types)
+                    choices.push({ value: terrainType.id, label: terrainType.name || terrainType.id, selected: terrainType.id === current });
+            }
+            catch
+            { /* ignore */ }
             return choices;
         }},
-    { key: 'disableHumanDeathSound', type: 'boolean' },
     { type: 'table',
         label: 'Per-Category Settings',
         tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
             'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
-        getTable: () => {
-            const modeChoices = (key) => {
+        getTable: () =>
+        {
+            const modeChoices = (key) =>
+            {
                 const cur = game.settings.get(MODULE_ID, key);
                 return [
                     { value: 'token', label: 'Token', selected: cur === 'token' },
@@ -111,7 +127,8 @@ const WRECKS_FIELDS = [
                     { value: 'none', label: 'Skip (do nothing)', selected: cur === 'none' },
                 ];
             };
-            const terrainChoices = (key) => {
+            const terrainChoices = (key) =>
+            {
                 let cur = game.settings.get(MODULE_ID, key);
                 if (cur === true)
                     cur = 'terrain';
@@ -152,14 +169,41 @@ const WRECKS_FIELDS = [
             };
         },
     },
+    { key: 'wreckFactionOnDeath',
+        type: 'select',
+        label: 'Wreck Faction On Death',
+        getChoices: () =>
+        {
+            const cur = game.settings.get(MODULE_ID, 'wreckFactionOnDeath') || 'same';
+            const choices = [
+                { value: 'same', label: 'Same Team / Disposition', selected: cur === 'same' },
+                { value: 'neutral', label: 'Neutral (No Team)', selected: cur === 'neutral' },
+            ];
+            const teams = game.modules.get('token-factions')?.active
+                ? (game.settings.get('token-factions', 'team-setup') || [])
+                : [];
+            for (const team of teams)
+                choices.push({ value: team.id, label: team.name, selected: team.id === cur });
+            return choices;
+        }},
+
+    { type: 'section', label: 'Assets & Audio', collapsible: true, collapsed: true },
+    { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' },
+    { key: 'enableWreckAnimation', type: 'boolean' },
+    { key: 'enableWreckAudio', type: 'boolean' },
+    { key: 'disableHumanDeathSound', type: 'boolean' },
 ];
 
 /** @param {string} key */
-function _statBarVisChoices(key) {
+function _statBarVisChoices(key)
+{
     let cur = 'all';
-    try {
+    try
+    {
         cur = game.settings.get(MODULE_ID, key);
-    } catch { /* not ready */ }
+    }
+    catch
+    { /* not ready */ }
     return [
         { value: 'all',   label: 'All (default behaviour)', selected: cur === 'all' },
         { value: 'owner', label: 'Owners only',             selected: cur === 'owner' },
@@ -173,15 +217,6 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
-    { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
-    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.' },
-    { type: 'button',
-        key: 'syncAllTokenHeights',
-        label: 'Apply Token Heights to All Actors',
-        icon: 'fas fa-ruler-vertical',
-        hint: 'Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.',
-        onClick: () => syncAllTokenHeights(),
-    },
 
     { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
@@ -209,16 +244,19 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
     { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
 
-    { type: 'section', label: 'Auto-Injected Bars (Talents & Frame Counters)', subsection: true },
-    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent Counter Bars', hint: 'Inject an extra bar for every talent counter and frame core counter on Lancer tokens. Deleted bars are not re-added.' },
-    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Talent Counter Bar Color', hint: 'Color used for newly auto-injected bars. Existing bars keep their original color.' },
-    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Talent Counter Width (%)', min: 1, max: 100, step: 1, hint: 'Width % used for newly auto-injected bars. Each is added on its own line.' },
+    { type: 'section', label: 'Auto-Injected Bars', subsection: true },
+    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent & Frame Counter Bars', hint: 'Inject an extra bar for every talent counter and frame core counter on Lancer tokens. Deleted bars are not re-added.' },
+    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Auto-Injected Bar Color', hint: 'Default color for auto-injected bars (talents, frame counters, and item/actor templates that do not set their own).' },
+    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Auto-Injected Bar Width (%)', min: 1, max: 100, step: 1, hint: 'Default width % for auto-injected bars. Each is added on its own line.' },
+    { key: 'statBarAutoInjectTalentFeedback', type: 'boolean', label: 'Auto-Injected Bar Audio/Text Feedback', hint: 'Default audio + floating text on value changes for auto-injected bars.' },
+    { key: 'statBarAutoInjectCustomFlags', type: 'boolean', label: 'Auto-add Custom Flag Bars (Alt Sheets)', hint: 'When Annoying\'s Alternative Sheets is active: fraction custom flags render as token bars, value flags as TAH counters. Adding a bar via Add Extra creates a flag.' },
     { type: 'button',
         key: 'statBarReinjectAllAutoBars',
         label: 'Reinject Auto-Bars on All Tokens',
         icon: 'fas fa-sync',
         hint: 'Rebuild auto-injected bars on every Lancer token in every scene and on every actor prototype. Clears prior tombstones.',
-        onClick: async () => {
+        onClick: async () =>
+        {
             const mod = await import('../tah/tokenStatBar.js');
             const fn = /** @type {any} */ (mod).reinjectAutoBarsOnAllTokens;
             if (typeof fn === 'function')
@@ -234,7 +272,8 @@ const TOKENS_DISPLAY_FIELDS = [
         label: 'Apply Defaults to Current Scene',
         icon: 'fas fa-clone',
         hint: 'Overwrites per-token settings on every Lancer token in the active scene.',
-        onClick: async () => {
+        onClick: async () =>
+        {
             const mod = await import('../tah/tokenStatBar.js');
             const fn = /** @type {any} */ (mod).applyDefaultsToCurrentScene;
             if (typeof fn === 'function')
@@ -250,7 +289,9 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatHintScale', type: 'slider', label: 'Popup Scale', min: 0.5, max: 2, step: 0.05, hint: 'Visual size of the popup. Independent of token size and zoom.' },
     { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'Show for Controlled Token', hint: 'When off, the popup is suppressed for the token you currently control.' },
     { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'Show Only In Combat', hint: 'When on, the popup only appears for tokens in an active combat.' },
-    { key: 'tokenStatHintLabelMode', type: 'select', label: 'Header Label (NPC)',
+    { key: 'tokenStatHintLabelMode',
+        type: 'select',
+        label: 'Header Label (NPC)',
         choices: [
             { value: 'actor', label: 'Always show name' },
             { value: 'scan', label: 'Tied to scan (UNKNOWN until scanned)' },
@@ -263,49 +304,40 @@ const TOKENS_DISPLAY_FIELDS = [
 
 const TAH_FIELDS = [
     { type: 'section', label: 'Token Action HUD' },
+
+    { type: 'section', label: 'General', subsection: true },
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
     { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' },
-    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware (default)', hint: 'Default for area pickers (blast etc.). When on, areas become 3D volumes that clip to terrain.' },
+    { key: 'tah.aboveActorSheets', type: 'boolean' },
+    { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
+
+    { type: 'section', label: 'Opening & Layout', subsection: true },
     { key: 'tah.clickToOpen', type: 'boolean' },
     { key: 'tah.hoverCloseDelay', type: 'number' },
     { key: 'tah.maxColumnItems', type: 'number' },
+
+    { type: 'section', label: 'Keyboard', subsection: true, collapsible: true, collapsed: true },
+    { key: 'tah.keyboardNav', type: 'boolean' },
+    { key: 'tah.keyboardNavResetDelay', type: 'number' },
+    { key: 'tah.preventWasdMovement', type: 'boolean' },
+
+    { type: 'section', label: 'Ranges & Display', subsection: true },
+    { key: 'tah.uiScale', type: 'slider', label: 'HUD Scale', min: 0.6, max: 1.6, step: 0.05 },
     { key: 'tah.rangePreview', type: 'boolean' },
+    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware (default)', hint: 'Default for area pickers (blast etc.). When on, areas become 3D volumes that clip to terrain.' },
     { key: 'tah.showAidHandleInteractSqueeze', type: 'boolean' },
-    { key: 'tah.auraUseAltKey', type: 'boolean' },
-    { key: 'tah.aboveActorSheets', type: 'boolean' },
-    { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
+
+    { type: 'section', label: 'Maintenance', subsection: true, collapsible: true, collapsed: true },
     { key: 'tah.resetPosition',
         type: 'button',
         label: 'Reset TAH Position',
         icon: 'fas fa-undo',
         hint: 'Reset the HUD to its default screen position.',
         clientAllowed: true,
-        onClick: async () => {
+        onClick: async () =>
+        {
             await game.settings.set(MODULE_ID, 'tah.position', null);
             ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
-        } },
-    { key: 'tah.clearAuras',
-        type: 'button',
-        label: 'Clear & Rebuild TAH Auras (Scene)',
-        icon: 'fas fa-broom',
-        hint: 'Remove all TAH-created auras from every token on the current scene, then re-apply configured defaults.',
-        onClick: async () => {
-            if (!canvas?.scene)
-                return ui.notifications.warn('No active scene.');
-            const { applyDefaultAuras } = await import('../tah/hover.js');
-            let cleared = 0;
-            const tokens = canvas.tokens?.placeables ?? [];
-            for (const tok of tokens) {
-                const auras = tok.document.getFlag('grid-aware-auras', 'auras') ?? [];
-                const kept = auras.filter((/** @type {any} */ a) => !a?.name?.startsWith?.('LA_'));
-                if (kept.length !== auras.length) {
-                    await tok.document.setFlag('grid-aware-auras', 'auras', kept);
-                    cleared++;
-                }
-            }
-            for (const tok of tokens)
-                await applyDefaultAuras(tok);
-            ui.notifications.info(`Cleared TAH auras from ${cleared} token(s) and rebuilt defaults.`);
         } },
     { key: 'tah.clearMacros',
         type: 'button',
@@ -313,7 +345,8 @@ const TAH_FIELDS = [
         icon: 'fas fa-trash',
         hint: 'Remove every macro from the TAH Macros category for this client.',
         clientAllowed: true,
-        onClick: async () => {
+        onClick: async () =>
+        {
             const confirmed = await Dialog.confirm({
                 title: 'Clear TAH Macros',
                 content: '<p>Remove every macro from the TAH Macros category? This cannot be undone.</p>',
@@ -330,7 +363,8 @@ const TAH_FIELDS = [
         icon: 'fas fa-star',
         hint: 'Remove every favorite (★) marked through the TAH. Saved per user.',
         clientAllowed: true,
-        onClick: async () => {
+        onClick: async () =>
+        {
             const confirmed = await Dialog.confirm({
                 title: 'Clear TAH Favorites',
                 content: '<p>Remove every favorite marker? This cannot be undone.</p>',
@@ -341,53 +375,19 @@ const TAH_FIELDS = [
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info('TAH Favorites cleared.');
         } },
-    { type: 'table',
-        label: 'Range Auras',
-        tableKeys: ['tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat',
-            'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor',
-            'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange',
-            'tah.auraColorCustom', 'tah.auraOpacityCustom'],
-        getTable: () => {
-            const defaultChoices = (key) => {
-                const cur = game.settings.get(MODULE_ID, key);
-                return [
-                    { value: 'none', label: 'None', selected: cur === 'none' },
-                    { value: 'combat', label: 'Combat', selected: cur === 'combat' },
-                    { value: 'all', label: 'Always', selected: cur === 'all' },
-                ];
-            };
-            const makeRow = (label, colorKey, opacityKey, defaultKey) => ({
-                label,
-                cells: [
-                    { isColor: true, name: colorKey, value: game.settings.get(MODULE_ID, colorKey) },
-                    { isNumber: true, name: opacityKey, value: game.settings.get(MODULE_ID, opacityKey) },
-                    ...(defaultKey ? [{ isSelect: true, name: defaultKey, choices: defaultChoices(defaultKey) }] : [{ isEmpty: true }]),
-                ],
-            });
-            return {
-                columns: ['Aura', 'Color', 'Opacity', 'Default'],
-                rows: [
-                    makeRow('Threat', 'tah.auraColorThreat', 'tah.auraOpacityThreat', 'tah.auraDefaultThreat'),
-                    makeRow('Sensor', 'tah.auraColorSensor', 'tah.auraOpacitySensor', 'tah.auraDefaultSensor'),
-                    makeRow('Weapon Range', 'tah.auraColorRange', 'tah.auraOpacityRange', 'tah.auraDefaultRange'),
-                    makeRow('Custom Measure', 'tah.auraColorCustom', 'tah.auraOpacityCustom', null),
-                ],
-            };
-        },
-    },
 ];
 
 // Per-action FX functions. Same list as the settings registered in tah/index.js.
 const ACTION_FX_KEYS = [
     'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
     'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
-    'protocol', 'reaction', 'fullAction', 'quickAction', 'standingUp',
+    'protocol', 'activation', 'reaction', 'fullAction', 'quickAction', 'standingUp',
     'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
     'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
     'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
     'defaultThrow', 'targetFail', 'reload', 'fight',
 ];
-const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover'];
+const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover', 'battleLogHover', 'battleLogClick'];
 const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
@@ -395,8 +395,9 @@ const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
 const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
 const STATUS_SFX_EVENTS = ['bonus'];
 
-function _toLabel(s) {
-    return s.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1')
+function _toLabel(str)
+{
+    return str.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1')
         .replace(/^./, (c) => c.toUpperCase()).trim();
 }
 
@@ -407,34 +408,36 @@ const SOUNDS_FIELDS = [
     { key: 'tah.damageSoundVolume', type: 'slider', label: 'Damage / Stat Feedback', min: 0, max: 1.5, step: 0.05 },
     { key: 'tah.actionFxVolume', type: 'slider', label: 'Action FX', min: 0, max: 1.5, step: 0.05 },
     { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Explosions', min: 0, max: 1.5, step: 0.1 },
+    { key: 'tah.battleLogVolume', type: 'slider', label: 'Battle Log', min: 0, max: 1.5, step: 0.05 },
 
-    { type: 'section', label: 'UI sounds (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'UI sounds', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: UI_VARIANTS.map((v) => ({ key: `tah.uiSound.${v}`, label: _toLabel(v), preview: true })) },
 
-    { type: 'section', label: 'Token feedback (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'Token feedback', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: TOKEN_VARIANTS.map((v) => ({ key: `tah.tokenSound.${v}`, label: _toLabel(v.replace(/^token/, '')), preview: true })) },
 
-    { type: 'section', label: 'Damage type sounds (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'Damage type sounds', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: DAMAGE_TYPES.map((t) => ({ key: `tah.damageSound.${t}`, label: _toLabel(t), preview: true })) },
 
-    { type: 'section', label: 'Stat feedback (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'Stat feedback', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STAT_EVENTS.map((e) => ({ key: `tah.statSound.${e}`, label: _toLabel(e), preview: true })) },
     { type: 'button',
         key: 'toggleLancerFloatingNumbers',
         label: 'Toggle Lancer Floating Numbers',
         icon: 'fas fa-arrows-alt-v',
         clientAllowed: true,
-        onClick: async () => {
+        onClick: async () =>
+        {
             const cur = !!game.settings.get('lancer', 'floatingNumbers');
             await game.settings.set('lancer', 'floatingNumbers', !cur);
             ui.notifications?.info(`Floating Numbers: ${!cur ? 'ON' : 'OFF'}`);
         },
     },
 
-    { type: 'section', label: 'Status SFX (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'Status SFX', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
 
-    { type: 'section', label: 'Action FX audio (mute toggles)', collapsible: true, collapsed: true },
+    { type: 'section', label: 'Action FX audio', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: ACTION_FX_KEYS.map((a) => ({ key: `tah.actionFxSound.${a}`, label: _toLabel(a), preview: true })) },
 ];
 
@@ -471,19 +474,18 @@ const STATUS_FX_AUTO = [
 ];
 
 const STATUSES_FIELDS = [
+    { type: 'section', label: 'Statuses & Effects' },
     { key: 'additionalStatuses', type: 'boolean' },
-
-    { type: 'section', label: 'Effects Configuration' },
     { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Disable to suppress all visual + auto-status effects.' },
     { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
     { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'Remove Statuses on Death' },
 
-    { type: 'section', label: 'Visual effects' },
+    { type: 'section', label: 'Visual effects', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_VISUAL },
     { key: 'guardianBulwarkAuraMode', type: 'select', label: 'Guardian / Bulwark Aura', hint: '"Only in Combat" requires the GAA Fork.' },
 
-    { type: 'section', label: 'Auto-status icons' },
+    { type: 'section', label: 'Auto-status icons', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_AUTO },
 ];
 
@@ -494,22 +496,14 @@ const DEBUG_FIELDS = [
     { key: 'debugOutOfCombat', type: 'boolean' },
     { key: 'debugForceJb2aFree', type: 'boolean' },
     { key: 'debugAutomation', type: 'boolean' },
+    { key: 'iso.debugSelectionOverlay', type: 'boolean' },
 ];
 
 const VISION_FIELDS = [
-    { type: 'section', label: 'About this tab', hint: 'Best with <b>fog of war</b> + token vision on. Lancer LOS samples from the token edge, not the center.' },
-
-    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]', hint: 'Samples LOS from points on the token edge so you can see/shoot from behind cover, per Lancer rules.' },
-    { key: 'visionFromEdgeEnabled', type: 'boolean' },
-    { key: 'visionFromEdgeSampleMode', type: 'select' },
-    { key: 'visionFromEdgeSampleOffset', type: 'number' },
-    { key: 'visionFromEdgeDebug', type: 'boolean' },
-
-    { type: 'section', label: 'Token Blocks Line of Sight', hint: 'Bulwarked tokens drop LOS-blocking edges around their footprint.' },
-    { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
-
-    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Sensors</b> (blue scanlines) = actor <code>sensor_range</code>, precise. <b>Awareness</b> (yellow silhouette) = infinite, fuzzy. <b>Sensor wins</b> when both detect.<br><b>Combat Only:</b> highlight only renders during a started combat.<br><b>Use Mode Range:</b> read range from the per-token detection-mode entry instead of <code>actor.system.sensor_range</code> / infinite.' },
+    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
+    { key: 'lancerLos', type: 'boolean' },
+    { key: 'lancerLosDebug', type: 'boolean' },
     { type: 'compactBooleans',
         items: [
             { key: 'lancerSensorCombatOnly', label: 'Sensor: Combat Only' },
@@ -522,26 +516,54 @@ const VISION_FIELDS = [
         key: 'refreshLancerVisionTokens',
         label: 'Refresh Tokens (All Scenes + Actors)',
         icon: 'fas fa-sync',
-        hint: 'Run if tokens are missing Sensor/Awareness highlights or after enabling Auto-add. Reorders modes so Sensor wins resolves correctly.',
+        hint: 'Rebuild and reorder detection modes on every token. Run after enabling Auto-add.',
         onClick: () => globalThis.lancerAutoVisionSetup?.(false),
+    },
+
+    { type: 'section', label: 'Token Blocks Line of Sight', hint: 'Bulwarked tokens block line of sight around their footprint.' },
+    { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
+
+    { type: 'section', label: 'Token Height (Wall Height)', hint: 'Vertical tokenHeight for 3D line-of-sight over walls of the token\'s own size.' },
+    { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
+    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.' },
+    { type: 'button',
+        key: 'syncAllTokenHeights',
+        label: 'Apply Token Heights to All Actors',
+        icon: 'fas fa-ruler-vertical',
+        hint: 'Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.',
+        onClick: () => syncAllTokenHeights(),
     },
 
     { type: 'section', label: 'Basic Vision' },
     { key: 'basicSightTo999', type: 'boolean' },
 
-    { type: 'section', label: 'Drag Vision' },
+    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]', collapsible: true, collapsed: true, hint: 'Sample vision from the token edge so you can see past cover.' },
+    { key: 'visionFromEdgeEnabled', type: 'boolean' },
+    { key: 'visionFromEdgeSampleMode', type: 'select' },
+    { key: 'visionFromEdgeSampleOffset', type: 'number' },
+    { key: 'visionFromEdgeDebug', type: 'boolean' },
+
+    { type: 'section', label: 'Drag Vision', collapsible: true, collapsed: true },
     { key: 'dragVisionMode', type: 'select' },
     { key: 'dragVisionMultiplier', type: 'number' },
 
-    { type: 'section', label: 'Performance' },
+    { type: 'section', label: 'Performance', collapsible: true, collapsed: true },
     { key: 'visionAnimationThrottleFps', type: 'number' },
     { key: 'disableVisionAboveControlled', type: 'number' },
 ];
 
 const TOOLS_FIELDS = [
-    { type: 'section', label: 'Optional content packs' },
+    { type: 'section', label: 'Optional content packs', hint: 'Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager (import .lcp).' },
     { key: 'enableLaSossisItems', type: 'boolean' },
     { key: 'enablePersonalStuff', type: 'boolean' },
+    { type: 'button',
+        key: 'getDeployablesLcp',
+        label: 'Get the Deployables LCP',
+        icon: 'fas fa-download',
+        hint: 'Downloads LaSossis_Npc_Deployables.lcp (bundled with the module).',
+        clientAllowed: true,
+        onClick: () => window.open(foundry.utils.getRoute('modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp'), '_blank'),
+    },
 
     { type: 'section', label: 'Actor ↔ Prototype Token sync' },
     { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait (Actors directory).' },
@@ -554,7 +576,7 @@ const TOOLS_FIELDS = [
         onClick: () => syncAllActorImgs(),
     },
 
-    { type: 'section', label: 'Maintenance' },
+    { type: 'section', label: 'Maintenance', collapsible: true, collapsed: true },
     { type: 'button',
         key: 'openLcpRepair',
         label: 'Apply Fixes (LCP Data)',
@@ -598,29 +620,44 @@ const laKb = (key) => ({ type: 'keybinding', module: 'lancer-automations', key }
 const laTour = (key) => ({ type: 'tour', module: 'lancer-automations', key });
 
 const TUTORIALS_FIELDS = [
+    { type: 'section', label: 'Setup', hint: 'First-run setup and guided walkthroughs.' },
+    { type: 'button', key: 'openOnboarding', label: 'Re-run Setup Wizard', icon: 'fas fa-wand-magic-sparkles', hint: 'Answer the main settings as yes/no questions. Nothing is written until you press Apply.', onClick: () => runSettingsOnboarding() },
     { type: 'section', label: 'Tutorials', hint: 'Guided walkthroughs of the module. Clicking a tour will close this window and start it.' },
     laTour('config-tour'),
     laTour('activation-manager-tour'),
     laTour('effect-manager-tour'),
     laTour('tah-tour'),
+    laTour('tah-advanced-tour'),
     laTour('ruler-tour'),
+    laTour('advanced-measure-tour'),
+    laTour('add-extra-tour'),
 ];
 
 const CONTROL_FIELDS = [
     { type: 'section', label: 'Lancer Automations' },
     laKb('resetMovement'),
+
+    { type: 'section', label: 'TAH Navigation', collapsible: true, collapsed: true },
     laKb('tah.toggleSearch'),
+    laKb('tahNavUp'),
+    laKb('tahNavDown'),
+    laKb('tahNavLeft'),
+    laKb('tahNavRight'),
+    laKb('tahNavActivate'),
+    laKb('tahNavContext'),
 
     { type: 'section', label: 'Movement' },
     laKb('freeMovement'),
     laKb('debugMovement'),
     laKb('movementWheel'),
 
-    { type: 'section', label: 'Targeting & Placement' },
+    { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
+    laKb('advancedMeasure'),
     laKb('elevationUp'),
     laKb('elevationDown'),
     laKb('lineTiltUp'),
     laKb('lineTiltDown'),
+    laKb('resetShape'),
 ];
 
 const ISO_FIELDS = [
@@ -637,58 +674,181 @@ const ISO_FIELDS = [
     { key: 'iso.moduleLabels', type: 'boolean' },
 ];
 
+const BATTLE_LOG_FIELDS = [
+    { type: 'section', label: 'Battle Log' },
+    {
+        key: 'battleLogEnabled',
+        type: 'boolean',
+        label: 'Enable Battle Log',
+        hint: 'Record combat telemetry and open the recap when a combat ends.',
+    },
+    {
+        key: 'tah.telemetryFriendlyMechAsSquad',
+        type: 'boolean',
+        label: 'Friendly mechs count as squad',
+        hint: 'Include FRIENDLY-disposition mechs (not owned by players) in the squad. Off: they render as friendlies.',
+    },
+    {
+        key: 'tah.disableAwards',
+        type: 'boolean',
+        label: 'Disable awards',
+        hint: 'No awards computed. No MVP auto-pick. GM can still pick MVP manually.',
+    },
+    {
+        key: 'tah.telemetryDebug',
+        type: 'boolean',
+        label: 'Debug: log every telemetry event',
+        hint: 'Console-log every event written to the combat telemetry flag. Turn off for normal play.',
+    },
+
+    { type: 'button',
+        key: 'openBattleLogTest',
+        label: 'Open GM card (test)',
+        icon: 'fas fa-flag-checkered',
+        onClick: () => openBattleLogGMCardTest(),
+    },
+    { type: 'button',
+        key: 'openBattleLogRecapTest',
+        label: 'Open Battle Log Recap',
+        icon: 'fas fa-clipboard-list',
+        onClick: () => openBattleLogRecapTest(),
+    },
+    { type: 'button',
+        key: 'openTelemetryDebug',
+        label: 'Telemetry debug',
+        icon: 'fas fa-bug',
+        onClick: () => openTelemetryDebugWindow(),
+    },
+
+    { type: 'section', label: 'Theme music', collapsible: true, collapsed: true },
+    { key: 'tah.battleLog.themeDefault',
+        type: 'audio',
+        label: 'Default theme',
+        hint: 'Audio file played for all outcomes unless a specific one is set below. Leave empty for no theme.' },
+    { key: 'tah.battleLog.themeVictory',
+        type: 'audio',
+        label: 'Success theme',
+        hint: 'Overrides the default when the mission outcome is SUCCESS.' },
+    { key: 'tah.battleLog.themeDefeat',
+        type: 'audio',
+        label: 'Failure theme',
+        hint: 'Overrides the default when the mission outcome is FAILURE.' },
+    { key: 'tah.battleLog.themePartial',
+        type: 'audio',
+        label: 'Partial theme',
+        hint: 'Overrides the default when the mission outcome is PARTIAL.' },
+];
+
+const COLORS_FIELDS = [
+    { type: 'section', label: 'Targeting Colors' },
+    { key: 'color.inRange', type: 'color', label: 'In Range' },
+    { key: 'color.target', type: 'color', label: 'Target' },
+    { key: 'color.reference', type: 'color', label: 'Reference Token' },
+    { key: 'color.outOfRange', type: 'color', label: 'Out of Range' },
+    { key: 'color.placed', type: 'color', label: 'Placed Shape' },
+    { key: 'color.noHost', type: 'color', label: 'No Host' },
+    { key: 'color.selected', type: 'color', label: 'Selected' },
+    { key: 'color.crit', type: 'color', label: 'Critical' },
+    { key: 'color.rangeFill', type: 'color', label: 'Range Fill' },
+    { type: 'section', label: 'Tool Colors' },
+    { key: 'color.traceStart', type: 'color', label: 'Trace Start' },
+    { key: 'color.traceEnd', type: 'color', label: 'Trace End' },
+    { key: 'color.traceLine', type: 'color', label: 'Trace Line' },
+    { type: 'section', label: 'Range Glow Colors' },
+    { key: 'color.glowManual', type: 'color', label: 'Default' },
+    { key: 'color.glowThreat', type: 'color', label: 'Threat' },
+    { key: 'color.glowSensor', type: 'color', label: 'Sensor' },
+    { key: 'color.glowWeapon', type: 'color', label: 'Weapon' },
+    { key: 'color.glowReach', type: 'color', label: 'Max Reach' },
+    { key: 'color.glowMark', type: 'color', label: 'Mark' },
+    { type: 'section', label: 'Ruler Colors' },
+    { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
+    { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
+    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Over-boost' },
+    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' },
+    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Force Movement' },
+    {
+        key: 'color.resetDefaults',
+        type: 'button',
+        label: 'Reset Colors to Default',
+        icon: 'fas fa-undo',
+        hint: 'Restore every color on this tab to its default.',
+        clientAllowed: true,
+        onClick: () => resetPaletteColorSettings(),
+    },
+];
+
 const TAB_DEFS = [
+    // Gameplay & rules
     { id: 'activations', label: 'Activations', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
     { id: 'combat', label: 'Combat & Movement', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
     { id: 'wrecks', label: 'Wrecks', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
+    { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
+    { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
+    // Look & feel
     { id: 'tokens', label: 'Tokens & Display', icon: 'fas fa-cubes', fields: TOKENS_DISPLAY_FIELDS },
     { id: 'tah', label: 'Token Action HUD', icon: 'fas fa-th-list', fields: TAH_FIELDS },
+    { id: 'colors', label: 'Colors', icon: 'fas fa-palette', fields: COLORS_FIELDS },
     { id: 'sounds', label: 'Sounds', icon: 'fas fa-volume-high', fields: SOUNDS_FIELDS },
-    { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
     {
-        id: 'iso', label: 'Isometric', icon: 'fas fa-cube', fields: ISO_FIELDS,
-        disabledReason: () => {
+        id: 'iso',
+        label: 'Isometric',
+        icon: 'fas fa-cube',
+        fields: ISO_FIELDS,
+        disabledReason: () =>
+        {
             const iso1 = !!game.modules.get('isometric-perspective')?.active;
             const iso2 = !!game.modules.get('grape_juice-isometrics')?.active;
-            if (iso1 || iso2) return null;
+            if (iso1 || iso2)
+                return null;
             return 'Install and enable "Isometric Perspective" or "Grape Juice Isometrics" to use these settings.';
         },
     },
-    { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
+    // Interface & tools
+    { id: 'battelog', label: 'Battle Log', icon: 'fas fa-flag-checkered', fields: BATTLE_LOG_FIELDS },
     { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
-    { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
     { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
+    // Help & maintenance
     { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
+    { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
 ];
 
-function _visibleTabs() {
-    return TAB_DEFS.filter(t => !t.condition || t.condition()).map(t => {
-        const reason = t.disabledReason?.() ?? null;
-        return { ...t, _disabled: !!reason, _disabledReason: reason };
+function _visibleTabs()
+{
+    return TAB_DEFS.filter(tab => !tab.condition || tab.condition()).map(tab =>
+    {
+        const reason = tab.disabledReason?.() ?? null;
+        return { ...tab, _disabled: !!reason, _disabledReason: reason };
     });
 }
 
-export function getExportableModuleBooleanFields() {
+export function getExportableModuleBooleanFields()
+{
     /** @type {{ module: string, key: string }[]} */
     const out = [];
-    for (const tab of TAB_DEFS) {
-        for (const f of tab.fields) {
-            const fa = /** @type {any} */ (f);
-            if (fa.type === 'moduleBoolean' && fa.module && fa.key)
-                out.push({ module: fa.module, key: fa.key });
+    for (const tab of TAB_DEFS)
+    {
+        for (const f of tab.fields)
+        {
+            const field = /** @type {any} */ (f);
+            if (field.type === 'moduleBoolean' && field.module && field.key)
+                out.push({ module: field.module, key: field.key });
         }
     }
     return out;
 }
 
-export function getExportableKeybindingFields() {
+export function getExportableKeybindingFields()
+{
     /** @type {{ module: string, key: string }[]} */
     const out = [];
-    for (const tab of TAB_DEFS) {
-        for (const f of tab.fields) {
-            const fa = /** @type {any} */ (f);
-            if (fa.type === 'keybinding' && fa.module && fa.key)
-                out.push({ module: fa.module, key: fa.key });
+    for (const tab of TAB_DEFS)
+    {
+        for (const f of tab.fields)
+        {
+            const field = /** @type {any} */ (f);
+            if (field.type === 'keybinding' && field.module && field.key)
+                out.push({ module: field.module, key: field.key });
         }
     }
     return out;
@@ -718,7 +878,8 @@ const KEY_DISPLAY = {
     Semicolon: ';',
     Slash: '/'
 };
-function _displayKey(code) {
+function _displayKey(code)
+{
     if (code in KEY_DISPLAY)
         return KEY_DISPLAY[code];
     if (typeof code !== 'string')
@@ -729,52 +890,58 @@ function _displayKey(code) {
         return code.slice(3);
     return code;
 }
-function _formatBinding(b) {
+function _formatBinding(b)
+{
     const parts = [...(b.modifiers ?? [])];
     parts.push(_displayKey(b.key));
     return parts.join(' + ');
 }
 
-function _isLockedForUser(key) {
-    if (game.user.isGM) {
+function _isLockedForUser(key)
+{
+    if (game.user.isGM)
         return false;
-    }
-    if (!key) {
+    if (!key)
         return true;
-    }
-    if (typeof key === 'string' && key.startsWith('_sfx.')) {
+    if (typeof key === 'string' && key.startsWith('_sfx.'))
         return true;
-    }
     const setting = game.settings.settings.get(`${MODULE_ID}.${key}`);
-    if (!setting) {
+    if (!setting)
         return true;
-    }
     return setting.scope === 'world';
 }
 
 /** @param {string} sub */
-function _readStatusFx(sub, fallback = true) {
-    try {
+function _readStatusFx(sub, fallback = true)
+{
+    try
+    {
         const cfg = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
         return cfg[sub] !== undefined ? cfg[sub] : fallback;
-    } catch {
+    }
+    catch
+    {
         return fallback;
     }
 }
 
 /** @param {any} f */
-function _buildItem(f) {
-    if (f.type === 'section') {
-        if (f.requireForkTitle) {
-            const m = game.modules.get(f.requireForkTitle.module);
-            if (!m?.active || m.title !== f.requireForkTitle.title)
+function _buildItem(f)
+{
+    if (f.type === 'section')
+    {
+        if (f.requireForkTitle)
+        {
+            const mod = game.modules.get(f.requireForkTitle.module);
+            if (!mod?.active || mod.title !== f.requireForkTitle.title)
                 return null;
         }
-        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: !!f.collapsible, collapsed: !!f.collapsed, isSubsection: !!f.subsection };
+        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: f.collapsible !== false, collapsed: !!f.collapsed, isSubsection: !!f.subsection };
     }
     if (f.type === 'button')
         return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '', isLocked: !game.user.isGM && !f.clientAllowed };
-    if (f.type === 'table') {
+    if (f.type === 'table')
+    {
         const table = f.getTable();
         const rows = table.rows.map(row => ({
             ...row,
@@ -782,7 +949,8 @@ function _buildItem(f) {
         }));
         return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows };
     }
-    if (f.type === 'keybinding') {
+    if (f.type === 'keybinding')
+    {
         const mod = game.modules.get(f.module);
         if (!mod?.active)
             return null;
@@ -802,7 +970,8 @@ function _buildItem(f) {
             bindings: bindings.map(/** @type {any} */ b => ({ display: _formatBinding(b) }))
         };
     }
-    if (f.type === 'tour') {
+    if (f.type === 'tour')
+    {
         const mod = game.modules.get(f.module);
         if (!mod?.active)
             return null;
@@ -822,15 +991,18 @@ function _buildItem(f) {
             description: tour.description ?? '',
         };
     }
-    if (f.type === 'moduleBoolean') {
+    if (f.type === 'moduleBoolean')
+    {
         const mod = game.modules.get(f.module);
-        if (!mod?.active) {
+        if (!mod?.active)
             return null;
-        }
         let value = false;
-        try {
+        try
+        {
             value = !!game.settings.get(f.module, f.key);
-        } catch { /* setting not registered */ }
+        }
+        catch
+        { /* setting not registered */ }
         const setting = game.settings.settings.get(`${f.module}.${f.key}`) ?? {};
         return {
             key: `__ext.${f.module}.${f.key}`,
@@ -842,24 +1014,38 @@ function _buildItem(f) {
             isLocked: !game.user.isGM
         };
     }
-    if (f.type === 'compactBooleans') {
+    if (f.type === 'compactBooleans')
+    {
         return {
             type: 'compactBooleans',
             isCompactBooleans: true,
-            items: (f.items ?? []).map((/** @type {any} */ it) => {
+            items: (f.items ?? []).map((/** @type {any} */ it) =>
+            {
                 let value = true;
-                try {
+                try
+                {
                     value = !!game.settings.get(MODULE_ID, it.key);
-                } catch { /* not ready */ }
+                }
+                catch
+                { /* not ready */ }
                 let hint = it.hint;
-                if (!hint) {
-                    try { hint = game.settings.settings.get(`${MODULE_ID}.${it.key}`)?.hint || ''; } catch { hint = ''; }
+                if (!hint)
+                {
+                    try
+                    {
+                        hint = game.settings.settings.get(`${MODULE_ID}.${it.key}`)?.hint || '';
+                    }
+                    catch
+                    {
+                        hint = '';
+                    }
                 }
                 return { key: it.key, label: it.label, hint, value, preview: !!it.preview, isLocked: _isLockedForUser(it.key) };
             }),
         };
     }
-    if (f.type === 'compactStatusFx') {
+    if (f.type === 'compactStatusFx')
+    {
         return {
             type: 'compactBooleans',
             isCompactBooleans: true,
@@ -872,7 +1058,8 @@ function _buildItem(f) {
             })),
         };
     }
-    if (f.type === 'statusFx') {
+    if (f.type === 'statusFx')
+    {
         // _sfx. prefix routes the value back into statusFXConfig on save.
         const fallback = f.default ?? true;
         return {
@@ -887,15 +1074,20 @@ function _buildItem(f) {
         };
     }
     let value;
-    try {
+    try
+    {
         value = game.settings.get(MODULE_ID, f.key);
-    } catch {
+    }
+    catch
+    {
         value = f.default;
     }
     const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`) || {};
-    if (f.type === 'color') {
+    if (f.type === 'color')
+    {
         const hexRe = /^#[0-9a-fA-F]{6}$/;
-        if (typeof value !== 'string' || !hexRe.test(value)) {
+        if (typeof value !== 'string' || !hexRe.test(value))
+        {
             const fromColor = (typeof value?.toString === 'function') ? value.toString() : null;
             value = (fromColor && hexRe.test(fromColor)) ? fromColor : (setting.default ?? f.default ?? '#000000');
         }
@@ -910,6 +1102,7 @@ function _buildItem(f) {
         isNumber: f.type === 'number',
         isString: f.type === 'string',
         isFolder: f.type === 'folder',
+        isAudio: f.type === 'audio',
         isColor: f.type === 'color',
         isSelect: f.type === 'select',
         isSlider: f.type === 'slider',
@@ -917,12 +1110,13 @@ function _buildItem(f) {
         sliderMax: f.max ?? setting.range?.max ?? 1,
         sliderStep: f.step ?? setting.range?.step ?? 0.1,
         isSection: f.type === 'section',
-        choices: (() => {
+        choices: (() =>
+        {
             const raw = (typeof f.getChoices === 'function' ? f.getChoices() : f.choices);
-            if (raw) {
-                return raw.map(c => ({ ...c, selected: c.selected ?? (c.value === value) }));
-            }
-            if (setting.choices) {
+            if (raw)
+                return raw.map(choice => ({ ...choice, selected: choice.selected ?? (choice.value === value) }));
+            if (setting.choices)
+            {
                 return Object.entries(setting.choices).map(([k, v]) => ({
                     value: k, label: v, selected: k === value,
                 }));
@@ -933,73 +1127,43 @@ function _buildItem(f) {
     };
 }
 
-function _getFCSData() {
-    if (!game.modules.get('force-client-settings')?.active)
-        return null;
-    try {
-        const forced = new Map(Object.entries(
-            game.settings.get('force-client-settings', 'forced') ?? {}
-        ));
-        const unlocked = new Map(Object.entries(
-            game.settings.get('force-client-settings', 'unlocked') ?? {}
-        ));
-        return { forced, unlocked };
-    } catch {
-        return null;
-    }
-}
-
-/** @param {string} key @param {any} fcs */
-async function _toggleFCSForce(key, fcs) {
-    if (!game.user?.isGM)
-        return;
-    const currentMode = fcs.forced.get(key)?.mode ?? 'open';
-    const forced = Object.fromEntries(fcs.forced);
-    if (currentMode === 'open')
-        forced[key] = { mode: 'soft' };
-    else if (currentMode === 'soft')
-        forced[key] = { mode: 'hard' };
-    else
-        delete forced[key];
-    await game.settings.set('force-client-settings', 'forced', forced);
-    fcs.forced = new Map(Object.entries(forced));
-    // Refresh FCS's in-memory map so the lock applies without a reload.
-    const FCS = /** @type {any} */ (globalThis).ForceClientSettings;
-    if (FCS?.forced) FCS.forced = new Map(Object.entries(forced));
-}
-
 /** @param {any} html @param {any[]} fields @param {any} _app */
-function _injectFCSLocks(html, fields, _app) {
-    const fcs = _getFCSData();
+/** @type {Record<string, string>} */
+const _FCS_ICONS = {
+    'hard-gm': 'fa-lock',
+    'soft-gm': 'fa-unlock-keyhole',
+    'open-gm': 'fa-lock-keyhole-open',
+    'unlocked-gm': 'fa-dungeon',
+    'hard-client': 'fa-lock',
+    'soft-client': 'fa-unlock-keyhole',
+    'unlocked-client': 'fa-lock-keyhole-open',
+};
+
+function _injectFCSLocks(html, fields, _app)
+{
+    const fcs = getFCSData();
     if (!fcs)
         return;
     const isGM = game.user?.isGM;
-    /** @type {Record<string, string>} */
-    const fa = {
-        'hard-gm': 'fa-lock',
-        'soft-gm': 'fa-unlock-keyhole',
-        'open-gm': 'fa-lock-keyhole-open',
-        'unlocked-gm': 'fa-dungeon',
-        'hard-client': 'fa-lock',
-        'soft-client': 'fa-unlock-keyhole',
-        'unlocked-client': 'fa-lock-keyhole-open',
-    };
+    const faIcons = _FCS_ICONS;
     const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
-    // compactStatusFx skipped: its values write into the world-scoped
-    // statusFXConfig Object, so FCS per-key forcing doesn't apply.
+    // compactStatusFx skipped: values live in world-scoped statusFXConfig, so FCS per-key forcing doesn't apply.
     /** @type {any[]} */
     const expanded = [];
-    for (const f of fields) {
-        if (f.type === 'compactBooleans') {
+    for (const f of fields)
+    {
+        if (f.type === 'compactBooleans')
+        {
             for (const it of (f.items ?? []))
                 expanded.push({ key: it.key, type: 'boolean', _inCompactGrid: true });
-        } else if (f.type === 'compactStatusFx') {
-            continue;
-        } else {
-            expanded.push(f);
         }
+        else if (f.type === 'compactStatusFx')
+            continue;
+        else
+            expanded.push(f);
     }
-    for (const f of expanded) {
+    for (const f of expanded)
+    {
         if (!f.key || f.type === 'section' || f.type === 'button' || f.type === 'table')
             continue;
         const key = `${MODULE_ID}.${f.key}`;
@@ -1020,27 +1184,15 @@ function _injectFCSLocks(html, fields, _app) {
         const modeKey = mode + (isGM ? '-gm' : '-client');
         if (modeKey === 'open-client')
             continue;
-        const icon = fa[modeKey];
+        const icon = faIcons[modeKey];
         if (!icon)
             continue;
         const $icon = $('<span>')
             .html('&nbsp;')
             .prop('title', game.i18n.localize(`FORCECLIENTSETTINGS.ui.${modeKey}-hint`))
-            .data('settings-key', key)
-            .addClass(`fas ${icon}`)
-            .css({ cursor: 'pointer', marginRight: '4px' })
-            .on('click', async () => {
-                await _toggleFCSForce(key, fcs);
-                const newMode = fcs.forced.get(key)?.mode ?? 'open';
-                let resolved = newMode;
-                if ((resolved === 'soft' || isGM) && fcs.unlocked.has(key))
-                    resolved = 'unlocked';
-                const newModeKey = resolved + (isGM ? '-gm' : '-client');
-                const newIcon = fa[newModeKey];
-                $icon.attr('class', `fas ${newIcon ?? 'fa-lock-keyhole-open'}`);
-                $icon.prop('title', game.i18n.localize(`FORCECLIENTSETTINGS.ui.${newModeKey}-hint`));
-                $input.prop('disabled', ['hard-client', 'soft-client'].includes(newModeKey));
-            });
+            .attr('data-settings-key', key)
+            .addClass(`fas ${icon} la-fcs-lock`)
+            .css({ cursor: 'pointer', marginRight: '4px' });
         $label.prepend($icon);
         if (['hard-client', 'soft-client'].includes(modeKey))
             $input.prop('disabled', true);
@@ -1048,24 +1200,24 @@ function _injectFCSLocks(html, fields, _app) {
 }
 
 /** @param {string} key */
-async function _previewSettingSound(key) {
+async function _previewSettingSound(key)
+{
     if (!key)
         return;
     const sound = await import('../tah/sound.js');
     const fx = await import('../fx/actionFX.js');
-    if (key.startsWith('tah.uiSound.')) {
+    if (key.startsWith('tah.uiSound.'))
         sound.playUiSound(/** @type {any} */ (key.slice('tah.uiSound.'.length)), { force: true });
-    } else if (key.startsWith('tah.tokenSound.')) {
+    else if (key.startsWith('tah.tokenSound.'))
         sound.playUiSound(/** @type {any} */ (key.slice('tah.tokenSound.'.length)), { force: true });
-    } else if (key.startsWith('tah.damageSound.')) {
+    else if (key.startsWith('tah.damageSound.'))
         await sound.playDamageSound(key.slice('tah.damageSound.'.length), { force: true });
-    } else if (key.startsWith('tah.statSound.')) {
+    else if (key.startsWith('tah.statSound.'))
         sound.playStatsSound(key.slice('tah.statSound.'.length), { force: true });
-    } else if (key.startsWith('tah.statusSfx.')) {
+    else if (key.startsWith('tah.statusSfx.'))
         sound.playStatusSfxSound(key.slice('tah.statusSfx.'.length), { force: true });
-    } else if (key.startsWith('tah.actionFxSound.')) {
+    else if (key.startsWith('tah.actionFxSound.'))
         fx.previewActionFxSound(key.slice('tah.actionFxSound.'.length));
-    }
 }
 
 /**
@@ -1074,23 +1226,24 @@ async function _previewSettingSound(key) {
  * @param {HTMLFormElement|null} form
  * @returns {Map<string, any>}
  */
-function _readFormSettings(form) {
+function _readFormSettings(form)
+{
     const map = new Map();
     if (!form)
         return map;
     const els = form.querySelectorAll('input[name], select[name], textarea[name]');
-    for (const el of /** @type {any} */ (els)) {
+    for (const el of /** @type {any} */ (els))
+    {
         const name = el.name;
         if (!name)
             continue;
         let value;
-        if (el.type === 'checkbox') {
+        if (el.type === 'checkbox')
             value = !!el.checked;
-        } else if (el.type === 'number' || el.type === 'range') {
+        else if (el.type === 'number' || el.type === 'range')
             value = el.value === '' ? null : Number(el.value);
-        } else {
+        else
             value = el.value;
-        }
         map.set(name, value);
     }
     return map;
@@ -1102,31 +1255,39 @@ function _readFormSettings(form) {
  * @param {Map<string, any>} formMap
  * @returns {() => void} restore function
  */
-function _patchSettingsGet(formMap) {
+function _patchSettingsGet(formMap)
+{
     const original = game.settings.get.bind(game.settings);
-    game.settings.get = function(namespace, key) {
-        if (namespace === MODULE_ID && formMap.has(key)) {
+    game.settings.get = function(namespace, key)
+    {
+        if (namespace === MODULE_ID && formMap.has(key))
+        {
             const cfg = /** @type {any} */ (game.settings.settings.get(`${namespace}.${key}`));
             const raw = formMap.get(key);
-            try {
+            try
+            {
                 if (cfg?.type === Boolean)
                     return Boolean(raw);
                 if (cfg?.type === Number)
                     return raw === null ? cfg.default : Number(raw);
                 if (cfg?.type === String)
                     return raw == null ? "" : String(raw);
-            } catch { /* fall through */ }
+            }
+            catch
+            { /* fall through */ }
             return raw;
         }
         return original(namespace, key);
     };
-    return () => {
+    return () =>
+    {
         game.settings.get = original;
     };
 }
 
-/** @param {any} $header @param {boolean} collapsed */
-function _toggleSection($header, collapsed) {
+/** @param {any} $header @param {boolean} collapsed @param {boolean} [animate] */
+function _toggleSection($header, collapsed, animate = false)
+{
     $header.attr('data-collapsed', collapsed ? 'true' : 'false');
     $header.find('.la-chevron').css('transform', collapsed ? 'rotate(-90deg)' : '');
 
@@ -1136,32 +1297,51 @@ function _toggleSection($header, collapsed) {
         ? 'h2.la-section, h3.la-subsection-header'
         : 'h2.la-section';
 
+    const setVisible = (/** @type {any} */ $el, /** @type {boolean} */ show) =>
+    {
+        if (!animate)
+        {
+            $el.toggle(show);
+            return;
+        }
+        $el.stop(true, false);
+        if (show)
+            $el.slideDown(150);
+        else
+            $el.slideUp(150);
+    };
+
     let $next = $header.next();
     let underCollapsedSub = false;
-    while ($next.length && !$next.is(stopSelector)) {
-        if (collapsed) {
-            $next.toggle(false);
-        } else if (!isSub && $next.is('h3.la-subsection-header')) {
-            $next.toggle(true);
+    while ($next.length && !$next.is(stopSelector))
+    {
+        if (collapsed)
+            setVisible($next, false);
+        else if (!isSub && $next.is('h3.la-subsection-header'))
+        {
+            setVisible($next, true);
             underCollapsedSub = $next.attr('data-collapsed') === 'true';
-        } else {
-            $next.toggle(!underCollapsedSub);
         }
+        else
+            setVisible($next, !underCollapsedSub);
         $next = $next.next();
     }
 }
 
 let _laConfigState = null;
 
-export class LancerAutomationsConfig extends FormApplication {
-    constructor(...args) {
+export class LancerAutomationsConfig extends FormApplication
+{
+    constructor(...args)
+    {
         super(...args);
         this._needsReload = false;
         /** @type {Map<string, boolean>} label → collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
         this._sectionStates = new Map();
     }
 
-    static get defaultOptions() {
+    static get defaultOptions()
+    {
         const saved = _laConfigState;
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'lancer-automations-config',
@@ -1178,9 +1358,10 @@ export class LancerAutomationsConfig extends FormApplication {
         });
     }
 
-    getData() {
+    getData()
+    {
         const visible = _visibleTabs();
-        const firstEnabledIdx = visible.findIndex(t => !t._disabled);
+        const firstEnabledIdx = visible.findIndex(tab => !tab._disabled);
         const tabs = visible.map((tab, idx) => ({
             id: tab.id,
             label: tab.label,
@@ -1193,32 +1374,44 @@ export class LancerAutomationsConfig extends FormApplication {
         return { tabs };
     }
 
-    activateListeners(html) {
+    activateListeners(html)
+    {
         super.activateListeners(html);
         const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
-        if (_laConfigState?.scroll != null) {
+        if (_laConfigState?.scroll != null)
+        {
             const scroller = $html.find('.content .tab.active')[0] ?? $html.find('.content')[0];
             if (scroller)
-                requestAnimationFrame(() => { scroller.scrollTop = _laConfigState.scroll; });
+            {
+                requestAnimationFrame(() =>
+                {
+                    scroller.scrollTop = _laConfigState.scroll;
+                });
+            }
         }
-        $html.find('.la-config-tabs .item.la-tab-disabled').on('click', (/** @type {any} */ ev) => {
+        $html.find('.la-config-tabs .item.la-tab-disabled').on('click', (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             ev.stopImmediatePropagation();
         });
-        const captureKey = (onDone) => {
+        const captureKey = (onDone) =>
+        {
             const km = /** @type {any} */ (globalThis).KeyboardManager;
             const protectedKeys = new Set(km?.PROTECTED_KEYS ?? ['F5', 'F11', 'F12', 'PrintScreen', 'ScrollLock', 'NumLock', 'CapsLock', 'Pause', 'Break', 'Insert', 'Home', 'PageUp', 'PageDown', 'End', 'ContextMenu']);
-            const handler = (ev) => {
+            const handler = (ev) =>
+            {
                 ev.preventDefault();
                 ev.stopPropagation();
-                if (ev.key === 'Escape') {
+                if (ev.key === 'Escape')
+                {
                     document.removeEventListener('keydown', handler, true);
                     onDone(null);
                     return;
                 }
                 if (['Alt', 'AltLeft', 'AltRight', 'Control', 'ControlLeft', 'ControlRight', 'Shift', 'ShiftLeft', 'ShiftRight', 'Meta', 'MetaLeft', 'MetaRight'].includes(ev.code))
                     return;
-                if (protectedKeys.has(ev.code)) {
+                if (protectedKeys.has(ev.code))
+                {
                     ui.notifications.warn(`"${ev.code}" is reserved by Foundry and cannot be bound.`);
                     document.removeEventListener('keydown', handler, true);
                     onDone(null);
@@ -1238,11 +1431,13 @@ export class LancerAutomationsConfig extends FormApplication {
             };
             document.addEventListener('keydown', handler, true);
         };
-        const splitFullKey = (fullKey) => {
+        const splitFullKey = (fullKey) =>
+        {
             const dot = fullKey.indexOf('.');
             return [fullKey.slice(0, dot), fullKey.slice(dot + 1)];
         };
-        const writeBindings = async (fullKey, next) => {
+        const writeBindings = async (fullKey, next) =>
+        {
             const [ns, action] = splitFullKey(fullKey);
             await game.keybindings.set(ns, action, next);
             this.render(true);
@@ -1250,7 +1445,8 @@ export class LancerAutomationsConfig extends FormApplication {
 
         const placeholderStyle = 'flex:0 0 auto; padding:2px 10px; height:24px; line-height:20px; border:1px solid var(--primary-color, #991e2a); background:rgba(153,30,42,0.08); color:var(--primary-color, #991e2a); border-radius:3px; font-family:inherit; font-size:0.78em; font-style:italic; margin:0; cursor:default;';
 
-        $html.find('.la-kb-key').on('click', (/** @type {any} */ ev) => {
+        $html.find('.la-kb-key').on('click', (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const btn = ev.currentTarget;
             const row = btn.closest('.la-keybinding-row');
@@ -1263,8 +1459,10 @@ export class LancerAutomationsConfig extends FormApplication {
             placeholder.style.cssText = placeholderStyle;
             placeholder.textContent = 'Press a key… (Esc to cancel)';
             btn.replaceWith(placeholder);
-            captureKey(async (binding) => {
-                if (!binding) {
+            captureKey(async (binding) =>
+            {
+                if (!binding)
+                {
                     placeholder.outerHTML = original;
                     return;
                 }
@@ -1273,7 +1471,8 @@ export class LancerAutomationsConfig extends FormApplication {
                 await writeBindings(fullKey, current);
             });
         });
-        $html.find('.la-kb-key').on('contextmenu', async (/** @type {any} */ ev) => {
+        $html.find('.la-kb-key').on('contextmenu', async (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const btn = ev.currentTarget;
             const row = btn.closest('.la-keybinding-row');
@@ -1285,7 +1484,8 @@ export class LancerAutomationsConfig extends FormApplication {
             current.splice(idx, 1);
             await writeBindings(fullKey, current);
         });
-        $html.find('.la-kb-reset').on('click', async (/** @type {any} */ ev) => {
+        $html.find('.la-kb-reset').on('click', async (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const row = ev.currentTarget.closest('.la-keybinding-row');
             const fullKey = row?.dataset.fullKey;
@@ -1295,7 +1495,8 @@ export class LancerAutomationsConfig extends FormApplication {
             const defaults = (action?.editable ?? []).map(/** @type {any} */ b => ({ key: b.key, modifiers: [...(b.modifiers ?? [])] }));
             await writeBindings(fullKey, defaults);
         });
-        $html.find('.la-kb-add').on('click', (/** @type {any} */ ev) => {
+        $html.find('.la-kb-add').on('click', (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const btn = ev.currentTarget;
             const row = btn.closest('.la-keybinding-row');
@@ -1309,8 +1510,10 @@ export class LancerAutomationsConfig extends FormApplication {
             const resetBtn = binds.querySelector('.la-kb-reset');
             binds.insertBefore(placeholder, resetBtn);
             btn.style.display = 'none';
-            captureKey(async (binding) => {
-                if (!binding) {
+            captureKey(async (binding) =>
+            {
+                if (!binding)
+                {
                     placeholder.remove();
                     btn.style.display = '';
                     return;
@@ -1321,7 +1524,8 @@ export class LancerAutomationsConfig extends FormApplication {
             });
         });
 
-        $html.find('.la-tour-play').on('click', async (/** @type {any} */ ev) => {
+        $html.find('.la-tour-play').on('click', async (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const row = ev.currentTarget.closest('.la-tour-row');
             const fullKey = row?.dataset.fullKey;
@@ -1331,58 +1535,97 @@ export class LancerAutomationsConfig extends FormApplication {
             if (!tour)
                 return;
             // Close the config window before starting the tour (matches Foundry's native Tour Manager UX).
-            try {
+            try
+            {
                 const appEl = ev.currentTarget.closest('.window-app');
                 const appId = appEl?.dataset.appid;
                 const app = appId ? ui.windows?.[appId] : null;
                 if (app)
                     await app.close();
-            } catch { /* ignore */ }
-            try {
+            }
+            catch
+            { /* ignore */ }
+            try
+            {
                 await tour.start();
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.error('lancer-automations | failed to start tour', fullKey, e);
             }
         });
 
-        $html.find('button[data-action-key]').on('click', async (/** @type {any} */ ev) => {
+        $html.find('button[data-action-key]').on('click', async (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             const key = ev.currentTarget.dataset.actionKey;
-            for (const tab of TAB_DEFS) {
-                const f = /** @type {any} */ (tab.fields.find((/** @type {any} */ x) => x.key === key));
-                if (f?.onClick) {
+            for (const tab of TAB_DEFS)
+            {
+                const matchedField = /** @type {any} */ (tab.fields.find((/** @type {any} */ field) => field.key === key));
+                if (matchedField?.onClick)
+                {
                     const formEl = ev.currentTarget.closest('form');
                     const formMap = _readFormSettings(formEl);
                     const restore = _patchSettingsGet(formMap);
-                    try {
-                        await f.onClick();
-                    } finally {
+                    try
+                    {
+                        await matchedField.onClick();
+                    }
+                    finally
+                    {
                         restore();
                     }
                     return;
                 }
             }
         });
-        $html.find('.la-preview-btn').on('click', async (/** @type {any} */ ev) => {
+        $html.find('.la-preview-btn').on('click', async (/** @type {any} */ ev) =>
+        {
             ev.preventDefault();
             ev.stopPropagation();
             await _previewSettingSound(ev.currentTarget.dataset.previewKey);
         });
-        $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h) => {
+        $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h) =>
+        {
             const $h = $(h);
             const label = $h.text().trim();
             const collapsed = this._sectionStates.has(label)
                 ? this._sectionStates.get(label)
                 : $h.attr('data-collapsed') === 'true';
             _toggleSection($h, collapsed);
-        }).on('click', (/** @type {any} */ ev) => {
+        }).on('click', (/** @type {any} */ ev) =>
+        {
             const $h = $(ev.currentTarget);
             const next = $h.attr('data-collapsed') !== 'true';
-            _toggleSection($h, next);
+            _toggleSection($h, next, true);
             this._sectionStates.set($h.text().trim(), next);
         });
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
+        // Delegated so the lock keeps working after the search filter rebuilds a label's HTML.
+        $html.off('click.laFcsLock').on('click.laFcsLock', '.la-fcs-lock', async function ()
+        {
+            const fcsData = getFCSData();
+            if (!fcsData)
+                return;
+            const isGM = game.user?.isGM;
+            const $icon = $(this);
+            const lockKey = $icon.attr('data-settings-key');
+            if (!lockKey)
+                return;
+            await toggleFCSForce(lockKey, fcsData);
+            let resolved = fcsData.forced.get(lockKey)?.mode ?? 'open';
+            if ((resolved === 'soft' || isGM) && fcsData.unlocked.has(lockKey))
+                resolved = 'unlocked';
+            const newModeKey = resolved + (isGM ? '-gm' : '-client');
+            const newIcon = _FCS_ICONS[newModeKey] ?? 'fa-lock-keyhole-open';
+            $icon.attr('class', `fas ${newIcon} la-fcs-lock`);
+            $icon.prop('title', game.i18n.localize(`FORCECLIENTSETTINGS.ui.${newModeKey}-hint`));
+            const shortKey = lockKey.slice(MODULE_ID.length + 1);
+            $html.find(`[name="${shortKey}"]`).prop('disabled', ['hard-client', 'soft-client'].includes(newModeKey));
+            // drop the search cache for this label so a re-search re-stashes the new icon
+            $icon.closest('label').removeData('la-orig');
+        });
 
         const $searchBar = $html.find('.la-config-search');
         const $searchToggle = $html.find('.la-config-search-toggle');
@@ -1390,18 +1633,21 @@ export class LancerAutomationsConfig extends FormApplication {
         const $clear = $html.find('.la-config-search-clear');
         const escapeRe = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const escapeHtml = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const stash = (/** @type {any} */ $el) => {
+        const stash = (/** @type {any} */ $el) =>
+        {
             if ($el.data('la-orig') === undefined)
                 $el.data('la-orig', $el.html());
         };
-        const restore = (/** @type {any} */ $el) => {
+        const restore = (/** @type {any} */ $el) =>
+        {
             const orig = $el.data('la-orig');
             if (orig !== undefined)
                 $el.html(orig);
         };
         const MARK_OPEN = '<mark style="background:#f8d96b;color:#111;padding:0 1px;border-radius:2px;">';
         const MARK_CLOSE = '</mark>';
-        const highlightIn = (/** @type {any} */ $el, /** @type {RegExp} */ re) => {
+        const highlightIn = (/** @type {any} */ $el, /** @type {RegExp} */ re) =>
+        {
             stash($el);
             // Restore first, then walk text nodes to wrap matches.
             const orig = $el.data('la-orig') ?? '';
@@ -1412,10 +1658,11 @@ export class LancerAutomationsConfig extends FormApplication {
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
             /** @type {Text[]} */
             const textNodes = [];
-            let n;
-            while ((n = walker.nextNode()))
-                textNodes.push(/** @type {Text} */ (n));
-            for (const node of textNodes) {
+            let textNode;
+            while ((textNode = walker.nextNode()))
+                textNodes.push(/** @type {Text} */ (textNode));
+            for (const node of textNodes)
+            {
                 const text = node.nodeValue ?? '';
                 re.lastIndex = 0;
                 if (!re.test(text))
@@ -1427,48 +1674,75 @@ export class LancerAutomationsConfig extends FormApplication {
                 node.parentNode?.replaceChild(span, node);
             }
         };
-        const applyFilter = (query) => {
+        const applyFilter = (query) =>
+        {
             const q = (query || '').trim().toLowerCase();
             $clear.css('display', q ? 'inline' : 'none');
             const re = q ? new RegExp(escapeRe(q), 'gi') : null;
-            $html.find('.tab').each((/** @type {number} */ _i, /** @type {any} */ tab) => {
+            $html.find('.tab').each((/** @type {number} */ _i, /** @type {any} */ tab) =>
+            {
                 const $tab = $(tab);
-                const groups = $tab.find('.form-group, h2.la-section');
-                if (!q) {
+                const groups = $tab.find('.form-group, h2.la-section, h3.la-subsection-header');
+                if (!q)
+                {
                     groups.css('display', '');
                     groups.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ el) => restore($(el)));
                     return;
                 }
                 let lastSection = null;
                 let sectionHasMatch = false;
-                const finalize = () => {
+                let lastSub = null;
+                let subHasMatch = false;
+                const finalizeSub = () =>
+                {
+                    if (lastSub)
+                        lastSub.css('display', subHasMatch ? '' : 'none');
+                };
+                const finalizeSection = () =>
+                {
                     if (lastSection)
                         lastSection.css('display', sectionHasMatch ? '' : 'none');
                 };
-                groups.each((/** @type {number} */ _j, /** @type {any} */ el) => {
+                groups.each((/** @type {number} */ _j, /** @type {any} */ el) =>
+                {
                     const $el = $(el);
-                    if ($el.is('h2.la-section')) {
-                        finalize();
+                    if ($el.is('h2.la-section'))
+                    {
+                        finalizeSub();
+                        finalizeSection();
                         lastSection = $el;
                         sectionHasMatch = false;
+                        lastSub = null;
+                        subHasMatch = false;
+                        return;
+                    }
+                    if ($el.is('h3.la-subsection-header'))
+                    {
+                        finalizeSub();
+                        lastSub = $el;
+                        subHasMatch = false;
                         return;
                     }
                     const text = ($el.text() || '').toLowerCase();
                     const name = ($el.find('[name]').attr('name') || '').toLowerCase();
                     const match = text.includes(q) || name.includes(q);
                     $el.css('display', match ? '' : 'none');
-                    if (match) {
+                    if (match)
+                    {
                         sectionHasMatch = true;
+                        subHasMatch = true;
                         $el.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ child) => highlightIn($(child), /** @type {RegExp} */ (re)));
-                    } else {
-                        $el.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ child) => restore($(child)));
                     }
+                    else
+                        $el.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ child) => restore($(child)));
                 });
-                finalize();
+                finalizeSub();
+                finalizeSection();
             });
-            if (q) {
+            if (q)
                 $html.find('.tab').addClass('active').css('display', '');
-            } else {
+            else
+            {
                 $html.find('.tab').removeClass('active');
                 const activeId = $html.find('.tabs .item.active').data('tab')
                     || $html.find('.tab').first().data('tab');
@@ -1476,31 +1750,38 @@ export class LancerAutomationsConfig extends FormApplication {
             }
         };
         $search.on('input', (/** @type {any} */ ev) => applyFilter(ev.currentTarget.value));
-        $clear.on('click', () => {
+        $clear.on('click', () =>
+        {
             $search.val(''); applyFilter('');
         });
 
         const idleStyle    = { color: 'var(--primary-color)', 'border-color': 'var(--primary-color)', background: 'rgba(255,255,255,0.5)' };
         const hoverStyle   = { color: '#fff',                 'border-color': 'var(--primary-color)', background: 'var(--primary-color)' };
         const activeStyle  = { color: '#fff',                 'border-color': 'var(--primary-color)', background: 'var(--primary-color)' };
-        const applyToggle = (style) => {
+        const applyToggle = (style) =>
+        {
             $searchToggle.css(style);
             $searchToggle.find('i').css('color', style.color);
         };
         applyToggle(idleStyle);
         $searchToggle.on('mouseenter', () => applyToggle(hoverStyle));
-        $searchToggle.on('mouseleave', () => {
+        $searchToggle.on('mouseleave', () =>
+        {
             const open = $searchBar.css('display') !== 'none';
             applyToggle(open ? activeStyle : idleStyle);
         });
-        $searchToggle.on('click', () => {
+        $searchToggle.on('click', () =>
+        {
             const open = $searchBar.css('display') !== 'none';
-            if (open) {
+            if (open)
+            {
                 $searchBar.css('display', 'none');
                 $search.val('');
                 applyFilter('');
                 applyToggle(idleStyle);
-            } else {
+            }
+            else
+            {
                 $searchBar.css('display', 'flex');
                 applyToggle(activeStyle);
                 setTimeout(() => $search.trigger('focus'), 10);
@@ -1508,56 +1789,63 @@ export class LancerAutomationsConfig extends FormApplication {
         });
     }
 
-    async _updateObject(_event, formData) {
+    async _updateObject(_event, formData)
+    {
         // non-GM submits skip world-scoped writes so player saves don't clobber GM values
         const isGM = !!game.user?.isGM;
-        const _canWrite = (moduleId, key) => {
+        const _canWrite = (moduleId, key) =>
+        {
             const setting = game.settings.settings.get(`${moduleId}.${key}`);
-            if (!setting) return false;
-            if (setting.scope === 'world') return isGM;
+            if (!setting)
+                return false;
+            if (setting.scope === 'world')
+                return isGM;
             return true;
         };
 
-        for (const formKey of Object.keys(formData)) {
-            if (!formKey.startsWith('__ext.')) {
+        for (const formKey of Object.keys(formData))
+        {
+            if (!formKey.startsWith('__ext.'))
                 continue;
-            }
             const rest = formKey.slice('__ext.'.length);
             const dot = rest.indexOf('.');
-            if (dot < 1) {
+            if (dot < 1)
                 continue;
-            }
             const moduleId = rest.slice(0, dot);
             const settingKey = rest.slice(dot + 1);
-            if (!game.modules.get(moduleId)?.active) {
+            if (!game.modules.get(moduleId)?.active)
                 continue;
-            }
             if (!_canWrite(moduleId, settingKey))
                 continue;
-            try {
+            try
+            {
                 await game.settings.set(moduleId, settingKey, !!formData[formKey]);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`${MODULE_ID} | Could not save ${moduleId}.${settingKey}`, e);
             }
         }
-        for (const tab of TAB_DEFS) {
-            for (const fRaw of tab.fields) {
+        for (const tab of TAB_DEFS)
+        {
+            for (const fRaw of tab.fields)
+            {
                 const f = /** @type {any} */ (fRaw);
-                if (f.type !== 'moduleBoolean') {
+                if (f.type !== 'moduleBoolean')
                     continue;
-                }
-                if (!game.modules.get(f.module)?.active) {
+                if (!game.modules.get(f.module)?.active)
                     continue;
-                }
                 const formKey = `__ext.${f.module}.${f.key}`;
-                if (formKey in formData) {
+                if (formKey in formData)
                     continue;
-                }
                 if (!_canWrite(f.module, f.key))
                     continue;
-                try {
+                try
+                {
                     await game.settings.set(f.module, f.key, false);
-                } catch (e) {
+                }
+                catch (e)
+                {
                     console.warn(`${MODULE_ID} | Could not save ${f.module}.${f.key}`, e);
                 }
             }
@@ -1565,40 +1853,51 @@ export class LancerAutomationsConfig extends FormApplication {
 
 
         const sfxSubs = new Set();
-        for (const tab of TAB_DEFS) {
-            for (const fRaw of tab.fields) {
+        for (const tab of TAB_DEFS)
+        {
+            for (const fRaw of tab.fields)
+            {
                 const f = /** @type {any} */ (fRaw);
                 if (f.type === 'statusFx' && f.sub)
                     sfxSubs.add(f.sub);
-                else if (f.type === 'compactStatusFx') {
-                    for (const it of (f.items ?? [])) {
+                else if (f.type === 'compactStatusFx')
+                {
+                    for (const it of (f.items ?? []))
+                    {
                         if (it?.sub)
                             sfxSubs.add(it.sub);
                     }
                 }
             }
         }
-        if (sfxSubs.size > 0 && _canWrite(MODULE_ID, 'statusFXConfig')) {
-            try {
+        if (sfxSubs.size > 0 && _canWrite(MODULE_ID, 'statusFXConfig'))
+        {
+            try
+            {
                 const existing = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
                 /** @type {any} */
                 const next = { ...existing };
                 let changed = false;
-                for (const sub of sfxSubs) {
+                for (const sub of sfxSubs)
+                {
                     const formKey = `_sfx.${sub}`;
                     const newVal = !!formData[formKey];
-                    if (next[sub] !== newVal) {
+                    if (next[sub] !== newVal)
+                    {
                         next[sub] = newVal;
                         changed = true;
                     }
                 }
-                if (changed) {
+                if (changed)
+                {
                     await game.settings.set(MODULE_ID, 'statusFXConfig', next);
                     const setting = game.settings.settings.get(`${MODULE_ID}.statusFXConfig`);
                     if (setting?.requiresReload)
                         this._needsReload = true;
                 }
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`${MODULE_ID} | Could not save statusFXConfig`, e);
             }
         }
@@ -1606,32 +1905,44 @@ export class LancerAutomationsConfig extends FormApplication {
         // Unchecked checkboxes are absent from formData; treat as false.
         /** @type {any[]} */
         const allFields = [];
-        for (const tab of TAB_DEFS) {
-            for (const fRaw of tab.fields) {
+        for (const tab of TAB_DEFS)
+        {
+            for (const fRaw of tab.fields)
+            {
                 const f = /** @type {any} */ (fRaw);
-                if (!f.key && f.type === 'table' && f.tableKeys) {
-                    for (const tk of f.tableKeys) {
+                if (!f.key && f.type === 'table' && f.tableKeys)
+                {
+                    for (const tk of f.tableKeys)
+                    {
                         const setting = game.settings.settings.get(`${MODULE_ID}.${tk}`);
                         allFields.push({ key: tk, type: setting?.type === Boolean ? 'boolean' : 'string' });
                     }
-                } else if (f.type === 'compactBooleans') {
+                }
+                else if (f.type === 'compactBooleans')
+                {
                     for (const it of (f.items ?? []))
                         allFields.push({ key: it.key, type: 'boolean' });
-                } else if (f.type === 'compactStatusFx') {
-                    continue;
-                } else if (f.key && f.type !== 'section' && f.type !== 'button' && f.type !== 'statusFx') {
-                    allFields.push(f);
                 }
+                else if (f.type === 'compactStatusFx')
+                    continue;
+                else if (f.key && f.type !== 'section' && f.type !== 'button' && f.type !== 'statusFx')
+                    allFields.push(f);
             }
         }
-        for (const f of allFields) {
+        for (const f of allFields)
+        {
             if (!_canWrite(MODULE_ID, f.key))
                 continue;
-            if (!(f.key in formData)) {
-                if (f.type === 'boolean') {
-                    try {
+            if (!(f.key in formData))
+            {
+                if (f.type === 'boolean')
+                {
+                    try
+                    {
                         await game.settings.set(MODULE_ID, f.key, false);
-                    } catch (e) {
+                    }
+                    catch (e)
+                    {
                         console.warn(`${MODULE_ID} | Could not save ${f.key}`, e);
                     }
                 }
@@ -1642,21 +1953,26 @@ export class LancerAutomationsConfig extends FormApplication {
                 val = Number(val);
             if (f.type === 'boolean')
                 val = !!val;
-            try {
+            try
+            {
                 const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`);
                 const prev = game.settings.get(MODULE_ID, f.key);
                 if (prev !== val && setting?.requiresReload)
                     this._needsReload = true;
                 await game.settings.set(MODULE_ID, f.key, val);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`${MODULE_ID} | Could not save ${f.key}`, e);
             }
         }
         ui.notifications.info('Lancer Automations configuration saved.');
     }
 
-    async close(options) {
-        try {
+    async close(options)
+    {
+        try
+        {
             const root = this.element?.[0];
             const activeNav = /** @type {any} */ (root?.querySelector('.tabs .item.active'));
             const scroller = root?.querySelector('.content .tab.active') ?? root?.querySelector('.content');
@@ -1669,9 +1985,12 @@ export class LancerAutomationsConfig extends FormApplication {
                 width: pos.width ?? null,
                 height: pos.height ?? null,
             };
-        } catch { /* ignore */ }
+        }
+        catch
+        { /* ignore */ }
         const r = await super.close(options);
-        if (this._needsReload) {
+        if (this._needsReload)
+        {
             this._needsReload = false;
             const reload = await Dialog.confirm({
                 title: 'Reload Required',
@@ -1687,7 +2006,8 @@ export class LancerAutomationsConfig extends FormApplication {
     }
 }
 
-export function registerSettingsMenus() {
+export function registerSettingsMenus()
+{
     game.settings.registerMenu(MODULE_ID, 'lancerAutomationsConfigMenu', {
         name: 'Lancer Automations Configuration',
         label: 'Open Configuration',

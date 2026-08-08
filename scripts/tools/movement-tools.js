@@ -4,7 +4,8 @@ import { playStandingUpFX, playTeleportFX } from "../fx/actionFX.js";
 import { executeDamageRoll } from "./misc-tools.js";
 
 /** Add a virtual LA movement entry for actions that cost movement without physically moving the token. */
-async function addVirtualMovement(token, cost) {
+async function addVirtualMovement(token, cost)
+{
     const tokenDoc = token.document;
     const laHistory = tokenDoc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
     const moves = laHistory.moves || [];
@@ -23,16 +24,19 @@ async function addVirtualMovement(token, cost) {
  * Stand up from prone: removes the Prone status and adds +speed to the movement cap.
  * Costs the standard move (not a quick/full action).
  */
-export async function executeStandingUp(token) {
+export async function executeStandingUp(token)
+{
     if (!token?.actor)
         return;
-    const hasProne = !!findEffectOnToken(token, e => e.statuses?.has('prone'));
-    if (!hasProne) {
+    const hasProne = !!findEffectOnToken(token, effect => effect.statuses?.has('prone'));
+    if (!hasProne)
+    {
         ui.notifications.info(`${token.name} is not Prone.`);
         return;
     }
     await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
     playStandingUpFX(token);
+    Hooks.callAll('lancer-automations.battelog.action', { token, name: 'STAND UP', actionType: 'Move' });
     const speed = token.actor.system?.speed ?? 0;
     await addVirtualMovement(token, speed);
     ChatMessage.create({
@@ -41,7 +45,8 @@ export async function executeStandingUp(token) {
     });
 }
 
-export async function executeTeleport(token, cost) {
+export async function executeTeleport(token, cost)
+{
     if (!token?.actor)
         return;
     const api = game.modules.get('lancer-automations')?.api;
@@ -57,26 +62,31 @@ export async function executeTeleport(token, cost) {
         description: `Select destination within Range ${speed}. Costs ${moveCost} movement.`
     });
     if (result)
+    {
         playTeleportFX(token);
+        Hooks.callAll('lancer-automations.battelog.action', { token, name: 'TELEPORT', actionType: 'Quick' });
+    }
 }
 
 /**
  * Tick a fall: if the token is above ground, reduce elevation by up to 10 spaces.
  * Once it lands, deal 3 AP kinetic per 3 spaces fallen (capped at 9).
  */
-export async function executeFall(paramToken) {
-    if (!paramToken) {
+export async function executeFall(targetToken)
+{
+    if (!targetToken)
+    {
         ui.notifications.error('lancer-automations | executeFall requires a target token.');
         return;
     }
 
-    const targetToken = paramToken;
     const tokenDoc = targetToken.document;
     const terrainAPI = globalThis.terrainHeightTools;
 
     // falling implies not flying
     const hasFlyingStatus = !!findEffectOnToken(targetToken, "flying");
-    if (hasFlyingStatus) {
+    if (hasFlyingStatus)
+    {
         await removeEffectsByNameFromTokens({
             tokens: [targetToken],
             effectNames: ["Flying"]
@@ -88,8 +98,10 @@ export async function executeFall(paramToken) {
 
     const hasFallingEffect = !!findEffectOnToken(targetToken, "falling");
 
-    if (tokenElevation <= maxGroundHeight) {
-        if (hasFallingEffect) {
+    if (tokenElevation <= maxGroundHeight)
+    {
+        if (hasFallingEffect)
+        {
             ui.notifications.warn('Token is already on the ground');
             await removeEffectsByNameFromTokens({
                 tokens: [targetToken],
@@ -108,7 +120,8 @@ export async function executeFall(paramToken) {
     await tokenDoc.update({ elevation: newElevation });
     ui.notifications.info(`Token has fallen ${fallAmount} space${fallAmount !== totalFallAmount ? ` (for a total of ${totalFallAmount})` : ''}`);
 
-    if (newElevation <= maxGroundHeight) {
+    if (newElevation <= maxGroundHeight)
+    {
         await removeEffectsByNameFromTokens({
             tokens: [targetToken],
             effectNames: ["Falling"]
@@ -117,25 +130,27 @@ export async function executeFall(paramToken) {
         const totalFallDistance = fallStartElevation - maxGroundHeight;
         const damageGroups = Math.min(3, Math.floor(totalFallDistance / 3));
 
-        if (damageGroups > 0) {
+        if (damageGroups > 0)
+        {
             const totalDamage = damageGroups * 3;
             await executeDamageRoll(targetToken, [targetToken], totalDamage, "Kinetic", "Fall", { ap: true, action: { name: "Fall" } });
         }
 
-        if (newElevation < maxGroundHeight) {
+        if (newElevation < maxGroundHeight)
             await tokenDoc.update({ elevation: maxGroundHeight });
-        }
 
         await tokenDoc.unsetFlag('lancer-automations', 'fallStartElevation');
 
-    } else if (!hasFallingEffect) {
+    }
+    else if (!hasFallingEffect)
+    {
         await applyEffectsToTokens({
             tokens: [targetToken],
             effectNames: ["Falling"],
             duration: { label: "unlimited" }
         });
         await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
-    } else {
-        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
     }
+    else
+        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
 }

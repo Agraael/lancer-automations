@@ -2,8 +2,10 @@
 /*global console, window */
 
 import { ReactionManager } from "./reaction-manager.js";
-export class ReactionReset extends FormApplication {
-    static get defaultOptions() {
+export class ReactionReset extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-reset",
             title: "Reset Lancer Reaction Checker",
@@ -13,9 +15,11 @@ export class ReactionReset extends FormApplication {
         });
     }
 
-    async _updateObject(_event, _formData) {}
+    async _updateObject(_event, _formData)
+    {}
 
-    render(force = false, options = {}) {
+    render(force = false, options = {})
+    {
         new Dialog({
             title: "Reset Module Defaults",
             content: `
@@ -34,10 +38,14 @@ export class ReactionReset extends FormApplication {
                 yes: {
                     icon: '<i class="fas fa-trash"></i>',
                     label: "Reset Everything",
-                    callback: async () => {
-                        try {
-                            for (const [key, setting] of game.settings.settings.entries()) {
-                                if (setting.namespace === ReactionManager.ID) {
+                    callback: async () =>
+                    {
+                        try
+                        {
+                            for (const [key, setting] of game.settings.settings.entries())
+                            {
+                                if (setting.namespace === ReactionManager.ID)
+                                {
                                     await game.settings.set(ReactionManager.ID, setting.key, setting.default);
                                     console.log(`lancer-automations | Resetting ${setting.key}`);
                                 }
@@ -49,7 +57,9 @@ export class ReactionReset extends FormApplication {
                             ui.notifications.info("Lancer Reaction Checker: Module reset to defaults.");
 
                             globalThis.location.reload();
-                        } catch (err) {
+                        }
+                        catch (err)
+                        {
                             ui.notifications.error("Error resetting module: " + err.message);
                             console.error(err);
                         }

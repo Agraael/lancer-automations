@@ -1,8 +1,11 @@
 /* global CONFIG, canvas, game, ChatMessage, ui */
 
 import { socketRequestWithAck } from '../socket.js';
+import { linkTierGate } from '../interactive/deployables.js';
+import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 
-function log(...args) {
+function log(...args)
+{
     console.log("lancer-automations |", ...args);
 }
 
@@ -12,23 +15,32 @@ let notificationTimer = null;
 // Notifications queued while >0 get whispered to the token's owners + GMs instead of broadcast.
 let _onInitDepth = 0;
 
-export function isInOnInitTriggerContext() {
+export function isInOnInitTriggerContext()
+{
     return _onInitDepth > 0;
 }
 
-export async function runInOnInitTriggerContext(fn) {
+export async function runInOnInitTriggerContext(fn)
+{
     _onInitDepth++;
-    try {
+    try
+    {
         return await fn();
-    } finally {
+    }
+    finally
+    {
         _onInitDepth--;
     }
 }
 
-function _isStatBarActive() {
-    try {
+function _isStatBarActive()
+{
+    try
+    {
         return game.settings.get('lancer-automations', 'tokenStatBar') === true;
-    } catch {
+    }
+    catch
+    {
         return false;
     }
 }
@@ -43,9 +55,11 @@ const _statusCache = {
 /**
  * Helper to get saved statuses with a short-lived cache to avoid redundant settings lookups in loops.
  */
-function _getSavedStatuses() {
+function _getSavedStatuses()
+{
     const now = Date.now();
-    if (!_statusCache.data || (now - _statusCache.timestamp > _statusCache.ttl)) {
+    if (!_statusCache.data || (now - _statusCache.timestamp > _statusCache.ttl))
+    {
         _statusCache.data = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
         _statusCache.timestamp = now;
     }
@@ -53,14 +67,14 @@ function _getSavedStatuses() {
 }
 
 /**
- * Queue an effect notification to be aggregated.
- * @param {Token|TokenDocument} token - The token involved
- * @param {string} effectName - Name of the effect
+ * @param {Token|TokenDocument} token
+ * @param {string} effectName
  * @param {Object|boolean} notifyOptions - Notification options { source, prefixText }
  * @param {string} defaultPrefix - Default prefix if notifyOptions.text is missing
- * @param {string} icon - Icon path
+ * @param {string} icon
  */
-function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix, icon) {
+function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix, icon)
+{
     if (!notifyOptions)
         return;
     const tokenObj = /** @type {any} */ (token).object || token;
@@ -79,12 +93,16 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
 }
 
 // Users who should see whispered notifications for a token: GMs + token owners.
-function _whisperTargetsForToken(token) {
+function _whisperTargetsForToken(token)
+{
     const actor = token?.actor;
     const ids = new Set();
-    for (const user of game.users) {
-        if (!user.active) continue;
-        if (user.isGM) {
+    for (const user of game.users)
+    {
+        if (!user.active)
+            continue;
+        if (user.isGM)
+        {
             ids.add(user.id);
             continue;
         }
@@ -94,43 +112,49 @@ function _whisperTargetsForToken(token) {
     return [...ids];
 }
 
-async function dispatchNotifications() {
+async function dispatchNotifications()
+{
     if (notificationQueue.length === 0)
         return;
 
-    const data = [...notificationQueue];
+    const batch = [...notificationQueue];
     notificationQueue = [];
     notificationTimer = null;
 
     // Split by (tokenId, whisper) so each output message is fully public OR fully whispered.
     const groups = new Map();
-    for (const item of data) {
+    for (const item of batch)
+    {
         const key = `${item.token.id}::${item.whisper ? 'w' : 'p'}`;
         if (!groups.has(key))
             groups.set(key, { token: item.token, whisper: item.whisper, updates: [] });
         groups.get(key).updates.push(item);
     }
 
-    const renderLine = (u) => {
-        const iconHtml = u.icon ? `<img src="${u.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
-        const actionText = `${iconHtml}${u.prefix} <strong>${u.effectName}</strong>`;
+    const renderLine = (update) =>
+    {
+        const iconHtml = update.icon ? `<img src="${update.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
+        const actionText = `${iconHtml}${update.prefix} <strong>${update.effectName}</strong>`;
         let sourceText = "";
-        if (u.source) {
-            const name = typeof u.source === 'object' ? u.source.name : u.source;
+        if (update.source)
+        {
+            const name = typeof update.source === 'object' ? update.source.name : update.source;
             if (name)
                 sourceText = ` with ${name}`;
         }
         return `<li>${actionText}${sourceText}</li>`;
     };
 
-    for (const { token, whisper, updates } of groups.values()) {
+    for (const { token, whisper, updates } of groups.values())
+    {
         const lines = updates.map(renderLine).join("");
         const content = `<div class="lancer-automations-notification"><div><strong>${token.name}:</strong><ul>${lines}</ul></div></div>`;
         const messageData = {
             content,
             speaker: ChatMessage.getSpeaker({ token: token.document || token })
         };
-        if (whisper) {
+        if (whisper)
+        {
             const targets = _whisperTargetsForToken(token);
             if (targets.length === 0)
                 continue;
@@ -141,21 +165,28 @@ async function dispatchNotifications() {
 }
 
 /** @returns {Promise<void>} */
-export async function pushEffect(targetID, effect, duration, note, originID) {
+export async function pushEffect(targetID, effect, duration, note, originID)
+{
     const target = canvas.tokens.get(targetID);
     const canActDirectly = game.user.isGM || target?.document?.isOwner;
-    if (!canActDirectly && game.users.filter(x => x.role === 4 && x.active).length < 1) {
+    if (!canActDirectly && game.users.filter(user => user.role === 4 && user.active).length < 1)
+    {
         log('There is no active GM.');
         return ui.notifications.error('There must be an active GM for this to work.');
     }
-    if (canActDirectly) {
+    if (canActDirectly)
+    {
         log(`Local setFlaggedEffect ${effect}`);
         await setEffect(targetID, effect, duration, note, originID);
-    } else {
+    }
+    else
+    {
         log(`Pushing setFlaggedEffect ${effect}`);
         await socketRequestWithAck('setEffect', { targetID, effect, duration, note, originID });
     }
 }
+
+const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
 
 /**
  * Returns true if the incoming extraOptions are considered the same "source" as an existing effect's stored flags.
@@ -164,8 +195,8 @@ export async function pushEffect(targetID, effect, duration, note, originID) {
  * @param {SetEffectOptions} extraOptions - The incoming extra options
  * @param {ActiveEffect} existingEffect - The existing effect on the actor
  */
-function _sameIdentity(extraOptions, existingEffect) {
-    const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
+function _sameIdentity(extraOptions, existingEffect)
+{
     const identityKeys = Object.keys(extraOptions || {}).filter(key => !META_KEYS.has(key));
     if (identityKeys.length === 0)
         return true;
@@ -174,67 +205,70 @@ function _sameIdentity(extraOptions, existingEffect) {
 }
 
 /** @returns {Promise<void>} */
-export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}) {
+export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {})
+{
     log('**setEffect**');
-    const target = canvas.tokens.placeables.find(x => x.id === targetID);
+    const target = canvas.tokens.placeables.find(token => token.id === targetID);
     if (!target)
         return;
 
     let effectNameForLog = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
     const isCustomRequest = (typeof effectOrData === 'object' && effectOrData.isCustom);// Auto-detect if "string" effect is actually an existing custom effect
     let resolvedEffectData = effectOrData;
-    if (typeof effectOrData === 'string') {
+    if (typeof effectOrData === 'string')
+    {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-        if (customStatusApi) {
+        if (customStatusApi)
+        {
             const savedStatuses = _getSavedStatuses();
             const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
-            if (hasCustom) {
+            if (hasCustom)
                 resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
-            }
         }
-    } else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom) {
+    }
+    else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom)
+    {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-        if (customStatusApi) {
+        if (customStatusApi)
+        {
             const savedStatuses = _getSavedStatuses();
             const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData.name);
-            if (hasCustom) {
+            if (hasCustom)
                 resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
-            }
         }
     }
 
-    if (resolvedEffectData?.isCustom && !resolvedEffectData.icon) {
+    if (resolvedEffectData?.isCustom && !resolvedEffectData.icon)
         resolvedEffectData.icon = "icons/svg/mystery-man.svg";
-    }
 
-    // Handle Custom Data Object
-    if (typeof resolvedEffectData === 'object' && resolvedEffectData.isCustom) {
+    if (typeof resolvedEffectData === 'object' && resolvedEffectData.isCustom)
+    {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
 
-        if (customStatusApi) {
-            // Check for existing effect to stack
+        if (customStatusApi)
+        {
             const existingEffect = target.actor.effects.find(effect =>
                 (game.modules.get("temporary-custom-statuses")?.active && effect.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
             );
 
-            if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
+            if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect))
+            {
                 const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
 
                 // Build duration entries for stack-aware expiration
                 const entries = [...(existingEffect.getFlag('lancer-automations', 'durationEntries') || [])];
-                if (entries.length === 0) {
+                if (entries.length === 0)
+                {
                     const existingDur = existingEffect.getFlag('lancer-automations', 'duration');
                     const existingOrigin = existingEffect.getFlag('lancer-automations', 'originID');
                     const existingApplied = (game.modules.get("lancer-automations")?.active && existingEffect.getFlag('lancer-automations', 'appliedStack'));
                     const existingStack = (game.modules.get("statuscounter")?.active && existingEffect.getFlag("statuscounter", "value")) || 1;
-                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null) {
+                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied || existingStack });
-                    }
                 }
-                if (duration && duration.label !== 'indefinite' && duration.turns !== null) {
+                if (duration && duration.label !== 'indefinite' && duration.turns !== null)
                     entries.push({ label: duration.label, turns: duration.turns, originID: originID, stack: addStack });
-                }
 
                 /** @type {LancerEffectFlags} */
                 const flagsData = {
@@ -286,19 +320,23 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 }
             );
 
-            if (activeEffects && !Array.isArray(activeEffects)) {
-                // modifyStack was called — update our flags on the existing effect
+            if (activeEffects && !Array.isArray(activeEffects))
+            {
+                // modifyStack was called; update our flags on the existing effect
                 const existingEffect = target.actor.effects.find(effect =>
                     (game.modules.get("temporary-custom-statuses")?.active && effect.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
                 );
-                if (existingEffect) {
+                if (existingEffect)
+                {
                     const updateData = { "flags.lancer-automations": lancerFlags };
                     if (extraOptions?.changes?.length)
                         updateData.changes = extraOptions.changes;
                     await existingEffect.update(/** @type {any} */ (updateData));
                 }
-            } else if (Array.isArray(activeEffects) && activeEffects[0]) {
-                // New effect created — statuscounter module may overwrite, re-set
+            }
+            else if (Array.isArray(activeEffects) && activeEffects[0])
+            {
+                // New effect created; statuscounter module may overwrite, re-set
                 const updateData = {
                     "flags.statuscounter.value": counterValue,
                     "flags.statuscounter.visible": counterValue > 1
@@ -339,31 +377,35 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         const fallbackStackVal = extraOptions.stack || resolvedEffectData.stack || 1;
         const fallbackCreated = await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
-        if (fallbackCreated?.[0]) {
+        if (fallbackCreated?.[0])
+        {
             await fallbackCreated[0].update(/** @type {any} */ ({
                 "flags.statuscounter.value": fallbackStackVal,
                 "flags.statuscounter.visible": fallbackStackVal > 1
             }));
         }
 
-    } else {
+    }
+    else
+    {
         const effectName = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
-        const statusEffect = CONFIG.statusEffects.find(x => x.name === effectName || x.id === effectName);
+        const statusEffect = CONFIG.statusEffects.find(candidate => candidate.name === effectName || candidate.id === effectName);
 
-        if (!statusEffect) {
-            ui.notifications.error(`Effect ${effectName} not found`);
+        if (!statusEffect)
+        {
+            if (!isAdditionalStatusUnavailable(effectName))
+                ui.notifications.error(`Effect ${effectName} not found`);
             return;
         }
 
-        // Check for existing effect to stack
-        const existingEffect = target.actor.effects.find(/** @param {any} e */ e =>
-            e.name === game.i18n.localize(statusEffect.name) ||
-            e.statuses?.has(statusEffect.id) ||
-            e.getFlag('lancer-automations', 'effect') === statusEffect.name
+        const existingEffect = target.actor.effects.find(/** @param {any} effect */ effect =>
+            effect.name === game.i18n.localize(statusEffect.name) ||
+            effect.statuses?.has(statusEffect.id) ||
+            effect.getFlag('lancer-automations', 'effect') === statusEffect.name
         );
 
-        if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect)) {
-            // Update existing stack
+        if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect))
+        {
             const currentStack = (game.modules.get('statuscounter')?.active ? existingEffect.getFlag('statuscounter', 'value') : (existingEffect.flags?.statuscounter?.value)) || 1;
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
@@ -374,15 +416,16 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 "flags.statuscounter.visible": newStack > 1
             };
 
-            if (duration && duration.label !== 'indefinite' && duration.turns !== null) {
+            if (duration && duration.label !== 'indefinite' && duration.turns !== null)
+            {
                 const entries = [...(existingEffect.getFlag('lancer-automations', 'durationEntries') || [])];
-                if (entries.length === 0) {
+                if (entries.length === 0)
+                {
                     const existingDur = existingEffect.getFlag('lancer-automations', 'duration');
                     const existingOrigin = existingEffect.getFlag('lancer-automations', 'originID');
                     const existingApplied = existingEffect.getFlag('lancer-automations', 'appliedStack') || currentStack;
-                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null) {
+                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied });
-                    }
                 }
                 entries.push({ label: duration.label, turns: duration.turns, originID: originID, stack: addStack });
                 updateData["flags.lancer-automations.durationEntries"] = entries;
@@ -412,7 +455,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         // Set statuscounter if stack is provided (used for both visual stacks and consumption charges)
         const stackVal = extraOptions.stack || 0;
-        if (stackVal > 0) {
+        if (stackVal > 0)
+        {
             flags['statuscounter'] = {
                 value: stackVal,
                 visible: stackVal > 1
@@ -433,7 +477,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         const created = await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
 
         // Post-creation update: statuscounter module may overwrite our flags, so re-set them
-        if (stackVal > 0 && created?.[0]) {
+        if (stackVal > 0 && created?.[0])
+        {
             await created[0].update(/** @type {any} */ ({
                 "flags.statuscounter.value": stackVal,
                 "flags.statuscounter.visible": stackVal > 1
@@ -442,9 +487,10 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     }
 }
 
-export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null) {
+export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null)
+{
     log('**removeEffectsByName**');
-    const target = canvas.tokens.placeables.find(x => x.id === targetID);
+    const target = canvas.tokens.placeables.find(token => token.id === targetID);
     if (!target)
         return;
 
@@ -452,19 +498,23 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
     const effectNameTail = effectsStr.split('.').pop();
     const effectNameLower = effectNameTail.toLowerCase();
 
-    const effectsToDelete = target.actor.effects.filter(/** @param {any} effect */ effect => {
+    const effectsToDelete = target.actor.effects.filter(/** @param {any} effect */ effect =>
+    {
         // When a source is specified, skip effects from any other source.
-        if (originID) {
+        if (originID)
+        {
             const flagOrigin = effect.getFlag('lancer-automations', 'originID') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'originID') : null);
             if (flagOrigin !== originID)
                 return false;
         }
 
         // When extra flag constraints are specified, all must match.
-        if (extraFlags) {
+        if (extraFlags)
+        {
             const storedFlags = effect.flags?.['lancer-automations'] ?? {};
-            for (const [key, val] of Object.entries(extraFlags)) {
-                if (storedFlags[key] !== val)
+            for (const [key, value] of Object.entries(extraFlags))
+            {
+                if (storedFlags[key] !== value)
                     return false;
             }
         }
@@ -482,7 +532,8 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         return false;
     });
 
-    if (effectsToDelete.length > 0) {
+    if (effectsToDelete.length > 0)
+    {
         log(`Removing ${effectsToDelete.length} effects matching ${effectsStr} from ${target.name}`);
         await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(effect => effect.id));
     }
@@ -503,7 +554,8 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
  * @param {SetEffectOptions} [extraOptions={}] - Extra options forwarded to setEffect
  * @returns {Promise<Array<Token>>} Array of valid tokens that received the effect(s)
  */
-export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
+export async function applyEffectsToTokens(options = {}, extraOptions = {})
+{
     const {
         tokens = [],
         effectNames = [],
@@ -511,17 +563,15 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         duration = {},
         checkEffectCallback = null,
         notify = true
-    } = options;
+    } = /** @type {any} */ (options);
 
-    // Auto-generate groupId if grouped is true and no groupId was provided
-    if (extraOptions?.consumption?.grouped && !extraOptions.consumption.groupId) {
+    if (extraOptions?.consumption?.grouped && !extraOptions.consumption.groupId)
         extraOptions.consumption.groupId = foundry.utils.randomID();
-    }
 
-    // Normalize effectNames to always be an array
     const effectsToApply = Array.isArray(effectNames) ? effectNames : [effectNames];
 
-    if (!effectNames || effectsToApply.length === 0) {
+    if (!effectNames || effectsToApply.length === 0)
+    {
         ui.notifications.error('No effect name(s) specified!');
         return [];
     }
@@ -531,69 +581,75 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         (duration.turns != null && duration.turns !== 0) ||
         (duration.rounds != null && duration.rounds !== 0)
     );
-    if (hasLimitedDuration && !game.combat?.started) {
-        const names = effectsToApply.map(e => typeof e === 'string' ? e : e?.name).filter(Boolean).join(', ');
+    if (hasLimitedDuration && !game.combat?.started)
+    {
+        const names = effectsToApply.map(effect => typeof effect === 'string' ? effect : effect?.name).filter(Boolean).join(', ');
         ui.notifications.warn(`Out of combat: ${names} duration will not tick.`);
     }
 
     const validTokens = [];
 
-    for (const token of tokens) {
+    for (const token of tokens)
+    {
         const effectsToApplyToToken = [];
 
-        // Check each effect individually
-        for (const effect of effectsToApply) {
+        for (const effect of effectsToApply)
+        {
             let hasEffect = false;
             let existingEffect = null;
             let effectNameForLog = typeof effect === 'string' ? effect : effect.name;
 
             // Auto-detect if "string" effect is an existing custom effect
             let resolvedEffectData = effect;
-            if (typeof effect === 'string') {
+            if (typeof effect === 'string')
+            {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-                if (customStatusApi) {
+                if (customStatusApi)
+                {
                     const savedStatuses = _getSavedStatuses();
                     const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect);
-                    if (hasCustom) {
+                    if (hasCustom)
                         resolvedEffectData = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
-                    }
                 }
-            } else if (typeof effect === 'object' && effect.name && !effect.isCustom) {
+            }
+            else if (typeof effect === 'object' && effect.name && !effect.isCustom)
+            {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-                if (customStatusApi) {
+                if (customStatusApi)
+                {
                     const savedStatuses = _getSavedStatuses();
                     const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
-                    if (hasCustom) {
+                    if (hasCustom)
                         resolvedEffectData = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
-                    }
                 }
             }
 
-            if (checkEffectCallback) {
-                // Use custom check function if provided
+            if (checkEffectCallback)
                 hasEffect = checkEffectCallback(token, resolvedEffectData);
-            } else if (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) {
-                // Smart duplicate check: if the incoming effect has consumption/group data,
-                // only consider it a duplicate if an existing effect has the SAME groupId or linkedBonusId.
-                // Different sources = different effects, allowed to coexist.
+            else if (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId)
+            {
+                // only flag duplicate when groupId or linkedBonusId matches; different sources coexist
                 const groupId = extraOptions.consumption?.groupId;
                 const bonusId = extraOptions.linkedBonusId;
-                hasEffect = token.actor?.effects.some(effect => {
-                    const flags = /** @type {SetEffectOptions} */ (effect.flags?.['lancer-automations'] || {});
+                hasEffect = token.actor?.effects.some(actorEffect =>
+                {
+                    const flags = /** @type {SetEffectOptions} */ (actorEffect.flags?.['lancer-automations'] || {});
                     if (groupId && flags.consumption?.groupId === groupId)
                         return true;
                     if (bonusId && flags.linkedBonusId === bonusId)
                         return true;
                     return false;
                 });
-            } else {
-                // Check if effect exists to stack it
+            }
+            else
+            {
                 const effectNameToCheck = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
                 const effectNameTail = /** @type {string} */ (effectNameToCheck.split('.').pop());
                 const effectNameLower = effectNameTail.toLowerCase();
 
                 // Find a matching effect: same name AND same identity flags (different source = different effect).
-                existingEffect = token.actor?.effects.find(effect => {
+                existingEffect = token.actor?.effects.find(effect =>
+                {
                     const nameMatch = (effect.name)?.toLowerCase().includes(effectNameLower) ||
                         effect.statuses?.has(effectNameTail) ||
                         effect.flags?.['lancer-automations']?.effect === effectNameToCheck ||
@@ -603,43 +659,45 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
                     return _sameIdentity(extraOptions, effect);
                 });
 
-                // If the found effect is unflagged (player-added) but the new application carries
-                // managed settings (duration or explicit origin), they are distinct — allow the new one.
+                // Unflagged (player-added) effect is distinct when the new application carries managed settings (duration/origin); allow it.
                 if (existingEffect &&
                     !existingEffect.flags?.['lancer-automations']?.effect &&
                     !existingEffect.flags?.['temporary-custom-statuses']?.originalName &&
                     !existingEffect.flags?.['csm-lancer-qol']?.effect &&
-                    (duration?.label || duration?.overrideTurnOriginId)) {
-                    existingEffect = null;
-                }
+                    (duration?.label || duration?.overrideTurnOriginId))
 
-                // If it exists, check if stacking is allowed
-                if (existingEffect) {
+                    existingEffect = null;
+
+
+                if (existingEffect)
+                {
                     const allowStack = extraOptions?.allowStack;
                     const hasConsumption = extraOptions?.consumption;
 
-                    if (!allowStack && !hasConsumption) {
+                    if (!allowStack && !hasConsumption)
                         hasEffect = true; // Block stacking
-                    }
                 }
             }
 
-            if (checkEffectCallback && hasEffect) {
+            if (checkEffectCallback && hasEffect)
+            {
                 // Custom callback blocking
                 ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
-            } else if ((extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) && hasEffect) {
+            }
+            else if ((extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) && hasEffect)
+            {
                 // Groups/Bonuses check blocking
                 ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()} (Group/Bonus conflict)!`);
-            } else if (hasEffect) {
+            }
+            else if (hasEffect)
+            {
                 // Standard blocking (no stack allowed)
                 ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
-            } else {
-                // Add this effect to the list to apply (or stack)
-                effectsToApplyToToken.push(resolvedEffectData);
             }
+            else
+                effectsToApplyToToken.push(resolvedEffectData);
         }
 
-        // Skip this token if no effects need to be applied
         if (effectsToApplyToToken.length === 0)
             continue;
         validTokens.push(token);
@@ -647,22 +705,23 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
         const tokenID = token.id;
         const originID = duration?.overrideTurnOriginId ?? token.id;
 
-        // Calculate duration - if it's currently the origin's turn, adjust turns to avoid immediate expiration
+        // External callers passing raw turns=1 on the origin's turn need +1; _preAdjusted (effect manager submit paths) skips this.
         let adjustedDuration = { ...duration };
-        if (game.combat?.current?.tokenId === originID && duration.turns === 1) {
+        if (!duration._preAdjusted && game.combat?.current?.tokenId === originID && duration.turns === 1)
             adjustedDuration.turns = 2;
-        }
+        delete adjustedDuration._preAdjusted;
 
         // Apply
         const canApplyDirectly = game.user.isGM || token.document?.isOwner;
-        for (const effect of effectsToApplyToToken) {
-            if (canApplyDirectly) {
+        for (const effect of effectsToApplyToToken)
+        {
+            if (canApplyDirectly)
                 await setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
-            } else {
+            else
                 await socketRequestWithAck('setEffect', { targetID: tokenID, effect, duration: adjustedDuration, note, originID, extraOptions });
-            }
 
-            if (notify) {
+            if (notify)
+            {
                 const effectName = typeof effect === 'string' ? effect : effect.name;
                 const icon = typeof effect === 'object' ? (effect.icon || "icons/svg/mystery-man.svg") : CONFIG.statusEffects.find(statusEffect => statusEffect.id === effect)?.icon;
                 queueEffectNotification(token, effectName, notify, 'Gained', icon);
@@ -671,6 +730,397 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
     }
 
     return validTokens;
+}
+
+// Doc-aware setEffect. Sets transfer=false and disabled=true.
+/**
+ * @param {Actor|Item} doc
+ * @param {string|Object} effectOrData
+ * @param {Object} [duration]
+ * @param {string} [note]
+ * @param {string|null} [originID]
+ * @param {Object} [extraOptions]
+ * @returns {Promise<ActiveEffect|null>}
+ */
+export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = "", originID = null, extraOptions = {})
+{
+    if (!doc)
+        return null;
+    const isItem = doc.documentName === 'Item';
+
+    let resolvedEffectData = effectOrData;
+    if (typeof effectOrData === 'string')
+    {
+        const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+        if (customStatusApi)
+        {
+            const savedStatuses = _getSavedStatuses();
+            const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
+            if (hasCustom)
+                resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
+        }
+    }
+    else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom)
+    {
+        const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+        if (customStatusApi)
+        {
+            const savedStatuses = _getSavedStatuses();
+            const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData.name);
+            if (hasCustom)
+                resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
+        }
+    }
+    if (resolvedEffectData?.isCustom && !resolvedEffectData.icon)
+        resolvedEffectData.icon = "icons/svg/mystery-man.svg";
+
+    const stackVal = extraOptions.stack || (typeof resolvedEffectData === 'object' && resolvedEffectData.stack) || 0;
+
+    let effectData;
+    if (typeof resolvedEffectData === 'object' && resolvedEffectData.isCustom)
+    {
+        effectData = {
+            name: resolvedEffectData.name,
+            img: resolvedEffectData.icon,
+            statuses: [],
+            changes: extraOptions.changes || resolvedEffectData.changes || [],
+            flags: {
+                'lancer-automations': {
+                    effect: resolvedEffectData.name,
+                    duration,
+                    note,
+                    originID,
+                    appliedRound: game.combat?.round || 0,
+                    appliedStack: stackVal || 1,
+                    ...extraOptions
+                },
+                'temporary-custom-statuses': {
+                    isCustom: true,
+                    originalName: resolvedEffectData.name
+                }
+            }
+        };
+    }
+    else
+    {
+        const effectName = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
+        const statusEffect = CONFIG.statusEffects.find(candidate => candidate.name === effectName || candidate.id === effectName);
+        if (!statusEffect)
+        {
+            if (!isAdditionalStatusUnavailable(effectName))
+                ui.notifications.error(`Effect ${effectName} not found`);
+            return null;
+        }
+        effectData = {
+            name: game.i18n.localize(statusEffect.name),
+            img: statusEffect.img,
+            description: statusEffect.description,
+            id: statusEffect.id,
+            statuses: [statusEffect.id],
+            changes: extraOptions.changes || statusEffect.changes || [],
+            flags: {
+                'lancer-automations': {
+                    effect: statusEffect.name,
+                    duration,
+                    note,
+                    originID,
+                    appliedRound: game.combat?.round || 0,
+                    appliedStack: stackVal || 0,
+                    ...extraOptions
+                }
+            }
+        };
+    }
+
+    if (stackVal > 0)
+        effectData.flags.statuscounter = { value: stackVal, visible: stackVal > 1 };
+    /** @type {any} */ (effectData).transfer = false;
+    /** @type {any} */ (effectData).disabled = true;
+    if (isItem)
+        effectData.flags['lancer-automations'].isItemTemplate = true;
+    else
+        effectData.flags['lancer-automations'].isActorTemplate = true;
+
+    const created = await /** @type {any} */ (doc).createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
+
+    if (stackVal > 0 && created?.[0])
+    {
+        await created[0].update(/** @type {any} */ ({
+            "flags.statuscounter.value": stackVal,
+            "flags.statuscounter.visible": stackVal > 1
+        }));
+    }
+    return created?.[0] ?? null;
+}
+
+/**
+ * Convert a template AE into the descriptor shape `applyEffectsToTokens` expects
+ * (a string status id, an `{isCustom, ...}` custom-status object, or a raw AE-like descriptor).
+ * @param {any} template
+ */
+export function templateToEffectDescriptor(template)
+{
+    const isCustom = template?.flags?.['temporary-custom-statuses']?.isCustom === true;
+    if (isCustom)
+        return { name: template.name, icon: template.img, isCustom: true, changes: template.changes ?? [] };
+    const statuses = template?.statuses ? Array.from(template.statuses) : [];
+    if (statuses.length > 0)
+        return String(statuses[0]);
+    return { name: template.name, icon: template.img, changes: template.changes ?? [] };
+}
+
+async function _applyTemplatesToTokens(sourceDoc, templates, sourceKey, tokens)
+{
+    if (!templates?.length || !tokens?.length)
+        return;
+    for (const template of templates)
+    {
+        const descriptor = templateToEffectDescriptor(template);
+        const laFlags = template.flags?.['lancer-automations'] ?? {};
+        const persistedStack = laFlags.lastRuntimeStack;
+        const stack = Number.isFinite(persistedStack)
+            ? persistedStack
+            : (template.flags?.statuscounter?.value || 0);
+        const duration = laFlags.duration ?? { label: 'permanent' };
+        for (const token of tokens)
+        {
+            if (!token?.actor)
+                continue;
+            if (!linkTierGate(laFlags, token.actor, sourceKey === 'sourceItemUuid' ? sourceDoc : null))
+                continue;
+            const already = /** @type {any[]} */ (Array.from(token.actor.effects ?? [])).some(effect =>
+            {
+                const flags = effect.flags?.['lancer-automations'];
+                return flags?.[sourceKey] === sourceDoc.uuid && flags?.sourceTemplateId === template.id;
+            });
+            if (already)
+                continue;
+            const extraOptions = /** @type {any} */ ({
+                [sourceKey]: sourceDoc.uuid,
+                sourceTemplateId: template.id,
+                stack
+            });
+            try
+            {
+                await applyEffectsToTokens({
+                    tokens: [token],
+                    effectNames: [descriptor],
+                    note: `From ${sourceDoc.name}`,
+                    duration
+                }, extraOptions);
+            }
+            catch (err)
+            {
+                console.warn('lancer-automations | template materialize failed:', err);
+            }
+        }
+    }
+}
+
+/**
+ * Materialize all `isItemTemplate` templates on an item to the given tokens via the standard applier.
+ * Idempotent - skips tokens that already carry the runtime for that template.
+ * @param {any} item
+ * @param {any[]} tokens
+ */
+export async function applyItemTemplatesToTokens(item, tokens)
+{
+    if (!item || !tokens?.length)
+        return;
+    if (item.system?.destroyed || item.system?.disabled)
+        return;
+    const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
+        .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+    await _applyTemplatesToTokens(item, templates, 'sourceItemUuid', tokens);
+}
+
+/**
+ * Materialize all `isActorTemplate` templates on an actor to the given tokens via the standard applier.
+ * @param {any} actor
+ * @param {any[]} tokens
+ */
+export async function applyActorTemplatesToTokens(actor, tokens)
+{
+    if (!actor || !tokens?.length)
+        return;
+    const templates = /** @type {any[]} */ (Array.from(actor.effects ?? []))
+        .filter(effect => effect.flags?.['lancer-automations']?.isActorTemplate === true);
+    await _applyTemplatesToTokens(actor, templates, 'sourceActorUuid', tokens);
+}
+
+/**
+ * Stamp effect template(s) on the given item(s) and immediately materialize on any active tokens
+ * carrying them. Templates persist across item remove/re-add and destroy/restore; runtime AEs
+ * on tokens are managed by the lifecycle hooks (createItem / createToken / deleteItem / etc).
+ * @param {Object} options
+ * @param {any[]} options.items
+ * @param {Array<string|Object>|string|Object} options.effectNames
+ * @param {string} [options.note]
+ * @param {Object} [options.duration]
+ * @param {Object} [extraOptions]
+ */
+export async function linkEffectToItem(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { items = [], effectNames = [], note = "", duration = {} } = /** @type {any} */ (options);
+    const effectsToStamp = Array.isArray(effectNames) ? effectNames : [effectNames];
+    for (const item of items)
+    {
+        if (!item || item.documentName !== 'Item')
+            continue;
+        for (const effect of effectsToStamp)
+        {
+            const canApplyDirectly = game.user.isGM || item.isOwner;
+            if (canApplyDirectly)
+                await setEffectOnDoc(item, effect, duration, note, extraOptions?.originID ?? null, extraOptions);
+            else
+                await socketRequestWithAck('setEffectOnDoc', { docUuid: item.uuid, effect, duration, note, originID: extraOptions?.originID ?? null, extraOptions });
+        }
+        const actor = item.parent;
+        if (actor?.documentName === 'Actor')
+            await applyItemTemplatesToTokens(item, actor.getActiveTokens?.() ?? []);
+    }
+    return items;
+}
+
+/**
+ * Stamp effect template(s) on the given actor(s) and immediately materialize on any active tokens.
+ * Templates on prototype actors also fire from `createToken` for future spawns.
+ * @param {Object} options
+ * @param {any[]} options.actors
+ * @param {Array<string|Object>|string|Object} options.effectNames
+ * @param {string} [options.note]
+ * @param {Object} [options.duration]
+ * @param {Object} [extraOptions]
+ */
+export async function linkEffectToActor(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { actors = [], effectNames = [], note = "", duration = {} } = /** @type {any} */ (options);
+    const effectsToStamp = Array.isArray(effectNames) ? effectNames : [effectNames];
+    for (const actor of actors)
+    {
+        if (!actor || actor.documentName !== 'Actor')
+            continue;
+        for (const effect of effectsToStamp)
+        {
+            const canApplyDirectly = game.user.isGM || actor.isOwner;
+            if (canApplyDirectly)
+                await setEffectOnDoc(actor, effect, duration, note, extraOptions?.originID ?? null, extraOptions);
+            else
+                await socketRequestWithAck('setEffectOnDoc', { docUuid: actor.uuid, effect, duration, note, originID: extraOptions?.originID ?? null, extraOptions });
+        }
+        await applyActorTemplatesToTokens(actor, actor.getActiveTokens?.() ?? []);
+    }
+    return actors;
+}
+
+/**
+ * Remove template(s) matching `effectName` (and optional identity `extraFlags`) from the given items.
+ * The `deleteActiveEffect` cascade hook cleans up runtime AEs on carrying tokens automatically.
+ * @param {Object} options
+ * @param {any[]} options.items
+ * @param {string} options.effectName
+ * @param {Object} [options.extraFlags]
+ */
+export async function unlinkEffectFromItem(options = /** @type {any} */ ({}))
+{
+    const { items = [], effectName = "", extraFlags = null } = /** @type {any} */ (options);
+    if (!effectName)
+        return [];
+    const removed = [];
+    for (const item of items)
+    {
+        if (!item || item.documentName !== 'Item')
+            continue;
+        const nameLower = String(effectName).toLowerCase();
+        const matches = /** @type {any[]} */ (Array.from(item.effects ?? [])).filter(effect =>
+        {
+            if (effect.flags?.['lancer-automations']?.isItemTemplate !== true)
+                return false;
+            const nameMatch = effect.name?.toLowerCase() === nameLower
+                || effect.statuses?.has?.(effectName)
+                || effect.flags?.['lancer-automations']?.effect === effectName;
+            if (!nameMatch)
+                return false;
+            if (!extraFlags)
+                return true;
+            const laFlags = effect.flags?.['lancer-automations'] ?? {};
+            return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
+        });
+        if (!matches.length)
+            continue;
+        await item.deleteEmbeddedDocuments("ActiveEffect", matches.map(effect => effect.id));
+        removed.push(...matches);
+    }
+    return removed;
+}
+
+/**
+ * Remove template(s) matching `effectName` from the given actors. Cascade cleans token runtimes.
+ * @param {Object} options
+ * @param {any[]} options.actors
+ * @param {string} options.effectName
+ * @param {Object} [options.extraFlags]
+ */
+export async function unlinkEffectFromActor(options = /** @type {any} */ ({}))
+{
+    const { actors = [], effectName = "", extraFlags = null } = /** @type {any} */ (options);
+    if (!effectName)
+        return [];
+    const removed = [];
+    for (const actor of actors)
+    {
+        if (!actor || actor.documentName !== 'Actor')
+            continue;
+        const nameLower = String(effectName).toLowerCase();
+        const matches = /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(effect =>
+        {
+            if (effect.flags?.['lancer-automations']?.isActorTemplate !== true)
+                return false;
+            const nameMatch = effect.name?.toLowerCase() === nameLower
+                || effect.statuses?.has?.(effectName)
+                || effect.flags?.['lancer-automations']?.effect === effectName;
+            if (!nameMatch)
+                return false;
+            if (!extraFlags)
+                return true;
+            const laFlags = effect.flags?.['lancer-automations'] ?? {};
+            return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
+        });
+        if (!matches.length)
+            continue;
+        await actor.deleteEmbeddedDocuments("ActiveEffect", matches.map(effect => effect.id));
+        removed.push(...matches);
+    }
+    return removed;
+}
+
+/**
+ * Sync a runtime AE's current statuscounter back to its source template as `lastRuntimeStack`
+ * so charge state survives item remove/re-add or destroy/restore cycles. Called before deletion.
+ * Handles both item-source templates (sourceItemUuid) and actor-source templates (sourceActorUuid).
+ * @param {ActiveEffect} runtime
+ */
+export async function persistRuntimeStackToTemplate(runtime)
+{
+    const laFlags = runtime?.flags?.['lancer-automations'];
+    const sourceUuid = laFlags?.sourceItemUuid ?? laFlags?.sourceActorUuid;
+    const sourceTemplateId = laFlags?.sourceTemplateId;
+    if (!sourceUuid || !sourceTemplateId)
+        return;
+    try
+    {
+        const source = /** @type {any} */ (await fromUuid(sourceUuid));
+        const template = source?.effects?.get?.(sourceTemplateId);
+        if (!template)
+            return;
+        const currentStack = runtime.flags?.statuscounter?.value;
+        if (Number.isFinite(currentStack))
+            await template.setFlag('lancer-automations', 'lastRuntimeStack', currentStack);
+    }
+    catch (e)
+    {
+        console.warn('lancer-automations | persistRuntimeStackToTemplate failed:', e);
+    }
 }
 
 /**
@@ -683,7 +1133,8 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {}) {
  * @param {Object|boolean} [options.notify=true] - Optional notification options
  * @returns {Promise<Array<Token|TokenDocument>>} Array of tokens processed
  */
-export async function removeEffectsByNameFromTokens(options = {}) {
+export async function removeEffectsByNameFromTokens(options = {})
+{
     const {
         tokens = [],
         effectNames = [],
@@ -694,58 +1145,67 @@ export async function removeEffectsByNameFromTokens(options = {}) {
 
     const effectsToRemove = Array.isArray(effectNames) ? effectNames : [effectNames];
 
-    if (!effectNames || effectsToRemove.length === 0) {
+    if (!effectNames || effectsToRemove.length === 0)
+    {
         ui.notifications.error('No effect name(s) specified for removal!');
         return [];
     }
 
     const processedTokens = [];
 
-    for (const token of tokens) {
+    for (const token of tokens)
+    {
         processedTokens.push(token);
         const tokenID = token.id;
 
-        for (const effect of effectsToRemove) {
-            let effectNameVal = typeof effect === 'object' ? effect.name : effect;
+        for (const effect of effectsToRemove)
+        {
+            let effectNameStr = typeof effect === 'object' ? effect.name : effect;
 
             let icon = "";
             let resolvedEffect = effect;
-            if (typeof effect === 'string') {
+            if (typeof effect === 'string')
+            {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-                if (customStatusApi) {
+                if (customStatusApi)
+                {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
                     const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect);
-                    if (hasCustom) {
+                    if (hasCustom)
+                    {
                         resolvedEffect = { name: effect, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
-                        effectNameVal = effect;
+                        effectNameStr = effect;
                     }
                 }
-            } else if (typeof effect === 'object' && effect.name && !effect.isCustom) {
+            }
+            else if (typeof effect === 'object' && effect.name && !effect.isCustom)
+            {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-                if (customStatusApi) {
+                if (customStatusApi)
+                {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
                     const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
-                    if (hasCustom) {
+                    if (hasCustom)
+                    {
                         resolvedEffect = { ...effect, isCustom: true, icon: effect.icon || hasCustom.icon || "icons/svg/mystery-man.svg" };
-                        effectNameVal = effect.name;
+                        effectNameStr = effect.name;
                     }
                 }
             }
 
-            if (notify) {
-                const existing = findEffectOnToken(token, effectNameVal);
+            if (notify)
+            {
+                const existing = findEffectOnToken(token, effectNameStr);
                 icon = existing?.img || (existing && game.modules.get('temporary-custom-statuses')?.active ? existing.getFlag('temporary-custom-statuses', 'icon') : "") || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
-            if (game.user.isGM || (/** @type {Token} */ (token)).document?.isOwner) {
-                await removeEffectsByName(tokenID, effectNameVal, originId, extraFlags);
-            } else {
-                await socketRequestWithAck('removeEffect', { targetID: tokenID, effect: effectNameVal, originID: originId, extraFlags });
-            }
+            if (game.user.isGM || (/** @type {Token} */ (token)).document?.isOwner)
+                await removeEffectsByName(tokenID, effectNameStr, originId, extraFlags);
+            else
+                await socketRequestWithAck('removeEffect', { targetID: tokenID, effect: effectNameStr, originID: originId, extraFlags });
 
-            if (notify) {
-                queueEffectNotification(token, effectNameVal, notify, 'Loss', icon);
-            }
+            if (notify)
+                queueEffectNotification(token, effectNameStr, notify, 'Loss', icon);
         }
     }
     return processedTokens;
@@ -757,20 +1217,22 @@ export async function removeEffectsByNameFromTokens(options = {}) {
  * @param {string|((e: ActiveEffect) => boolean)} identifier - Effect name (string) or predicate function (e => boolean)
  * @returns {ActiveEffect|undefined} The found effect or undefined
  */
-export function findEffectOnToken(token, identifier) {
+export function findEffectOnToken(token, identifier)
+{
     const actor = /** @type {Actor} */(token?.actor);
     if (!actor)
         return undefined;
 
-    if (typeof identifier === 'function') {
+    if (typeof identifier === 'function')
         return actor.effects.find(identifier);
-    }
 
-    if (typeof identifier === 'string') {
+    if (typeof identifier === 'string')
+    {
         const identifierPathTail = identifier.split('.').pop();
         const identifierPathTailLower = identifierPathTail.toLowerCase();
 
-        return actor.effects.find(/** @param {any} e */ effect => {
+        return actor.effects.find(/** @param {any} e */ effect =>
+        {
             const flags = effect.flags;
             const laFlags = flags?.['lancer-automations'];
             const tcsFlags = flags?.['temporary-custom-statuses'];
@@ -797,7 +1259,8 @@ export function findEffectOnToken(token, identifier) {
  * @param {ActiveEffect} effect - The active effect to consume a charge from
  * @returns {Promise<boolean>} true if consumed, false if not applicable
  */
-export async function consumeEffectCharge(effect) {
+export async function consumeEffectCharge(effect)
+{
     if (!effect)
         return false;
 
@@ -805,7 +1268,8 @@ export async function consumeEffectCharge(effect) {
     if (!actor)
         return false;
 
-    if (!game.user.isGM && !actor.isOwner) {
+    if (!game.user.isGM && !actor.isOwner)
+    {
         await socketRequestWithAck('consumeEffectCharge', { effectUuid: effect.uuid });
         return true;
     }
@@ -818,17 +1282,22 @@ export async function consumeEffectCharge(effect) {
     const newStack = currentStack - 1;
     const groupId = consumption.groupId;
 
-    if (groupId) {
-        const groupEffects = actor.effects.filter(effect => {
-            const consumption = effect.flags?.['lancer-automations']?.consumption;
-            return consumption?.groupId === groupId;
+    if (groupId)
+    {
+        const groupEffects = actor.effects.filter(groupMember =>
+        {
+            const innerConsumption = groupMember.flags?.['lancer-automations']?.consumption;
+            return innerConsumption?.groupId === groupId;
         });
 
-        if (newStack <= 0) {
+        if (newStack <= 0)
+        {
             const idsToDelete = groupEffects.map(effect => effect.id);
             log(`Consumption depleted for group ${groupId}, removing ${idsToDelete.length} effects`);
             await actor.deleteEmbeddedDocuments("ActiveEffect", idsToDelete);
-        } else {
+        }
+        else
+        {
             const updates = groupEffects.map(effect => ({
                 _id: effect.id,
                 "flags.statuscounter.value": newStack,
@@ -837,10 +1306,14 @@ export async function consumeEffectCharge(effect) {
             log(`Consuming charge for group ${groupId}: ${newStack} remaining`);
             await actor.updateEmbeddedDocuments("ActiveEffect", updates);
         }
-    } else if (newStack <= 0) {
+    }
+    else if (newStack <= 0)
+    {
         log(`Consumption depleted for ${effect.name}, removing effect`);
         await effect.delete();
-    } else {
+    }
+    else
+    {
         log(`Consuming charge for ${effect.name}: ${newStack} remaining`);
         await effect.update(/** @type {any} */({ "flags.statuscounter.value": newStack, "flags.statuscounter.visible": newStack > 1 }));
     }
@@ -856,23 +1329,27 @@ export async function consumeEffectCharge(effect) {
  * @param {string} triggeringTokenId - The token ID whose turn is starting/ending
  * @returns {Promise<void>}
  */
-export async function processDurationEffects(triggerLabel, triggeringTokenId) {
+export async function processDurationEffects(triggerLabel, triggeringTokenId)
+{
     // Only the active GM processes duration to avoid conflicts
     if (game.user.id !== game.users.find(user => user.active && user.isGM)?.id)
         return;
 
     const allTokens = canvas.tokens.placeables.filter(token => token.actor);
 
-    for (const token of allTokens) {
+    for (const token of allTokens)
+    {
         const actor = token.actor;
         if (!actor)
             continue;
 
         const effects = [...actor.effects];
 
-        for (const effect of effects) {
+        for (const effect of effects)
+        {
             const flags = effect.flags?.['lancer-automations'];
-            if (!flags) {
+            if (!flags)
+            {
                 const legacyFlags = effect.flags?.['csm-lancer-qol'];
                 if (!legacyFlags?.duration)
                     continue;
@@ -889,25 +1366,29 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
                     continue;
 
                 const newTurns = (dur.turns || 1) - 1;
-                if (newTurns <= 0) {
+                if (newTurns <= 0)
+                {
                     log(`Duration expired for ${effect.name} (legacy), removing effect`);
                     await effect.delete();
-                } else {
-                    await effect.update(/** @type {any} */({ "flags.csm-lancer-qol.duration.turns": newTurns }));
                 }
+                else
+                    await effect.update(/** @type {any} */({ "flags.csm-lancer-qol.duration.turns": newTurns }));
                 continue;
             }
 
             // Check durationEntries first (multi-duration stacks)
             const entries = flags.durationEntries;
 
-            if (entries && Array.isArray(entries) && entries.length > 0) {
+            if (entries && Array.isArray(entries) && entries.length > 0)
+            {
                 let totalStackToRemove = 0;
                 const remaining = [];
                 let modified = false;
 
-                for (const entry of entries) {
-                    if (entry.label !== triggerLabel || entry.originID !== triggeringTokenId) {
+                for (const entry of entries)
+                {
+                    if (entry.label !== triggerLabel || entry.originID !== triggeringTokenId)
+                    {
                         remaining.push(entry);
                         continue;
                     }
@@ -915,24 +1396,27 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
                     modified = true;
                     const newTurns = (entry.turns || 1) - 1;
 
-                    if (newTurns <= 0) {
+                    if (newTurns <= 0)
                         totalStackToRemove += (entry.stack || 1);
-                    } else {
+                    else
                         remaining.push({ ...entry, turns: newTurns });
-                    }
                 }
 
                 if (!modified)
                     continue;
 
-                if (totalStackToRemove > 0) {
+                if (totalStackToRemove > 0)
+                {
                     const currentStack = effect.flags?.statuscounter?.value || 1;
                     const newStack = currentStack - totalStackToRemove;
 
-                    if (newStack <= 0 || remaining.length === 0) {
+                    if (newStack <= 0 || remaining.length === 0)
+                    {
                         log(`Duration expired for ${effect.name} (all stacks depleted), removing effect`);
                         await effect.delete();
-                    } else {
+                    }
+                    else
+                    {
                         log(`Duration expired for ${effect.name}, removing ${totalStackToRemove} stacks (${newStack} remaining)`);
                         await effect.update(/** @type {any} */({
                             "flags.statuscounter.value": newStack,
@@ -940,13 +1424,17 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
                             "flags.lancer-automations.durationEntries": remaining
                         }));
                     }
-                } else {
+                }
+                else
+                {
                     // Entries were modified (turns decremented) but none expired yet
                     await effect.update(/** @type {any} */({
                         "flags.lancer-automations.durationEntries": remaining
                     }));
                 }
-            } else {
+            }
+            else
+            {
                 // Fall back to single duration field
                 const dur = flags.duration;
                 if (!dur || dur.label === 'indefinite' || dur.turns === null || dur.turns === undefined)
@@ -960,17 +1448,22 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
 
                 const newTurns = (dur.turns || 1) - 1;
 
-                if (newTurns <= 0) {
+                if (newTurns <= 0)
+                {
                     const appliedStack = flags.appliedStack || 0;
 
-                    if (appliedStack > 0) {
+                    if (appliedStack > 0)
+                    {
                         const currentStack = effect.flags?.statuscounter?.value || 0;
                         const newStack = currentStack - appliedStack;
 
-                        if (newStack <= 0) {
+                        if (newStack <= 0)
+                        {
                             log(`Duration expired for ${effect.name}, removing effect (all stacks)`);
                             await effect.delete();
-                        } else {
+                        }
+                        else
+                        {
                             log(`Duration expired for ${effect.name}, removing ${appliedStack} stacks (${newStack} remaining)`);
                             await effect.update(/** @type {any} */({
                                 "flags.statuscounter.value": newStack,
@@ -979,11 +1472,15 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
                                 "flags.lancer-automations.appliedStack": null
                             }));
                         }
-                    } else {
+                    }
+                    else
+                    {
                         log(`Duration expired for ${effect.name}, removing effect`);
                         await effect.delete();
                     }
-                } else {
+                }
+                else
+                {
                     await effect.update(/** @type {any} */({
                         "flags.lancer-automations.duration.turns": newTurns
                     }));
@@ -1001,7 +1498,8 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId) {
  * @param {boolean} [notify=true] - Whether to show a chat notification
  * @returns {Promise<void>}
  */
-export async function triggerEffectImmunity(token, effectNames, source = "", notify = true) {
+export async function triggerEffectImmunity(token, effectNames, source = "", notify = true)
+{
     const actor = token?.actor;
     if (!actor)
         return;
@@ -1009,11 +1507,13 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
     if (targets.length === 0)
         return;
 
-    const foundEffects = actor.effects.filter(effect => {
+    const foundEffects = actor.effects.filter(effect =>
+    {
         const flagName = effect.getFlag('lancer-automations', 'effect');
         const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null;
 
-        return targets.some(name => {
+        return targets.some(name =>
+        {
             const nameTail = name.split('.').pop();
             const lowerName = nameTail.toLowerCase();
             return (
@@ -1025,7 +1525,8 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
         });
     });
 
-    if (foundEffects.length > 0) {
+    if (foundEffects.length > 0)
+    {
         const notifyOptions = notify ? {
             source: source,
             prefixText: 'Immunity to'
@@ -1044,45 +1545,48 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
  * @param {Array<Token|TokenDocument>} tokens - List of tokens to process
  * @returns {Promise<void>}
  */
-export async function deleteAllEffects(tokens) {
-    if (!tokens || tokens.length === 0) {
+export async function deleteAllEffects(tokens)
+{
+    if (!tokens || tokens.length === 0)
         return ui.notifications.error('No tokens provided for effect removal!');
-    }
 
     ui.notifications.info(`Removing all effects from ${tokens.length} tokens...`);
 
-    for (const token of tokens) {
+    for (const token of tokens)
+    {
         if (!token.actor)
             continue;
 
         const ids = token.actor.effects.map(effect => effect.id.toString());
-        if (ids.length > 0) {
+        if (ids.length > 0)
+        {
             await token.actor.deleteEmbeddedDocuments("ActiveEffect", ids);
             log(`Removed ${ids.length} effects from ${token.name}`);
         }
     }
 }
 
-// --- Multi-source effect display collapsing ---
+// Multi-source effect display collapsing
 
 /**
  * Register a libWrapper on Token._refreshEffects to collapse duplicate same-name
  * lancer-automations effects into a single visible icon with an aggregate counter badge.
  * Must be called in a 'ready' hook so it runs after statuscounter's wrapper (outermost).
  */
-export function initCollapseHook() {
+export function initCollapseHook()
+{
     if (typeof libWrapper === 'undefined')
         return;
     libWrapper.register('lancer-automations', 'Token.prototype._refreshEffects',
-        function (wrapped, ...args) {
+        function (wrapped, ...args)
+        {
             // PRE: destroy duplicate sprites before _refreshEffects positions them.
             _collapseRemoveDuplicates(this);
             // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
             wrapped(...args);
             // Only shrink icons when the custom stat bar is active.
-            if (_isStatBarActive()) {
+            if (_isStatBarActive())
                 _shrinkEffectIcons(this);
-            }
             // POST: add count badges for each collapsed group.
             _collapseAddBadges(this);
         }, 'WRAPPER');
@@ -1092,15 +1596,19 @@ export function initCollapseHook() {
  * Shrink effect icons and re-lay them out at the smaller size.
  * @param {Token} token
  */
-function _shrinkEffectIcons(token) {
+function _shrinkEffectIcons(token)
+{
     const bg = token.effects?.bg;
     if (!bg || !token.effects?.children)
         return;
 
     let scale = 1;
-    try {
+    try
+    {
         scale = Number(game.settings.get('lancer-automations', 'statBarEffectIconScale')) || 1;
-    } catch { /* not registered */ }
+    }
+    catch
+    { /* not registered */ }
     if (scale >= 1)
         return;
 
@@ -1118,7 +1626,8 @@ function _shrinkEffectIcons(token) {
 
     const rows = Math.floor(token.document.height * 5);
 
-    for (let i = 0; i < sprites.length; i++) {
+    for (let i = 0; i < sprites.length; i++)
+    {
         const sprite = sprites[i];
         // Scale direct to dodge .width setter dividing by a 0/stale texture size.
         const textureWidth = sprite.texture?.orig?.width || sprite.texture?.width || targetSize;
@@ -1131,9 +1640,8 @@ function _shrinkEffectIcons(token) {
     bg.clear();
     bg.beginFill(0x000000, 0.4);
     bg.lineStyle(1, 0x000000, 1);
-    for (const sprite of sprites) {
+    for (const sprite of sprites)
         bg.drawRoundedRect(sprite.x, sprite.y, targetSize, targetSize, 2);
-    }
     bg.endFill();
 }
 
@@ -1143,7 +1651,8 @@ function _shrinkEffectIcons(token) {
  * Sprites are matched to effects via sprite.zIndex (set by _drawEffects = effect index).
  * @param {Token} token
  */
-function _collapseRemoveDuplicates(token) {
+function _collapseRemoveDuplicates(token)
+{
     if (!token.actor || !token.effects?.children)
         return;
     const temporaryEffects = token.actor.temporaryEffects;
@@ -1153,7 +1662,8 @@ function _collapseRemoveDuplicates(token) {
     // Build a map from effect id to its current sprite using zIndex as the key.
     const bg = token.effects.bg;
     const spriteMap = new Map();
-    for (const child of token.effects.children) {
+    for (const child of token.effects.children)
+    {
         if (child === bg)
             continue;
         const zIdx = child.zIndex;
@@ -1168,21 +1678,24 @@ function _collapseRemoveDuplicates(token) {
 
     // Walk effects in order; keep the first sprite for each name, destroy the rest.
     const seenPrimary = new Set();
-    for (const effect of temporaryEffects) {
+    for (const effect of temporaryEffects)
+    {
         if (!spriteMap.has(effect.id))
             continue;
         const name = effect.name;
         if (!name || !managedNames.has(name))
             continue;
-        if (seenPrimary.has(name)) {
+        if (seenPrimary.has(name))
+        {
             const sprite = spriteMap.get(effect.id);
-            if (sprite.parent === token.effects) {
+            if (sprite.parent === token.effects)
+            {
                 token.effects.removeChild(sprite);
                 sprite.destroy();
             }
-        } else {
-            seenPrimary.add(name);
         }
+        else
+            seenPrimary.add(name);
     }
 }
 
@@ -1193,7 +1706,8 @@ function _collapseRemoveDuplicates(token) {
  * duplicate sprites have already been removed.
  * @param {Token} token
  */
-function _collapseAddBadges(token) {
+function _collapseAddBadges(token)
+{
     if (!token.actor || !token.effects?.children)
         return;
     const temporaryEffects = token.actor.temporaryEffects;
@@ -1203,7 +1717,8 @@ function _collapseAddBadges(token) {
     // Rebuild spriteMap with post-layout positions (sprites were repositioned by _refreshEffects).
     const bg = token.effects.bg;
     const spriteMap = new Map();
-    for (const child of token.effects.children) {
+    for (const child of token.effects.children)
+    {
         if (child === bg)
             continue;
         const zIdx = child.zIndex;
@@ -1217,7 +1732,8 @@ function _collapseAddBadges(token) {
     );
 
     const effectCountByName = new Map();
-    for (const effect of temporaryEffects) {
+    for (const effect of temporaryEffects)
+    {
         const name = effect.name;
         if (!name || !managedNames.has(name))
             continue;
@@ -1227,7 +1743,8 @@ function _collapseAddBadges(token) {
     const effectsOffsetX = token.effects?.x ?? 0;
     const effectsOffsetY = token.effects?.y ?? 0;
 
-    for (const [name, count] of effectCountByName) {
+    for (const [name, count] of effectCountByName)
+    {
         if (count <= 1)
             continue;
         // Find the first effect with this name that still has a sprite (the primary).
@@ -1240,15 +1757,16 @@ function _collapseAddBadges(token) {
     }
 }
 
-function _addCounterBadge(token, entry, offsetX, offsetY, count) {
-    if (!token.effectCounters) {
+function _addCounterBadge(token, entry, offsetX, offsetY, count)
+{
+    if (!token.effectCounters)
+    {
         const container = new PIXI.Container();
         container.name = "effectCounters";
         token.effectCounters = token.addChild(container);
     }
 
     // statuscounter always clears effectCounters before our POST runs, so we always create fresh.
-    // (No need to search for existing badges — there won't be any for our effects.)
     const sizeRatio = entry.height / 20;
     const badgeX = entry.posX + offsetX + entry.width + 1 * sizeRatio;
     const badgeY = entry.posY + offsetY + entry.height + 4 * sizeRatio;
@@ -1274,8 +1792,9 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count) {
  * @param {Token|TokenDocument|Actor} target - The target to search effects on
  * @returns {Array<ActiveEffect>} Array of flagged effects
  */
-export function getAllEffects(target) {
-    const actor = /** @type {Actor} */(/** @type {any} */ (target).actor || target); // Simple normalization
+export function getAllEffects(target)
+{
+    const actor = /** @type {Actor} */(/** @type {any} */ (target).actor || target);
     if (!actor?.effects)
         return [];
 
@@ -1288,79 +1807,115 @@ export function getAllEffects(target) {
  * @param {ActiveEffect|string} effect - The effect (or its ID) to delete
  * @returns {Promise<void>}
  */
-export async function deleteEffect(token, effect) {
+export async function deleteEffect(token, effect)
+{
     const tokenID = /** @type {any} */ (token)?.id ?? token;
     const effectID = /** @type {any} */ (effect)?.id ?? effect;
     const target = canvas.tokens.get(tokenID);
-    if (game.user.isGM || target?.document?.isOwner) {
-        if (target?.actor) {
+    if (game.user.isGM || target?.document?.isOwner)
+    {
+        if (target?.actor)
             await target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
-        }
-    } else {
-        await socketRequestWithAck('removeEffectById', { targetID: tokenID, effectID });
     }
+    else
+        await socketRequestWithAck('removeEffectById', { targetID: tokenID, effectID });
 }
 
-// --- Deprecation Layer ---
+// Deprecation layer
 
 /** @deprecated use pushEffect */
-export function pushFlaggedEffect(...args) {
+export function pushFlaggedEffect(...args)
+{
     console.warn("lancer-automations | pushFlaggedEffect is deprecated, use pushEffect instead");
     return pushEffect.apply(null, args);
 }
 
 /** @deprecated use setEffect @returns {Promise<void>} */
-export function setFlaggedEffect(...args) {
+export function setFlaggedEffect(...args)
+{
     console.warn("lancer-automations | setFlaggedEffect is deprecated, use setEffect instead");
     return setEffect.apply(null, args);
 }
 
 /** @deprecated use applyEffectsToTokens @returns {Promise<void>} */
-export function applyFlaggedEffectToTokens(...args) {
+export function applyFlaggedEffectToTokens(...args)
+{
     console.warn("lancer-automations | applyFlaggedEffectToTokens is deprecated, use applyEffectsToTokens instead");
     return applyEffectsToTokens.apply(null, args);
 }
 
 /** @deprecated use removeEffectsByNameFromTokens @returns {Promise<void>} */
-export function removeFlaggedEffectFromTokens(...args) {
+export function removeFlaggedEffectFromTokens(...args)
+{
     console.warn("lancer-automations | removeFlaggedEffectFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
     return removeEffectsByNameFromTokens.apply(null, args);
 }
 
 /** @deprecated use removeEffectsByNameFromTokens @returns {Promise<void>} */
-export function removeEffectsFromTokens(...args) {
+export function removeEffectsFromTokens(...args)
+{
     console.warn("lancer-automations | removeEffectsFromTokens is deprecated, use removeEffectsByNameFromTokens instead");
     return removeEffectsByNameFromTokens.apply(null, args);
 }
 
 /** @deprecated use findEffectOnToken @returns {ActiveEffect|null} */
-export function findFlaggedEffectOnToken(...args) {
+export function findFlaggedEffectOnToken(...args)
+{
     console.warn("lancer-automations | findFlaggedEffectOnToken is deprecated, use findEffectOnToken instead");
     return findEffectOnToken.apply(null, args);
 }
 
 /** @deprecated use triggerEffectImmunity @returns {Promise<void>} */
-export function triggerFlaggedEffectImmunity(...args) {
+export function triggerFlaggedEffectImmunity(...args)
+{
     console.warn("lancer-automations | triggerFlaggedEffectImmunity is deprecated, use triggerEffectImmunity instead");
     return triggerEffectImmunity.apply(null, args);
 }
 
 /** @deprecated use deleteAllEffects @returns {Promise<void>} */
-export function executeDeleteAllFlaggedEffect(...args) {
+export function executeDeleteAllFlaggedEffect(...args)
+{
     console.warn("lancer-automations | executeDeleteAllFlaggedEffect is deprecated, use deleteAllEffects instead");
     return deleteAllEffects.apply(null, args);
 }
 
 /** @deprecated use getAllEffects @returns {ActiveEffect[]} */
-export function getAllFlaggedEffects(...args) {
+export function getAllFlaggedEffects(...args)
+{
     console.warn("lancer-automations | getAllFlaggedEffects is deprecated, use getAllEffects instead");
     return getAllEffects.apply(null, args);
 }
 
 
+/**
+ * Read status templates attached to an item or an actor (item templates with
+ * `isItemTemplate: true` on items, actor templates with `isActorTemplate: true` on actors).
+ * @param {any} source  Item or Actor
+ * @returns {any[]}
+ */
+export function getLinkedEffects(source)
+{
+    if (!source)
+        return [];
+    return /** @type {any[]} */ (Array.from(source.effects ?? []))
+        .filter(effect =>
+        {
+            const laFlags = effect.flags?.['lancer-automations'];
+            return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
+        });
+}
+
 export const EffectsAPI = {
     applyEffectsToTokens,
     removeEffectsByNameFromTokens,
+    linkEffectToItem,
+    linkEffectToActor,
+    unlinkEffectFromItem,
+    unlinkEffectFromActor,
+    applyItemTemplatesToTokens,
+    applyActorTemplatesToTokens,
+    templateToEffectDescriptor,
+    getLinkedEffects,
     findEffectOnToken,
     getAllEffects,
     deleteEffect,

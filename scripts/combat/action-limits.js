@@ -7,97 +7,161 @@ const RESTORE_FLAG = 'actionTrackerRestore';
 // full=false + quick=true allows exactly one quick before quick flips to false).
 const ACTION_LIMITING_EFFECTS = [
     { statusId: 'brace',                          locks: ['protocol', 'full'],            actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
-    { statusId: 'dazed',                          locks: ['protocol', 'full'],            actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
-    { statusId: 'DeadRings_statuses_staggered',   locks: ['protocol', 'reaction', 'free'] },
+    { statusId: 'dazed',                          locks: ['protocol', 'full', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
+    { statusId: 'DeadRings_statuses_staggered',   locks: ['protocol', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'slow',                           locks: [],                              actionLocks: ['Boost'] },
 ];
 const ALL_LOCKABLE_FIELDS = ['protocol', 'full', 'quick', 'reaction', 'free'];
 export const LIMITING_STATUS_IDS = new Set(ACTION_LIMITING_EFFECTS.map(e => e.statusId));
 
-export function isStaleStatusSource(s) {
-    return typeof s === 'string' && (s.startsWith('status:') || LIMITING_STATUS_IDS.has(s));
+export function isStaleStatusSource(source)
+{
+    return typeof source === 'string' && (source.startsWith('status:') || LIMITING_STATUS_IDS.has(source));
+}
+
+// Manual actor-lock entries: legacy plain string, or { id, reason? }.
+export function lockEntryId(entry)
+{
+    return typeof entry === 'string' ? entry : String(entry?.id ?? '');
+}
+
+export function lockEntryLabel(entry)
+{
+    if (typeof entry === 'string')
+        return entry;
+    return String(entry?.reason || entry?.id || '');
+}
+
+// Item-held locks (actionLocks item flag), live only while the item is owned and active.
+export function getItemActionLocks(actor, actionName = null)
+{
+    const out = [];
+    for (const item of actor?.items ?? [])
+    {
+        if (item.system?.destroyed || item.system?.disabled)
+            continue;
+        for (const lock of (item.getFlag?.('lancer-automations', 'actionLocks') ?? []))
+        {
+            if (!lock?.actionName || (actionName && lock.actionName !== actionName))
+                continue;
+            out.push({ item, actionName: lock.actionName, reason: lock.reason ?? null });
+        }
+    }
+    return out;
+}
+
+export function getFieldLockingStatuses(actor, field)
+{
+    if (!field || !actor?.statuses)
+        return [];
+    return ACTION_LIMITING_EFFECTS
+        .filter(effect => effect.locks?.includes(field) && actor.statuses.has(effect.statusId))
+        .map(effect => effect.statusId);
 }
 
 // Inverse lookup: action name -> status IDs that disable it. Built once.
-const STATUS_DISABLING_ACTION = (() => {
-    const m = {};
-    for (const { statusId, actionLocks } of ACTION_LIMITING_EFFECTS) {
-        for (const name of (actionLocks ?? [])) {
-            if (!m[name])
-                m[name] = [];
-            m[name].push(statusId);
+const STATUS_DISABLING_ACTION = (() =>
+{
+    const actionToStatuses = {};
+    for (const { statusId, actionLocks } of ACTION_LIMITING_EFFECTS)
+    {
+        for (const name of (actionLocks ?? []))
+        {
+            if (!actionToStatuses[name])
+                actionToStatuses[name] = [];
+            actionToStatuses[name].push(statusId);
         }
     }
-    return m;
+    return actionToStatuses;
 })();
 
-export function getActionLockInfo(actor, actionName) {
-    const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(s => actor?.statuses?.has?.(s));
-    const tracker = /** @type {Record<string,string[]>} */(actor?.getFlag?.('lancer-automations', 'lockedActions') ?? {})[actionName] ?? [];
-    const sources = tracker.filter(s => !isStaleStatusSource(s));
-    return { statuses, sources };
+export function getActionLockInfo(actor, actionName)
+{
+    const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(statusId => actor?.statuses?.has?.(statusId));
+    const tracker = /** @type {any[]} */ ((actor?.getFlag?.('lancer-automations', 'lockedActions') ?? {})[actionName] ?? []);
+    const sources = tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry)));
+    const itemLocks = getItemActionLocks(actor, actionName);
+    return { statuses, sources, itemLocks };
 }
 
-export function isActionDisabledByStatus(actor, actionName) {
+export function isActionDisabledByStatus(actor, actionName)
+{
     const statuses = STATUS_DISABLING_ACTION[actionName];
     if (!statuses)
         return false;
-    const has = actor?.statuses;
-    if (!has)
+    const actorStatuses = actor?.statuses;
+    if (!actorStatuses)
         return false;
-    return statuses.some(s => has.has(s));
+    return statuses.some(statusId => actorStatuses.has(statusId));
 }
 
-function _hasStatus(actor, statusId) {
+function _hasStatus(actor, statusId)
+{
     return !!actor?.statuses?.has(statusId);
 }
 
-export async function refreshActionLimits(token, { turnStart = false } = {}) {
+export function getStatusLockedFields(actor)
+{
+    const locked = new Set();
+    for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
+    {
+        if (!locks?.length || !_hasStatus(actor, statusId))
+            continue;
+        for (const field of locks)
+            locked.add(field);
+    }
+    return locked;
+}
+
+export async function refreshActionLimits(token, { turnStart = false } = {})
+{
     const actor = token?.actor;
     if (!actor)
         return;
     const lockedFields = new Set();
-    for (const { statusId, locks } of ACTION_LIMITING_EFFECTS) {
+    for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
+    {
         if (!locks?.length)
             continue;
         if (!_hasStatus(actor, statusId))
             continue;
-        for (const f of locks)
-            lockedFields.add(f);
+        for (const field of locks)
+            lockedFields.add(field);
     }
     const prevRestore = actor.getFlag(MODULE_ID, RESTORE_FLAG) ?? {};
     const restore = { ...prevRestore };
     const tracker = actor.system?.action_tracker ?? {};
     const updates = {};
-    for (const field of ALL_LOCKABLE_FIELDS) {
+    for (const field of ALL_LOCKABLE_FIELDS)
+    {
         const isLocked = lockedFields.has(field);
         const hadCapture = field in prevRestore;
-        if (isLocked) {
+        if (isLocked)
+        {
             // First lock or turn-start re-capture records the current "natural" value.
             if (!hadCapture || turnStart)
                 restore[field] = tracker[field] ?? false;
             if (tracker[field] !== false)
                 updates[`system.action_tracker.${field}`] = false;
-        } else if (hadCapture) {
-            if (tracker[field] !== prevRestore[field]) {
+        }
+        else if (hadCapture)
+        {
+            if (tracker[field] !== prevRestore[field])
                 updates[`system.action_tracker.${field}`] = prevRestore[field];
-            }
             delete restore[field];
         }
     }
     const restoreChanged = !foundry.utils.objectsEqual(prevRestore, restore);
-    if (restoreChanged && Object.keys(restore).length > 0) {
+    if (restoreChanged && Object.keys(restore).length > 0)
         updates[`flags.${MODULE_ID}.${RESTORE_FLAG}`] = restore;
-    }
-    if (Object.keys(updates).length > 0) {
+    if (Object.keys(updates).length > 0)
         await actor.update(updates, { _laActionLimits: true });
-    }
-    if (restoreChanged && Object.keys(restore).length === 0) {
+    if (restoreChanged && Object.keys(restore).length === 0)
         await actor.unsetFlag(MODULE_ID, RESTORE_FLAG);
-    }
 }
 
-function _findTokenForActor(actor) {
+function _findTokenForActor(actor)
+{
     if (!actor)
         return null;
     if (actor.token)
@@ -105,7 +169,8 @@ function _findTokenForActor(actor) {
     return canvas.tokens.placeables.find(t => t.actor?.id === actor.id) ?? null;
 }
 
-function _resolveActorToken(effect) {
+function _resolveActorToken(effect)
+{
     if (!game.users.activeGM?.isSelf)
         return null;
     const actor = effect?.parent;
@@ -114,24 +179,28 @@ function _resolveActorToken(effect) {
     return _findTokenForActor(actor);
 }
 
-async function _cleanupStaleStatusLocks() {
+async function _cleanupStaleStatusLocks()
+{
     if (!game.users.activeGM?.isSelf)
         return;
-    for (const actor of game.actors ?? []) {
+    for (const actor of game.actors ?? [])
+    {
         const locks = actor.getFlag(MODULE_ID, 'lockedActions');
         if (!locks || typeof locks !== 'object')
             continue;
         const next = {};
         let changed = false;
-        for (const [name, sources] of Object.entries(locks)) {
-            const arr = Array.isArray(sources) ? sources : [];
-            const kept = arr.filter(s => !isStaleStatusSource(s));
-            if (kept.length !== arr.length)
+        for (const [name, sources] of Object.entries(locks))
+        {
+            const sourcesArray = Array.isArray(sources) ? sources : [];
+            const kept = sourcesArray.filter(source => !isStaleStatusSource(source));
+            if (kept.length !== sourcesArray.length)
                 changed = true;
             if (kept.length)
                 next[name] = kept;
         }
-        if (changed) {
+        if (changed)
+        {
             console.log(`LA action-limits cleanup: ${actor.name} had stale status: locks`, locks, '→', next);
             if (Object.keys(next).length)
                 await actor.setFlag(MODULE_ID, 'lockedActions', next);
@@ -141,22 +210,27 @@ async function _cleanupStaleStatusLocks() {
     }
 }
 
-export function registerActionLimitsHooks() {
-    Hooks.once('ready', () => {
+export function registerActionLimitsHooks()
+{
+    Hooks.once('ready', () =>
+    {
         _cleanupStaleStatusLocks();
     });
-    Hooks.on('createActiveEffect', async (effect) => {
+    Hooks.on('createActiveEffect', async (effect) =>
+    {
         const token = _resolveActorToken(effect);
         if (token)
             await refreshActionLimits(token);
     });
-    Hooks.on('deleteActiveEffect', async (effect) => {
+    Hooks.on('deleteActiveEffect', async (effect) =>
+    {
         const token = _resolveActorToken(effect);
         if (token)
             await refreshActionLimits(token);
     });
     // Self-heal stale capture (e.g. effect removed via DB/migration).
-    Hooks.on('updateActor', async (actor, _changes, options) => {
+    Hooks.on('updateActor', async (actor, _changes, options) =>
+    {
         if (options?._laActionLimits)
             return;
         if (!game.users.activeGM?.isSelf)
@@ -171,37 +245,40 @@ export function registerActionLimitsHooks() {
     });
     // Catch Lancer's turn-start refill (and any other actor.update touching action_tracker)
     // BEFORE commit so locked fields land at false in the same write. No blink.
-    Hooks.on('preUpdateActor', (actor, changes, options) => {
+    Hooks.on('preUpdateActor', (actor, changes, options) =>
+    {
         if (options?._laActionLimits)
             return;
         const trackerChange = foundry.utils.getProperty(changes, 'system.action_tracker');
         if (!trackerChange)
             return;
         const lockedFields = new Set();
-        for (const { statusId, locks } of ACTION_LIMITING_EFFECTS) {
+        for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
+        {
             if (!locks?.length)
                 continue;
             if (!_hasStatus(actor, statusId))
                 continue;
-            for (const f of locks)
-                lockedFields.add(f);
+            for (const field of locks)
+                lockedFields.add(field);
         }
         if (!lockedFields.size)
             return;
         const prevRestore = actor.getFlag(MODULE_ID, RESTORE_FLAG) ?? {};
         const restore = { ...prevRestore };
         let restoreChanged = false;
-        for (const field of lockedFields) {
+        for (const field of lockedFields)
+        {
             if (!(field in trackerChange))
                 continue;
-            if (restore[field] !== trackerChange[field]) {
+            if (restore[field] !== trackerChange[field])
+            {
                 restore[field] = trackerChange[field];
                 restoreChanged = true;
             }
             trackerChange[field] = false;
         }
-        if (restoreChanged) {
+        if (restoreChanged)
             foundry.utils.setProperty(changes, `flags.${MODULE_ID}.${RESTORE_FLAG}`, restore);
-        }
     });
 }

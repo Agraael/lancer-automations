@@ -18,7 +18,7 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 <img align="right" src="../img/mv-ruler.png" width="45%"/>
 
-Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it). While you drag a token, the ruler shows the **movement cost** and colours the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colours. All five colours are set in **Ruler Speed Colors**.
+Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it). While you drag a token, the ruler shows the **movement cost** and colors the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colors. All five colors are set in **Ruler Speed Colors**.
 
 Each waypoint label shows the running cost, the delta from your last click, an ↑/↓ elevation change, and a ⚠ marker on cells that cross difficult terrain. Turn on **Per-step Ruler Path** (`rulerPerStepRender`) to draw the path through each grid cell instead of a straight line.
 
@@ -26,16 +26,22 @@ Status effects shape the tiers: **prone** halves speed, **slow** removes boost a
 
 <br clear="right"/>
 
+<img src="../vid/mv-ruler-demo.gif" width="70%"/>
+
 ## How movement cost is figured
 
 Cost is horizontal distance plus vertical climb plus any terrain penalties:
 
-- **Difficult terrain** penalties are read from Terrain Height Tools, Grid-Aware Auras, TemplateMacro zones, and Foundry region *Modify Movement Cost* behaviours.
+- **Difficult terrain** penalties are read from Terrain Height Tools, Grid-Aware Auras, TemplateMacro zones, and Foundry region *Modify Movement Cost* behaviors.
 - **Climbing** costs a mech extra (the first grid unit is free, then one per unit), unless it's flying, has the climber status, or has an elevation-immunity bonus.
 - **Flying** measures against the highest terrain it crosses rather than each step.
 - Gridless scenes are supported, sampling penalties along the line.
 
 Elevation also feeds combat range checks (overwatch, engagement, range) if you enable **`count3DDistance`** (in the Combat Flows settings).
+
+The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras) and [Terrain Height Tools](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools), plus my [TemplateMacro](https://github.com/Agraael/templatemacro): set difficult terrain by painting it with THT, dropping a GAA aura, or placing a TemplateMacro zone, and the ruler bills the penalty as you cross it.
+
+<img src="../vid/mv-difficult-terrain.gif" width="70%"/>
 
 ## Elevation
 
@@ -43,7 +49,7 @@ Elevation also feeds combat range checks (overwatch, engagement, range) if you e
 
 During a drag, **Q** and **E** bump the token's elevation up and down by one grid unit per press (the offset resets when the drag starts).
 
-With Terrain Height Tools, the token also **auto-elevates** to sit on the terrain under it, as you drag, on drop, and when you first place it. Your Q/E offset stacks on top. You can turn this off globally with **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`), turn it off just for the measure ruler with **Disable Auto-elevation on Measure**, or opt a single token out with its **`disableAutoTerrainElevation`** flag (or Terrain Height Tools' own `ignoreAutoElevation`).
+With Terrain Height Tools, the token also **auto-elevates** to sit on the terrain under it, as you drag, on drop, and when you first place it. Your Q/E offset stacks on top. You can turn this off globally with **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`), turn it off for the measure ruler only with **Disable Auto-elevation on Measure**, or opt a single token out with its **`disableAutoTerrainElevation`** flag (or Terrain Height Tools' own `ignoreAutoElevation`).
 
 **Auto-insert Climb Waypoints** (`enableClimbWaypoints`) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb.
 
@@ -82,7 +88,7 @@ While you drag a token, **Tactical Distance Labels** show the distance and eleva
 
 <img align="right" src="../img/mv-history.png" width="45%"/>
 
-Each token's moves are recorded during combat (distance, cost, whether dragged, free, or forced). From the [HUD](./HUD.md) combat bar you can **revert the last move** (teleport the token back) or **clear the history**.
+Each token's moves are recorded during combat (distance, cost, whether dragged, free, or forced). From the [HUD](./HUD.md) combat bar you can **revert the last move** (retraces the token back along the path it took) or **clear the history**.
 
 History clears on combat start, and you can also clear it automatically at the end of each turn (`historyClearOnTurn`) or the start of each round (`historyClearOnRound`).
 

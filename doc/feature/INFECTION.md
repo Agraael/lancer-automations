@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-Infection is a damage type from [HORUS: Thy Hubris Manifest](https://cornylius.itch.io/thy-hubris-manifest) (by P.B. Cornylius), a heat-based cousin of Burn. Lancer Automations adds it as a damage type, with its end-of-turn check and sheet tracking.
+Infection is a damage type from [HORUS: Thy Hubris Manifest](https://cornylius.itch.io/thy-hubris-manifest) (by P.B. Cornylius), a heat-based cousin of Burn. Lancer Automations adds it, with an end-of-turn check and sheet tracking.
 
 ---
 

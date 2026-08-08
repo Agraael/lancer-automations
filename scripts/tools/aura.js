@@ -1,10 +1,10 @@
 /**
- * Wrapper for Grid-Aware Auras to support lambda function callbacks within Lancer Automations.
- * This utilizes libWrapper to intercept macro execution calls dynamically without modifying the original GAA codebase.
+ * Wraps Grid-Aware Auras to support lambda-function macro callbacks, via libWrapper (no GAA edits).
  */
 import { hasReactionAvailable } from "./misc-tools.js";
 
-export class LAAuras {
+export class LAAuras
+{
     /** Session cache of compiled aura macro callbacks, keyed on serialized source string. */
     static callbackCache = new Map();
     static _initialized = false;
@@ -12,33 +12,45 @@ export class LAAuras {
     /**
      * Initialize the libWrapper intercept.
      */
-    static init() {
+    static init()
+    {
         if (LAAuras._initialized)
             return;
 
-        if (typeof libWrapper === "function") {
-            libWrapper.register('lancer-automations', 'Macros.prototype.get', function (wrapped, ...args) {
+        if (typeof libWrapper === "function")
+        {
+            libWrapper.register('lancer-automations', 'Macros.prototype.get', function (wrapped, ...args)
+            {
                 const id = args[0];
-                if (typeof id === 'string' && id.startsWith('@@fn:')) {
-                    const src = id.slice('@@fn:'.length);
-                    let fn = LAAuras.callbackCache.get(src);
-                    if (!fn) {
-                        try {
-                            fn = new Function('token', 'parent', 'aura', 'options',
-                                `return (${src})(token, parent, aura, options);`
+                if (typeof id === 'string' && id.startsWith('@@fn:'))
+                {
+                    const macroSource = id.slice('@@fn:'.length);
+                    let callbackFn = LAAuras.callbackCache.get(macroSource);
+                    if (!callbackFn)
+                    {
+                        try
+                        {
+                            callbackFn = new Function('token', 'parent', 'aura', 'options',
+                                `return (${macroSource})(token, parent, aura, options);`
                             );
-                            LAAuras.callbackCache.set(src, fn);
-                        } catch (e) {
+                            LAAuras.callbackCache.set(macroSource, callbackFn);
+                        }
+                        catch (e)
+                        {
                             console.error(`lancer-automations | Failed to reconstruct Aura callback from source:`, e);
                             return wrapped(...args);
                         }
                     }
                     return {
                         canExecute: true,
-                        execute: (params) => {
-                            try {
-                                fn(params.token, params.parent, params.aura, params.options);
-                            } catch (e) {
+                        execute: (params) =>
+                        {
+                            try
+                            {
+                                callbackFn(params.token, params.parent, params.aura, params.options);
+                            }
+                            catch (e)
+                            {
                                 console.error(`lancer-automations | Error executing Aura lambda function for aura '${params.aura?.name}':`, e);
                             }
                         }
@@ -47,56 +59,62 @@ export class LAAuras {
                 return wrapped(...args);
             }, 'MIXED');
             LAAuras._initialized = true;
-        } else {
-            console.warn("lancer-automations | libWrapper not found, Grid-Aware Auras lambda functions will not work.");
         }
+        else
+            console.warn("lancer-automations | libWrapper not found, Grid-Aware Auras lambda functions will not work.");
     }
 
     /**
      * Wrapper for Grid-Aware Auras `createAura`.
      * Intercepts `function` definitions in `macros` and converts them to virtual macro IDs.
-     * Accepts Token / TokenDocument / Item owners — for Item owners, the context actor is
+     * Accepts Token / TokenDocument / Item owners; for Item owners, the context actor is
      * resolved from `item.parent` and the active token (or prototypeToken) provides name/disposition.
      * @returns {Promise<object|undefined>}
      */
-    static async createAura(owner, auraConfig) {
-        const gaa = game.modules.get("grid-aware-auras");
-        if (!gaa?.api?.createAura) {
+    static async createAura(owner, auraConfig)
+    {
+        const gridAwareAuras = game.modules.get("grid-aware-auras");
+        if (!gridAwareAuras?.api?.createAura)
+        {
             console.warn("lancer-automations | Grid-Aware Auras module is not active or does not support the API.");
             return undefined;
         }
 
-        if (!LAAuras._initialized) {
+        if (!LAAuras._initialized)
             LAAuras.init();
-        }
 
         let configToPass = foundry.utils.deepClone(auraConfig);
 
         // Resolve context actor + token-like doc (for disposition/name) regardless of owner type
         let contextActor = null;
         let contextTokenDoc = null;
-        if (owner instanceof Item) {
+        if (owner instanceof Item)
+        {
             contextActor = owner.parent instanceof Actor ? owner.parent : null;
             contextTokenDoc = contextActor?.getActiveTokens?.()?.[0]?.document
                 ?? contextActor?.prototypeToken
                 ?? null;
-        } else {
+        }
+        else
+        {
             contextTokenDoc = owner.document ?? owner;
             contextActor = contextTokenDoc?.actor ?? null;
         }
 
-        if (contextActor && contextTokenDoc) {
+        if (contextActor && contextTokenDoc)
+        {
             const hasReaction = hasReactionAvailable(contextActor);
             const tokenFactionsApi = game.modules.get("token-factions")?.api;
 
             let resolvedColor = "#ffffff";
-            if (tokenFactionsApi && hasReaction) {
+            if (tokenFactionsApi && hasReaction)
+            {
                 const color = await tokenFactionsApi.retrieveBorderFactionsColorFromToken(contextTokenDoc.name);
                 if (color)
                     resolvedColor = color;
-            } else if (contextActor.folder?.color && hasReaction) {
-                resolvedColor = contextActor.folder.color;
             }
+            else if (contextActor.folder?.color && hasReaction)
+                resolvedColor = contextActor.folder.color;
 
             const fillTexture = game.modules.get("templatemacro")?.active
                 ? "modules/templatemacro/textures/hatching-cog.png"
@@ -132,9 +150,12 @@ export class LAAuras {
             configToPass = foundry.utils.mergeObject(defaultAuraConfig, configToPass);
         }
 
-        if (configToPass.macros && Array.isArray(configToPass.macros)) {
-            for (let macro of configToPass.macros) {
-                if (typeof macro.function === 'function') {
+        if (configToPass.macros && Array.isArray(configToPass.macros))
+        {
+            for (let macro of configToPass.macros)
+            {
+                if (typeof macro.function === 'function')
+                {
                     const src = macro.function.toString();
                     macro.macroId = '@@fn:' + src;
                     LAAuras.callbackCache.set(src, macro.function);
@@ -143,32 +164,28 @@ export class LAAuras {
             }
         }
 
-        return await gaa.api.createAura(owner, configToPass);
+        return await gridAwareAuras.api.createAura(owner, configToPass);
     }
 
     /**
      * Passthrough wrapper for Grid-Aware Auras `deleteAuras`.
      * @returns {Promise<object[]>}
      */
-    static async deleteAuras(owner, filter, options = {}) {
-        const gaa = game.modules.get("grid-aware-auras");
-        if (!gaa?.api?.deleteAuras)
+    static async deleteAuras(owner, filter, options = {})
+    {
+        const gridAwareAuras = game.modules.get("grid-aware-auras");
+        if (!gridAwareAuras?.api?.deleteAuras)
             return [];
-        return await gaa.api.deleteAuras(owner, filter, options);
+        return await gridAwareAuras.api.deleteAuras(owner, filter, options);
     }
 
-    /**
-     * Finds an aura on an actor by its name.
-     * @param {Actor|Token|TokenDocument} actorOrToken - The actor or token to search.
-     * @param {string} auraName - The name of the aura to find.
-     * @returns {object|null} The aura configuration object, or null if not found.
-     */
-    static findAura(actorOrToken, auraName) {
+    static findAura(actorOrToken, auraName)
+    {
         const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
         const auras = actor?.getFlag('grid-aware-auras', 'auras');
         if (!auras)
             return null;
-        return Object.values(auras).find(a => a.name === auraName) || null;
+        return Object.values(auras).find(aura => aura.name === auraName) || null;
     }
 
     /**
@@ -178,19 +195,20 @@ export class LAAuras {
      * @param {boolean} [on] - true=enable, false=disable. Flip current state if omitted.
      * @returns {Promise<boolean|null>} new enabled state, or null if the aura wasn't found.
      */
-    static async toggleAura(actorOrToken, auraName, on) {
+    static async toggleAura(actorOrToken, auraName, on)
+    {
         const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
         const auras = actor?.getFlag('grid-aware-auras', 'auras');
         if (!auras)
             return null;
-        const entry = Object.entries(auras).find(([, a]) => /** @type {any} */ (a).name === auraName);
+        const entry = Object.entries(auras).find(([, candidateAura]) => /** @type {any} */ (candidateAura).name === auraName);
         if (!entry)
             return null;
         const [key, aura] = entry;
-        const cur = !!(/** @type {any} */ (aura).enabled);
-        const next = typeof on === 'boolean' ? on : !cur;
-        if (next === cur)
-            return cur;
+        const currentEnabled = !!(/** @type {any} */ (aura).enabled);
+        const next = typeof on === 'boolean' ? on : !currentEnabled;
+        if (next === currentEnabled)
+            return currentEnabled;
         await actor.setFlag('grid-aware-auras', 'auras', {
             ...auras,
             [key]: { ...(/** @type {any} */ (aura)), enabled: next }
@@ -199,31 +217,34 @@ export class LAAuras {
     }
 }
 
-/** Scene grid size relative to baseline (100 px) — multiply stroke / dash / texture-scale fields by this. */
-export function gridScale() {
-    const g = canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100;
-    return g / 100;
+/** Scene grid size relative to baseline (100 px); multiply stroke / dash / texture-scale fields by this. */
+export function gridScale()
+{
+    const gridSize = canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100;
+    return gridSize / 100;
 }
 
 /**
  * Scale lineWidth / lineDashSize / lineGapSize / fillTextureScale on an aura config in place.
  * @returns {object}
  */
-export function scaleAuraStroke(aura) {
-    const s = gridScale();
-    if (s === 1)
+export function scaleAuraStroke(aura)
+{
+    const scale = gridScale();
+    if (scale === 1)
         return aura;
     if (typeof aura.lineWidth === 'number')
-        aura.lineWidth = Math.max(1, Math.round(aura.lineWidth * s));
+        aura.lineWidth = Math.max(1, Math.round(aura.lineWidth * scale));
     if (typeof aura.lineDashSize === 'number')
-        aura.lineDashSize = Math.max(1, Math.round(aura.lineDashSize * s));
+        aura.lineDashSize = Math.max(1, Math.round(aura.lineDashSize * scale));
     if (typeof aura.lineGapSize === 'number')
-        aura.lineGapSize = Math.max(1, Math.round(aura.lineGapSize * s));
-    if (aura.fillTextureScale && typeof aura.fillTextureScale === 'object') {
+        aura.lineGapSize = Math.max(1, Math.round(aura.lineGapSize * scale));
+    if (aura.fillTextureScale && typeof aura.fillTextureScale === 'object')
+    {
         if (typeof aura.fillTextureScale.x === 'number')
-            aura.fillTextureScale.x = Math.max(1, Math.round(aura.fillTextureScale.x * s));
+            aura.fillTextureScale.x = Math.max(1, Math.round(aura.fillTextureScale.x * scale));
         if (typeof aura.fillTextureScale.y === 'number')
-            aura.fillTextureScale.y = Math.max(1, Math.round(aura.fillTextureScale.y * s));
+            aura.fillTextureScale.y = Math.max(1, Math.round(aura.fillTextureScale.y * scale));
     }
     return aura;
 }

@@ -13,14 +13,18 @@ const ACTION_DEFS = [
     { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'Reaction' },
 ];
 
-function _canMod(actor) {
+function _canMod(actor)
+{
     if (game.user.isGM)
         return true;
     if (actor?.isOwner)
         return true;
-    try {
+    try
+    {
         return game.settings.get(game.system.id, 'actionTracker')?.allowPlayers ?? false;
-    } catch {
+    }
+    catch
+    {
         return false;
     }
 }
@@ -31,25 +35,24 @@ function _canMod(actor) {
  * @param {Token} token
  * @returns {JQuery|null}
  */
-export function buildCombatBar(actor, token) {
-    if (!game.combat?.active) {
+export function buildCombatBar(actor, token)
+{
+    if (!game.combat?.active)
         return null;
-    }
     const combatant = game.combat.combatants.find(c => c.tokenId === token.document?.id);
-    if (!combatant) {
+    if (!combatant)
         return null;
-    }
 
     const actions = actor.system?.action_tracker;
-    if (!actions) {
+    if (!actions)
         return null;
-    }
 
     const activations = /** @type {any} */ (combatant).activations ?? { max: 1, value: 0 };
     const isMyTurn = game.combat.combatant?.id === combatant.id;
     const canClick = _canMod(actor);
 
-    if (!document.getElementById('la-combat-bar-styles')) {
+    if (!document.getElementById('la-combat-bar-styles'))
+    {
         const style = document.createElement('style');
         style.id = 'la-combat-bar-styles';
         style.textContent = `
@@ -69,21 +72,26 @@ export function buildCombatBar(actor, token) {
     const available = activations.value ?? 0;
     const max = activations.max ?? 1;
     let endTurnPlaced = false;
-    for (let i = 0; i < max; i++) {
+    for (let i = 0; i < max; i++)
+    {
         const filled = i < available;
 
         // Replace the first spent diamond with end-turn button when active
-        if (!filled && isMyTurn && !endTurnPlaced) {
+        if (!filled && isMyTurn && !endTurnPlaced)
+        {
             endTurnPlaced = true;
             const endBtn = $(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:var(--primary-color);transition:filter 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`);
-            endBtn.on('mouseenter', () => {
+            endBtn.on('mouseenter', () =>
+            {
                 playUiSound('statusHover'); endBtn.css('filter', 'brightness(1.6)');
             });
             endBtn.on('mouseleave', () => endBtn.css('filter', ''));
-            endBtn.on('click', async () => {
+            endBtn.on('click', async () =>
+            {
                 await deactivateCombatantSocket(game.combat, combatant);
             });
-            endBtn.on('contextmenu', async (ev) => {
+            endBtn.on('contextmenu', async (ev) =>
+            {
                 ev.preventDefault();
                 await deactivateCombatantSocket(game.combat, combatant);
                 await modifyCombatantActivationsSocket(game.combat, combatant, 1);
@@ -93,17 +101,22 @@ export function buildCombatBar(actor, token) {
         }
 
         const diamond = $(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:filter 0.1s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`);
-        diamond.on('mouseenter', () => {
+        diamond.on('mouseenter', () =>
+        {
             playUiSound('statusHover'); diamond.css({ filter: 'brightness(1.6)', opacity: 1 });
         });
         diamond.on('mouseleave', () => diamond.css({ filter: '', opacity: filled ? 1 : 0.4 }));
-        if (canClick) {
-            if (filled) {
-                diamond.on('click', async () => {
+        if (canClick)
+        {
+            if (filled)
+            {
+                diamond.on('click', async () =>
+                {
                     await activateCombatantSocket(game.combat, combatant);
                 });
             }
-            diamond.on('contextmenu', async (ev) => {
+            diamond.on('contextmenu', async (ev) =>
+            {
                 ev.preventDefault();
                 await modifyCombatantActivationsSocket(game.combat, combatant, filled ? -1 : 1);
             });
@@ -115,7 +128,8 @@ export function buildCombatBar(actor, token) {
     bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
 
     // Action icons
-    for (const def of ACTION_DEFS) {
+    for (const def of ACTION_DEFS)
+    {
         const val = actions[def.key];
         const isAvailable = def.isMove ? (val > 0) : !!val;
         const tooltip = def.isMove
@@ -123,13 +137,16 @@ export function buildCombatBar(actor, token) {
             : `${def.label}: ${isAvailable ? 'Available' : 'Spent'}`;
 
         const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
-        icon.on('mouseenter', () => {
+        icon.on('mouseenter', () =>
+        {
             playUiSound('statusHover'); icon.css({ filter: 'brightness(1.6)', opacity: 1 });
         });
         icon.on('mouseleave', () => icon.css({ filter: '', opacity: isAvailable ? 1 : 0.35 }));
 
-        if (canClick) {
-            icon.on('click', async () => {
+        if (canClick)
+        {
+            icon.on('click', async () =>
+            {
                 await modifyAction(actor, def.key, !!val);
             });
         }
@@ -137,14 +154,17 @@ export function buildCombatBar(actor, token) {
     }
 
     // Reset button
-    if (canClick) {
+    if (canClick)
+    {
         bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
         const resetBtn = $(`<span class="la-action-reset" style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Reset Actions"><i class="mdi mdi-restore"></i></span>`);
-        resetBtn.on('mouseenter', () => {
+        resetBtn.on('mouseenter', () =>
+        {
             playUiSound('statusHover'); resetBtn.css('color', '#fff');
         });
         resetBtn.on('mouseleave', () => resetBtn.css('color', '#888'));
-        resetBtn.on('click', async () => {
+        resetBtn.on('click', async () =>
+        {
             const speed = actor.system?.speed ?? 0;
             await actor.update({
                 system: { action_tracker: {
@@ -160,22 +180,26 @@ export function buildCombatBar(actor, token) {
 
         // Revert last movement
         const revertBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Revert Last Move"><i class="fas fa-step-backward"></i></span>`);
-        revertBtn.on('mouseenter', () => {
+        revertBtn.on('mouseenter', () =>
+        {
             playUiSound('statusHover'); revertBtn.css('color', '#fff');
         });
         revertBtn.on('mouseleave', () => revertBtn.css('color', '#888'));
-        revertBtn.on('click', async () => {
+        revertBtn.on('click', async () =>
+        {
             await revertMovement(token);
         });
         bar.append(revertBtn);
 
         // Clear movement history
         const clearBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Clear Movement History"><i class="fas fa-trash"></i></span>`);
-        clearBtn.on('mouseenter', () => {
+        clearBtn.on('mouseenter', () =>
+        {
             playUiSound('statusHover'); clearBtn.css('color', '#fff');
         });
         clearBtn.on('mouseleave', () => clearBtn.css('color', '#888'));
-        clearBtn.on('click', async () => {
+        clearBtn.on('click', async () =>
+        {
             await clearMovementHistory(token, false);
         });
         bar.append(clearBtn);

@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-Lancer Automations works with the isometric modules, **isometric-perspective** and **grape_juice-isometrics**. It re-aligns its own overlays (stat bars, labels, the target reticle, and more) so they sit upright over the projected token instead of the flat grid cell, and on Isometric Perspective it animates a token's elevation over terrain.
+Lancer Automations works with the isometric modules, **isometric-perspective** and **grape_juice-isometrics**. It re-aligns its own overlays (stat bars, labels, target reticle, etc.) so they sit upright over the projected token instead of the flat grid cell, and on Isometric Perspective it animates a token's elevation over terrain.
 
 <p align="center"><img src="../img/iso-action.png" width="50%"/></p>
 
@@ -20,7 +20,7 @@ Lancer Automations works with the isometric modules, **isometric-perspective** a
 
 ## Keeping the UI aligned
 
-The rest of the toggles cancel the isometric skew on each overlay so it reads straight over the token. All are on by default; turn one off only if it clashes with something.
+The rest of the toggles cancel the isometric skew on each overlay so it reads straight over the token. All are on by default; turn one off only if it clashes.
 
 | Setting | Keeps aligned |
 |---------|---------------|

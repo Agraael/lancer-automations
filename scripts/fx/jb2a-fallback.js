@@ -51,16 +51,22 @@ const PLACEHOLDER = 'modules/lancer-automations/FX/Debugempty.png';
 const _runtimeRegistry = new Map();
 const _warnedIds = new Set();
 
-function _hasPatreon() {
-    try {
+function _hasPatreon()
+{
+    try
+    {
         if (game.settings.get('lancer-automations', 'debugForceJb2aFree'))
             return false;
-    } catch { /* setting not registered yet */ }
+    }
+    catch
+    { /* setting not registered yet */ }
     return !!game.modules.get('jb2a_patreon')?.active;
 }
 
-function _existsInDatabase(id) {
-    try {
+function _existsInDatabase(id)
+{
+    try
+    {
         const db = /** @type {any} */ (Sequencer)?.Database;
         if (!db)
             return false;
@@ -70,13 +76,16 @@ function _existsInDatabase(id) {
         if (entry === false || entry == null || entry === "")
             return false;
         return true;
-    } catch {
+    }
+    catch
+    {
         return false;
     }
 }
 
 /** @param {string} id */
-export function resolveJb2a(id) {
+export function resolveJb2a(id)
+{
     if (typeof id !== 'string' || !id.startsWith('jb2a.'))
         return { src: id };
 
@@ -91,7 +100,8 @@ export function resolveJb2a(id) {
     if (_existsInDatabase(id))
         return { src: id };
 
-    if (!_warnedIds.has(id)) {
+    if (!_warnedIds.has(id))
+    {
         _warnedIds.add(id);
         console.warn(`lancer-automations | JB2A asset "${id}" missing from user's library, using placeholder. Register a fallback in scripts/fx/jb2a-fallback.js`);
     }
@@ -99,62 +109,77 @@ export function resolveJb2a(id) {
     return { src: PLACEHOLDER };
 }
 
-export function jb2aFile(id) {
+export function jb2aFile(id)
+{
     return resolveJb2a(id).src;
 }
 
-export function jb2aPreloadList(ids) {
+export function jb2aPreloadList(ids)
+{
     if (!Array.isArray(ids))
         return ids;
     return ids.map((id) => typeof id === 'string' && id.startsWith('jb2a.') ? jb2aFile(id) : id);
 }
 
-export function installJb2aHooks() {
+export function installJb2aHooks()
+{
     if (typeof Sequencer === 'undefined' || /** @type {any} */ (Sequencer)._laJb2aHooked)
         return;
     /** @type {any} */ (Sequencer)._laJb2aHooked = true;
 
-    try {
-        const pl = /** @type {any} */ (Sequencer.Preloader);
-        if (pl?.preloadForClients) {
-            const orig = pl.preloadForClients.bind(pl);
-            pl.preloadForClients = function (entries, ...rest) {
+    try
+    {
+        const preloader = /** @type {any} */ (Sequencer.Preloader);
+        if (preloader?.preloadForClients)
+        {
+            const orig = preloader.preloadForClients.bind(preloader);
+            preloader.preloadForClients = function (entries, ...rest)
+            {
                 return orig(jb2aPreloadList(entries), ...rest);
             };
         }
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn('lancer-automations | failed to hook Sequencer.Preloader', e);
     }
 
     // Patch section .file() via prototype probed off a throwaway Sequence.
-    try {
+    try
+    {
         const probe = new Sequence();
         const protos = [];
-        const eff = probe.effect();
-        if (eff)
-            protos.push(Object.getPrototypeOf(eff));
-        if (typeof probe.sound === 'function') {
-            const snd = probe.sound();
-            if (snd)
-                protos.push(Object.getPrototypeOf(snd));
+        const effectSection = probe.effect();
+        if (effectSection)
+            protos.push(Object.getPrototypeOf(effectSection));
+        if (typeof probe.sound === 'function')
+        {
+            const soundSection = probe.sound();
+            if (soundSection)
+                protos.push(Object.getPrototypeOf(soundSection));
         }
-        for (const proto of protos) {
+        for (const proto of protos)
+        {
             if (!proto || typeof proto.file !== 'function' || proto._laJb2aHooked)
                 continue;
             proto._laJb2aHooked = true;
             const origFile = proto.file;
-            proto.file = function (input, ...rest) {
-                if (typeof input === 'string' && input.startsWith('jb2a.')) {
-                    const r = resolveJb2a(input);
-                    const ret = origFile.call(this, r.src, ...rest);
-                    if (r.tint !== undefined && typeof this.tint === 'function')
-                        this.tint(r.tint);
-                    return ret;
+            proto.file = function (input, ...rest)
+            {
+                if (typeof input === 'string' && input.startsWith('jb2a.'))
+                {
+                    const resolved = resolveJb2a(input);
+                    const section = origFile.call(this, resolved.src, ...rest);
+                    if (resolved.tint !== undefined && typeof this.tint === 'function')
+                        this.tint(resolved.tint);
+                    return section;
                 }
                 return origFile.call(this, input, ...rest);
             };
         }
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn('lancer-automations | failed to hook Sequencer section .file()', e);
     }
 }

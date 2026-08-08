@@ -4,15 +4,18 @@ import { gainAction } from '../tools/misc-tools.js';
 const externalItemReactions = {};
 const externalGeneralReactions = {};
 
-export function registerExternalItemReactions(reactions) {
+export function registerExternalItemReactions(reactions)
+{
     Object.assign(externalItemReactions, reactions);
 }
 
-export function registerExternalGeneralReactions(reactions) {
+export function registerExternalGeneralReactions(reactions)
+{
     Object.assign(externalGeneralReactions, reactions);
 }
 
-export function getDefaultItemReactionRegistry() {
+export function getDefaultItemReactionRegistry()
+{
     const builtInDefaults = {
         "ms_custom_paint_job": {
             category: "System",
@@ -27,18 +30,26 @@ export function getDefaultItemReactionRegistry() {
                 awaitActivationCompletion: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item) {
+                evaluate: function (triggerType, triggerData, reactorToken, item)
+                {
                     return triggerData.triggeringToken?.id === reactorToken.id
                         && !item.system?.destroyed && !item.system?.disabled;
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const result = await api.startChoiceCard({
                         title: "CUSTOM PAINT JOB",
                         item,
                         originToken: reactorToken,
                         choices: [
-                            { text: "Use", icon: "fas fa-dice-d6", callback: async () => {} },
-                            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
+                            { text: "Use",
+                                icon: "fas fa-dice-d6",
+                                callback: async () =>
+                                {} },
+                            { text: "Skip",
+                                icon: "fas fa-times",
+                                callback: async () =>
+                                {} }
                         ]
                     });
                     if (result?.choiceIdx !== 0)
@@ -48,7 +59,8 @@ export function getDefaultItemReactionRegistry() {
                         speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
                         flavor: `<b>Custom Paint Job</b>`
                     });
-                    if (roll.total >= 6) {
+                    if (roll.total >= 6)
+                    {
                         await item.update({ "system.disabled": true });
                         await reactorToken.actor.update({ "system.hp.value": 1 });
                         ChatMessage.create({
@@ -61,7 +73,9 @@ export function getDefaultItemReactionRegistry() {
                             null, null, null,
                             { item, originToken: reactorToken }
                         );
-                    } else {
+                    }
+                    else
+                    {
                         ChatMessage.create({
                             speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
                             content: `<b>Custom Paint Job — Failed!</b> Rolled ${roll.total}, needed 6.`
@@ -72,7 +86,7 @@ export function getDefaultItemReactionRegistry() {
         }
     };
 
-    // Limitless (Ultra / Veteran) — grants the "Overcharge (NPC)" extra action.
+    // Limitless (Ultra/Veteran): grants the "Overcharge (NPC)" extra action.
     /** @type {ReactionGroup} */
     const limitlessOvercharge = {
         category: "NPC",
@@ -83,13 +97,16 @@ export function getDefaultItemReactionRegistry() {
             triggerOther: false,
             autoActivate: false,
             activationType: "none",
-            onInit: async function (token, item, api) {
-                await api.addExtraActions(item, {
+            onInit: async function (token, item, api)
+            {
+                if (!api || !item)
+                    return;
+                await api.addExtraActions(item, [{
                     name: "Overcharge (NPC)",
                     activation: "Free",
                     icon: "systems/lancer/assets/icons/overcharge.svg",
                     detail: item.system.effect
-                });
+                }]);
             }
         }]
     };
@@ -108,26 +125,144 @@ export function getDefaultItemReactionRegistry() {
             triggerOther: false,
             autoActivate: false,
             activationType: "none",
-            onInit: async function (token, item, api) {
-                if (!api || !token.actor)
+            onInit: async function (token, item, api)
+            {
+                if (!api || !item)
                     return;
-                if (token.actor.statuses?.has('surefoot'))
+                const sourceId = `treads-or-hover-${item.id}`;
+                const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
+                    .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+                if (templates.some(template => template.flags?.['lancer-automations']?.treadsOrHoverSourceId === sourceId))
                     return;
-                await api.applyEffectsToTokens({
-                    tokens: [token],
+                await api.linkEffectToItem({
+                    items: [item],
                     effectNames: ['surefoot'],
                     note: "Treads or Hover",
                     duration: { label: 'permanent' }
-                }, { treadsOrHoverSourceId: item.id });
+                }, { treadsOrHoverSourceId: sourceId });
             }
         }]
     };
     builtInDefaults["npcf_treads_or_hover_vehicle"] = treadsOrHover;
 
+    /** @type {ReactionGroup} */
+    const limitedMeleeAttacks = {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.lockActorAction(item, "Grapple");
+                await api.lockActorAction(item, "Improvised Attack");
+            }
+        }]
+    };
+    builtInDefaults["npcf_limited_melee_attacks_ship"] = limitedMeleeAttacks;
+    builtInDefaults["npcf_limited_melee_vehicle"] = limitedMeleeAttacks;
+
+    /** @type {ReactionGroup} */
+    const noManipulators = {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.lockActorAction(item, "Grapple");
+                await api.lockActorAction(item, "Handle");
+            }
+        }]
+    };
+    builtInDefaults["npcf_no_manipulators_ship"] = noManipulators;
+    builtInDefaults["npcf_no_manipulators_vehicle"] = noManipulators;
+
+    /** @type {ReactionGroup} */
+    const veterancyVeteran = {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onEnterCombat"],
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                const templates = api.getLinkedBonuses(item);
+                return !templates.some(template => template.addOptions?.veterancyBonus === true);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (!api || !item)
+                    return;
+                const skills = [
+                    { text: "Hull", icon: "cci cci-hull", rollType: "hull" },
+                    { text: "Agility", icon: "cci cci-agility", rollType: "agility" },
+                    { text: "Systems", icon: "cci cci-systems", rollType: "systems" },
+                    { text: "Engineering", icon: "cci cci-engineering", rollType: "engineering" }
+                ];
+                const choices = skills.map(skill => ({
+                    text: skill.text,
+                    icon: skill.icon,
+                    callback: async () =>
+                    {
+                        await api.linkBonusToItem({
+                            items: [item],
+                            bonusData: {
+                                name: `Veterancy (${skill.text})`,
+                                val: 1,
+                                type: "accuracy",
+                                rollTypes: [skill.rollType]
+                            },
+                            addOptions: { duration: 'constant', veterancyBonus: true }
+                        });
+                    }
+                }));
+                await api.startChoiceCard({
+                    title: "VETERANCY",
+                    description: `Choose a skill for ${reactorToken.name}:`,
+                    choices,
+                    icon: "cci cci-rank-veteran"
+                });
+            }
+        }, {
+            triggers: ["onExitCombat"],
+            triggerSelf: true,
+            triggerOther: false,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (!api || !item)
+                    return;
+                const templates = api.getLinkedBonuses(item);
+                for (const template of templates)
+                {
+                    if (template.addOptions?.veterancyBonus === true)
+                        await api.unlinkBonusFromItem({ items: [item], templateId: template.id });
+                }
+            }
+        }]
+    };
+    builtInDefaults["npcf_veterancy_veteran"] = veterancyVeteran;
+    builtInDefaults["npc-rebake_npcf_veterancy_veteran"] = veterancyVeteran;
+
     return { ...builtInDefaults, ...externalItemReactions };
 }
 
-export function getDefaultGeneralReactionRegistry() {
+export function getDefaultGeneralReactionRegistry()
+{
     const builtInDefaults = {
         "Overwatch": {
             category: "General",
@@ -139,10 +274,12 @@ export function getDefaultGeneralReactionRegistry() {
                 isReaction: true,
                 triggerOther: true,
                 actionType: "Reaction",
-                outOfCombat: true,
+                outOfCombat: false,
+                enabled: false,
                 frequency: "Other",
                 requireCanProvoke: true,
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const mover = triggerData.triggeringToken;
                     if (!mover)
                         return false;
@@ -150,7 +287,8 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     api.executeSimpleActivation(reactorToken.actor, {
                         title: "Overwatch",
                         action: {
@@ -176,7 +314,8 @@ export function getDefaultGeneralReactionRegistry() {
                 awaitActivationCompletion: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const mover = triggerData.triggeringToken;
                     if (!mover)
                         return false;
@@ -189,12 +328,14 @@ export function getDefaultGeneralReactionRegistry() {
                     const distance = api.getTokenDistance(reactorToken, mover);
                     return distance >= 1 && maxThreat >= distance;
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const mover = triggerData.triggeringToken;
                     if (!mover)
                         return;
                     let preConfirmResponderIds = [];
-                    const preConfirm = async () => {
+                    const preConfirm = async () =>
+                    {
                         const result = await api.startChoiceCard({
                             title: "OVERWATCH",
                             icon: api.getActivationIcon("reaction"),
@@ -203,12 +344,19 @@ export function getDefaultGeneralReactionRegistry() {
                             relatedToken: mover,
                             userIdControl: api.getTokenOwnerUserId(reactorToken),
                             choices: [
-                                { text: "Fire", icon: "fas fa-crosshairs", callback: async () => {} },
-                                { text: "Let pass", icon: "fas fa-times", callback: async () => {} }
+                                { text: "Fire",
+                                    icon: "fas fa-crosshairs",
+                                    callback: async () =>
+                                    {} },
+                                { text: "Let pass",
+                                    icon: "fas fa-times",
+                                    callback: async () =>
+                                    {} }
                             ]
                         });
                         preConfirmResponderIds = result?.responderIds ?? [];
-                        if (result?.choiceIdx === 0) {
+                        if (result?.choiceIdx === 0)
+                        {
                             await triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0], { moverTokenId: mover.id });
                             await api.startChoiceCard({
                                 title: `WAITING — ${reactorToken.name.toUpperCase()} OVERWATCH`,
@@ -218,13 +366,17 @@ export function getDefaultGeneralReactionRegistry() {
                                 relatedToken: mover,
                                 userIdControl: null,
                                 choices: [
-                                    { text: "Confirm", icon: "fas fa-check", callback: async () => {} }
+                                    { text: "Confirm",
+                                        icon: "fas fa-check",
+                                        callback: async () =>
+                                        {} }
                                 ]
                             });
                         }
                         return false;
                     };
-                    const postChoice = async () => {};
+                    const postChoice = async () =>
+                    {};
                     triggerData.cancelTriggeredMove?.(
                         `<b>${reactorToken.name}</b> triggers Overwatch against <b>${mover.name}</b>.`,
                         true,
@@ -247,16 +399,23 @@ export function getDefaultGeneralReactionRegistry() {
                 onlyOnSourceMatch: true,
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const moverId = triggerData.extraData?.moverTokenId ?? null;
                     const mover = moverId ? canvas.tokens.get(moverId) ?? null : null;
                     const distance = mover ? api.getTokenDistance(reactorToken, mover) : 0;
-                    const weaponFilter = distance > 0
-                        ? (w) => {
-                            const ranges = api.getMaxWeaponRanges_WithBonus(w);
-                            return (ranges.Threat || 1) >= distance;
-                        }
-                        : null;
+                    const isOrdnance = (weapon) =>
+                        [...(weapon.system?.active_profile?.tags ?? []), ...(weapon.system?.all_base_tags ?? []), ...(weapon.system?.tags ?? [])]
+                            .some(tag => tag.lid === 'tg_ordnance');
+                    const weaponFilter = (weapon) =>
+                    {
+                        if (isOrdnance(weapon))
+                            return false;
+                        if (distance <= 0)
+                            return true;
+                        const ranges = api.getMaxWeaponRanges_WithBonus(weapon);
+                        return (ranges.Threat || 1) >= distance;
+                    };
                     await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter, { noFX: true });
                 }
             }]
@@ -264,8 +423,8 @@ export function getDefaultGeneralReactionRegistry() {
         "Brace": {
             category: "General",
             reactions: [{
-                triggers: ["onDamage"],
-                triggerDescription: "You are hit by an attack and damage has been rolled.",
+                triggers: ["onPreDamage"],
+                triggerDescription: "You are hit by an attack and damage is about to be rolled.",
                 effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 actionType: "Reaction",
                 frequency: "Other",
@@ -273,23 +432,54 @@ export function getDefaultGeneralReactionRegistry() {
                 checkReaction: true,
                 triggerOther: true,
                 triggerSelf: false,
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     if (reactorToken.actor?.type !== 'mech')
                         return false;
-                    if (triggerData.target?.id !== reactorToken.id)
+                    if (!triggerData.targets?.some(target => target?.id === reactorToken.id))
+                        return false;
+                    if (api.findEffectOnToken(reactorToken, "brace"))
                         return false;
 
+                    const flowData = triggerData.flowState?.data;
                     const currentHP = reactorToken.actor?.system?.hp?.value ?? 0;
-                    const halfHP = currentHP / 2;
-                    const totalDamage = (triggerData.damages || []).reduce((sum, d) => sum + (d || 0), 0);
-                    const wouldKill = (currentHP - totalDamage) <= 0;
-                    const isHalfHP = totalDamage >= halfHP;
 
-                    return wouldKill || isHalfHP;
+                    const hitResult = flowData?.hit_results?.find(result => result.target?.id === reactorToken.id);
+                    if (hitResult && !hitResult.hit && !hitResult.crit)
+                    {
+                        const reliableVal = Number(flowData?.reliable_val) || 0;
+                        return reliableVal > 0 && reliableVal >= currentHP / 2;
+                    }
+
+                    let damageEntries = [...(flowData?.damage ?? []), ...(flowData?.bonus_damage ?? [])];
+                    const weapon = triggerData.weapon;
+                    if (damageEntries.length === 0 && weapon)
+                    {
+                        if (weapon.type === 'npc_feature')
+                            damageEntries = weapon.system?.damage?.[(triggerData.triggeringToken?.actor?.system?.tier || 1) - 1] ?? [];
+                        else
+                            damageEntries = weapon.system?.active_profile?.damage ?? weapon.system?.damage ?? [];
+                    }
+
+                    let maxDamage = 0;
+                    for (const dmg of damageEntries)
+                    {
+                        try
+                        {
+                            maxDamage += new Roll(String(dmg.val ?? 0)).evaluateSync({ maximize: true }).total ?? 0;
+                        }
+                        catch
+                        {
+                            maxDamage += Number(dmg.val) || 0;
+                        }
+                    }
+
+                    return maxDamage >= currentHP / 2;
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     await api.executeSimpleActivation(reactorToken.actor, {
                         title: "Brace",
                         action: {
@@ -315,7 +505,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerSelf: true,
                 triggerOther: false,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: "brace",
@@ -331,7 +522,8 @@ export function getDefaultGeneralReactionRegistry() {
                         return;
 
                     await Sequencer.Preloader.preloadForClients(["modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg", "jb2a.shield.01.intro.blue", "modules/lancer-automations/FX/svg/Brace.svg"]);
-                    validTokens.forEach(token => {
+                    validTokens.forEach(token =>
+                    {
                         let sequence = new Sequence()
                             .sound()
                             .file("modules/lancer-weapon-fx/soundfx/PPC_Charge.ogg")
@@ -366,13 +558,18 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerSelf: true,
                 triggerOther: false,
                 outOfCombat: true,
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName)
+                {
                     return triggerData.statusId === 'brace';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const BRACE_BONUS_ID = 'brace-difficulty-applyToTargetter';
+                    const BRACE_HALF_ID = 'brace-halfDamage-applyToTargetter';
+                    const BRACE_RESIST_ID = 'brace-resistance';
 
-                    if (triggerType === 'onStatusApplied') {
+                    if (triggerType === 'onStatusApplied')
+                    {
                         await api.addConstantBonus(reactorToken.actor, {
                             id: BRACE_BONUS_ID,
                             name: "Brace",
@@ -381,9 +578,48 @@ export function getDefaultGeneralReactionRegistry() {
                             rollTypes: ["attack"],
                             applyToTargetter: true
                         });
-                    } else if (triggerType === 'onStatusRemoved') {
-                        await api.removeConstantBonus(reactorToken.actor, BRACE_BONUS_ID);
+                        await api.addConstantBonus(reactorToken.actor, {
+                            id: BRACE_HALF_ID,
+                            name: "Brace",
+                            type: "target_modifier",
+                            subtype: "half_damage",
+                            rollTypes: ["damage"],
+                            applyToTargetter: true
+                        });
+                        // Fallback when bracing after the damage roll: read by the damageCalc
+                        // bridge at apply time. Condition keeps it out of roll HUDs.
+                        await api.addConstantBonus(reactorToken.actor, {
+                            id: BRACE_RESIST_ID,
+                            name: "Brace",
+                            type: "immunity",
+                            subtype: "resistance",
+                            damageTypes: ["all"],
+                            condition: () => false
+                        });
                     }
+                    else if (triggerType === 'onStatusRemoved')
+                        await api.removeConstantBonus(reactorToken.actor, bonus => [BRACE_BONUS_ID, BRACE_HALF_ID, BRACE_RESIST_ID].includes(bonus.id));
+                }
+            }, {
+                triggers: ["onDamage"],
+                comments: "Consume Brace resistance once it has halved a damage roll",
+                autoActivate: true,
+                activationType: "code",
+                activationMode: "instead",
+                triggerSelf: false,
+                triggerOther: true,
+                outOfCombat: true,
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
+                    if (triggerData.target?.id !== reactorToken.id)
+                        return false;
+                    if (!triggerData.flowState?.la_extraData?.bonusUsage?.candidates?.['brace-halfDamage-applyToTargetter'])
+                        return false;
+                    return api.getConstantBonuses(reactorToken.actor).some(bonus => ['brace-resistance', 'brace-halfDamage-applyToTargetter'].includes(bonus.id));
+                },
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
+                    await api.removeConstantBonus(reactorToken.actor, bonus => ['brace-halfDamage-applyToTargetter', 'brace-resistance'].includes(bonus.id));
                 }
             }],
         },
@@ -399,28 +635,30 @@ export function getDefaultGeneralReactionRegistry() {
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
-                const isFlying = reactorToken.actor?.effects.some(e =>
-                    e.statuses?.has('flying') && !e.disabled
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName)
+            {
+                const isFlying = reactorToken.actor?.effects.some(effect =>
+                    effect.statuses?.has('flying') && !effect.disabled
                 );
                 if (!isFlying)
                     return false;
 
-                if (triggerType === 'onStatusApplied') {
+                if (triggerType === 'onStatusApplied')
                     return ['prone', 'immobilized', 'stunned'].includes(triggerData.statusId);
-                }
-                if (triggerType === 'onStructure' || triggerType === 'onStress') {
+                if (triggerType === 'onStructure' || triggerType === 'onStress')
                     return true;
-                }
                 return false;
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (triggerType === 'onStatusApplied') {
-                    if (triggerData.statusId === 'prone') {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (triggerType === 'onStatusApplied')
+                {
+                    if (triggerData.statusId === 'prone')
                         await api.triggerEffectImmunity(reactorToken, ["Prone"], "Flying");
-                    } else {
+                    else
+                    {
                         const statusName = triggerData.statusId.charAt(0).toUpperCase() + triggerData.statusId.slice(1);
                         await api.startChoiceCard({
                             title: `FLYING — ${statusName}`,
@@ -430,7 +668,8 @@ export function getDefaultGeneralReactionRegistry() {
                                 {
                                     text: "Remove Flying",
                                     icon: "fas fa-arrow-down",
-                                    callback: async () => {
+                                    callback: async () =>
+                                    {
                                         await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                                     }
                                 },
@@ -440,7 +679,8 @@ export function getDefaultGeneralReactionRegistry() {
                     }
                 }
 
-                if (triggerType === 'onStructure' || triggerType === 'onStress') {
+                if (triggerType === 'onStructure' || triggerType === 'onStress')
+                {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
                     await api.startChoiceCard({
                         title: `FLYING — ${label}`,
@@ -450,11 +690,11 @@ export function getDefaultGeneralReactionRegistry() {
                             {
                                 text: "Roll AGI Save",
                                 icon: "fas fa-dice-d20",
-                                callback: async () => {
+                                callback: async () =>
+                                {
                                     const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
-                                    if (result.completed && !result.passed) {
+                                    if (result.completed && !result.passed)
                                         await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
-                                    }
                                 }
                             },
                             { text: "Skip", icon: "fas fa-times" }
@@ -475,7 +715,8 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const sensorRange = reactorToken?.actor?.system?.sensor_range ?? 10;
                 const targets = await api.chooseToken(reactorToken, {
                     range: sensorRange,
@@ -484,9 +725,8 @@ export function getDefaultGeneralReactionRegistry() {
                     description: `Choose a target within Sensors (${sensorRange})`,
                     filter: t => t.actor?.type !== 'deployable',
                 });
-                if (!targets || targets.length === 0) {
+                if (!targets || targets.length === 0)
                     return;
-                }
 
                 await api.applyEffectsToTokens({
                     tokens: targets,
@@ -504,7 +744,8 @@ export function getDefaultGeneralReactionRegistry() {
                 ]);
 
 
-                for (const target of targets) {
+                for (const target of targets)
+                {
                     let sequence = new Sequence()
                         .sound()
                         .file("modules/lancer-weapon-fx/soundfx/LockOn.ogg")
@@ -542,7 +783,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: reactorToken.actor.system.sensor_range,
@@ -571,7 +813,8 @@ export function getDefaultGeneralReactionRegistry() {
                         "jb2a.zoning.inward.circle.once.bluegreen.01.01",
                     ]);
 
-                    validTargets.forEach(target => {
+                    validTargets.forEach(target =>
+                    {
                         let sequence = new Sequence()
                             .sound()
                             .file("modules/lancer-weapon-fx/soundfx/TechPrepare.ogg")
@@ -607,18 +850,23 @@ export function getDefaultGeneralReactionRegistry() {
                 awaitActivationCompletion: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     return !!api.findEffectOnToken(reactorToken, "bolster");
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    if (triggerType === 'onInitCheck') {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
+                    if (triggerType === 'onInitCheck')
+                    {
                         triggerData.flowState.injectBonus({
                             name: "Bolster",
                             type: "accuracy",
                             val: 2
                         });
 
-                    } else if (triggerType === 'onCheck') {
+                    }
+                    else if (triggerType === 'onCheck')
+                    {
                         await api.removeEffectsByNameFromTokens({
                             tokens: [reactorToken],
                             effectNames: ["bolster"]
@@ -639,7 +887,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
@@ -667,7 +916,8 @@ export function getDefaultGeneralReactionRegistry() {
                         "jb2a.healing_generic.400px.blue",
                     ]);
 
-                    validTargets.forEach(target => {
+                    validTargets.forEach(target =>
+                    {
                         let sequence = new Sequence()
                             .sound()
                             .file("modules/lancer-automations/FX/audio/activation-sound-effect.wav")
@@ -704,10 +954,12 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 return !!api.findEffectOnToken(reactorToken, "Aided");
             },
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.removeEffectsByNameFromTokens({
                     tokens: [reactorToken],
                     effectNames: ["Aided"]
@@ -727,7 +979,8 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const targets = triggerData.targets;
                 if (!targets || targets.length === 0)
                     return;
@@ -758,7 +1011,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
@@ -787,7 +1041,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const targets = triggerData.targets;
                     if (!targets || targets.length === 0)
                         return;
@@ -815,7 +1070,8 @@ export function getDefaultGeneralReactionRegistry() {
                 autoActivate: true,
                 triggerSelf: true,
                 triggerOther: false,
-                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const terrainAPI = globalThis.terrainHeightTools;
                     const elevation = reactorToken.document?.elevation || 0;
                     const maxGroundHeight = terrainAPI ? api.getMaxGroundHeightUnderToken(reactorToken, terrainAPI) : 0;
@@ -841,7 +1097,8 @@ export function getDefaultGeneralReactionRegistry() {
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
                     await api.startChoiceCard({
                         title: "FALLING?",
@@ -853,7 +1110,8 @@ export function getDefaultGeneralReactionRegistry() {
                             {
                                 text: "Yes, it falls",
                                 icon: "fas fa-arrow-down",
-                                callback: async () => {
+                                callback: async () =>
+                                {
                                     await api.executeFall(reactorToken);
 
                                     const weaponFx = game.modules.get("lancer-weapon-fx");
@@ -878,7 +1136,8 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName)
+                {
                     reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
                     await actionFX.playFallImpactFX(reactorToken);
@@ -887,10 +1146,10 @@ export function getDefaultGeneralReactionRegistry() {
         },
         "Engagement": {
             category: "General",
-            comments: "Stop Movement & Engagement",
-            triggers: ["onUpdate", "onPreMove", "onTokenCreated", "onTokenRemoved", "onTokenVisibility"],
+            comments: "Update Engagement Status",
+            triggers: ["onUpdate", "onTokenCreated", "onTokenRemoved", "onTokenVisibility"],
             triggerDescription: "When a character moves",
-            effectDescription: "Targets of equal or greater size stop the character's movement, and engagement status is updated.",
+            effectDescription: "Keeps the engaged status updated as characters move and appear.",
             isReaction: false,
             checkReaction: false,
             autoActivate: true,
@@ -898,20 +1157,48 @@ export function getDefaultGeneralReactionRegistry() {
             triggerSelf: true,
             triggerOther: false,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (triggerType === "onUpdate") {
-                    const c = triggerData.change || {};
-                    if (c.x !== undefined || c.y !== undefined || c.elevation !== undefined) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (triggerType === "onUpdate")
+                {
+                    const change = triggerData.change || {};
+                    if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
                         return true;
-                    }
                     return false;
                 }
 
-                if (triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility") {
+                if (triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility")
                     return true;
+                return false;
+            },
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (triggerType === "onUpdate" || triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility")
+                {
+                    const excludeTokenId = triggerType === "onTokenRemoved" ? triggerData.triggeringToken?.id : undefined;
+                    api.updateAllEngagements({ excludeTokenId });
                 }
-
-                if (triggerType === "onPreMove") {
+            }
+        },
+        "Engagement Interrupt Movement": {
+            category: "General",
+            reactions: [{
+                comments: "Stop Movement on Engagement",
+                triggers: ["onPreMove"],
+                triggerDescription: "When a character moves",
+                effectDescription: "Targets of equal or greater size stop the character's movement.",
+                isReaction: false,
+                checkReaction: false,
+                autoActivate: true,
+                awaitActivationCompletion: true,
+                triggerSelf: true,
+                triggerOther: false,
+                outOfCombat: false,
+                enabled: false,
+                evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     if (!game.combat?.active)
                         return false;
                     const moveInfo = triggerData.moveInfo;
@@ -923,29 +1210,22 @@ export function getDefaultGeneralReactionRegistry() {
                     if (api.findEffectOnToken(reactorToken, "hidden") ||
                         api.findEffectOnToken(reactorToken, "disengage") ||
                         api.findEffectOnToken(reactorToken, "intangible") ||
-                        reactorToken.actor?.effects.some(e => e.statuses?.has("hidden") || e.statuses?.has("disengage") || e.statuses?.has("intangible"))) {
+                        reactorToken.actor?.effects.some(effect => effect.statuses?.has("hidden") || effect.statuses?.has("disengage") || effect.statuses?.has("intangible")))
+
                         return false;
-                    }
+
 
                     const isAlreadyEngaged = api.findEffectOnToken(reactorToken, "engaged") ||
-                        reactorToken.actor?.effects.some(e => e.statuses?.has("engaged"));
+                        reactorToken.actor?.effects.some(effect => effect.statuses?.has("engaged"));
                     if (isAlreadyEngaged)
                         return false;
 
                     return true;
-                }
-                return false;
-            },
-            activationType: "code",
-            activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                if (triggerType === "onUpdate" || triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility") {
-                    const excludeTokenId = triggerType === "onTokenRemoved" ? triggerData.triggeringToken?.id : undefined;
-                    api.updateAllEngagements({ excludeTokenId });
-                    return;
-                }
-
-                if (triggerType === "onPreMove") {
+                },
+                activationType: "code",
+                activationMode: "instead",
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const moveInfo = triggerData.moveInfo;
                     const allTokens = canvas.tokens.placeables;
                     const mover = reactorToken;
@@ -954,13 +1234,15 @@ export function getDefaultGeneralReactionRegistry() {
                     let stoppedBy = null;
                     let interceptIndex = -1;
 
-                    // Mover Z per step: flying/hover uses end elevation; walking uses terrain
-                    // top at the hex (via THT) so engagement tracks ground height changes.
-                    // Falls back to current token elevation when THT is absent.
-                    const is3D = (() => {
-                        try {
+                    // Mover Z per step: flying/hover uses end elevation; walking uses THT terrain top so engagement tracks ground height.
+                    const is3D = (() =>
+                    {
+                        try
+                        {
                             return !!game.settings.get('lancer-automations', 'count3DDistance');
-                        } catch {
+                        }
+                        catch
+                        {
                             return false;
                         }
                     })();
@@ -968,38 +1250,47 @@ export function getDefaultGeneralReactionRegistry() {
                     const sceneGridDist = canvas.scene?.grid?.distance ?? 1;
                     const fallbackZ = mover.document.elevation ?? 0;
                     const isFlying = !!api.findEffectOnToken(mover, "flying")
-                        || !!mover.actor?.effects?.some(e => e.statuses?.has("flying") && !e.disabled);
+                        || !!mover.actor?.effects?.some(effect => effect.statuses?.has("flying") && !effect.disabled);
                     const endZ = triggerData.elevationToMove ?? fallbackZ;
                     let solidTypeIds = null;
-                    const getSolidTypeIds = () => {
+                    const getSolidTypeIds = () =>
+                    {
                         if (solidTypeIds)
                             return solidTypeIds;
                         solidTypeIds = new Set();
-                        for (const t of terrainAPI?.getTerrainTypes?.() || []) {
-                            if (t.usesHeight && t.isSolid)
-                                solidTypeIds.add(t.id);
+                        for (const terrain of terrainAPI?.getTerrainTypes?.() || [])
+                        {
+                            if (terrain.usesHeight && terrain.isSolid)
+                                solidTypeIds.add(terrain.id);
                         }
                         return solidTypeIds;
                     };
-                    const terrainTopAt = (cx, cy) => {
-                        try {
-                            const off = canvas.grid.getOffset({ x: cx, y: cy });
-                            const cell = terrainAPI.getCell(off.j, off.i) || [];
+                    const terrainTopAt = (cx, cy) =>
+                    {
+                        try
+                        {
+                            const gridOffset = canvas.grid.getOffset({ x: cx, y: cy });
+                            const cell = terrainAPI.getCell(gridOffset.j, gridOffset.i) || [];
                             const solids = getSolidTypeIds();
                             let top = 0;
-                            for (const t of cell) {
-                                if (solids.has(t.terrainTypeId)) {
-                                    const v = (t.elevation || 0) + (t.height || 0);
-                                    if (v > top)
-                                        top = v;
+                            for (const terrain of cell)
+                            {
+                                if (solids.has(terrain.terrainTypeId))
+                                {
+                                    const topValue = (terrain.elevation || 0) + (terrain.height || 0);
+                                    if (topValue > top)
+                                        top = topValue;
                                 }
                             }
                             return top;
-                        } catch {
+                        }
+                        catch
+                        {
                             return null;
                         }
                     };
-                    const moverZAt = (step) => {
+                    const moverZAt = (step) =>
+                    {
                         if (isFlying)
                             return endZ;
                         if (!terrainAPI)
@@ -1009,27 +1300,32 @@ export function getDefaultGeneralReactionRegistry() {
                     };
 
                     const scanEnd = Math.min(moveInfo.pathHexes.length, historyStart + triggerData.distanceToMove);
-                    for (let i = historyStart; i < scanEnd; i++) {
-                        const stepPos = moveInfo.pathHexes[i];
+                    for (let stepIndex = historyStart; stepIndex < scanEnd; stepIndex++)
+                    {
+                        const stepPos = moveInfo.pathHexes[stepIndex];
                         if (!stepPos)
                             continue;
                         const moverZ = is3D ? moverZAt(stepPos) : null;
 
-                        for (const other of allTokens) {
+                        for (const other of allTokens)
+                        {
                             if (!api.canEngage(mover, other))
                                 continue;
 
                             const planar = api.getMinGridDistance(mover, other, stepPos, false);
                             let total = planar;
-                            if (moverZ !== null) {
+                            if (moverZ !== null)
+                            {
                                 const otherZ = other.document.elevation ?? 0;
                                 total += Math.round(Math.abs(moverZ - otherZ) / sceneGridDist);
                             }
 
-                            if (total <= 1) {
-                                if (other.actor?.system?.size >= mover.actor?.system?.size) {
+                            if (total <= 1)
+                            {
+                                if (other.actor?.system?.size >= mover.actor?.system?.size)
+                                {
                                     stoppedBy = other;
-                                    interceptIndex = i;
+                                    interceptIndex = stepIndex;
                                     break;
                                 }
                             }
@@ -1038,13 +1334,14 @@ export function getDefaultGeneralReactionRegistry() {
                             break;
                     }
 
-                    if (stoppedBy && interceptIndex < moveInfo.pathHexes.length - 1) {
+                    if (stoppedBy && interceptIndex < moveInfo.pathHexes.length - 1)
+                    {
                         const pt = moveInfo.pathHexes.getPathPositionAt(interceptIndex);
                         const interceptPoint = pt || moveInfo.pathHexes[interceptIndex];
                         await triggerData.changeTriggeredMove(interceptPoint, { stopTokenId: stoppedBy.id }, `Stopped by Engagement (${stoppedBy.name})`, true);
                     }
                 }
-            }
+            }]
         },
         "Disengage": {
             category: "General",
@@ -1059,7 +1356,8 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["Disengage"],
@@ -1080,14 +1378,17 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                evaluate: function (triggerType, triggerData) {
-                    if (!triggerData.actionData?.flowState?.la_extraData?.selectedTurns) {
+                evaluate: function (triggerType, triggerData)
+                {
+                    if (!triggerData.actionData?.flowState?.la_extraData?.selectedTurns)
+                    {
                         ui.notifications.warn('Reactor Meltdown: no turn count provided.');
                         return false;
                     }
                     return true;
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const selectedTurns = triggerData.actionData.flowState.la_extraData.selectedTurns;
                     const validTokens = await api.applyEffectsToTokens({
                         tokens: [reactorToken],
@@ -1104,12 +1405,14 @@ export function getDefaultGeneralReactionRegistry() {
                 triggerOther: false,
                 autoActivate: true,
                 outOfCombat: true,
-                evaluate: function (triggerType, triggerData) {
+                evaluate: function (triggerType, triggerData)
+                {
                     return triggerData.statusId === 'reactor_meltdown';
                 },
                 activationType: "code",
                 activationMode: "instead",
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     await api.startChoiceCard({
                         mode: "or",
                         title: "Reactor Explosion",
@@ -1118,7 +1421,8 @@ export function getDefaultGeneralReactionRegistry() {
                         choices: [{
                             text: "Trigger Reactor Explosion",
                             icon: "cci cci-boom",
-                            callback: async () => {
+                            callback: async () =>
+                            {
                                 await api.executeReactorExplosion(reactorToken);
                             }
                         }]
@@ -1138,20 +1442,23 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName)
+            {
                 const mechActor = reactorToken.actor;
-                if (mechActor?.type !== 'mech') {
+                if (mechActor?.type !== 'mech')
+                {
                     ui.notifications.warn('Eject: this action must be used by a mech token.');
                     return false;
                 }
 
                 const pilotRef = mechActor.system.pilot;
-                const idStr = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
-                const pilotActor = idStr
-                    ? (idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr))
+                const pilotId = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
+                const pilotActor = pilotId
+                    ? (pilotId.startsWith('Actor.') ? fromUuidSync(pilotId) : game.actors.get(pilotId))
                     : null;
 
-                if (!pilotActor) {
+                if (!pilotActor)
+                {
                     ui.notifications.warn(`Eject: no linked pilot found on ${mechActor.name}.`);
                     return false;
                 }
@@ -1160,12 +1467,13 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const mechActor = reactorToken.actor;
 
                 const pilotRef = mechActor.system.pilot;
-                const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
-                const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
+                const pilotId = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
+                const pilotActor = pilotId.startsWith('Actor.') ? fromUuidSync(pilotId) : game.actors.get(pilotId);
 
                 const placed = await api.placeToken({
                     actor: pilotActor,
@@ -1202,7 +1510,8 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"],
@@ -1228,7 +1537,8 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.removeEffectsByNameFromTokens({
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
@@ -1248,7 +1558,8 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["hidden"],
@@ -1266,7 +1577,8 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: false,
             activationType: "none",
-            onInit: async function (token, item, api) {
+            onInit: async function (token, item, api)
+            {
                 if (!api || !token.actor)
                     return;
                 if (token.actor.type !== "deployable" || token.actor.system?.type !== "Mine")
@@ -1290,7 +1602,8 @@ export function getDefaultGeneralReactionRegistry() {
             autoActivate: true,
             activationType: "code",
             activationMode: "instead",
-            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const actor = reactorToken.actor;
                 if (actor?.type !== "deployable" || actor.system?.type !== "Mine")
                     return false;
@@ -1299,7 +1612,8 @@ export function getDefaultGeneralReactionRegistry() {
                     return false;
                 return true;
             },
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: [{
@@ -1326,7 +1640,8 @@ export function getDefaultGeneralReactionRegistry() {
                     outOfCombat: true,
                     activationType: "code",
                     activationMode: "instead",
-                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                    {
                         if (triggerData.statusId !== "armed")
                             return false;
                         const actor = reactorToken.actor;
@@ -1334,7 +1649,8 @@ export function getDefaultGeneralReactionRegistry() {
                             return false;
                         return !api.getActorFlags(actor, "customMineDetection");
                     },
-                    activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                    {
                         if (api.findAura(reactorToken, "LA_MineZone"))
                             return;
                         const radius = String(api.getActorFlags(reactorToken.actor, "mineDetectionRadius") ?? 1);
@@ -1354,7 +1670,8 @@ export function getDefaultGeneralReactionRegistry() {
                             macros: [{
                                 mode: "ENTER",
                                 targetTokens: disposition,
-                                function: function (token, parent, aura, options) {
+                                function: function (token, parent, aura, options)
+                                {
                                     if (options?.isInit || options?.isPreview)
                                         return;
                                     if (!game.users.activeGM?.isSelf)
@@ -1369,7 +1686,8 @@ export function getDefaultGeneralReactionRegistry() {
                                     if (!api.findEffectOnToken(mine, "armed"))
                                         return;
 
-                                    const detonate = async () => {
+                                    const detonate = async () =>
+                                    {
                                         await api.removeEffectsByNameFromTokens({
                                             tokens: [mine],
                                             effectNames: ["Armed"]
@@ -1392,7 +1710,8 @@ export function getDefaultGeneralReactionRegistry() {
                                             {
                                                 text: "Try disarm (SYS)",
                                                 icon: "fas fa-screwdriver",
-                                                callback: async () => {
+                                                callback: async () =>
+                                                {
                                                     const result = await api.executeStatRoll(
                                                         mover.actor,
                                                         "SYS",
@@ -1400,7 +1719,8 @@ export function getDefaultGeneralReactionRegistry() {
                                                         10,
                                                         { sendToOwner: true }
                                                     );
-                                                    if (result?.passed) {
+                                                    if (result?.passed)
+                                                    {
                                                         await api.removeEffectsByNameFromTokens({
                                                             tokens: [mine],
                                                             effectNames: ["Armed"]
@@ -1409,9 +1729,9 @@ export function getDefaultGeneralReactionRegistry() {
                                                             speaker: ChatMessage.getSpeaker({ actor: mover.actor }),
                                                             content: "<b>" + mover.name + "</b> disarmed <b>" + mine.name + "</b>."
                                                         });
-                                                    } else if (result?.completed) {
-                                                        await detonate();
                                                     }
+                                                    else if (result?.completed)
+                                                        await detonate();
                                                 }
                                             },
                                             { text: "Let pass", icon: "fas fa-times" }
@@ -1430,13 +1750,16 @@ export function getDefaultGeneralReactionRegistry() {
                     outOfCombat: true,
                     activationType: "code",
                     activationMode: "instead",
-                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                    evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+                    {
                         if (triggerData.statusId !== "armed")
                             return false;
                         return !api.getActorFlags(reactorToken.actor, "customMineDetection");
                     },
-                    activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                        for (let i = 0; i < 10; i++) {
+                    activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                    {
+                        for (let i = 0; i < 10; i++)
+                        {
                             await api.deleteAuras(reactorToken, { name: "LA_MineZone" });
                             if (!api.findAura(reactorToken, "LA_MineZone"))
                                 break;
@@ -1457,18 +1780,22 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const squeezeProne = api.findEffectOnToken(reactorToken, e =>
                     e.statuses?.has("prone") &&
                     e.flags?.['lancer-automations']?.squeezeSource === reactorToken.id
                 );
-                if (squeezeProne) {
+                if (squeezeProne)
+                {
                     await api.removeEffectsByNameFromTokens({
                         tokens: [reactorToken],
                         effectNames: ["prone"],
                         extraFlags: { squeezeSource: reactorToken.id }
                     });
-                } else {
+                }
+                else
+                {
                     await api.applyEffectsToTokens({
                         tokens: [reactorToken],
                         effectNames: ["prone"],
@@ -1487,18 +1814,21 @@ export function getDefaultGeneralReactionRegistry() {
             triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
-            evaluate: function (triggerType, triggerData, reactorToken) {
+            evaluate: function (triggerType, triggerData, reactorToken)
+            {
                 const mechActor = reactorToken.actor;
-                if (mechActor?.type !== 'mech') {
+                if (mechActor?.type !== 'mech')
+                {
                     ui.notifications.warn('Dismount: this action must be used by a mech token.');
                     return false;
                 }
                 const pilotRef = mechActor.system.pilot;
-                const idStr = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
-                const pilotActor = idStr
-                    ? (idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr))
+                const pilotId = pilotRef ? (typeof pilotRef === 'object' ? pilotRef.id : pilotRef) : null;
+                const pilotActor = pilotId
+                    ? (pilotId.startsWith('Actor.') ? fromUuidSync(pilotId) : game.actors.get(pilotId))
                     : null;
-                if (!pilotActor) {
+                if (!pilotActor)
+                {
                     ui.notifications.warn(`Dismount: no linked pilot found on ${mechActor.name}.`);
                     return false;
                 }
@@ -1506,11 +1836,12 @@ export function getDefaultGeneralReactionRegistry() {
             },
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 const mechActor = reactorToken.actor;
                 const pilotRef = mechActor.system.pilot;
-                const idStr = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
-                const pilotActor = idStr.startsWith('Actor.') ? fromUuidSync(idStr) : game.actors.get(idStr);
+                const pilotId = typeof pilotRef === 'object' ? pilotRef.id : pilotRef;
+                const pilotActor = pilotId.startsWith('Actor.') ? fromUuidSync(pilotId) : game.actors.get(pilotId);
                 const placed = await api.placeToken({
                     actor: pilotActor,
                     range: 1,
@@ -1534,7 +1865,8 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
                 await api.executeScanOnActivation(reactorToken);
             }
         },
@@ -1549,31 +1881,39 @@ export function getDefaultGeneralReactionRegistry() {
             outOfCombat: true,
             activationType: "code",
             activationMode: "instead",
-            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                const isPilot = reactorToken.actor?.type === 'pilot';
+                const range = isPilot ? 5 : (reactorToken.actor?.system?.sensor_range ?? null);
                 const targets = await api.chooseToken(reactorToken, {
                     title: "SEARCH",
                     count: 1,
-                    range: reactorToken.actor?.system?.sensor_range ?? null,
+                    range,
                     includeHidden: true
                 });
                 if (!targets?.length)
                     return;
                 const targetToken = targets[0];
                 await actionFX.playSearchFX(reactorToken, targetToken);
-                const result = await api.executeContestedCheck(
-                    reactorToken, "SYS",
-                    targetToken, "AGI",
-                    { title: "SEARCH - SYSTEMS vs AGILITY", sendToOwner: true }
-                );
+                const checkTitle = isPilot ? "SEARCH - Skill Check" : "SEARCH - SYSTEMS vs AGILITY";
+                const result = await api.openHaseContestCard({
+                    tokenA: reactorToken,
+                    skillA: "SYS",
+                    tokenB: targetToken,
+                    skillB: "AGI",
+                    title: checkTitle,
+                    sendToOwner: true,
+                });
                 if (!result?.completed)
                     return;
-                if (result.winner === reactorToken.actor) {
+                if (result.winner === reactorToken.actor)
+                {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
                     await actionFX.playSearchFoundFX(targetToken);
-                } else {
-                    await actionFX.playSearchFailFX(targetToken);
                 }
+                else
+                    await actionFX.playSearchFailFX(targetToken);
             }
         }
 
@@ -1593,24 +1933,27 @@ export function getDefaultGeneralReactionRegistry() {
         actionType: "Quick Action",
         activationType: "code",
         activationMode: "instead",
-        evaluate: function (triggerType, triggerData, reactorToken) {
+        evaluate: function (triggerType, triggerData, reactorToken)
+        {
             if (triggerType === "onActivation")
                 return reactorToken.actor?.type === 'pilot';
-            if (triggerType === "onStatusRemoved") {
+            if (triggerType === "onStatusRemoved")
+            {
                 const effectName = triggerData.effect?.name ?? triggerData.statusId ?? "";
                 return reactorToken.id === triggerData.triggeringToken?.id
                     && effectName.startsWith("Mount:");
             }
             return false;
         },
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            if (triggerType === "onActivation") {
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            if (triggerType === "onActivation")
+            {
                 if (reactorToken.actor?.type !== 'pilot')
                     return;
                 const pilotName = reactorToken.actor.name;
                 const pilotActorId = reactorToken.actor.id;
 
-                // Choose mech at range 1
                 const targets = await api.chooseToken(reactorToken, {
                     range: 1,
                     includeSelf: false,
@@ -1625,21 +1968,24 @@ export function getDefaultGeneralReactionRegistry() {
 
                 await actionFX.playMountFX(reactorToken, mechToken);
 
-                // Apply Mount effect, store pilot ref
-                await api.setEffect(
-                    mechToken.id,
-                    { name: `Mount: ${pilotName}`, isCustom: true },
-                    { label: 'indefinite' },
-                    `${pilotName} is mounted`,
-                    reactorToken.id,
-                    { pilotActorId }
-                );
+                const isOwnMech = mechToken.actor?.system?.pilot?.value?.id === pilotActorId;
+                if (!isOwnMech)
+                {
+                    await api.setEffect(
+                        mechToken.id,
+                        { name: `Mount: ${pilotName}`, isCustom: true },
+                        { label: 'indefinite' },
+                        `${pilotName} is mounted`,
+                        reactorToken.id,
+                        { pilotActorId }
+                    );
+                }
 
-                // Remove pilot token
                 await reactorToken.document.delete();
             }
 
-            if (triggerType === "onStatusRemoved") {
+            if (triggerType === "onStatusRemoved")
+            {
                 // Respawn pilot on dismount
                 const pilotActorId = triggerData.effect?.flags?.['lancer-automations']?.pilotActorId;
                 if (!pilotActorId)
@@ -1672,7 +2018,8 @@ export function getDefaultGeneralReactionRegistry() {
         outOfCombat: true,
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
             const targets = await api.chooseToken(reactorToken, {
                 range: 1,
                 includeSelf: false,
@@ -1686,14 +2033,18 @@ export function getDefaultGeneralReactionRegistry() {
                 return;
             await actionFX.playJockeyFX(reactorToken, mechToken);
 
-            const result = await api.executeContestedCheck(
-                reactorToken, "GRIT",
-                mechToken,    "HULL",
-                { title: "JOCKEY - GRIT vs HULL", sendToOwner: true }
-            );
+            const result = await api.openHaseContestCard({
+                tokenA: reactorToken,
+                skillA: "GRIT",
+                tokenB: mechToken,
+                skillB: "HULL",
+                title: "JOCKEY - GRIT vs HULL",
+                sendToOwner: true,
+            });
             if (!result?.completed)
                 return;
-            if (result.winner !== reactorToken.actor) {
+            if (result.winner !== reactorToken.actor)
+            {
                 ui.notifications.info(`${reactorToken.name} failed to Jockey ${mechToken.name}.`);
                 return;
             }
@@ -1707,7 +2058,8 @@ export function getDefaultGeneralReactionRegistry() {
                     {
                         text: `Distract <span style="color:#aaa;font-size:0.85em;">-IMPAIR + SLOW</span>`,
                         icon: "modules/lancer-automations/icons/rope-dart.svg",
-                        callback: async () => {
+                        callback: async () =>
+                        {
                             await api.applyEffectsToTokens({
                                 tokens: [mechToken],
                                 effectNames: ['impaired', 'slow'],
@@ -1718,14 +2070,16 @@ export function getDefaultGeneralReactionRegistry() {
                     {
                         text: `Shred <span style="color:#aaa;font-size:0.85em;">-2 Heat</span>`,
                         icon: "systems/lancer/assets/icons/white/condition_shredded.svg",
-                        callback: async () => {
+                        callback: async () =>
+                        {
                             await api.executeDamageRoll(reactorToken, [mechToken], '2', 'Heat', `${reactorToken.name} - Jockey (Shred)`);
                         }
                     },
                     {
                         text: `Damage <span style="color:#aaa;font-size:0.85em;">-4 Kinetic</span>`,
                         icon: "systems/lancer/assets/icons/melee.svg",
-                        callback: async () => {
+                        callback: async () =>
+                        {
                             await api.executeDamageRoll(reactorToken, [mechToken], '4', 'Kinetic', `${reactorToken.name} - Jockey (Damage)`);
                         }
                     },
@@ -1749,14 +2103,17 @@ export function getDefaultGeneralReactionRegistry() {
         triggerOther: false,
         autoActivate: true,
         outOfCombat: true,
-        evaluate: function (_triggerType, _triggerData, _reactorToken, _item, _activationName, _api) {
+        evaluate: function (_triggerType, _triggerData, _reactorToken, _item, _activationName, _api)
+        {
             return true;
         },
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
             const speed = reactorToken.actor?.system?.speed ?? 0;
             api.increaseMovementCap(reactorToken, speed);
+            api.recordBoostCast?.(reactorToken, speed);
             await gainAction(reactorToken, 'move');
             await actionFX.playBoostFX(reactorToken);
         }
@@ -1773,7 +2130,8 @@ export function getDefaultGeneralReactionRegistry() {
         outOfCombat: true,
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
             await gainAction(reactorToken, 'quick');
         }
     };
@@ -1789,7 +2147,8 @@ export function getDefaultGeneralReactionRegistry() {
         actionType: "Free",
         activationType: "code",
         activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
             const roll = await new Roll("1d6").evaluate();
             await roll.toMessage({
                 flavor: `${reactorToken.name} — Overcharge Heat`,
@@ -1803,10 +2162,14 @@ export function getDefaultGeneralReactionRegistry() {
         }
     };
 
-    function _guardianBulwarkAuraMode() {
-        try {
+    function _guardianBulwarkAuraMode()
+    {
+        try
+        {
             return game.settings.get('lancer-automations', 'guardianBulwarkAuraMode') || 'always';
-        } catch {
+        }
+        catch
+        {
             return 'always';
         }
     }
@@ -1824,17 +2187,20 @@ export function getDefaultGeneralReactionRegistry() {
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData) {
+                evaluate: function (triggerType, triggerData)
+                {
                     return triggerData.statusId === 'guardian';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const mode = _guardianBulwarkAuraMode();
                     if (mode === 'off')
                         return;
                     if (api.findAura(reactorToken, "LA_Guardian") || _guardianAuraPending.has(reactorToken.id))
                         return;
                     _guardianAuraPending.add(reactorToken.id);
-                    try {
+                    try
+                    {
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Guardian",
                             unified: false,
@@ -1851,7 +2217,9 @@ export function getDefaultGeneralReactionRegistry() {
                             onlyEnabledInCombat: mode === 'combat',
                             nonOwnerVisibility: { default: true }
                         }));
-                    } finally {
+                    }
+                    finally
+                    {
                         _guardianAuraPending.delete(reactorToken.id);
                     }
                 }
@@ -1864,12 +2232,15 @@ export function getDefaultGeneralReactionRegistry() {
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData) {
+                evaluate: function (triggerType, triggerData)
+                {
                     return triggerData.statusId === 'guardian';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     _guardianAuraPending.delete(reactorToken.id);
-                    for (let i = 0; i < 10; i++) {
+                    for (let i = 0; i < 10; i++)
+                    {
                         await api.deleteAuras(reactorToken, { name: "LA_Guardian" });
                         if (!api.findAura(reactorToken, "LA_Guardian"))
                             break;
@@ -1892,17 +2263,20 @@ export function getDefaultGeneralReactionRegistry() {
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData) {
+                evaluate: function (triggerType, triggerData)
+                {
                     return triggerData.statusId === 'bulwark';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     const mode = _guardianBulwarkAuraMode();
                     if (mode === 'off')
                         return;
                     if (api.findAura(reactorToken, "LA_Bulwark") || _bulwarkAuraPending.has(reactorToken.id))
                         return;
                     _bulwarkAuraPending.add(reactorToken.id);
-                    try {
+                    try
+                    {
                         await api.createAura(reactorToken, api.scaleAuraStroke({
                             name: "LA_Bulwark",
                             unified: false,
@@ -1919,7 +2293,9 @@ export function getDefaultGeneralReactionRegistry() {
                             onlyEnabledInCombat: mode === 'combat',
                             nonOwnerVisibility: { default: true }
                         }));
-                    } finally {
+                    }
+                    finally
+                    {
                         _bulwarkAuraPending.delete(reactorToken.id);
                     }
                 }
@@ -1932,12 +2308,15 @@ export function getDefaultGeneralReactionRegistry() {
                 outOfCombat: true,
                 activationType: "code",
                 activationMode: "instead",
-                evaluate: function (triggerType, triggerData) {
+                evaluate: function (triggerType, triggerData)
+                {
                     return triggerData.statusId === 'bulwark';
                 },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+                {
                     _bulwarkAuraPending.delete(reactorToken.id);
-                    for (let i = 0; i < 10; i++) {
+                    for (let i = 0; i < 10; i++)
+                    {
                         await api.deleteAuras(reactorToken, { name: "LA_Bulwark" });
                         if (!api.findAura(reactorToken, "LA_Bulwark"))
                             break;

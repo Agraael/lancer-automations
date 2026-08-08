@@ -1,17 +1,21 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "3.4.5",
+    "version": "4.0.0",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "authors": [
         {
-            "name": "LaSossis"
+            "name": "LaSossis",
+            "url": "https://github.com/Agraael",
+            "github": "Agraael",
+            "patreon": "https://www.patreon.com/c/LaSossis",
+            "discord": "232918237107453962"
         }
     ],
     "url": "https://github.com/Agraael/lancer-automations",
     "manifest": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/lancer-automations/releases/download/3.4.5/module.zip",
+    "download": "https://github.com/Agraael/lancer-automations/releases/download/4.0.0/module.zip",
     "esmodules": [
         "scripts/combat/overwatch.js",
         "scripts/main.js",
@@ -19,7 +23,9 @@
         "scripts/combat/speed-provider.js",
         "scripts/tah/index.js",
         "scripts/setup/telemetry.js",
-        "scripts/setup/news.js"
+        "scripts/setup/news.js",
+        "scripts/Battelog/battlelog.js",
+        "scripts/Battelog/recap.js"
     ],
     "scripts": [
         "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"
@@ -27,7 +33,8 @@
     "styles": [
         "styles/codemirror-dark.css",
         "styles/interactive-tools.css",
-        "styles/tah.css"
+        "styles/tah.css",
+        "styles/battelog.css"
     ],
     "compatibility": {
         "minimum": "13.351",

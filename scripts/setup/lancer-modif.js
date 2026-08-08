@@ -1,41 +1,31 @@
-/**
- * Lancer System Modifications
- *
- * Features that patch or extend the Lancer system without editing its bundle.
- *
- * === Item Disabled System ===
- * Allows marking mech weapons, mech systems, NPC features, and weapon mods as
- * "disabled".  Disabled items cannot be activated through flows and display a
- * visual indicator (power-off icon + dimmed header) on actor sheets.
- * Storage: `system.disabled` (boolean) directly on the item document.
- *
- * === Extra Trackable Attributes ===
- * Adds action_tracker.move / action_tracker.reaction to token resource bar
- * options for mechs, NPCs, and pilots.
- */
+// Lancer system patches applied at init/ready, without editing the system bundle.
 
-// ---------------------------------------------------------------------------
-// Schema extension — add `disabled` field to item data models
-// ---------------------------------------------------------------------------
+// Schema extension: add `disabled` field to item data models
 
 /**
  * Inject `disabled` BooleanField into item schemas. Must be called during `init`.
  * Without this, `item.update({'system.disabled': true})` is silently ignored.
  */
-export function injectDisabledSchemaField() {
+export function injectDisabledSchemaField()
+{
     const BooleanField = foundry.data.fields.BooleanField;
     const modelKeys = ['mech_weapon', 'mech_system', 'npc_feature', 'weapon_mod'];
     let injected = 0;
-    for (const key of modelKeys) {
+    for (const key of modelKeys)
+    {
         const model = CONFIG.Item.dataModels?.[key];
         if (!model?.schema)
             continue;
 
-        if (!model.schema.fields.disabled) {
-            try {
+        if (!model.schema.fields.disabled)
+        {
+            try
+            {
                 model.schema.fields.disabled = new BooleanField({ initial: false });
                 injected++;
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`lancer-automations | Could not inject disabled field into ${key}:`, e);
             }
         }
@@ -44,39 +34,40 @@ export function injectDisabledSchemaField() {
         console.log(`lancer-automations | Injected disabled field into ${injected} item schema(s)`);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /** Item types that support the disabled state. */
 const DISABLEABLE_TYPES = new Set(['mech_weapon', 'mech_system', 'npc_feature', 'weapon_mod']);
 
 /** @returns {boolean} */
-function isDisableable(item) {
+function isDisableable(item)
+{
     return item?.documentName === 'Item' && DISABLEABLE_TYPES.has(item.type);
 }
 
 /** @returns {boolean} */
-function isItemDisabled(item) {
+function isItemDisabled(item)
+{
     return !!item?.system?.disabled;
 }
 
 /** @returns {Promise<Item>} */
-async function setItemDisabled(item, disabled) {
+async function setItemDisabled(item, disabled)
+{
     return item.update({ 'system.disabled': disabled });
 }
 
-// ---------------------------------------------------------------------------
-// 1. Flow step – block disabled items
-// ---------------------------------------------------------------------------
+// 1. Flow step: block disabled items
 
-async function checkItemDisabled(state) {
+async function checkItemDisabled(state)
+{
     if (!state.item)
         return true;
     if (!isDisableable(state.item))
         return true;
 
-    if (isItemDisabled(state.item)) {
+    if (isItemDisabled(state.item))
+    {
         const isSystem =
             state.item.type === 'mech_system' ||
             (state.item.type === 'npc_feature' && state.item.system?.type !== 'Weapon');
@@ -87,11 +78,10 @@ async function checkItemDisabled(state) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
 // 2. Flow registration
-// ---------------------------------------------------------------------------
 
-export function registerDisabledFlowSteps(flowSteps, flows) {
+export function registerDisabledFlowSteps(flowSteps, flows)
+{
     flowSteps.set('lancer-automations:checkItemDisabled', checkItemDisabled);
 
     // Insert right after checkItemDestroyed in every flow that has it
@@ -103,38 +93,33 @@ export function registerDisabledFlowSteps(flowSteps, flows) {
         'SystemFlow',
         'CoreActiveFlow',
     ];
-    for (const name of targets) {
+    for (const name of targets)
         flows.get(name)?.insertStepAfter('checkItemDestroyed', 'lancer-automations:checkItemDisabled');
-    }
 
     // Repair: clear disabled flags after the full-repair executes
     flowSteps.set('lancer-automations:clearDisabledOnRepair', clearDisabledOnRepair);
     flows.get('FullRepairFlow')?.insertStepAfter('executeFullRepair', 'lancer-automations:clearDisabledOnRepair');
 }
 
-async function clearDisabledOnRepair(state) {
+async function clearDisabledOnRepair(state)
+{
     if (!state.actor)
         return true;
     const updates = [];
-    for (const item of state.actor.items) {
-        if (isDisableable(item) && isItemDisabled(item)) {
+    for (const item of state.actor.items)
+    {
+        if (isDisableable(item) && isItemDisabled(item))
             updates.push({ _id: item.id, 'system.disabled': false });
-        }
     }
-    if (updates.length) {
+    if (updates.length)
         await state.actor.updateEmbeddedDocuments('Item', updates);
-    }
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Permanent statuses survive Full Repair.
-// snapshotPermanentEffects runs before executeFullRepair (which calls
-// effectHelper.removeAllStatuses); restorePermanentEffects re-creates them after.
-// Marker: effect.flags['lancer-automations'].duration.label === 'permanent'.
-// ---------------------------------------------------------------------------
+// Permanent statuses survive Full Repair; marker: flags['lancer-automations'].duration.label === 'permanent'.
 
-export function registerPermanentStatusFlowSteps(flowSteps, flows) {
+export function registerPermanentStatusFlowSteps(flowSteps, flows)
+{
     flowSteps.set('lancer-automations:snapshotPermanentEffects', snapshotPermanentEffects);
     flowSteps.set('lancer-automations:restorePermanentEffects', restorePermanentEffects);
     const repair = flows.get('FullRepairFlow');
@@ -142,21 +127,24 @@ export function registerPermanentStatusFlowSteps(flowSteps, flows) {
     repair?.insertStepAfter('executeFullRepair', 'lancer-automations:restorePermanentEffects');
 }
 
-async function snapshotPermanentEffects(state) {
+async function snapshotPermanentEffects(state)
+{
     if (!state.actor || !state.data)
         return true;
     const perm = state.actor.effects
         .filter(e => e.getFlag('lancer-automations', 'duration')?.label === 'permanent')
-        .map(e => {
-            const data = e.toObject();
-            delete data._id;
-            return data;
+        .map(effect =>
+        {
+            const effectData = effect.toObject();
+            delete effectData._id;
+            return effectData;
         });
     state.data._permEffects = perm;
     return true;
 }
 
-async function restorePermanentEffects(state) {
+async function restorePermanentEffects(state)
+{
     const perm = state.data?._permEffects;
     if (!state.actor || !perm?.length)
         return true;
@@ -164,27 +152,31 @@ async function restorePermanentEffects(state) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// 3. Context menu — inject into Lancer's tippy menus
-// ---------------------------------------------------------------------------
+// 3. Context menu: inject into Lancer's tippy menus
 
 /** Resolve item from a context-menu target (UUID on closest `.set[data-uuid]`). */
-function _resolveItem(el) {
+function _resolveItem(el)
+{
     const domEl = el instanceof $ ? el[0] : el;
     const setEl = domEl?.closest?.('.set[data-uuid]') ?? domEl?.closest?.('[data-uuid]');
     const uuid = setEl?.dataset?.uuid;
     if (!uuid)
         return null;
-    try {
+    try
+    {
         return fromUuidSync(uuid);
-    } catch {
+    }
+    catch
+    {
         return null;
     }
 }
 
 /** Extend tippy context menus with "Mark Disabled / Not Disabled" for disableable items. */
-function _injectDisabledContextMenu(jHtml) {
-    jHtml.find('.lancer-context-menu').each(function () {
+function _injectDisabledContextMenu(jHtml)
+{
+    jHtml.find('.lancer-context-menu').each(function ()
+    {
         const tippyInstance = this._tippy;
         if (!tippyInstance)
             return;
@@ -195,12 +187,14 @@ function _injectDisabledContextMenu(jHtml) {
 
         // Wrap onShow to inject our entry each time the menu opens
         const origOnShow = tippyInstance.props.onShow;
-        tippyInstance.props.onShow = (instance) => {
+        tippyInstance.props.onShow = (instance) =>
+        {
             if (origOnShow)
                 origOnShow(instance);
 
             // Wait a tick for tippy to populate content
-            setTimeout(() => {
+            setTimeout(() =>
+            {
                 const content = instance.popper?.querySelector?.('.lancer-context-menu');
                 if (!content)
                     return;
@@ -215,41 +209,44 @@ function _injectDisabledContextMenu(jHtml) {
                 const entry = document.createElement('div');
                 entry.className = 'lancer-context-item la-disabled-entry';
                 entry.innerHTML = `${icon}${label}`;
-                entry.addEventListener('click', () => {
+                entry.addEventListener('click', () =>
+                {
                     setItemDisabled(item, !disabled);
                     instance.hide();
                 });
                 // Insert after Edit entry
                 const firstEntry = content.querySelector('.lancer-context-item');
-                if (firstEntry?.nextSibling) {
+                if (firstEntry?.nextSibling)
                     content.insertBefore(entry, firstEntry.nextSibling);
-                } else {
+                else
                     content.appendChild(entry);
-                }
             }, 0);
         };
     });
 }
 
-// ---------------------------------------------------------------------------
 // 4. Sheet visual updates + context-menu injection (renderActorSheet hook)
-// ---------------------------------------------------------------------------
 
-export function onRenderActorSheet(app, html, _data) {
+export function onRenderActorSheet(app, html, _data)
+{
     const jHtml = html instanceof $ ? html : $(html);
     const actor = app.actor ?? app.document;
     if (!actor)
         return;
 
     // Dim disabled items (base sheet)
-    jHtml.find('.set[data-uuid]').each(function () {
+    jHtml.find('.set[data-uuid]').each(function ()
+    {
         const uuid = this.dataset.uuid;
         if (!uuid)
             return;
         let item;
-        try {
+        try
+        {
             item = fromUuidSync(uuid);
-        } catch {
+        }
+        catch
+        {
             return;
         }
         if (!isDisableable(item) || !isItemDisabled(item))
@@ -260,20 +257,23 @@ export function onRenderActorSheet(app, html, _data) {
 
         // Swap icon to power-off (skip if already showing destroyed icon)
         const $icon = $header.find('> i, > .lancer-hit-icon > i').first();
-        if ($icon.length && !$icon.hasClass('mdi-cog')) {
+        if ($icon.length && !$icon.hasClass('mdi-cog'))
             $icon.attr('class', 'mdi mdi-power-off');
-        }
     });
 
-    // Disabled items (alt sheet) — show "DISABLED" in the subtitle like "DESTROYED"
-    jHtml.find('[data-uuid][data-accept-types]').each(function () {
+    // Disabled items (alt sheet): show "DISABLED" in the subtitle like "DESTROYED"
+    jHtml.find('[data-uuid][data-accept-types]').each(function ()
+    {
         const uuid = this.dataset.uuid;
         if (!uuid)
             return;
         let item;
-        try {
+        try
+        {
             item = fromUuidSync(uuid);
-        } catch {
+        }
+        catch
+        {
             return;
         }
         if (!isDisableable(item) || !isItemDisabled(item))
@@ -302,22 +302,103 @@ export function onRenderActorSheet(app, html, _data) {
     _injectDisabledContextMenu(jHtml);
     _injectAmmoDisplay(jHtml, actor);
     _injectAmmoDisplayAltSheet(jHtml, actor);
+    _injectPilotStressBar(jHtml, actor);
 }
 
-// ---------------------------------------------------------------------------
+// Stress bar/stat under HP on the pilot sheet, cloned from the HP element so the style matches exactly.
+function _injectPilotStressBar(jHtml, actor)
+{
+    if (actor.type !== 'pilot')
+        return;
+    const stress = actor.system?.bond_state?.stress;
+    if (!(stress?.max > 0))
+        return;
+    try
+    {
+        if (!game.settings.get('lancer-automations', 'statBarDefaultPilotStress'))
+            return;
+    }
+    catch
+    {
+        return;
+    }
+    if (jHtml.find('.la-pilot-stress-bar, .la-pilot-stress-stat').length)
+        return;
+
+    const stressValue = stress.value ?? 0;
+    const max = stress.max ?? 8;
+    const pct = Math.max(0, Math.min(100, (stressValue / max) * 100));
+    const $hpInput = jHtml.find('input[name="system.hp.value"]').first();
+
+    // Alt sheet: clone the HP StatusBar and replay its focus/blur editing (Svelte reactivity doesn't clone).
+    const $hpBar = $hpInput.closest('.la-statusbar');
+    if ($hpBar.length)
+    {
+        const $bar = $hpBar.clone().addClass('la-pilot-stress-bar');
+        $bar.find('.la-bar-h-current.-secondary, .la-bar-h-current.-tertiary').remove();
+        const $fill = $bar.find('.la-bar-h-current').first();
+        $fill.attr('class', ($fill.attr('class') || '').replace(/\bla-bckg-\S+/g, '').trim());
+        const restStyle = `--la-percent:${pct}%; background:#d9b800 !important;`;
+        $fill.attr('style', restStyle);
+        const $lbl = $bar.find('.la-damage__span').first();
+        if ($lbl.length)
+            $lbl.text('STRESS');
+        const $input = $bar.find('input').first();
+        const $span = $bar.find('.la-bar-h-progress__span');
+        $input.attr('name', 'system.bond_state.stress.value').val(stressValue);
+        $span.text(`${stressValue}/${max}`);
+        $input.on('focus', function ()
+        {
+            this.select();
+            $input.removeClass('la-text-transparent').addClass('la-text-text');
+            $span.addClass('-visibilityhidden');
+            $fill.attr('style', `--la-percent:${pct}%`).addClass('-pulse-bckg-prmy -fast');
+        });
+        $input.on('blur', function ()
+        {
+            $input.removeClass('la-text-text').addClass('la-text-transparent');
+            $span.removeClass('-visibilityhidden');
+            $fill.removeClass('-pulse-bckg-prmy -fast').attr('style', restStyle);
+        });
+        $input.on('change', async function ()
+        {
+            const raw = String(this.value).trim();
+            const next = /^[+-]/.test(raw) ? stressValue + Number(raw) : Number(raw);
+            if (Number.isFinite(next))
+                await actor.update({ 'system.bond_state.stress.value': Math.max(0, Math.min(max, Math.round(next))) });
+        });
+        $hpBar.after($bar);
+        return;
+    }
+
+    // Base sheet: clone the HP compact-stat (native form submit handles the edit).
+    const $hpStat = $hpInput.closest('.compact-stat');
+    if (!$hpStat.length)
+        return;
+    const $stat = $hpStat.clone().addClass('la-pilot-stress-stat');
+    $stat.find('i').first().attr('class', 'mdi mdi-brain i--4 i--dark');
+    $stat.find('input[name="system.hp.value"]').attr('name', 'system.bond_state.stress.value').val(stressValue);
+    $stat.find('.lancer-stat.minor').last().text(max);
+    $hpStat.after($stat);
+}
+
 // 4b. Ammo display on actor sheet
-// ---------------------------------------------------------------------------
 
 /** Inject clickable ammo list into mech_system collapsible bodies on actor sheets. */
-function _injectAmmoDisplay(jHtml, actor) {
-    jHtml.find('.lancer-system.set').each(function () {
+function _injectAmmoDisplay(jHtml, actor)
+{
+    jHtml.find('.lancer-system.set').each(function ()
+    {
         const uuid = this.dataset?.uuid;
         if (!uuid)
             return;
         let item;
-        try {
+        try
+        {
             item = fromUuidSync(uuid);
-        } catch {
+        }
+        catch
+        {
             return;
         }
         if (item?.type !== 'mech_system')
@@ -334,13 +415,13 @@ function _injectAmmoDisplay(jHtml, actor) {
         if (!$collapse.length)
             return;
 
-        // Action icon from parent item's first action
         const firstAction = item.system?.actions?.[0];
         const activation = firstAction?.activation || 'Free';
         const iconClass = _ammoActivationIcon(activation);
 
         let entries = '';
-        for (let i = 0; i < ammoArr.length; i++) {
+        for (let i = 0; i < ammoArr.length; i++)
+        {
             const ammo = ammoArr[i];
             if (!ammo.name)
                 continue;
@@ -373,7 +454,8 @@ function _injectAmmoDisplay(jHtml, actor) {
         const $ammo = $(ammoHtml);
 
         // USE button -> UseAmmoFlow
-        $ammo.find('.la-ammo-use').on('click', function (ev) {
+        $ammo.find('.la-ammo-use').on('click', function (ev)
+        {
             ev.stopPropagation();
             const ammoIndex = parseInt(this.dataset.ammoIndex);
             const itemUuid = this.dataset.itemUuid;
@@ -382,27 +464,31 @@ function _injectAmmoDisplay(jHtml, actor) {
 
         // Insert before the tags row
         const $tags = $collapse.children('.flexrow').last();
-        if ($tags.length) {
+        if ($tags.length)
             $tags.before($ammo);
-        } else {
+        else
             $collapse.append($ammo);
-        }
     });
 }
 
 /** Inject ammo display into lancer-alternative-sheets. */
-function _injectAmmoDisplayAltSheet(jHtml, actor) {
+function _injectAmmoDisplayAltSheet(jHtml, actor)
+{
     if (!jHtml.find('[data-accept-types="mech_system"]').length)
         return;
 
-    jHtml.find('[data-uuid][data-accept-types="mech_system"]').each(function () {
+    jHtml.find('[data-uuid][data-accept-types="mech_system"]').each(function ()
+    {
         const uuid = this.dataset?.uuid;
         if (!uuid)
             return;
         let item;
-        try {
+        try
+        {
             item = fromUuidSync(uuid);
-        } catch {
+        }
+        catch
+        {
             return;
         }
         if (item?.type !== 'mech_system')
@@ -419,7 +505,6 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
         if (!$content.length)
             return;
 
-        // Activation color from parent item's first action
         const firstAction = item.system?.actions?.[0];
         const activation = firstAction?.activation || 'Free';
         const colorClass = {
@@ -434,7 +519,8 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
         }[activation] || 'la-bckg-action--free';
 
         let entries = '';
-        for (let i = 0; i < ammoArr.length; i++) {
+        for (let i = 0; i < ammoArr.length; i++)
+        {
             const ammo = ammoArr[i];
             if (!ammo.name)
                 continue;
@@ -464,7 +550,8 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
                 </div>
             </div>`);
 
-        $ammo.find('.la-ammo-use').on('click', function (ev) {
+        $ammo.find('.la-ammo-use').on('click', function (ev)
+        {
             ev.stopPropagation();
             const ammoIndex = parseInt(this.dataset.ammoIndex);
             const itemUuid = this.dataset.itemUuid;
@@ -473,24 +560,26 @@ function _injectAmmoDisplayAltSheet(jHtml, actor) {
 
         // Insert before tags row
         const $tagsRow = $content.find('.la-flexrow.-wrapwrap').last();
-        if ($tagsRow.length) {
+        if ($tagsRow.length)
             $tagsRow.before($ammo);
-        } else {
+        else
             $content.append($ammo);
-        }
     });
 }
 
 /** Trigger UseAmmoFlow via the custom flow dispatch pattern. */
-export function TriggerUseAmmoFlow(itemUuid, ammoIndex) {
+export function TriggerUseAmmoFlow(itemUuid, ammoIndex)
+{
     const flowDef = game.lancer?.flows?.get('UseAmmoFlow');
-    if (!flowDef) {
+    if (!flowDef)
+    {
         ui.notifications?.error('UseAmmoFlow not registered. Is the flow registration enabled?');
         return;
     }
 
     const item = fromUuidSync(itemUuid);
-    if (!item?.actor) {
+    if (!item?.actor)
+    {
         ui.notifications?.error('Could not resolve item or actor for ammo flow.');
         return;
     }
@@ -498,13 +587,16 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex) {
     // Build GenericFlow from step-based definition
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
     const FlowBase = typeof StatRollFlow === 'function' ? Object.getPrototypeOf(StatRollFlow) : null;
-    if (!FlowBase) {
+    if (!FlowBase)
+    {
         ui.notifications?.error('Could not resolve Flow base class.');
         return;
     }
 
-    const GenericFlow = class extends FlowBase {
-        constructor(uuid, data) {
+    const GenericFlow = class extends FlowBase
+    {
+        constructor(uuid, data)
+        {
             super(uuid, data || {});
         }
     };
@@ -514,7 +606,8 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex) {
 }
 
 // UseAmmoFlow: standalone flow for using ammo from a mech_system.
-async function initUseAmmoData(state) {
+async function initUseAmmoData(state)
+{
     if (!state.data?.itemUuid || state.data.ammoIndex == null)
         throw new TypeError('UseAmmoFlow requires itemUuid and ammoIndex in state.data');
 
@@ -541,35 +634,42 @@ async function initUseAmmoData(state) {
     return true;
 }
 
-async function checkAmmoItemDestroyed(state) {
-    if (state.item?.system?.destroyed) {
+async function checkAmmoItemDestroyed(state)
+{
+    if (state.item?.system?.destroyed)
+    {
         ui.notifications.warn(`System ${state.item.name} is destroyed!`);
         return false;
     }
     return true;
 }
 
-async function checkAmmoItemDisabled(state) {
-    if (state.item?.system?.disabled) {
+async function checkAmmoItemDisabled(state)
+{
+    if (state.item?.system?.disabled)
+    {
         ui.notifications.warn(`System ${state.item.name} is disabled!`);
         return false;
     }
     return true;
 }
 
-async function checkAmmoItemLimited(state) {
+async function checkAmmoItemLimited(state)
+{
     if (!state.item?.isLimited?.())
         return true;
     const uses = state.item.system.uses;
     const cost = state.data.ammoCost ?? 1;
-    if ((uses?.value ?? 0) < cost) {
+    if ((uses?.value ?? 0) < cost)
+    {
         ui.notifications.warn(`${state.item.name} does not have enough charges! (need ${cost}, have ${uses?.value ?? 0})`);
         return false;
     }
     return true;
 }
 
-async function deductAmmoCost(state) {
+async function deductAmmoCost(state)
+{
     if (!state.item?.isLimited?.())
         return true;
     const cost = state.data.ammoCost ?? 1;
@@ -579,38 +679,42 @@ async function deductAmmoCost(state) {
 }
 
 /** Map activation type to CCI icon class. */
-function _ammoActivationIcon(activation) {
-    switch ((activation || '').toLowerCase()) {
-    case 'quick':      return 'cci cci-activation-quick';
-    case 'full':       return 'cci cci-activation-full';
-    case 'quick tech': case 'invade': return 'cci cci-tech-quick';
-    case 'full tech':  return 'cci cci-tech-full';
-    case 'reaction':   return 'cci cci-reaction';
-    case 'protocol':   return 'cci cci-protocol';
-    default:           return 'cci cci-free-action';
+function _ammoActivationIcon(activation)
+{
+    switch ((activation || '').toLowerCase())
+    {
+        case 'quick':      return 'cci cci-activation-quick';
+        case 'full':       return 'cci cci-activation-full';
+        case 'quick tech': case 'invade': return 'cci cci-tech-quick';
+        case 'full tech':  return 'cci cci-tech-full';
+        case 'reaction':   return 'cci cci-reaction';
+        case 'protocol':   return 'cci cci-protocol';
+        default:           return 'cci cci-free-action';
     }
 }
 
 /** Build type/size restriction tags. All false or all true = no restriction (hidden). */
-function _buildTypeSizeTags(allowedTypes, allowedSizes) {
+function _buildTypeSizeTags(allowedTypes, allowedSizes)
+{
     const tags = [];
-    const _collect = (checklist, label) => {
+    const _collect = (checklist, label) =>
+    {
         if (!checklist)
             return;
-        const enabled = Object.entries(checklist).filter(([, v]) => v).map(([k]) => k);
+        const enabled = Object.entries(checklist).filter(([, isChecked]) => isChecked).map(([k]) => k);
         const total = Object.keys(checklist).length;
         if (enabled.length === 0 || enabled.length === total)
             return;
-        for (const name of enabled) {
+        for (const name of enabled)
             tags.push(`<span class="lancer-tag compact-tag">${name}</span>`);
-        }
     };
     _collect(allowedSizes, 'Size');
     _collect(allowedTypes, 'Type');
     return tags.join(' ');
 }
 
-async function printAmmoCard(state) {
+async function printAmmoCard(state)
+{
     const typeSizeTags = _buildTypeSizeTags(
         state.data.ammoAllowedTypes, state.data.ammoAllowedSizes
     );
@@ -636,7 +740,8 @@ async function printAmmoCard(state) {
     return true;
 }
 
-export function registerUseAmmoFlow(flowSteps, flows) {
+export function registerUseAmmoFlow(flowSteps, flows)
+{
     flowSteps.set('lancer-automations:initUseAmmoData', initUseAmmoData);
     flowSteps.set('lancer-automations:checkAmmoItemDestroyed', checkAmmoItemDestroyed);
     flowSteps.set('lancer-automations:checkAmmoItemDisabled', checkAmmoItemDisabled);
@@ -657,11 +762,10 @@ export function registerUseAmmoFlow(flowSteps, flows) {
     });
 }
 
-// ---------------------------------------------------------------------------
 // 5. CSS injection
-// ---------------------------------------------------------------------------
 
-export function injectDisabledCSS() {
+export function injectDisabledCSS()
+{
     if (document.getElementById('la-item-disabled-css'))
         return;
     const style = document.createElement('style');
@@ -688,9 +792,11 @@ export function injectDisabledCSS() {
 }
 
 // Patch stat-roll-card to support embedButtons; runtime override of the system's partial.
-export async function patchStatRollCardTemplate() {
+export async function patchStatRollCardTemplate()
+{
     const path = 'systems/lancer/templates/chat/stat-roll-card.hbs';
-    try {
+    try
+    {
         let src = await fetch(path).then(r => r.text());
         if (src.includes('embedButtons'))
             return; // already patched
@@ -700,19 +806,23 @@ export async function patchStatRollCardTemplate() {
         );
         const compiled = Handlebars.compile(src);
         Handlebars.registerPartial(path, compiled);
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.error('lancer-automations | Failed to patch stat-roll-card template:', e);
     }
 }
 
 // Ammo editor injected into mech_system item sheets via renderItemSheet.
 // gen-control data attrs are handled by Lancer's sheet listeners.
-function _buildAmmoEditorHTML(item) {
+function _buildAmmoEditorHTML(item)
+{
     const ammoArr = item.system?.ammo ?? [];
     const path = 'system.ammo';
 
     let ammoDetail = '';
-    for (let i = 0; i < ammoArr.length; i++) {
+    for (let i = 0; i < ammoArr.length; i++)
+    {
         const ammo = ammoArr[i];
         ammoDetail += `
         <div class="card clipped" style="margin: 5px; padding: 10px; background: rgba(0,0,0,0.2);">
@@ -751,8 +861,9 @@ function _buildAmmoEditorHTML(item) {
     </div>`;
 }
 
-/** renderItemSheet hook — inject ammo editor into mech_system sheets. */
-export function onRenderItemSheet(app, html, _data) {
+/** renderItemSheet hook: inject ammo editor into mech_system sheets. */
+export function onRenderItemSheet(app, html, _data)
+{
     const item = app.item ?? app.document;
     if (!item || item.type !== 'mech_system')
         return;
@@ -761,7 +872,8 @@ export function onRenderItemSheet(app, html, _data) {
 
     // Inject after INTEGRATED ITEMS section
     const $sections = jHtml.find('.item-edit-arrayed');
-    const $integrated = $sections.filter(function () {
+    const $integrated = $sections.filter(function ()
+    {
         return $(this).find('.lancer-header').text().trim() === 'INTEGRATED ITEMS';
     });
 
@@ -769,9 +881,10 @@ export function onRenderItemSheet(app, html, _data) {
         return;
 
     const ammoHtml = _buildAmmoEditorHTML(item);
-    if ($integrated.length) {
+    if ($integrated.length)
         $integrated.after(ammoHtml);
-    } else {
+    else
+    {
         // Fallback: append at end of arrayed-edits container
         const $container = $sections.last().parent();
         if ($container.length)
@@ -781,9 +894,10 @@ export function onRenderItemSheet(app, html, _data) {
 
 /**
  * Per RAW, cover only applies to ranged attacks and melee throws.
- * The system always sets cover regardless of attack type -- this zeroes it for non-throw melee.
+ * The system always sets cover regardless of attack type; this zeroes it for non-throw melee.
  */
-async function stripCoverForMelee(state) {
+async function stripCoverForMelee(state)
+{
     if (!state.data?.acc_diff?.targets)
         return true;
 
@@ -794,15 +908,16 @@ async function stripCoverForMelee(state) {
     if (isThrow)
         state.data.is_throw = true;
 
-    if (isMelee && !isThrow) {
-        for (const t of state.data.acc_diff.targets) {
+    if (isMelee && !isThrow)
+    {
+        for (const t of state.data.acc_diff.targets)
             t.cover = 0;
-        }
     }
     return true;
 }
 
-export function registerMeleeCoverFix(flowSteps, flows) {
+export function registerMeleeCoverFix(flowSteps, flows)
+{
     flowSteps.set('lancer-automations:stripCoverForMelee', stripCoverForMelee);
 
     // Before showAttackHUD so the HUD displays correct cover
@@ -811,23 +926,26 @@ export function registerMeleeCoverFix(flowSteps, flows) {
 }
 
 // Add action_tracker fields to token resource bar options; call during ready.
-export function registerExtraTrackableAttributes() {
-    const ta = CONFIG.Actor.trackableAttributes;
-    if (!ta)
+export function registerExtraTrackableAttributes()
+{
+    const trackableAttributes = CONFIG.Actor.trackableAttributes;
+    if (!trackableAttributes)
         return;
 
-    const _push = (obj, arr, ...vals) => {
-        if (!obj?.[arr])
+    const _push = (attrs, key, ...vals) =>
+    {
+        if (!attrs?.[key])
             return;
-        for (const v of vals) {
-            if (!obj[arr].includes(v))
-                obj[arr].push(v);
+        for (const attr of vals)
+        {
+            if (!attrs[key].includes(attr))
+                attrs[key].push(attr);
         }
     };
 
-    _push(ta.mech, 'value', 'action_tracker.move', 'action_tracker.reaction', 'infection');
-    _push(ta.npc, 'value', 'action_tracker.reaction', 'action_tracker.move', 'infection');
-    _push(ta.pilot, 'value', 'action_tracker.move');
+    _push(trackableAttributes.mech, 'value', 'action_tracker.move', 'action_tracker.reaction', 'infection');
+    _push(trackableAttributes.npc, 'value', 'action_tracker.reaction', 'action_tracker.move', 'infection');
+    _push(trackableAttributes.pilot, 'value', 'action_tracker.move');
 }
 
 /**
@@ -846,8 +964,10 @@ const SYSTEM_FLOW_TYPES = new Set([
     // Add other system-native flow types here as needed
 ]);
 
-export function initCustomFlowDispatch() {
-    document.body.addEventListener('click', (ev) => {
+export function initCustomFlowDispatch()
+{
+    document.body.addEventListener('click', (ev) =>
+    {
         const button = ev.target?.closest?.('.flow-button[data-flow-type]');
         if (!button)
             return;
@@ -868,57 +988,64 @@ export function initCustomFlowDispatch() {
         ev.preventDefault();
 
         const actorId = button.dataset.actorId;
-        if (!actorId) {
+        if (!actorId)
+        {
             ui.notifications?.error(`No actor ID found on ${flowType} prompt button.`);
             return;
         }
 
         const actor = CONFIG.Actor.documentClass.fromUuidSync?.(actorId)
             ?? fromUuidSync(actorId);
-        if (!actor) {
+        if (!actor)
+        {
             ui.notifications?.error(`Invalid actor ID on ${flowType} prompt button.`);
             return;
         }
 
-        if (typeof customFlow === 'function') {
+        if (typeof customFlow === 'function')
             new customFlow(actor.uuid).begin();
-        } else if (customFlow.steps) {
-            // Step-based object -- create a generic Flow dynamically
+        else if (customFlow.steps)
+        {
+            // Step-based object: create a generic Flow dynamically
             const Flow = game.lancer?.flows?.get('StatRollFlow')?.__proto__;
-            if (!Flow) {
+            if (!Flow)
+            {
                 ui.notifications?.error(`Cannot resolve Flow base class for ${flowType}.`);
                 return;
             }
-            const GenericFlow = class extends Flow {
-                constructor(uuid, data) {
+            const GenericFlow = class extends Flow
+            {
+                constructor(uuid, data)
+                {
                     super(uuid, data || {});
                 }
             };
             GenericFlow.steps = customFlow.steps;
 
             let initialData = {};
-            if (button.dataset.checkType) {
+            if (button.dataset.checkType)
                 initialData.path = `system.${button.dataset.checkType}`;
-            }
             // Forward all data-* attributes
-            for (const [key, val] of Object.entries(button.dataset)) {
-                if (key !== 'flowType' && key !== 'actorId' && key !== 'checkType') {
-                    initialData[key] = val;
-                }
+            for (const [key, value] of Object.entries(button.dataset))
+            {
+                if (key !== 'flowType' && key !== 'actorId' && key !== 'checkType')
+                    initialData[key] = value;
             }
 
             new GenericFlow(actor.uuid, initialData).begin();
-        } else {
-            ui.notifications?.error(`Invalid flow structure for ${flowType}.`);
         }
+        else
+            ui.notifications?.error(`Invalid flow structure for ${flowType}.`);
     }, { capture: true });
 }
 
 /**
  * Call via API: game.modules.get('lancer-automations').api.repairLCPData()
  */
-export async function repairLCPData() {
-    if (!game.user.isGM) {
+export async function repairLCPData()
+{
+    if (!game.user.isGM)
+    {
         ui.notifications.error('Only the GM can run LCP data repair.');
         return;
     }
@@ -931,7 +1058,8 @@ export async function repairLCPData() {
     if (!confirmed)
         return;
 
-    try {
+    try
+    {
         const entryText = await (await fetch('/systems/lancer/lancer.mjs')).text();
         // v3 moved getOfficialData out of lancer.mjs into lancer-actor-<hash>.mjs.
         const actorMatch = entryText.match(/from\s+["']\.\/(lancer-actor-[^"']+\.mjs)["']/);
@@ -955,17 +1083,22 @@ export async function repairLCPData() {
         const rawWeaponByLid = new Map();
         const rawActionsByLid = new Map();
         const _actionBuckets = ['systems', 'weapons', 'frames', 'mods', 'pilot_gear', 'core_bonuses', 'talents', 'npc_features'];
-        for (const data of allData) {
-            for (const sys of data?.cp?.data?.systems ?? []) {
+        for (const data of allData)
+        {
+            for (const sys of data?.cp?.data?.systems ?? [])
+            {
                 if (sys.ammo?.length && sys.id)
                     rawAmmoByLid.set(sys.id, sys.ammo);
             }
-            for (const wpn of data?.cp?.data?.weapons ?? []) {
-                if (wpn.id)
-                    rawWeaponByLid.set(wpn.id, wpn);
+            for (const weapon of data?.cp?.data?.weapons ?? [])
+            {
+                if (weapon.id)
+                    rawWeaponByLid.set(weapon.id, weapon);
             }
-            for (const bucket of _actionBuckets) {
-                for (const entry of data?.cp?.data?.[bucket] ?? []) {
+            for (const bucket of _actionBuckets)
+            {
+                for (const entry of data?.cp?.data?.[bucket] ?? [])
+                {
                     if (entry?.id && entry.actions?.length)
                         rawActionsByLid.set(entry.id, entry.actions);
                 }
@@ -977,9 +1110,11 @@ export async function repairLCPData() {
         // swallow locked-compendium toasts; one persistent warn summarises at the end
         const _origError = ui.notifications.error.bind(ui.notifications);
         const _lockedRe = /locked compendium/i;
-        ui.notifications.error = (msg, opts) => {
+        ui.notifications.error = (msg, opts) =>
+        {
             const s = typeof msg === 'string' ? msg : String(msg ?? '');
-            if (_lockedRe.test(s)) {
+            if (_lockedRe.test(s))
+            {
                 console.warn('lancer-automations | suppressed:', s);
                 return null;
             }
@@ -987,46 +1122,58 @@ export async function repairLCPData() {
         };
 
         const lockedPacks = [];
-        try {
+        try
+        {
             const lancerPacks = ['world.mech-items', 'world.pilot-items', 'world.npc-items'];
-            for (const packId of lancerPacks) {
+            for (const packId of lancerPacks)
+            {
                 let pack = game.packs.get(packId);
                 if (!pack)
                     continue;
                 const wasLocked = pack.locked;
-                if (wasLocked) {
+                if (wasLocked)
+                {
                     await pack.configure({ locked: false });
                     pack = game.packs.get(packId) ?? pack;
                 }
-                if (pack.locked) {
+                if (pack.locked)
+                {
                     lockedPacks.push(packId);
                     continue;
                 }
                 let packFailed = false;
-                for (const doc of await pack.getDocuments()) {
+                for (const doc of await pack.getDocuments())
+                {
                     if (packFailed)
                         break;
-                    try {
+                    try
+                    {
                         if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid, rawActionsByLid))
                             fixed++;
-                    } catch (e) {
+                    }
+                    catch (e)
+                    {
                         const msg = String(e?.message ?? e);
-                        if (_lockedRe.test(msg)) {
+                        if (_lockedRe.test(msg))
+                        {
                             packFailed = true;
                             lockedPacks.push(packId);
                             console.warn(`lancer-automations | ${packId} rejected updates, aborting pack`);
-                        } else {
-                            console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
                         }
+                        else
+                            console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
                     }
                 }
                 if (wasLocked)
                     await (game.packs.get(packId) ?? pack).configure({ locked: true });
             }
-        } finally {
+        }
+        finally
+        {
             ui.notifications.error = _origError;
         }
-        if (lockedPacks.length) {
+        if (lockedPacks.length)
+        {
             ui.notifications.warn(
                 `Could not write to ${lockedPacks.join(', ')}. Open the Compendium tab, right-click each pack, ` +
                 `pick "Toggle Edit Lock", and re-run.`,
@@ -1035,34 +1182,39 @@ export async function repairLCPData() {
         }
 
         // Fix actor-owned items
-        for (const actor of game.actors) {
-            for (const item of actor.items) {
+        for (const actor of game.actors)
+        {
+            for (const item of actor.items)
+            {
                 if (await _fixItem(item, rawAmmoByLid, rawWeaponByLid))
                     fixed++;
             }
         }
 
         // Fix world items
-        for (const item of game.items) {
+        for (const item of game.items)
+        {
             if (await _fixItem(item, rawAmmoByLid, rawWeaponByLid))
                 fixed++;
         }
 
         ui.notifications.info(`Applied fixes to ${fixed} item(s).${fixed > 0 ? ' Reload recommended.' : ''}`, { permanent: fixed > 0 });
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.error('lancer-automations | repairLCPData failed:', e);
         ui.notifications.error(`Repair failed: ${e.message}. Check console.`);
     }
 }
 
 /** Case-insensitive checklist builder (mirrors the bundle fix). */
-function _makeTypeChecklist(types, validKeys) {
-    const lc = types.map(t => t.toLowerCase());
+function _makeTypeChecklist(types, validKeys)
+{
+    const lowerTypes = types.map(type => type.toLowerCase());
     const override = types.length === 0;
     const result = {};
-    for (const key of validKeys) {
-        result[key] = override || lc.includes(key.toLowerCase());
-    }
+    for (const key of validKeys)
+        result[key] = override || lowerTypes.includes(key.toLowerCase());
     return result;
 }
 
@@ -1070,7 +1222,8 @@ const _WEAPON_TYPES = ['CQB', 'Cannon', 'Launcher', 'Melee', 'Nexus', 'Rifle'];
 const _WEAPON_SIZES = ['Auxiliary', 'Main', 'Heavy', 'Superheavy'];
 
 /** Fix a single item from raw LCP source. Returns true if changed. */
-async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
+async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
+{
     const lid = item.system?.lid;
     if (!lid)
         return false;
@@ -1078,52 +1231,62 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
     const updates = {};
     let changed = false;
 
-    // --- Action name fixes ---
+    // Action name fixes
     const rawActions = rawActionsByLid?.get(lid);
-    if (Array.isArray(item.system?.actions) && item.system.actions.length) {
+    if (Array.isArray(item.system?.actions) && item.system.actions.length)
+    {
         let actionsChanged = false;
-        const fixedActions = item.system.actions.map((a, i) => {
-            const cur = (a?.name ?? '').trim();
+        const fixedActions = item.system.actions.map((action, i) =>
+        {
+            const cur = (action?.name ?? '').trim();
             if (cur && cur.toLowerCase() !== 'action')
-                return a;
+                return action;
             const raw = rawActions?.[i]?.name?.trim?.();
             const newName = (raw && raw.toLowerCase() !== 'action')
                 ? raw
                 : (item.system.actions.length > 1 ? `${item.name} ${i + 1}` : item.name);
             if (newName === cur)
-                return a;
+                return action;
             actionsChanged = true;
-            return { ...a, name: newName };
+            return { ...action, name: newName };
         });
-        if (actionsChanged) {
+        if (actionsChanged)
+        {
             updates['system.actions'] = fixedActions;
             changed = true;
         }
     }
 
-    // --- Ammo fixes ---
+    // Ammo fixes
     const rawAmmo = rawAmmoByLid.get(lid);
-    if (rawAmmo && item.system?.ammo?.length) {
-        const fixedAmmo = item.system.ammo.map((a, i) => {
+    if (rawAmmo && item.system?.ammo?.length)
+    {
+        const fixedAmmo = item.system.ammo.map((ammoEntry, i) =>
+        {
             const raw = rawAmmo[i];
             if (!raw)
-                return a;
-            const fix = { ...a };
+                return ammoEntry;
+            const fix = { ...ammoEntry };
 
-            if (!fix.description && raw.detail) {
+            if (!fix.description && raw.detail)
+            {
                 fix.description = raw.detail;
                 changed = true;
             }
-            if (raw.allowed_types && Array.isArray(raw.allowed_types)) {
+            if (raw.allowed_types && Array.isArray(raw.allowed_types))
+            {
                 const correct = _makeTypeChecklist(raw.allowed_types, _WEAPON_TYPES);
-                if (JSON.stringify(fix.allowed_types) !== JSON.stringify(correct)) {
+                if (JSON.stringify(fix.allowed_types) !== JSON.stringify(correct))
+                {
                     fix.allowed_types = correct;
                     changed = true;
                 }
             }
-            if (raw.allowed_sizes && Array.isArray(raw.allowed_sizes)) {
+            if (raw.allowed_sizes && Array.isArray(raw.allowed_sizes))
+            {
                 const correct = _makeTypeChecklist(raw.allowed_sizes, _WEAPON_SIZES);
-                if (JSON.stringify(fix.allowed_sizes) !== JSON.stringify(correct)) {
+                if (JSON.stringify(fix.allowed_sizes) !== JSON.stringify(correct))
+                {
                     fix.allowed_sizes = correct;
                     changed = true;
                 }
@@ -1134,16 +1297,19 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
             updates['system.ammo'] = fixedAmmo;
     }
 
-    // --- Weapon profile text merging ---
+    // Weapon profile text merging
     const rawWeapon = rawWeaponByLid.get(lid);
-    if (rawWeapon && item.system?.profiles?.length && rawWeapon.profiles?.length > 1) {
+    if (rawWeapon && item.system?.profiles?.length && rawWeapon.profiles?.length > 1)
+    {
         const wpnEffect = rawWeapon.effect || '';
         const wpnOnAttack = rawWeapon.on_attack || '';
         const wpnOnCrit = rawWeapon.on_crit || '';
         const wpnOnHit = rawWeapon.on_hit || '';
 
-        if (wpnEffect || wpnOnAttack || wpnOnCrit || wpnOnHit) {
-            const fixedProfiles = item.system.profiles.map((prof, i) => {
+        if (wpnEffect || wpnOnAttack || wpnOnCrit || wpnOnHit)
+        {
+            const fixedProfiles = item.system.profiles.map((prof, i) =>
+            {
                 const rawProf = rawWeapon.profiles[i];
                 if (!rawProf)
                     return prof;
@@ -1151,18 +1317,24 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
                 const name = rawProf.name ?? `${rawWeapon.name} :: ${i + 1}`;
                 let profChanged = false;
 
-                for (const field of ['effect', 'on_attack', 'on_crit', 'on_hit']) {
+                for (const field of ['effect', 'on_attack', 'on_crit', 'on_hit'])
+                {
                     const wpnText = rawWeapon[field] || '';
                     const profText = rawProf[field] || '';
                     if (!wpnText)
                         continue;
-                    if (!profText) {
-                        if (fix[field] !== wpnText) {
+                    if (!profText)
+                    {
+                        if (fix[field] !== wpnText)
+                        {
                             fix[field] = wpnText; profChanged = true;
                         }
-                    } else if (wpnText !== profText) {
+                    }
+                    else if (wpnText !== profText)
+                    {
                         const merged = wpnText + '<br><br>' + name + ':: ' + profText;
-                        if (fix[field] !== merged) {
+                        if (fix[field] !== merged)
+                        {
                             fix[field] = merged; profChanged = true;
                         }
                     }
@@ -1171,17 +1343,19 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
                     changed = true;
                 return fix;
             });
-            if (changed && !updates['system.ammo'])
-                updates['system.profiles'] = fixedProfiles;
-            else if (changed)
+            if (changed)
                 updates['system.profiles'] = fixedProfiles;
         }
     }
 
-    if (changed) {
-        try {
+    if (changed)
+    {
+        try
+        {
             await item.update(updates);
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn(`lancer-automations | Could not fix ${item.name}:`, e);
             return false;
         }
@@ -1189,22 +1363,26 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid) {
     return changed;
 }
 
-// ---------------------------------------------------------------------------
 // Fix: initTechAttackData overwrites custom title with "TECH ATTACK"
-// ---------------------------------------------------------------------------
 
-export function wrapInitTechAttackData(flowSteps) {
+export function wrapInitTechAttackData(flowSteps)
+{
     const orig = flowSteps.get('initTechAttackData');
     if (!orig)
         return;
-    flowSteps.set('initTechAttackData', async function(state, options) {
+    flowSteps.set('initTechAttackData', async function(state, options)
+    {
         const savedTitle = state.data?.title;
         const result = await orig(state, options);
-        if (savedTitle && state.data?.title === "TECH ATTACK") {
+        if (savedTitle && state.data?.title === "TECH ATTACK")
+        {
             state.data.title = savedTitle;
-            try {
+            try
+            {
                 state.data.acc_diff.title = savedTitle;
-            } catch { /* */ }
+            }
+            catch
+            { /* */ }
         }
         return result;
     });
@@ -1215,22 +1393,28 @@ export function wrapInitTechAttackData(flowSteps) {
  * so downstream steps and hooks (LancerFX, chat templates, etc.) see the action's identity
  * instead of the generic "BASIC ATTACK".
  */
-export function wrapInitAttackData(flowSteps) {
+export function wrapInitAttackData(flowSteps)
+{
     const orig = flowSteps.get('initAttackData');
     if (!orig)
         return;
-    flowSteps.set('initAttackData', async function(state, options) {
+    flowSteps.set('initAttackData', async function(state, options)
+    {
         const savedTitle = state.data?.title;
         const savedAction = state.data?.action;
         const savedEffect = state.data?.effect;
         const result = await orig(state, options);
         if (!state.data)
             return result;
-        if (savedTitle && state.data.title === "BASIC ATTACK") {
+        if (savedTitle && state.data.title === "BASIC ATTACK")
+        {
             state.data.title = savedTitle;
-            try {
+            try
+            {
                 state.data.acc_diff.title = savedTitle;
-            } catch { /* */ }
+            }
+            catch
+            { /* */ }
         }
         if (savedAction && !state.data.action)
             state.data.action = savedAction;
@@ -1246,17 +1430,23 @@ export const ItemDisabledAPI = {
     isDisableable,
 };
 
-function getDesiredWallHeight(actor) {
+function getDesiredWallHeight(actor)
+{
     const size = Number(actor.system?.size ?? actor.prototypeToken?.width ?? 1) || 1;
     let vsEnabled = false;
-    try {
+    try
+    {
         vsEnabled = !!game.settings.get('lancer-automations', 'autoTokenHeightVehicleSquad');
-    } catch { /* ignore */ }
-    if (vsEnabled) {
+    }
+    catch
+    { /* ignore */ }
+    if (vsEnabled)
+    {
         const items = Array.from(actor.items ?? []);
-        if (items.some(i => i.system?.lid === 'npcc_squad'))
+        if (items.some(item => item.system?.lid === 'npcc_squad'))
             return 0.5;
-        if (items.some(i => /vehicle/i.test(i.system?.lid ?? ''))) {
+        if (items.some(item => /vehicle/i.test(item.system?.lid ?? '')))
+        {
             if (size <= 1)
                 return 0.5;
             return Math.min(size - 1, 4) + 0.1;
@@ -1267,14 +1457,32 @@ function getDesiredWallHeight(actor) {
 
 const _HEIGHT_TARGET_TYPES = new Set(['mech', 'npc', 'pilot', 'deployable']);
 
-export async function syncAllTokenHeights() {
-    if (!game.user.isGM) {
+// On placement: auto-set wall-height tokenHeight, unless the prototype carries a manual non-zero value.
+Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
+{
+    if (userId !== game.userId)
+        return;
+    if (!game.modules.get('wall-height')?.active)
+        return;
+    if (!game.settings.get('lancer-automations', 'autoTokenHeight'))
+        return;
+    const actor = tokenDoc.actor;
+    if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type))
+        return;
+    if (Number(tokenDoc.flags?.['wall-height']?.tokenHeight ?? 0) !== 0)
+        return;
+    tokenDoc.updateSource({ flags: { 'wall-height': { tokenHeight: getDesiredWallHeight(actor) } } });
+});
+
+export async function syncAllTokenHeights()
+{
+    if (!game.user.isGM)
+    {
         ui.notifications.error('Only the GM can sync token heights.');
         return;
     }
-    if (!game.modules.get('wall-height')?.active) {
+    if (!game.modules.get('wall-height')?.active)
         ui.notifications.warn('Wall Height is not active — values written but unused by the canvas.');
-    }
     const confirmed = await Dialog.confirm({
         title: 'Lancer Automations — Sync Token Heights',
         content: `<p>Set <b>wall-height.tokenHeight</b> on every world actor (prototype) and every placed token across all scenes.</p><p>Continue?</p>`,
@@ -1286,13 +1494,16 @@ export async function syncAllTokenHeights() {
     let protoUpdated = 0;
     let protoSkipped = 0;
     const protoUpdates = [];
-    for (const actor of game.actors) {
-        if (!_HEIGHT_TARGET_TYPES.has(actor.type)) {
+    for (const actor of game.actors)
+    {
+        if (!_HEIGHT_TARGET_TYPES.has(actor.type))
+        {
             protoSkipped++;
             continue;
         }
         const desired = getDesiredWallHeight(actor);
-        if (actor.prototypeToken?.flags?.['wall-height']?.tokenHeight === desired) {
+        if (actor.prototypeToken?.flags?.['wall-height']?.tokenHeight === desired)
+        {
             protoSkipped++;
             continue;
         }
@@ -1302,10 +1513,14 @@ export async function syncAllTokenHeights() {
         });
         protoUpdated++;
     }
-    if (protoUpdates.length) {
-        try {
+    if (protoUpdates.length)
+    {
+        try
+        {
             await Actor.updateDocuments(protoUpdates);
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error('lancer-automations | syncAllTokenHeights (prototype) failed', e);
             ui.notifications.error('Prototype sync failed; see console.');
             return;
@@ -1314,17 +1529,21 @@ export async function syncAllTokenHeights() {
 
     let sceneUpdated = 0;
     let sceneSkipped = 0;
-    for (const scene of game.scenes) {
+    for (const scene of game.scenes)
+    {
         /** @type {any[]} */
         const tokenUpdates = [];
-        for (const tokenDoc of scene.tokens) {
+        for (const tokenDoc of scene.tokens)
+        {
             const actor = /** @type {any} */ (tokenDoc).actor;
-            if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type)) {
+            if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type))
+            {
                 sceneSkipped++;
                 continue;
             }
             const desired = getDesiredWallHeight(actor);
-            if (/** @type {any} */ (tokenDoc).flags?.['wall-height']?.tokenHeight === desired) {
+            if (/** @type {any} */ (tokenDoc).flags?.['wall-height']?.tokenHeight === desired)
+            {
                 sceneSkipped++;
                 continue;
             }
@@ -1334,10 +1553,14 @@ export async function syncAllTokenHeights() {
             });
             sceneUpdated++;
         }
-        if (tokenUpdates.length) {
-            try {
+        if (tokenUpdates.length)
+        {
+            try
+            {
                 await scene.updateEmbeddedDocuments('Token', tokenUpdates);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.error(`lancer-automations | syncAllTokenHeights (scene "${scene.name}") failed`, e);
             }
         }
@@ -1346,8 +1569,10 @@ export async function syncAllTokenHeights() {
     ui.notifications.info(`Prototypes: ${protoUpdated} updated, ${protoSkipped} skipped. Scene tokens: ${sceneUpdated} updated, ${sceneSkipped} skipped.`);
 }
 
-export async function syncAllActorImgs() {
-    if (!game.user.isGM) {
+export async function syncAllActorImgs()
+{
+    if (!game.user.isGM)
+    {
         ui.notifications.error('Only the GM can sync actor portraits.');
         return;
     }
@@ -1364,28 +1589,35 @@ export async function syncAllActorImgs() {
     let nameUpdated = 0;
     let skipped = 0;
     const updates = [];
-    for (const actor of game.actors) {
+    for (const actor of game.actors)
+    {
         const tokenImg = actor.prototypeToken?.texture?.src;
         const tokenName = actor.prototypeToken?.name;
         /** @type {any} */
-        const u = { _id: actor.id };
-        if (tokenImg && actor.img !== tokenImg) {
-            u.img = tokenImg;
+        const update = { _id: actor.id };
+        if (tokenImg && actor.img !== tokenImg)
+        {
+            update.img = tokenImg;
             imgUpdated++;
         }
-        if (tokenName && actor.name !== tokenName) {
-            u.name = tokenName;
+        if (tokenName && actor.name !== tokenName)
+        {
+            update.name = tokenName;
             nameUpdated++;
         }
-        if (Object.keys(u).length > 1)
-            updates.push(u);
+        if (Object.keys(update).length > 1)
+            updates.push(update);
         else
             skipped++;
     }
-    if (updates.length) {
-        try {
+    if (updates.length)
+    {
+        try
+        {
             await Actor.updateDocuments(updates);
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error('lancer-automations | syncAllActorImgs failed', e);
             ui.notifications.error('Sync failed; see console.');
             return;

@@ -12,7 +12,7 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near the top-left of the screen:
 
-- **Move it** by dragging; the **lock** button locks the position, the **reset** button puts it back. Stays above open actor sheets (`aboveActorSheets`).
+- **Move it** by dragging; the **lock** button pins it, the **reset** button puts it back. Stays above open actor sheets (`aboveActorSheets`).
 - Categories open on **hover** by default, or set **`clickToOpen`** to open them on click. `hoverCloseDelay` controls how long the menu lingers after the mouse leaves, and `maxColumnItems` makes long columns scroll.
 
 <br clear="right"/>
@@ -76,7 +76,7 @@ The left column lists categories; opening one cascades its items out to the righ
 | **Statuses** | Opens the status panel (below) |
 | **Macros** | Your pinned macros (`macroList`); right-click a slot to edit it |
 
-Toggle `showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category.
+Toggle `showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category. These come from PPG (Prototype Pattern Group).
 
 See also: movement actions → [MOVEMENT.md](./MOVEMENT.md), resurrect → [WRECK.md](./WRECK.md), reinforcement → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md), scan → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).
 
@@ -100,7 +100,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 <br clear="right"/>
 
-**Disable / destroy toggles** appear on items that support them (greyed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded; clicking still fires it with a warning).
+**Disable / destroy toggles** appear on items that support them (grayed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded; clicking still fires it with a warning).
 
 ## Status panel
 
@@ -157,20 +157,29 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
-## Range and aura previews
+## Keyboard control
 
-<img align="right" src="../img/hud-range-hover.png" width="35%"/>
+With **`tah.keyboardNav`** on (default), you can drive the whole HUD from the keyboard instead of the mouse:
+
+- **Shift+WASD** moves a cursor through the menus: up/down within a column, left/right to step into a submenu or back out.
+- **Shift+E** activates the focused row (left-click), **Shift+Q** opens its context action (right-click).
+- The cursor clears after a spell of no input; **`tah.keyboardNavResetDelay`** sets how long it lingers.
+
+The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token; turn on **`tah.preventWasdMovement`** to block that during nav.
+
+## Range previews and measures
+
+<img align="right" src="../vid/hud-range-hover.gif" width="35%"/>
 
 **Hover preview** - hovering a weapon or action pulses its range on the canvas (`rangePreview`); the attack card can pulse the attacker's range too (`rangePreviewOnAttackCard`). Works standalone, no extra module needed.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-auras.png" width="35%"/>
+<img align="right" src="../vid/hud-measures.gif" width="35%"/>
 
-**Persistent auras** (requires [Grid-Aware Auras](../../README.md#optional-integrations)) - four you can toggle from the Utility menu: threat, sensor, max weapon range, and a custom measure. Each has its own color, opacity, and a default mode (off / in combat / always), and they're elevation-aware.
+**Range measures** - toggles in the Utility → Measures menu that drive the [Advanced Measure tool](./ATTACK_TARGETING.md) to pulse a range on the canvas: **Threat**, **Sensors**, **Max Reach**, and, when the Lancer ruler is on, **Movement**. A **Custom** measure lets you set a size and toggle it on.
 
-- With the auras fork plus Terrain Height Tools, `auraUseAltKey` shows THT rulers on the auras while you hold Alt on a targeted token.
-- **Area Elevation Aware** (`areaElevationAware`, requires the auras fork) - default for area pickers (blast etc.); when on, areas become 3D volumes that clip to terrain.
+- **Area Elevation Aware** (`areaElevationAware`) - default for area pickers (blast etc.); when on, areas become 3D volumes that clip to terrain.
 
 <br clear="right"/>
 

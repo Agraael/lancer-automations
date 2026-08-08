@@ -1,0 +1,236 @@
+[
+  {
+    "id": "npcf_deployable_turret_engineer__deploys",
+    "name": "npcf_deployable_turret_engineer (deployables)",
+    "type": "System",
+    "sp": 0,
+    "source": "GMS",
+    "license": "NPC_DEPLOYABLES",
+    "license_level": 0,
+    "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
+    "deployables": [
+      {
+        "name": "(NPC) Engineer Turret T1",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 5,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer (1 to adjacent space, max 6 total). On the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are disabled if the Engineer is destroyed.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "On the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+1 vs Evasion, 4 Kinetic damage.</b>"
+          }
+        ]
+      },
+      {
+        "name": "(NPC) Engineer Turret T2",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 8,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer (1 to adjacent space, max 6 total). On the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are disabled if the Engineer is destroyed.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "On the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+2 vs Evasion, 5 Kinetic damage.</b>"
+          }
+        ]
+      },
+      {
+        "name": "(NPC) Engineer Turret T3",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 10,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer (1 to adjacent space, max 6 total). On the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are disabled if the Engineer is destroyed.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "On the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+3 vs Evasion, 6 Kinetic damage.</b>"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "npc-rebake_npcf_engineer_turret_rebake__deploys",
+    "name": "npc-rebake_npcf_engineer_turret_rebake (deployables)",
+    "type": "System",
+    "sp": 0,
+    "source": "GMS",
+    "license": "NPC_DEPLOYABLES",
+    "license_level": 0,
+    "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
+    "deployables": [
+      {
+        "name": "(NPC) Engineer Rebake Turret T1",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer Rebake (up to 2 within Range 3, max 6 total). At the end of the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are destroyed when the Engineer is destroyed. If the Engineer becomes Jammed or Stunned, turrets are disabled for the duration.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "At the end of the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+1 vs Evasion, 4 Kinetic damage.</b>"
+          }
+        ]
+      },
+      {
+        "name": "(NPC) Engineer Rebake Turret T2",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer Rebake (up to 2 within Range 3, max 6 total). At the end of the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are destroyed when the Engineer is destroyed. If the Engineer becomes Jammed or Stunned, turrets are disabled for the duration.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "At the end of the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+2 vs Evasion, 5 Kinetic damage.</b>"
+          }
+        ]
+      },
+      {
+        "name": "(NPC) Engineer c Turret T3",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Self-constructing turret deployed by an Engineer Rebake (up to 2 within Range 3, max 6 total). At the end of the Engineer's turn, attacks the nearest hostile character within Range 10.</p><p>All turrets are destroyed when the Engineer is destroyed. If the Engineer becomes Jammed or Stunned, turrets are disabled for the duration.</p>",
+        "actions": [
+          {
+            "name": "Turret Attack (Auto)",
+            "activation": "Free",
+            "detail": "At the end of the Engineer's turn, attack the nearest hostile within Range 10.<br><b>+3 vs Evasion, 6 Kinetic damage.</b>"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ms_restock_drone__deploys",
+    "name": "ms_restock_drone (deployables)",
+    "type": "System",
+    "sp": 0,
+    "source": "GMS",
+    "license": "NPC_DEPLOYABLES",
+    "license_level": 0,
+    "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
+    "deployables": [
+      {
+        "name": "(NPC) Support Restock Drone T1",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 5,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them regain 5 HP.</p>"
+      },
+      {
+        "name": "(NPC) Support Restock Drone T2",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 8,
+        "evasion": 12,
+        "edef": 12,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them regain 10 HP.</p>"
+      },
+      {
+        "name": "(NPC) Support Restock Drone T3",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 10,
+        "evasion": 14,
+        "edef": 14,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them regain 15 HP.</p>"
+      }
+    ]
+  },
+  {
+    "id": "npc-rebake_npcf_restock_drone_support__deploys",
+    "name": "npc-rebake_npcf_restock_drone_support (deployables)",
+    "type": "System",
+    "sp": 0,
+    "source": "GMS",
+    "license": "NPC_DEPLOYABLES",
+    "license_level": 0,
+    "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
+    "deployables": [
+      {
+        "name": "(NPC) Support Rebake Restock Drone T1",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 5,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them either regain 5 HP or reload one Loading weapon.</p>"
+      },
+      {
+        "name": "(NPC) Support Rebake Restock Drone T2",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 8,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them either regain 8 HP or reload one Loading weapon.</p>"
+      },
+      {
+        "name": "(NPC) Support Rebake Restock Drone T3",
+        "type": "Drone",
+        "size": 0.5,
+        "hp": 10,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them either regain 10 HP or reload one Loading weapon.</p>"
+      }
+    ]
+  }
+]

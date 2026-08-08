@@ -11,13 +11,13 @@ import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js"
 export { getMinGridDistance };
 
 const THREAT_AURA_NAMES = new Set(["Threat_detail", "Threat"]);
-const isThreatAura = (a) => THREAT_AURA_NAMES.has(a.config.name);
+const isThreatAura = (aura) => THREAT_AURA_NAMES.has(aura.config.name);
 
-function getDispositionData(tokenA, tokenB) {
+function getDispositionData(tokenA, tokenB)
+{
     const tokenFactions = game.modules.get("token-factions")?.api;
-    if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
+    if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
         return { factionDisposition: tokenFactions.getDisposition(tokenA, tokenB) };
-    }
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
     const dispA = tokenA.document.disposition;
     const dispB = tokenB.document.disposition;
@@ -30,26 +30,49 @@ function getDispositionData(tokenA, tokenB) {
 }
 
 /** @returns {boolean} */
-export function isFriendly(token1, token2) {
+export function isFriendly(token1, token2)
+{
     const disposition = getDispositionData(token1, token2);
-    if (disposition.factionDisposition !== undefined) {
+    if (disposition.factionDisposition !== undefined)
         return disposition.factionDisposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-    }
     return (disposition.isAFriendly && disposition.isBFriendly) || (disposition.isAHostile && disposition.isBHostile);
 }
 
 /** @returns {boolean} */
-export function isHostile(reactor, mover) {
+export function isHostile(reactor, mover)
+{
     const disposition = getDispositionData(reactor, mover);
-    if (disposition.factionDisposition !== undefined) {
+    if (disposition.factionDisposition !== undefined)
+    {
         const disp = disposition.factionDisposition;
         return disp === CONST.TOKEN_DISPOSITIONS.HOSTILE || disp === CONST.TOKEN_DISPOSITIONS.SECRET;
     }
     return (disposition.isAFriendly && disposition.isBHostile) || (disposition.isAHostile && disposition.isBFriendly);
 }
 
+/**
+ * Disposition of `other` as seen from `viewer`. Only defers to token-factions
+ * when its advanced-teams mode is on (its getDisposition resolves the team
+ * matrix); every other mode collapses to hostile/friendly, so we fall back to
+ * `other`'s own token disposition there to keep NEUTRAL and SECRET distinct.
+ * @returns {number|null} a CONST.TOKEN_DISPOSITIONS value, or null if unknown
+ */
+export function getRelativeDisposition(viewer, other)
+{
+    const tokenFactions = game.modules.get("token-factions")?.api;
+    const advancedTeams = tokenFactions && game.settings.get("token-factions", "color-from") === "advanced-factions";
+    if (advancedTeams && typeof tokenFactions.getDisposition === 'function' && viewer && other)
+    {
+        const disp = tokenFactions.getDisposition(viewer, other);
+        if (disp !== undefined && disp !== null)
+            return disp;
+    }
+    return other?.document?.disposition ?? null;
+}
+
 /** @returns {boolean} */
-export function checkOverwatchCondition(reactor, mover, startPos) {
+export function checkOverwatchCondition(reactor, mover, startPos)
+{
     if (reactor.id === mover.id)
         return false;
 
@@ -62,13 +85,13 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
-    if (manager) {
+    if (manager)
+    {
         const auras = manager.getTokenAuras(reactor);
         const threatAura = auras.find(a => isThreatAura(a));
 
-        if (threatAura) {
+        if (threatAura)
             return manager.isInside(mover, reactor, threatAura.config.id);
-        }
     }
 
     const maxThreat = getActorMaxThreat(reactor.actor);
@@ -77,7 +100,8 @@ export function checkOverwatchCondition(reactor, mover, startPos) {
     return distanceStart <= maxThreat;
 }
 
-export async function checkOverwatch(token, distance, elevation, startPos, endPos) {
+export async function checkOverwatch(token, distance, elevation, startPos, endPos)
+{
     if (!game.settings.get('lancer-automations', 'overwatchEnabled'))
         return;
 
@@ -89,7 +113,8 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
-    const potentialReactors = canvas.tokens.placeables.filter(t => {
+    const potentialReactors = canvas.tokens.placeables.filter(t =>
+    {
         if (t.id === movedToken.id)
             return false;
         if (!t.actor)
@@ -101,14 +126,16 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
             return false;
 
         const tokenFactions = game.modules.get("token-factions")?.api;
-        if (tokenFactions && typeof tokenFactions.getDisposition === 'function') {
+        if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
+        {
             const disposition = tokenFactions.getDisposition(t, movedToken);
             const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
             const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-            if (disposition !== HOSTILE && disposition !== SECRET) {
+            if (disposition !== HOSTILE && disposition !== SECRET)
                 return false;
-            }
-        } else {
+        }
+        else
+        {
             const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
             const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
             const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
@@ -128,56 +155,65 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
 
     const triggeredReactors = [];
 
-    for (const reactor of potentialReactors) {
+    for (const reactor of potentialReactors)
+    {
         let isTriggered = false;
 
-        if (manager) {
+        if (manager)
+        {
             const auras = manager.getTokenAuras(reactor);
             const threatAura = auras.find(a => isThreatAura(a));
 
-            if (threatAura) {
+            if (threatAura)
+            {
                 const wasInside = manager.isInside(movedToken, reactor, threatAura.config.id);
-                if (wasInside) {
+                if (wasInside)
                     isTriggered = true;
-                }
             }
         }
 
-        if (!isTriggered) {
+        if (!isTriggered)
+        {
             const hasGaaSupport = manager?.getTokenAuras(reactor).some(a => isThreatAura(a));
 
-            if (!hasGaaSupport) {
+            if (!hasGaaSupport)
+            {
                 const maxThreat = await getActorMaxThreat(reactor.actor);
                 const distanceStart = getMinGridDistance(movedToken, reactor, startPos);
 
-                if (distanceStart <= maxThreat) {
+                if (distanceStart <= maxThreat)
                     isTriggered = true;
-                }
             }
         }
 
-        if (isTriggered) {
+        if (isTriggered)
             triggeredReactors.push(reactor);
-        }
     }
 
-    if (triggeredReactors.length > 0) {
+    if (triggeredReactors.length > 0)
+    {
         const ownerMap = {};
 
-        for (const reactor of triggeredReactors) {
+        for (const reactor of triggeredReactors)
+        {
             const owners = game.users.filter(u => u.active && reactor.document.testUserPermission(u, "OWNER"));
-            for (const user of owners) {
+            for (const user of owners)
+            {
                 if (!ownerMap[user.id])
                     ownerMap[user.id] = [];
                 ownerMap[user.id].push(reactor.id);
             }
         }
 
-        for (const [userId, reactorIds] of Object.entries(ownerMap)) {
-            if (userId === game.userId) {
+        for (const [userId, reactorIds] of Object.entries(ownerMap))
+        {
+            if (userId === game.userId)
+            {
                 const myReactors = reactorIds.map(id => canvas.tokens.get(id));
                 displayOverwatch(myReactors, movedToken.document);
-            } else {
+            }
+            else
+            {
                 game.socket.emit('module.lancer-automations', {
                     action: 'overwatchAlert',
                     payload: {
@@ -190,10 +226,12 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
     }
 }
 
-export function displayOverwatch(reactors, target) {
+export function displayOverwatch(reactors, target)
+{
     let reactorItems = "";
 
-    for (const reactor of reactors) {
+    for (const reactor of reactors)
+    {
         reactorItems += `
         <div class="lancer-list-item" data-token-id="${reactor.id}">
              <img src="${reactor.document.texture.src}" width="36" height="36" style="margin-right:10px; border: 1px solid var(--primary-color); border-radius: 4px; background: #000; cursor: pointer;">
@@ -224,7 +262,8 @@ export function displayOverwatch(reactors, target) {
 
     const mode = game.settings.get('lancer-automations', 'reactionReminder');
 
-    if (mode === 'p') {
+    if (mode === 'p')
+    {
         new Dialog({
             title: "Overwatch Alert",
             content: html,
@@ -232,18 +271,23 @@ export function displayOverwatch(reactors, target) {
                 ok: { label: "ACKNOWLEDGE" }
             },
             default: "ok",
-            render: (htmlConfig) => {
-                htmlConfig.find('.lancer-list-item').click((event) => {
+            render: (html) =>
+            {
+                html.find('.lancer-list-item').click((event) =>
+                {
                     const tokenId = event.currentTarget.dataset.tokenId;
                     const token = canvas.tokens.get(tokenId);
-                    if (token) {
+                    if (token)
+                    {
                         token.control({ releaseOthers: true });
                         canvas.animatePan({ x: token.x, y: token.y, duration: 250 });
                     }
                 });
             }
         }, { top: 450, left: 150,classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
-    } else if (mode === 'c') {
+    }
+    else if (mode === 'c')
+    {
         ChatMessage.create({
             author: game.userId,
             content: html,
@@ -254,7 +298,8 @@ export function displayOverwatch(reactors, target) {
 
 
 /** @returns {Promise<void>} */
-export async function drawThreatDebug(token) {
+export async function drawThreatDebug(token)
+{
     if (!token)
         return;
 
@@ -264,7 +309,8 @@ export async function drawThreatDebug(token) {
 
     ui.notifications.info(`Debug: Token Size ${token.document.width}x${token.document.height}, Max Threat: ${maxThreat}`);
 
-    if (!isHexGrid()) {
+    if (!isHexGrid())
+    {
         ui.notifications.warn("Threat debug visualization currently only supports hex grids");
         return;
     }
@@ -280,11 +326,13 @@ export async function drawThreatDebug(token) {
     const threatHexSet = new Set();
     const footprintSet = new Set();
 
-    for (const fp of footprintCubes) {
-        footprintSet.add(`${fp.col},${fp.row}`);
+    for (const footprintCube of footprintCubes)
+    {
+        footprintSet.add(`${footprintCube.col},${footprintCube.row}`);
 
-        const inRange = getHexesInRange(fp, maxThreat);
-        for (const cube of inRange) {
+        const inRange = getHexesInRange(footprintCube, maxThreat);
+        for (const cube of inRange)
+        {
             const offset = cubeToOffset(cube);
             threatHexSet.add(`${offset.col},${offset.row}`);
         }
@@ -293,7 +341,8 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.lineStyle(2, 0x00FF00, 0.7);
     canvas.controls.debug.beginFill(0x00FF00, 0.15);
 
-    for (const key of threatHexSet) {
+    for (const key of threatHexSet)
+    {
         if (footprintSet.has(key))
             continue;
 
@@ -306,15 +355,15 @@ export async function drawThreatDebug(token) {
     canvas.controls.debug.lineStyle(3, 0xFF0000, 1);
     canvas.controls.debug.beginFill(0xFF0000, 0.25);
 
-    for (const fp of footprintCubes) {
+    for (const fp of footprintCubes)
         drawHexAt(canvas.controls.debug, fp.col, fp.row);
-    }
 
     canvas.controls.debug.endFill();
 
     canvas.controls.debug.lineStyle(0);
     canvas.controls.debug.beginFill(0xFF0000, 1);
-    for (const fp of footprintCubes) {
+    for (const fp of footprintCubes)
+    {
         const center = getHexCenter(fp.col, fp.row);
         canvas.controls.debug.drawCircle(center.x, center.y, 5);
     }
@@ -322,14 +371,17 @@ export async function drawThreatDebug(token) {
 }
 
 /** @returns {number} */
-export function getTokenDistance(token1, token2, includeElevation = undefined) {
+export function getTokenDistance(token1, token2, includeElevation = undefined)
+{
     return getMinGridDistance(token1, token2, null, includeElevation);
 }
 
-export async function drawDistanceDebug() {
+export async function drawDistanceDebug()
+{
     const controlled = canvas.tokens.controlled;
 
-    if (controlled.length !== 2) {
+    if (controlled.length !== 2)
+    {
         ui.notifications.warn("Select exactly 2 tokens to measure distance.");
         return;
     }
@@ -345,13 +397,17 @@ export async function drawDistanceDebug() {
 
     let closestPair = { nearCenter1: null, nearCenter2: null, dist: Infinity };
 
-    if (isHexGrid()) {
-        for (const offset1 of token1Offsets) {
+    if (isHexGrid())
+    {
+        for (const offset1 of token1Offsets)
+        {
             const cube1 = offsetToCube(offset1.col, offset1.row);
-            for (const offset2 of token2Offsets) {
+            for (const offset2 of token2Offsets)
+            {
                 const cube2 = offsetToCube(offset2.col, offset2.row);
                 const hexDistance = cubeDistance(cube1, cube2);
-                if (hexDistance < closestPair.dist) {
+                if (hexDistance < closestPair.dist)
+                {
                     closestPair = {
                         nearCenter1: getHexCenter(offset1.col, offset1.row),
                         nearCenter2: getHexCenter(offset2.col, offset2.row),
@@ -360,15 +416,18 @@ export async function drawDistanceDebug() {
                 }
             }
         }
-    } else {
+    }
+    else
+    {
         const token1Centers = getOccupiedCenters(token1);
         const token2Centers = getOccupiedCenters(token2);
-        for (const center1 of token1Centers) {
-            for (const center2 of token2Centers) {
+        for (const center1 of token1Centers)
+        {
+            for (const center2 of token2Centers)
+            {
                 const pixelDistance = measureGridDistance(center1, center2);
-                if (pixelDistance < closestPair.dist) {
+                if (pixelDistance < closestPair.dist)
                     closestPair = { nearCenter1: center1, nearCenter2: center2, dist: pixelDistance };
-                }
             }
         }
         closestPair.dist = Math.round(closestPair.dist / canvas.scene.grid.distance);
@@ -378,11 +437,13 @@ export async function drawDistanceDebug() {
 
     canvas.controls.debug.lineStyle(2, 0x0066FF, 0.5);
     canvas.controls.debug.beginFill(0x0066FF, 0.15);
-    for (const o of offsets1) {
-        if (isHexGrid()) {
-            drawHexAt(canvas.controls.debug, o.col, o.row);
-        } else {
-            const center = getHexCenter(o.col, o.row);
+    for (const offset of offsets1)
+    {
+        if (isHexGrid())
+            drawHexAt(canvas.controls.debug, offset.col, offset.row);
+        else
+        {
+            const center = getHexCenter(offset.col, offset.row);
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
     }
@@ -390,17 +451,20 @@ export async function drawDistanceDebug() {
 
     canvas.controls.debug.lineStyle(2, 0xFF6600, 0.5);
     canvas.controls.debug.beginFill(0xFF6600, 0.15);
-    for (const o of offsets2) {
-        if (isHexGrid()) {
-            drawHexAt(canvas.controls.debug, o.col, o.row);
-        } else {
-            const center = getHexCenter(o.col, o.row);
+    for (const offset of offsets2)
+    {
+        if (isHexGrid())
+            drawHexAt(canvas.controls.debug, offset.col, offset.row);
+        else
+        {
+            const center = getHexCenter(offset.col, offset.row);
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
     }
     canvas.controls.debug.endFill();
 
-    if (closestPair.nearCenter1 && closestPair.nearCenter2) {
+    if (closestPair.nearCenter1 && closestPair.nearCenter2)
+    {
         canvas.controls.debug.lineStyle(4, 0xFFFF00, 1);
         canvas.controls.debug.moveTo(closestPair.nearCenter1.x, closestPair.nearCenter1.y);
         canvas.controls.debug.lineTo(closestPair.nearCenter2.x, closestPair.nearCenter2.y);
@@ -417,40 +481,48 @@ export async function drawDistanceDebug() {
     return distance;
 }
 
-/**
- * Can the triggering token provoke a reaction from the reactor token?
- * Returns false when the mover has hidden/disengage, has a "provoke"
- * immunity bonus, or is intangible while the reactor is not also intangible
- * (different planes). Same-token pairs always return true (self-reactions
- * bypass this check).
- * @returns {boolean}
- */
-export function canProvokeReaction(triggering, reactor) {
+/** False if the mover can't provoke: hidden, disengage, provoke immunity, or intangible mismatch. Self-pairs always provoke. */
+export function canProvokeReaction(triggering, reactor, reasonOut = null)
+{
     if (!triggering || !reactor)
         return true;
     if (triggering.id === reactor.id)
         return true;
     const api = game.modules.get('lancer-automations')?.api;
-    const has = (tok, statusId) => {
-        if (api?.findEffectOnToken && api.findEffectOnToken(tok, statusId))
+    const hasStatus = (token, statusId) =>
+    {
+        if (api?.findEffectOnToken && api.findEffectOnToken(token, statusId))
             return true;
-        return !!tok.actor?.effects?.some(e => e.statuses?.has(statusId) && !e.disabled);
+        return !!token.actor?.effects?.some(effect => effect.statuses?.has(statusId) && !effect.disabled);
     };
-    const hasProvokeImmunity = (tok) =>
-        !!api?.getImmunityBonuses && api.getImmunityBonuses(tok.actor, "provoke").length > 0;
-    if (has(triggering, "hidden"))
+    const hasProvokeImmunity = (token) =>
+        !!api?.getImmunityBonuses && api.getImmunityBonuses(token.actor, "provoke").length > 0;
+    if (hasStatus(triggering, "hidden"))
+    {
+        reasonOut?.push('hidden');
         return false;
-    if (has(triggering, "disengage"))
+    }
+    if (hasStatus(triggering, "disengage"))
+    {
+        reasonOut?.push('disengage');
         return false;
+    }
     if (hasProvokeImmunity(triggering))
+    {
+        reasonOut?.push('provoke_immunity');
         return false;
-    if (has(triggering, "intangible") && !has(reactor, "intangible"))
+    }
+    if (hasStatus(triggering, "intangible") && !hasStatus(reactor, "intangible"))
+    {
+        reasonOut?.push('intangible');
         return false;
+    }
     return true;
 }
 
 /** @returns {boolean} */
-export function canEngage(token1, token2) {
+export function canEngage(token1, token2)
+{
     if (!token1 || !token2)
         return false;
 
@@ -460,7 +532,6 @@ export function canEngage(token1, token2) {
     if (!token1.actor || !token2.actor)
         return false;
 
-    // Must be hostile
     if (!isHostile(token1, token2))
         return false;
 
@@ -474,27 +545,29 @@ export function canEngage(token1, token2) {
 
     const api = game.modules.get('lancer-automations')?.api;
 
-    // Check statuses
-    const checkStatus = (token, statusName) => {
+    const checkStatus = (token, statusName) =>
+    {
         if (statusName === "hidden" && token.document.hidden)
             return true;
 
-        if (api?.findEffectOnToken) {
+        if (api?.findEffectOnToken)
+        {
             if (api.findEffectOnToken(token, statusName))
                 return true;
         }
 
-        return token.actor.effects.some(e => e.statuses?.has(statusName) && !e.disabled);
+        return token.actor.effects.some(effect => effect.statuses?.has(statusName) && !effect.disabled);
     };
 
-    const hasProvokeImmunity = (tok) =>
-        !!api?.getImmunityBonuses && api.getImmunityBonuses(tok.actor, "provoke").length > 0;
+    const hasProvokeImmunity = (token) =>
+        !!api?.getImmunityBonuses && api.getImmunityBonuses(token.actor, "provoke").length > 0;
     if (hasProvokeImmunity(token1) || hasProvokeImmunity(token2))
         return false;
 
     const invalidStatuses = ["hidden", "disengage", "intangible"];
 
-    for (const status of invalidStatuses) {
+    for (const status of invalidStatuses)
+    {
         if (checkStatus(token1, status) || checkStatus(token2, status))
             return false;
     }
@@ -503,7 +576,8 @@ export function canEngage(token1, token2) {
 }
 
 /** @returns {Promise<void>} */
-export async function updateAllEngagements(options = {}) {
+export async function updateAllEngagements(options = {})
+{
     if (!game.user.isGM)
         return;
 
@@ -517,24 +591,27 @@ export async function updateAllEngagements(options = {}) {
         ? canvas.tokens.placeables.filter(t => t.id !== excludeId)
         : canvas.tokens.placeables;
 
-    // Check who is currently flagged as engaged
     const currentlyEngaged = new Set(
         allTokens.filter(t => !!api.findEffectOnToken(t, "engaged")).map(t => t.id)
     );
 
     const shouldBeEngaged = new Set();
 
-    for (let i = 0; i < allTokens.length; i++) {
+    for (let i = 0; i < allTokens.length; i++)
+    {
         const tokenA = allTokens[i];
 
-        for (let j = i + 1; j < allTokens.length; j++) {
+        for (let j = i + 1; j < allTokens.length; j++)
+        {
             const tokenB = allTokens[j];
 
             if (shouldBeEngaged.has(tokenA.id) && shouldBeEngaged.has(tokenB.id))
                 continue;
 
-            if (canEngage(tokenA, tokenB)) {
-                if (getMinGridDistance(tokenA, tokenB) <= 1) {
+            if (canEngage(tokenA, tokenB))
+            {
+                if (getMinGridDistance(tokenA, tokenB) <= 1)
+                {
                     shouldBeEngaged.add(tokenA.id);
                     shouldBeEngaged.add(tokenB.id);
                 }
@@ -542,17 +619,21 @@ export async function updateAllEngagements(options = {}) {
         }
     }
 
-    for (const token of allTokens) {
+    for (const token of allTokens)
+    {
         const hasStatus = currentlyEngaged.has(token.id);
         const needsStatus = shouldBeEngaged.has(token.id);
 
-        if (needsStatus && !hasStatus) {
+        if (needsStatus && !hasStatus)
+        {
             await api.applyEffectsToTokens({
                 tokens: [token],
                 effectNames: ["engaged"],
                 notify: false
             });
-        } else if (!needsStatus && hasStatus) {
+        }
+        else if (!needsStatus && hasStatus)
+        {
             await api.removeEffectsByNameFromTokens({
                 tokens: [token],
                 effectNames: ["engaged"],
@@ -569,6 +650,7 @@ export const OverwatchAPI = {
     checkOverwatchCondition,
     isHostile,
     isFriendly,
+    getRelativeDisposition,
     getActorMaxThreat,
     getMinGridDistance,
     canEngage,

@@ -17,43 +17,58 @@ const HISTORY_HINT = `<p style="margin-top: 12px; padding: 8px 10px; background:
     <b>Configure Settings → Module Settings → Lancer Automations → Tools & Extras → News & Releases</b>.
 </p>`;
 
-function _getRole() {
-    try {
-        const c = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
-        if (c === "gm" || c === "player")
-            return c;
-    } catch { /* not registered yet */ }
+function _getRole()
+{
+    try
+    {
+        const consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
+        if (consent === "gm" || consent === "player")
+            return consent;
+    }
+    catch
+    { /* not registered yet */ }
     return null;
 }
 
-async function _fetchNews() {
+async function _fetchNews()
+{
     // Remote first (live, decoupled from module version); local bundled copy as offline fallback.
-    for (const url of [NEWS_URL, NEWS_URL_LOCAL]) {
-        try {
-            const res = await fetch(url, { cache: "no-store" });
-            if (res.ok)
-                return await res.json();
-        } catch (err) {
+    for (const url of [NEWS_URL, NEWS_URL_LOCAL])
+    {
+        try
+        {
+            const response = await fetch(url, { cache: "no-store" });
+            if (response.ok)
+                return await response.json();
+        }
+        catch (err)
+        {
             console.warn(`Lancer Automations | News fetch failed (${url}):`, err);
         }
     }
     return null;
 }
 
-async function _fetchReleases() {
-    try {
-        const res = await fetch(RELEASES_URL);
-        if (!res.ok)
+async function _fetchReleases()
+{
+    try
+    {
+        const response = await fetch(RELEASES_URL);
+        if (!response.ok)
             return [];
-        return await res.json();
-    } catch (err) {
+        return await response.json();
+    }
+    catch (err)
+    {
         console.warn("Lancer Automations | Releases fetch failed:", err);
         return [];
     }
 }
 
-function _filterEntries(entries, { seen, role, version, isGM }) {
-    return entries.filter(entry => {
+function _filterEntries(entries, { seen, role, version, isGM })
+{
+    return entries.filter(entry =>
+    {
         if (!entry?.id || seen.has(entry.id))
             return false;
         if (entry.minVersion && foundry.utils.isNewerVersion(entry.minVersion, version))
@@ -62,7 +77,8 @@ function _filterEntries(entries, { seen, role, version, isGM }) {
             return false;
         if (entry.gmOnly && !isGM)
             return false;
-        if (Array.isArray(entry.roles) && entry.roles.length) {
+        if (Array.isArray(entry.roles) && entry.roles.length)
+        {
             if (!role || !entry.roles.includes(role))
                 return false;
         }
@@ -70,7 +86,8 @@ function _filterEntries(entries, { seen, role, version, isGM }) {
     });
 }
 
-function _renderEntry(entry) {
+function _renderEntry(entry)
+{
     const dateLine = entry.date ? `<div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${entry.date}</div>` : "";
     const body = Array.isArray(entry.body) ? entry.body.join("") : (entry.body ?? "");
     return `
@@ -83,42 +100,51 @@ function _renderEntry(entry) {
     `;
 }
 
-function _pollState(entry) {
+function _pollState(entry)
+{
     const poll = entry?.poll;
     if (!poll?.tableName || !Array.isArray(poll.fields) || poll.fields.length === 0)
         return null;
     const now = new Date();
     const expired = poll.expiresAt ? (new Date(poll.expiresAt) < now) : false;
     let responded = false;
-    try {
+    try
+    {
         const list = game.settings.get(NEWS_MODULE_ID, POLL_RESPONDED_SETTING) || [];
         responded = list.includes(entry.id);
-    } catch { /* not registered yet */ }
+    }
+    catch
+    { /* not registered yet */ }
     return { poll, expired, responded };
 }
 
-function _renderField(field) {
+function _renderField(field)
+{
     const name = String(field?.name ?? "").trim();
     if (!name)
         return "";
     const label = String(field?.label ?? name);
-    const ph = field?.placeholder ? `placeholder="${String(field.placeholder).replaceAll('"', "&quot;")}"` : "";
+    const placeholderAttr = field?.placeholder ? `placeholder="${String(field.placeholder).replaceAll('"', "&quot;")}"` : "";
     const required = field?.required ? "required" : "";
     let input;
-    if (field?.type === "select" && Array.isArray(field.options)) {
-        const opts = field.options.map(opt => {
+    if (field?.type === "select" && Array.isArray(field.options))
+    {
+        const opts = field.options.map(opt =>
+        {
             const value = typeof opt === "object" ? String(opt.value ?? "") : String(opt);
-            const lbl = typeof opt === "object" ? String(opt.label ?? opt.value ?? "") : String(opt);
-            return `<option value="${value.replaceAll('"', "&quot;")}">${lbl}</option>`;
+            const optLabel = typeof opt === "object" ? String(opt.label ?? opt.value ?? "") : String(opt);
+            return `<option value="${value.replaceAll('"', "&quot;")}">${optLabel}</option>`;
         }).join("");
         input = `<select name="${name}" ${required} style="width:100%;"><option value=""></option>${opts}</select>`;
-    } else if (field?.type === "textarea") {
-        input = `<textarea name="${name}" ${required} ${ph} rows="3" style="width:100%; resize:vertical;"></textarea>`;
-    } else {
+    }
+    else if (field?.type === "textarea")
+        input = `<textarea name="${name}" ${required} ${placeholderAttr} rows="3" style="width:100%; resize:vertical;"></textarea>`;
+    else
+    {
         const type = field?.type === "number" ? "number" : "text";
         const min = field?.min != null ? `min="${field.min}"` : "";
         const max = field?.max != null ? `max="${field.max}"` : "";
-        input = `<input type="${type}" name="${name}" ${required} ${ph} ${min} ${max} style="width:100%;"/>`;
+        input = `<input type="${type}" name="${name}" ${required} ${placeholderAttr} ${min} ${max} style="width:100%;"/>`;
     }
     return `
         <label style="display:flex; flex-direction:column; gap:2px; font-size:0.9em;">
@@ -128,7 +154,8 @@ function _renderField(field) {
     `;
 }
 
-function _renderPoll(entry) {
+function _renderPoll(entry)
+{
     const pollInfo = _pollState(entry);
     if (!pollInfo)
         return "";
@@ -161,36 +188,51 @@ function _renderPoll(entry) {
     `);
 }
 
-function _collectInstallContext() {
+function _collectInstallContext()
+{
     const ctx = {};
-    try {
+    try
+    {
         const consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
         if (consent === "gm" || consent === "player")
             ctx.role = consent;
-    } catch { /* ignore */ }
-    try {
+    }
+    catch
+    { /* ignore */ }
+    try
+    {
         ctx.language = game.i18n?.lang ?? null;
-    } catch { /* ignore */ }
+    }
+    catch
+    { /* ignore */ }
     for (const k of Object.keys(ctx))
+    {
         if (ctx[k] == null)
             delete ctx[k];
+    }
     return ctx;
 }
 
-async function _getOrCreateInstallId() {
-    try {
+async function _getOrCreateInstallId()
+{
+    try
+    {
         let id = game.settings.get(NEWS_MODULE_ID, INSTALL_ID_SETTING) || "";
-        if (!id) {
+        if (!id)
+        {
             id = foundry.utils.randomID();
             await game.settings.set(NEWS_MODULE_ID, INSTALL_ID_SETTING, id);
         }
         return id;
-    } catch {
+    }
+    catch
+    {
         return foundry.utils.randomID();
     }
 }
 
-async function _submitPoll(pollEl) {
+async function _submitPoll(pollEl)
+{
     const pollId = pollEl.dataset.pollId;
     const table = pollEl.dataset.pollTable;
     const form = pollEl.querySelector("form.poll-form");
@@ -198,17 +240,19 @@ async function _submitPoll(pollEl) {
     if (!form || !table || !pollId)
         return;
     const data = {};
-    for (const el of form.querySelectorAll("[name]")) {
-        const v = (el.value ?? "").trim();
-        if (v !== "")
-            data[el.name] = v;
+    for (const el of form.querySelectorAll("[name]"))
+    {
+        const fieldValue = (el.value ?? "").trim();
+        if (fieldValue !== "")
+            data[el.name] = fieldValue;
     }
     const installId = await _getOrCreateInstallId();
     const context = _collectInstallContext();
     const payload = { install_id: installId, ...context, ...data };
     status.textContent = "Sending...";
     form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = true);
-    try {
+    try
+    {
         const { error } = await getSupabase().from(table).upsert(payload, { onConflict: "install_id" });
         if (error)
             throw error;
@@ -217,35 +261,45 @@ async function _submitPoll(pollEl) {
         await game.settings.set(NEWS_MODULE_ID, POLL_RESPONDED_SETTING, [...list]);
         form.remove();
         status.innerHTML = `<i class="fas fa-check"></i> Thanks, your response was recorded.`;
-    } catch (err) {
+    }
+    catch (err)
+    {
         console.warn("Lancer Automations | Poll submit failed:", err);
         status.textContent = "Could not submit. Try again later.";
         form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = false);
     }
 }
 
-function _attachPollHandlers(rootEl) {
+function _attachPollHandlers(rootEl)
+{
     if (!rootEl)
         return;
-    for (const pollEl of rootEl.querySelectorAll(".lancer-poll")) {
+    for (const pollEl of rootEl.querySelectorAll(".lancer-poll"))
+    {
         const form = pollEl.querySelector("form.poll-form");
         if (!form || form.dataset.bound === "1")
             continue;
         form.dataset.bound = "1";
-        form.addEventListener("submit", (ev) => {
+        form.addEventListener("submit", (ev) =>
+        {
             ev.preventDefault();
             _submitPoll(pollEl);
         });
     }
 }
 
-function _renderRelease(release) {
+function _renderRelease(release)
+{
     const date = release.published_at ? release.published_at.split("T")[0] : "";
     let bodyHtml = "";
-    if (release.body) {
-        try {
+    if (release.body)
+    {
+        try
+        {
             bodyHtml = new window.showdown.Converter().makeHtml(release.body);
-        } catch {
+        }
+        catch
+        {
             bodyHtml = `<pre>${release.body}</pre>`;
         }
     }
@@ -258,20 +312,26 @@ function _renderRelease(release) {
     `;
 }
 
-async function _markSeen(entries) {
+async function _markSeen(entries)
+{
     const current = new Set(game.settings.get(NEWS_MODULE_ID, SEEN_SETTING) || []);
     for (const entry of entries)
         current.add(entry.id);
     await game.settings.set(NEWS_MODULE_ID, SEEN_SETTING, [...current]);
 }
 
-function _renderUpdate(update) {
+function _renderUpdate(update)
+{
     const { module, newVersion, releaseNotes } = update;
     let notesHtml = "";
-    if (releaseNotes) {
-        try {
+    if (releaseNotes)
+    {
+        try
+        {
             notesHtml = new globalThis.showdown.Converter().makeHtml(releaseNotes);
-        } catch {
+        }
+        catch
+        {
             notesHtml = `<pre>${releaseNotes}</pre>`;
         }
     }
@@ -287,7 +347,8 @@ function _renderUpdate(update) {
 
 const SCROLL_STYLE = "max-height: 60vh; overflow-y: auto; padding: 6px 10px;";
 
-function _showCombinedDialog({ news, update, firstRun }) {
+function _showCombinedDialog({ news, update, firstRun })
+{
     const hasNews = news.length > 0;
     const hasUpdate = !!update;
     if (!hasNews && !hasUpdate)
@@ -308,7 +369,8 @@ function _showCombinedDialog({ news, update, firstRun }) {
 
     let content;
     let bindTabs = false;
-    if (hasNews && hasUpdate) {
+    if (hasNews && hasUpdate)
+    {
         bindTabs = true;
         content = `
             <nav class="sheet-tabs tabs" data-group="lancer-news-popup-tabs" style="margin-bottom: 6px;">
@@ -318,7 +380,9 @@ function _showCombinedDialog({ news, update, firstRun }) {
             <section class="tab active" data-tab="news" style="${SCROLL_STYLE}">${newsBody}</section>
             <section class="tab" data-tab="update" style="${SCROLL_STYLE} display: none;">${updateBody}</section>
         `;
-    } else if (hasNews) {
+    }
+    else if (hasNews)
+    {
         const heading = firstRun ? "LATEST NEWS" : "WHAT'S NEW";
         content = `
             <div class="lancer-dialog-header">
@@ -326,7 +390,9 @@ function _showCombinedDialog({ news, update, firstRun }) {
             </div>
             <div style="${SCROLL_STYLE}">${newsBody}</div>
         `;
-    } else {
+    }
+    else
+    {
         content = `
             <div class="lancer-dialog-header">
                 <div class="lancer-dialog-title">UPDATE AVAILABLE</div>
@@ -335,11 +401,13 @@ function _showCombinedDialog({ news, update, firstRun }) {
         `;
     }
 
-    const ackUpdate = () => {
+    const ackUpdate = () =>
+    {
         if (hasUpdate)
             game.settings.set(update.module.id, "lastNotifiedVersion", update.newVersion);
     };
-    const ackNews = () => {
+    const ackNews = () =>
+    {
         if (hasNews && !firstRun)
             _markSeen(news);
     };
@@ -351,32 +419,37 @@ function _showCombinedDialog({ news, update, firstRun }) {
             ok: {
                 icon: '<i class="fas fa-check"></i>',
                 label: "Got it",
-                callback: () => {
+                callback: () =>
+                {
                     ackNews(); ackUpdate();
                 },
             },
         },
         default: "ok",
-        close: () => {
+        close: () =>
+        {
             ackNews(); /* don't auto-ack update on X, let it remind next time */
         },
-        render: (html) => {
+        render: (html) =>
+        {
             const root = /** @type {HTMLElement} */ (html instanceof jQuery ? html[0] : html);
             _attachPollHandlers(root);
             if (!bindTabs)
                 return;
-            root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} item */ (item) => {
-                item.addEventListener("click", () => {
+            root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} item */ (item) =>
+            {
+                item.addEventListener("click", () =>
+                {
                     const tab = item.dataset.tab;
-                    root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} i */ (i) => i.classList.toggle("active", i.dataset.tab === tab));
-                    root.querySelectorAll("section.tab").forEach(/** @param {HTMLElement} s */ (s) => {
-                        const match = s.dataset.tab === tab;
-                        s.classList.toggle("active", match);
-                        s.style.display = match ? "" : "none";
+                    root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} tabItem */ (tabItem) => tabItem.classList.toggle("active", tabItem.dataset.tab === tab));
+                    root.querySelectorAll("section.tab").forEach(/** @param {HTMLElement} sectionEl */ (sectionEl) =>
+                    {
+                        const match = sectionEl.dataset.tab === tab;
+                        sectionEl.classList.toggle("active", match);
+                        sectionEl.style.display = match ? "" : "none";
                     });
-                    if (dialog.position) {
+                    if (dialog.position)
                         dialog.setPosition({ height: "auto", left: dialog.position.left, top: dialog.position.top });
-                    }
                 });
             });
         },
@@ -384,14 +457,18 @@ function _showCombinedDialog({ news, update, firstRun }) {
     dialog.render(true);
 }
 
-async function _runNews() {
+async function _runNews()
+{
     if (!game.user?.isGM)
         return;
 
     let consent = NEWS_PENDING;
-    try {
+    try
+    {
         consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY) || NEWS_PENDING;
-    } catch { /* not registered */ }
+    }
+    catch
+    { /* not registered */ }
     if (consent === NEWS_PENDING)
         return;
 
@@ -405,23 +482,25 @@ async function _runNews() {
 
     let news = [];
     let firstRun = false;
-    if (!seenRaw.length) {
+    if (!seenRaw.length)
+    {
         firstRun = true;
-        const allIds = entries.map(e => e.id).filter(Boolean);
+        const allIds = entries.map(entry => entry.id).filter(Boolean);
         const visible = _filterEntries(entries, { seen: new Set(), role, version, isGM });
         const sorted = [...visible].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         if (sorted[0])
             news = [sorted[0]];
         if (allIds.length)
             await game.settings.set(NEWS_MODULE_ID, SEEN_SETTING, allIds);
-    } else {
-        news = _filterEntries(entries, { seen: new Set(seenRaw), role, version, isGM });
     }
+    else
+        news = _filterEntries(entries, { seen: new Set(seenRaw), role, version, isGM });
 
     _showCombinedDialog({ news, update, firstRun });
 }
 
-export async function openNewsHistory() {
+export async function openNewsHistory()
+{
     const [newsPayload, releases] = await Promise.all([_fetchNews(), _fetchReleases()]);
 
     const newsEntries = Array.isArray(newsPayload?.entries) ? newsPayload.entries : [];
@@ -448,17 +527,21 @@ export async function openNewsHistory() {
             close: { icon: '<i class="fas fa-times"></i>', label: "Close" }
         },
         default: "close",
-        render: (html) => {
+        render: (html) =>
+        {
             const root = /** @type {HTMLElement} */ (html instanceof jQuery ? html[0] : html);
             _attachPollHandlers(root);
-            root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} item */ (item) => {
-                item.addEventListener("click", () => {
+            root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} item */ (item) =>
+            {
+                item.addEventListener("click", () =>
+                {
                     const tab = item.dataset.tab;
-                    root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} i */ (i) => i.classList.toggle("active", i.dataset.tab === tab));
-                    root.querySelectorAll("section.tab").forEach(/** @param {HTMLElement} s */ (s) => {
-                        const match = s.dataset.tab === tab;
-                        s.classList.toggle("active", match);
-                        s.style.display = match ? "" : "none";
+                    root.querySelectorAll(".tabs .item").forEach(/** @param {HTMLElement} tabItem */ (tabItem) => tabItem.classList.toggle("active", tabItem.dataset.tab === tab));
+                    root.querySelectorAll("section.tab").forEach(/** @param {HTMLElement} sectionEl */ (sectionEl) =>
+                    {
+                        const match = sectionEl.dataset.tab === tab;
+                        sectionEl.classList.toggle("active", match);
+                        sectionEl.style.display = match ? "" : "none";
                     });
                 });
             });
@@ -466,7 +549,8 @@ export async function openNewsHistory() {
     }, { width: 900, height: 720, resizable: true, classes: ["lancer-dialog-base", "lancer-no-title"] }).render(true);
 }
 
-Hooks.once("setup", () => {
+Hooks.once("setup", () =>
+{
     game.settings.register(NEWS_MODULE_ID, SEEN_SETTING, {
         scope: "client",
         config: false,
@@ -481,7 +565,8 @@ Hooks.once("setup", () => {
     });
 });
 
-Hooks.on("ready", async () => {
+Hooks.on("ready", async () =>
+{
     if (!game.user?.id)
         return;
     await _runNews();

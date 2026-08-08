@@ -6,23 +6,27 @@ import { injectBonusToFlowState } from '../bonuses/genericBonuses.js';
 
 import('../bonuses/genericBonuses.js');
 
-export function registerModuleFlows(flowSteps, flows) {
+export function registerModuleFlows(flowSteps, flows)
+{
 
     const ActivationFlow = flows.get("ActivationFlow");
-    if (!ActivationFlow) {
+    if (!ActivationFlow)
+    {
         console.error("lancer-automations | Could not find ActivationFlow to retrieve base Flow class");
         return;
     }
     const Flow = Object.getPrototypeOf(ActivationFlow);
 
-    class SimpleActivationFlow extends Flow {
-        constructor(uuid, data) {
+    class SimpleActivationFlow extends Flow
+    {
+        constructor(uuid, options)
+        {
             const initialData = {
                 type: "action",
-                title: data?.title || "",
-                action: data?.action || null,
-                detail: data?.detail || "",
-                tags: data?.tags || []
+                title: options?.title || "",
+                action: options?.action || null,
+                detail: options?.detail || "",
+                tags: options?.tags || []
             };
             super(uuid, initialData);
         }
@@ -34,15 +38,18 @@ export function registerModuleFlows(flowSteps, flows) {
 
 }
 
-export function registerFlowStatePersistence() {
-    ['printAttackCard', 'printTechAttackCard'].forEach(stepName => {
+export function registerFlowStatePersistence()
+{
+    ['printAttackCard', 'printTechAttackCard'].forEach(stepName =>
+    {
         const originalStep = game.lancer.flowSteps.get(stepName);
-        if (!originalStep) {
+        if (!originalStep)
             return;
-        }
 
-        game.lancer.flowSteps.set(stepName, async function(state, options) {
-            const hookId = Hooks.on("preCreateChatMessage", (message) => {
+        game.lancer.flowSteps.set(stepName, async function(state, options)
+        {
+            const hookId = Hooks.on("preCreateChatMessage", (message) =>
+            {
                 const attackData = message.flags?.lancer?.attackData;
                 if (!attackData)
                     return;
@@ -52,19 +59,22 @@ export function registerFlowStatePersistence() {
                 if (!effectMatch && !hasInjectedTags && !hasFlowBonus)
                     return;
                 let flowState = {};
-                if (state.la_extraData && typeof state.la_extraData === 'object') {
+                if (state.la_extraData && typeof state.la_extraData === 'object')
                     flowState = { ...state.la_extraData };
-                }
-                if (Object.keys(flowState).length > 0) {
+                if (Object.keys(flowState).length > 0)
+                {
                     message.updateSource({
                         "flags.lancer-automations.flowState": flowState
                     });
                 }
             });
 
-            try {
+            try
+            {
                 return await originalStep(state, options);
-            } finally {
+            }
+            finally
+            {
                 Hooks.off("preCreateChatMessage", hookId);
             }
         });
@@ -78,51 +88,55 @@ export const ActiveFlowState = {
     current: null
 };
 
-export function bindChatMessageStateInterceptor(message, html) {
+export function bindChatMessageStateInterceptor(message, html)
+{
     const flowState = message.flags?.["lancer-automations"]?.flowState;
-    if (!flowState) {
+    if (!flowState)
         return;
-    }
 
     // v13's renderChatMessageHTML passes a raw HTMLElement; legacy/wrapped paths pass jQuery.
     const root = html instanceof HTMLElement ? html : html[0];
     const damageBtn = root?.querySelector(".lancer-damage-flow");
-    if (damageBtn) {
-        damageBtn.addEventListener("click", () => {
+    if (damageBtn)
+    {
+        damageBtn.addEventListener("click", () =>
+        {
             ActiveFlowState.current = flowState;
             // Clear it shortly after in case the flow doesn't begin synchronously for some reason
-            setTimeout(() => {
+            setTimeout(() =>
+            {
                 ActiveFlowState.current = null;
             }, 100);
         }, true);
     }
 }
 
-/**
- * Injects extra data management methods into a given Flow state object.
- * This directly modifies the passed state object to include injectFlowExtraData and getFlowExtraData.
- * It is safe to call multiple times on the same object.
- * @param {Object} state - The flow state object
- * @returns {Object} The modified state object
- */
-export function injectExtraDataUtility(state) {
+/** Injects extra-data + injectBonus methods into a flow state; idempotent. */
+export function injectExtraDataUtility(state)
+{
     if (!state)
         return state;
 
-    if (!state.injectFlowExtraData) {
-        state.injectFlowExtraData = function(extraData) {
+    if (!state.injectFlowExtraData)
+    {
+        state.injectFlowExtraData = function(extraData)
+        {
             this.la_extraData = foundry.utils.mergeObject(this.la_extraData || {}, extraData);
         };
     }
 
-    if (!state.getFlowExtraData) {
-        state.getFlowExtraData = function() {
+    if (!state.getFlowExtraData)
+    {
+        state.getFlowExtraData = function()
+        {
             return this.la_extraData || {};
         };
     }
 
-    if (!state.injectBonus) {
-        state.injectBonus = function(bonus) {
+    if (!state.injectBonus)
+    {
+        state.injectBonus = function(bonus)
+        {
             injectBonusToFlowState(this, bonus);
         };
     }
@@ -130,15 +144,12 @@ export function injectExtraDataUtility(state) {
     return state;
 }
 
-/**
- * Flow step injected before showAttackHUD in TechAttackFlow.
- * When the attack is an invade but has no lancerItem (e.g. Fragment Signal),
- * sets a minimal fake lancerItem on acc_diff so isTech() returns true and
- * the HUD renders with purple tech styling instead of grey weapon styling.
- */
-export async function forceTechHUDStep(state, _options) {
+/** Fakes a lancerItem on invades that lack one (e.g. Fragment Signal) so isTech() returns true and the HUD gets tech styling. */
+export async function forceTechHUDStep(state, _options)
+{
     const data = state?.data;
-    if (data?.invade && data.acc_diff && !data.acc_diff.lancerItem) {
+    if (data?.invade && data.acc_diff && !data.acc_diff.lancerItem)
+    {
         data.acc_diff.lancerItem = {
             is_mech_weapon: () => false,
             is_pilot_weapon: () => false,

@@ -1,0 +1,95 @@
+<form class="lancer-dialog-base la-onboarding-form" autocomplete="off" style="display:flex; flex-direction:column; height:100%; gap:0;">
+
+    <header class="lancer-dialog-header" style="margin-bottom:0;">
+        <div class="lancer-dialog-title">LANCER AUTOMATIONS SETUP</div>
+        <div class="lancer-dialog-subtitle">A few yes/no questions to get you started</div>
+    </header>
+
+    <div class="la-onb-body" style="flex:1 1 auto; overflow-y:auto; padding:10px 16px 12px;">
+        {{#each pages}}
+        <div class="la-onb-page" data-index="{{this.index}}" data-type="{{this.type}}"{{#if this.hidden}} style="display:none;"{{/if}}>
+
+            {{#if this.isIntro}}
+            <div style="padding:6px 2px; line-height:1.55; color:var(--la-ink);">
+                <p style="margin:0 0 10px;">This wizard walks you through the module's main features as plain yes/no questions. Your answers flip the matching settings; nothing is saved until you reach the end and press <b>Apply</b>.</p>
+                <p style="margin:0 0 10px;">You can change any of these later in <b>Game Settings &rarr; Configure Settings &rarr; Lancer Automations</b>, or re-run this wizard from there at any time.</p>
+                <div style="margin:12px 0 0; padding:9px 11px; border-left:3px solid var(--la-edge); background:rgba(0,0,0,0.03); font-size:0.9em; line-height:1.5;">
+                    <b>Already set up another world?</b> Export your config there (<b>Tools &amp; Extras &rarr; Export to JSON</b>) and import it here to skip all of this.
+                </div>
+                {{#unless ../fcsActive}}
+                <div style="margin:12px 0 0; padding:9px 11px; border-left:3px solid var(--primary-color, #782e22); background:color-mix(in srgb, var(--primary-color, #782e22) 8%, transparent); font-size:0.9em; line-height:1.5;">
+                    <b>Tip:</b> some settings are per-player, so your answer only applies to your own screen. Install <a href="https://gitlab.com/kimitsu_desu/force-client-settings" target="_blank" rel="noopener"><b>Force Client Settings</b></a> and this wizard will let you push those onto your players too.
+                </div>
+                {{/unless}}
+            </div>
+            {{/if}}
+
+            {{#if this.isGroup}}
+            <h2 style="border-bottom:1px solid var(--primary-color, #782e22); margin:4px 0 4px; font-size:1.05em; display:flex; align-items:center; gap:8px;">
+                <i class="{{this.icon}}"></i> {{this.label}}
+            </h2>
+            <p style="margin:0 0 8px; font-size:0.85em; color:var(--la-ink-dim); line-height:1.45;">{{this.blurb}}</p>
+
+            {{#each this.questions}}
+            <div class="la-onb-q" data-qid="{{this.id}}" data-original="{{this.originalValue}}" data-label="{{this.label}}" style="padding:11px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 15%, transparent);">
+                <div style="display:flex; align-items:flex-start; gap:12px;">
+                    <div style="flex:1 1 auto; min-width:0;">
+                        <div style="font-weight:bold; color:var(--la-ink); line-height:1.3;">{{this.label}}</div>
+                        <p style="margin:3px 0 0; font-size:0.84em; color:var(--la-ink-dim); line-height:1.45;">{{this.explain}}</p>
+                        {{#if this.warn}}
+                        <p style="margin:4px 0 0; font-size:0.8em; color:#b35c00; line-height:1.4;"><i class="fas fa-triangle-exclamation"></i> {{this.warn}}</p>
+                        {{/if}}
+                        {{#if this.link}}
+                        <p style="margin:6px 0 0;">
+                            <a href="{{this.link.url}}" download target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; font-size:0.8em; padding:3px 10px; border:1px solid var(--primary-color, #782e22); border-radius:3px; color:var(--primary-color, #782e22); text-decoration:none;"><i class="fas fa-download"></i> {{this.link.label}}</a>
+                        </p>
+                        {{/if}}
+                    </div>
+                    <div style="flex:0 0 auto; display:flex; align-items:center; gap:14px; padding-top:1px;">
+                        {{#if this.isChoice}}
+                        <select name="q.{{this.id}}" style="max-width:150px;">
+                            {{#each this.choices}}
+                            <option value="{{this.value}}"{{#if this.selected}} selected{{/if}}>{{this.label}}</option>
+                            {{/each}}
+                        </select>
+                        {{else}}
+                        <label style="cursor:pointer; white-space:nowrap;"><input type="radio" name="q.{{this.id}}" value="yes"{{#if this.isYes}} checked{{/if}}> Yes</label>
+                        <label style="cursor:pointer; white-space:nowrap;"><input type="radio" name="q.{{this.id}}" value="no"{{#unless this.isYes}} checked{{/unless}}> No</label>
+                        {{/if}}
+
+                        {{#if this.forceable}}
+                        <label class="la-onb-force" title="Force this on your players (Force Client Settings). You can soften or lift it later from the lock icons in the config window."
+                               style="display:flex; align-items:center; gap:5px; font-size:0.76em; padding-left:12px; border-left:1px solid var(--la-edge); color:var(--la-ink-dim); white-space:nowrap;">
+                            <input type="checkbox" name="fcs.{{this.id}}"{{#if this.forced}} checked{{/if}}>
+                            <i class="fas fa-lock"></i> Force
+                        </label>
+                        {{/if}}
+                    </div>
+                </div>
+            </div>
+            {{/each}}
+            {{/if}}
+
+            {{#if this.isSummary}}
+            <div style="padding:14px 4px; line-height:1.55; color:var(--la-ink);">
+                <h2 style="border-bottom:1px solid var(--primary-color, #782e22); margin:0 0 10px; font-size:1.05em;"><i class="fas fa-flag-checkered"></i> Review your changes</h2>
+                <p style="margin:0 0 10px;">This is what will change when you press <b>Apply &amp; Continue</b>. Nothing has been saved yet.</p>
+                <div class="la-onb-summary-list" style="margin:10px 0;"></div>
+                <p style="margin:0; font-size:0.85em; color:var(--la-ink-dim);">Some options need a page reload; you'll be asked once at the end.</p>
+            </div>
+            {{/if}}
+
+        </div>
+        {{/each}}
+    </div>
+
+    <footer class="la-onb-footer" style="flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-top:1px solid var(--la-edge);">
+        <button type="button" class="la-onb-skip" style="width:auto; margin:0; flex:0 0 auto; background:transparent; border:1px solid var(--la-edge); color:var(--la-ink-dim); padding:5px 12px; cursor:pointer; font-size:0.85em; white-space:nowrap;">Skip setup</button>
+        <span class="la-onb-step" style="flex:1 1 auto; text-align:center; font-size:0.78em; color:var(--la-ink-dim);"></span>
+        <div style="flex:0 0 auto; display:flex; align-items:center; gap:8px;">
+            <button type="button" class="la-onb-back" style="visibility:hidden; width:auto; margin:0; flex:0 0 auto; background:rgba(0,0,0,0.04); border:1px solid var(--la-edge); color:var(--la-ink); padding:6px 16px; cursor:pointer; white-space:nowrap;"><i class="fas fa-arrow-left"></i> Back</button>
+            <button type="button" class="la-onb-next" style="width:auto; margin:0; flex:0 0 auto; background:var(--primary-color, #991e2a); border:1px solid var(--primary-color, #991e2a); color:#fff; padding:6px 18px; cursor:pointer; font-weight:bold; white-space:nowrap;">Next <i class="fas fa-arrow-right"></i></button>
+        </div>
+    </footer>
+
+</form>

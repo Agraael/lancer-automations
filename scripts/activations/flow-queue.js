@@ -5,7 +5,8 @@ let chain = Promise.resolve();
 /** @type {Array<{ label: string, queuedAt: string }>} */
 const queueLabels = [];
 
-function _hhmmss() {
+function _hhmmss()
+{
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -18,11 +19,15 @@ function _hhmmss() {
 let _flowBodyDepth = 0;
 
 /** Wrap a flow-body callback so child flow.begin() bypass the queue. */
-export async function runInFlowBody(asyncFn) {
+export async function runInFlowBody(asyncFn)
+{
     _flowBodyDepth++;
-    try {
+    try
+    {
         return await asyncFn();
-    } finally {
+    }
+    finally
+    {
         _flowBodyDepth--;
     }
 }
@@ -35,38 +40,55 @@ let innerChain = Promise.resolve();
 // derive the "waiting" count for the indicator: total - active.
 let activeCount = 0;
 
-function _queueOn(getChain, setChain, fn, label) {
+function _queueOn(getChain, setChain, fn, label)
+{
     const wasIdle = queueLabels.length === 0;
     queueLabels.push({ label, queuedAt: _hhmmss() });
     _renderIndicator();
-    const next = getChain().then(async () => {
+    const next = getChain().then(async () =>
+    {
         if (!wasIdle)
             await new Promise(r => setTimeout(r, INTER_FLOW_DELAY_MS));
         activeCount++;
         _renderIndicator();
-        try {
-            const r = fn();
+        try
+        {
+            const result = fn();
             setTimeout(() => _renderIndicator(), 50);
             setTimeout(() => _renderIndicator(), 250);
-            return await r;
-        } finally {
+            return await result;
+        }
+        finally
+        {
             activeCount--;
         }
     });
-    setChain(next.catch(() => {}).finally(() => {
+    setChain(next.catch(() =>
+    {}).finally(() =>
+    {
         queueLabels.shift();
         _renderIndicator();
     }));
     return next;
 }
 
-export function queue(fn, label = 'Flow') {
+export function queue(fn, label = 'Flow')
+{
     if (_flowBodyDepth > 0)
-        return _queueOn(() => innerChain, c => { innerChain = c; }, fn, label);
-    return _queueOn(() => chain, c => { chain = c; }, fn, label);
+    {
+        return _queueOn(() => innerChain, c =>
+        {
+            innerChain = c;
+        }, fn, label);
+    }
+    return _queueOn(() => chain, c =>
+    {
+        chain = c;
+    }, fn, label);
 }
 
-export function _flowQueueDebug() {
+export function _flowQueueDebug()
+{
     return {
         labels: queueLabels.map(q => q.label),
         active: activeCount,
@@ -74,7 +96,8 @@ export function _flowQueueDebug() {
     };
 }
 
-function _hudLabel(stepName, state) {
+function _hudLabel(stepName, state)
+{
     const item = state?.item?.name;
     const actor = state?.actor?.name;
     if (item)
@@ -86,24 +109,29 @@ function _hudLabel(stepName, state) {
 
 let _indicatorEl = null;
 
-function _findActiveCard() {
+function _findActiveCard()
+{
     const huds = document.querySelectorAll('.lancer-hud');
     if (huds.length)
         return /** @type {HTMLElement} */ (huds[huds.length - 1]);
     return null;
 }
 
-function _renderIndicator() {
+function _renderIndicator()
+{
     const waiting = Math.max(0, queueLabels.length - Math.max(1, activeCount));
     const target = _findActiveCard();
-    if (waiting <= 0 || !target) {
-        if (_indicatorEl) {
+    if (waiting <= 0 || !target)
+    {
+        if (_indicatorEl)
+        {
             _indicatorEl.remove();
             _indicatorEl = null;
         }
         return;
     }
-    if (!_indicatorEl) {
+    if (!_indicatorEl)
+    {
         _injectStyles();
         _indicatorEl = document.createElement('div');
         _indicatorEl.className = 'la-flow-queue-indicator';
@@ -121,7 +149,8 @@ function _renderIndicator() {
 }
 
 let _stylesInjected = false;
-function _injectStyles() {
+function _injectStyles()
+{
     if (_stylesInjected)
         return;
     _stylesInjected = true;
@@ -168,15 +197,18 @@ const HUD_STEPS_TO_QUEUE = [
     'showStatRollHUD',
 ];
 
-export function initFlowQueue() {
+export function initFlowQueue()
+{
     const flowSteps = game.lancer?.flowSteps;
     if (!flowSteps)
         return;
-    for (const stepName of HUD_STEPS_TO_QUEUE) {
+    for (const stepName of HUD_STEPS_TO_QUEUE)
+    {
         const original = flowSteps.get(stepName);
         if (!original)
             continue;
-        flowSteps.set(stepName, async function (state, options) {
+        flowSteps.set(stepName, async function (state, options)
+        {
             return queue(() => original(state, options), _hudLabel(stepName, state));
         });
     }

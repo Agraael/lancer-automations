@@ -1,6 +1,6 @@
-# API - Combat, Spatial & Item Tools
+# API - Combat & Weapons
 
-[Back to API Reference](API_REFERENCE.md)
+[Back to API Reference](API_REFERENCE.md) · Feature guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md)
 
 ---
 
@@ -20,8 +20,52 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 | <kbd>actor</kbd> | `Actor` | *required* | The actor making the roll |
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` |
 | <kbd>title</kbd> | `string` | auto | Roll title |
-| <kbd>target</kbd> | `number\|"token"` | `10` | Pass threshold or `"token"` for interactive choice |
+| <kbd>target</kbd> | `number\|"token"\|Token\|TokenDocument` | `10` | Pass threshold or `"token"` for interactive choice |
 | <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>executeContestedCheck</code></b> <sup>async</sup> → <code>{ completed, winner, loser, winnerToken, loserToken, tie, results }</code></summary>
+
+<br>
+
+```js
+const res = await api.executeContestedCheck(input1, stat1, input2, stat2, options)
+```
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>input1</kbd> | `Actor\|Token` | *required* | First contender |
+| <kbd>stat1</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
+| <kbd>input2</kbd> | `Actor\|Token` | *required* | Second contender |
+| <kbd>stat2</kbd> | `string` | *required* | Second contender's stat |
+| <kbd>options</kbd> | `Object` | `{}` | `{ title?: string, sendToOwner?: boolean }` |
+
+Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie; `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>executeForceCheck</code></b> <sup>async</sup> → <code>{ completed, results }</code></summary>
+
+<br>
+
+```js
+const res = await api.executeForceCheck(skill, targets, options)
+```
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>skill</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` |
+| <kbd>targets</kbd> | `Token[]` | user targets | The tokens that roll |
+| <kbd>options</kbd> | `Object` | `{}` | `{ saveVs?: Token\|Actor, sendToOwner?: boolean = true, title?: string }` |
+
+Sends each target its HASE check (owner rolls; GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary; returned by `openForceCheckCard`.
 
 </details>
 
@@ -40,14 +84,31 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 |:------|:-----|:--------|:------------|
 | <kbd>attacker</kbd> | `Token\|Actor` | *required* | The attacker |
 | <kbd>targets</kbd> | `Array<Token>` | *required* | Damage targets |
-| <kbd>damageValue</kbd> | `number` | `null` | Base damage |
+| <kbd>damageValue</kbd> | `number\|string` | `null` | Base damage |
 | <kbd>damageType</kbd> | `string` | `null` | kinetic, energy, explosive, burn, heat, variable |
 | <kbd>title</kbd> | `string` | `"Damage Roll"` | Roll title |
 | <kbd>options</kbd> | `Object` | `{}` | Flow options (see below) |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
-**`options` keys:**
-`{ ap, paracausal, overkill, reliable, half_damage, add_burn, invade, has_normal_hit, has_crit_hit, tags, bonus_damage, hit_results }`
+**`options` keys** (all merged onto the Lancer `DamageRollFlow` state):
+
+| Key | Type | Default | Meaning |
+|:----|:-----|:--------|:--------|
+| <kbd>ap</kbd> | `boolean` | `false` | Armor Piercing - damage ignores the target's armor. |
+| <kbd>paracausal</kbd> | `boolean` | `false` | Damage can't be reduced (bypasses armor **and** resistances). |
+| <kbd>overkill</kbd> | `boolean` | `false` | Overkill - the flow rerolls 1s on the damage dice (self-heat per reroll). |
+| <kbd>reliable</kbd> | `boolean` | `false` | Reliable - applies a minimum-damage floor. |
+| <kbd>half_damage</kbd> | `boolean` | `false` | Halve all damage dealt. |
+| <kbd>add_burn</kbd> | `boolean` | `true` | Whether Burn-type damage also accumulates on the target's burn track. `false` = immediate burn hit only, no ongoing burn. |
+| <kbd>invade</kbd> | `boolean` | `false` | Flags the roll as an Invade tech-attack (passed to Lancer flow). |
+| <kbd>has_normal_hit</kbd> | `boolean` | `true` | At least one normal (non-crit) hit exists -> rolls normal damage. |
+| <kbd>has_crit_hit</kbd> | `boolean` | `false` | At least one crit exists -> rolls crit damage. |
+| <kbd>tags</kbd> | `Array` | `[]` | Weapon tags that shape the roll (Overkill/Reliable/AP...). Element: `{ lid, val?, name?, description? }`. |
+| <kbd>bonus_damage</kbd> | `Array` | `[]` | Extra damage entries added to the roll. Element: `{ type, val }` where `type` is a DamageType (`"Kinetic"`/`"Energy"`/`"Explosive"`/`"Heat"`/`"Burn"`/`"Variable"`) and `val` a formula string. |
+| <kbd>hit_results</kbd> | `Array` | `[]` | Per-target hit outcomes that decide which targets take damage (chained damage rolls carry these instead of user targets). Element: `{ target: Token, total: string, hit: boolean, crit: boolean, usedLockOn?: boolean }`. |
+| <kbd>targeting</kbd> | `Object` | - | See below. |
+
+**`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }` - opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target.
 
 </details>
 
@@ -94,6 +155,27 @@ await api.executeTechAttack(target, options, extraData)
 ---
 
 <details>
+<summary><b><code>executeExtraActionCombat</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
+
+<br>
+
+```js
+await api.executeExtraActionCombat(actorOrToken, action, sourceItem?)
+```
+
+Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`); `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [API_HUD.md](API_HUD.md).
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>actorOrToken</kbd> | `Actor\|Token` | *required* | The attacker |
+| <kbd>action</kbd> | `ExtraAction` | *required* | The extra action (must have `laCombat`) |
+| <kbd>sourceItem</kbd> | `Item\|null` | `null` | Owning item, if any (tech attacks route through it) |
+
+</details>
+
+---
+
+<details>
 <summary><b><code>executeSimpleActivation</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -104,10 +186,9 @@ await api.executeSimpleActivation(actor, options, extraData)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>title</kbd> | `string` | `""` | Card/Match title |
-| <kbd>action</kbd> | `Object` | `null` | `{ name, activation }` |
-| <kbd>detail</kbd> | `string` | `""` | Description text |
-| <kbd>tags</kbd> | `Array` | `[]` | Lancer tags |
+| <kbd>actor</kbd> | `Actor` | *required* | Acting actor |
+| <kbd>options</kbd> | `{ title?: string; action?: { name, activation }; detail?: string; tags?: Array }` | `{}` | Card fields |
+| <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
 </details>
 
@@ -122,11 +203,11 @@ await api.executeSimpleActivation(actor, options, extraData)
 await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter)
 ```
 
-Executes a Skirmish action. Optionally bypasses mount selection or pre-targets a token.
+Optionally bypasses mount selection or pre-targets a token.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>actorOrToken</kbd> | `Token\|Actor` | *required* | The actor or token performing the skirmish |
+| <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | The actor or token performing the skirmish |
 | <kbd>bypassMount</kbd> | `Object` | `null` | Mount object to skip mount selection |
 | <kbd>preTarget</kbd> | `Token` | `null` | Pre-selected target token |
 | <kbd>weaponFilter</kbd> | `Function` | `null` | `(weapon) => boolean` filter for available weapons |
@@ -144,7 +225,7 @@ Executes a Skirmish action. Optionally bypasses mount selection or pre-targets a
 await api.beginWeaponAttackFlow(weapon, options, extraData)
 ```
 
-Starts a weapon attack flow for a specific weapon item. Use it when you need to trigger an attack with a known weapon directly (e.g. an NPC's specific rifle).
+Starts a weapon attack flow for a specific weapon item (e.g. an NPC's specific rifle).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -156,236 +237,9 @@ Starts a weapon attack flow for a specific weapon item. Use it when you need to 
 
 ---
 
-## Spatial & Distance Tools
-
-### Distance Calculations
-
-Three distance functions at different abstraction levels. All return distance in **grid spaces** (not pixels).
-
-| Function | Input | Size-aware | Use case |
-|:---------|:------|:---:|:---------|
-| `getTokenDistance` | Two tokens | Yes | General token-to-token distance. Wraps `getMinGridDistance`. |
-| `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. Optional `includeElevation` adds elevation difference to the planar distance. |
-| `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
-
-<details>
-<summary><b><code>getTokenDistance</code></b> → <code>number</code></summary>
-
-<br>
-
-```js
-api.getTokenDistance(token1, token2)
-```
-
-Delegates to `getMinGridDistance(token1, token2)`.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token1</kbd> | `Token` | First token |
-| <kbd>token2</kbd> | `Token` | Second token |
-
-</details>
-
----
-
-<details>
-<summary><b><code>getMinGridDistance</code></b> → <code>number</code></summary>
-
-<br>
-
-```js
-api.getMinGridDistance(token1, token2, overridePos1, includeElevation)
-```
-
-Minimum cell-to-cell grid distance across all occupied cell pairs.
-
-When `includeElevation` is `true`, the elevation difference (converted to grid spaces) is **added** to the planar distance - e.g. 1 horizontal + 2 vertical = 3. When `false` (default), elevation is ignored (purely 2D).
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>token1</kbd> | `Token` | *required* | First token |
-| <kbd>token2</kbd> | `Token` | *required* | Second token |
-| <kbd>overridePos1</kbd> | `{x, y}` | `null` | Evaluate as if token1 were at this world position |
-| <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `|elevation1 − elevation2|` (in grid spaces) to the planar result |
-
-</details>
-
----
-
-<details>
-<summary><b><code>getGridDistance</code></b> → <code>number</code></summary>
-
-<br>
-
-```js
-api.getGridDistance(pos1, pos2)
-```
-
-Hex grids: cube distance. Square grids: `measurePath` rounded to grid units.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>pos1</kbd> | `{x, y}` | World coordinates |
-| <kbd>pos2</kbd> | `{x, y}` | World coordinates |
-
-</details>
-
----
-
-### Faction & Disposition
-
-<details>
-<summary><b><code>isHostile</code></b> → <code>boolean</code></summary>
-
-<br>
-
-```js
-api.isHostile(reactor, mover)
-```
-
-Checks if two tokens are hostile. Compatible with the Token Factions module.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>reactor</kbd> | `Token` | The reacting token |
-| <kbd>mover</kbd> | `Token` | The triggering token |
-
-</details>
-
----
-
-<details>
-<summary><b><code>isFriendly</code></b> → <code>boolean</code></summary>
-
-<br>
-
-```js
-api.isFriendly(token1, token2)
-```
-
-Checks if two tokens are friendly. Compatible with the Token Factions module.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token1</kbd> | `Token` | First token |
-| <kbd>token2</kbd> | `Token` | Second token |
-
-</details>
-
----
-
-### Grid & Cell Data
-
-<details>
-<summary><b><code>getTokenCells</code></b> → <code>Array&lt;[row, col]&gt;</code></summary>
-
-<br>
-
-```js
-api.getTokenCells(token)
-```
-
-Returns the grid cells occupied by a token.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token</kbd> | `Token` | The token to inspect |
-
-</details>
-
----
-
-<details>
-<summary><b><code>getMaxGroundHeightUnderToken</code></b> → <code>number</code></summary>
-
-<br>
-
-```js
-api.getMaxGroundHeightUnderToken(token, terrainAPI)
-```
-
-Returns the highest terrain height value under any cell occupied by the token. Requires the Terrain Height Tools module API.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token</kbd> | `Token` | The token to check |
-| <kbd>terrainAPI</kbd> | `Object` | Terrain Height Tools API object |
-
-</details>
-
----
-
-<details>
-<summary><b><code>triggerDangerousZoneFlow</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.triggerDangerousZoneFlow(token, damageType, damageValue)
-```
-
-Rolls an ENG check on the token's actor. On a result below 10 the token is targeted and a damage roll is performed. Dedupes to once per combat round per actor (uses an actor flag in the `lancer-automations` namespace). Outside combat, fires every call.
-
-Useful as the body of a "dangerous terrain" trigger from a sibling module (e.g. Terrain Height Tools' on-enter trigger):
-
-```js
-await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token, "burn", 5);
-```
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token</kbd> | `Token \| TokenDocument` | Token whose actor rolls ENG and takes damage on failure |
-| <kbd>damageType</kbd> | `string` | `"kinetic"`, `"energy"`, `"explosive"`, `"burn"`, `"heat"`, `"variable"`. Defaults to `"kinetic"` |
-| <kbd>damageValue</kbd> | `number \| string` | Damage amount or dice expression. Defaults to `5` |
-
-> Designed for Pilot/Mech actors; NPCs do not have a direct `system.eng` and the flow returns silently.
-
-</details>
-
----
-
-### Debug Visualizations
-
-<details>
-<summary><b><code>drawThreatDebug</code></b> · <b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.drawThreatDebug(token)    // Draws threat range cells on canvas. Hex grids only.
-await api.drawDistanceDebug()       // Select 2 tokens, draws shortest distance line.
-```
-
-</details>
-
----
-
-<details>
-<summary><b><code>drawRangeHighlight</code></b> → <code>PIXI.Graphics</code></summary>
-
-<br>
-
-```js
-api.drawRangeHighlight(casterToken, range, color, alpha, includeSelf)
-```
-
-Draws a range highlight on the canvas.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>casterToken</kbd> | `Token\|{x, y}` | *required* | Origin token or point |
-| <kbd>range</kbd> | `number` | *required* | Radius in grid spaces |
-| <kbd>color</kbd> | `number` | `0x00ff00` | Hex color |
-| <kbd>alpha</kbd> | `number` | `0.2` | Opacity (0-1) |
-| <kbd>includeSelf</kbd> | `boolean` | `false` | Include origin cells |
-
-</details>
-
----
-
 ## Weapon & Item Details
 
-These functions provide processed information about weapons and items, often accounting for active actor bonuses (e.g., Accuracy, Threat bonuses).
+Processed weapon/item info, with active actor bonuses applied (e.g. Accuracy, Threat).
 
 <details>
 <summary><b><code>getItemTags_WithBonus</code></b> <sup>async</sup> → <code>Array&lt;Object&gt;</code></summary>
@@ -465,6 +319,72 @@ Returns the single highest reach value across all scanned weapons. Scans `Range`
 
 ---
 
+<details>
+<summary><b><code>getMaxItemRanges_WithBonus</code></b> <sup>async</sup> → <code>Object</code></summary>
+
+<br>
+
+```js
+await api.getMaxItemRanges_WithBonus(item, actor)   // { Range: 10, Thrown: 5, Deploy: 8 }
+```
+
+Single item's max range per type, with bonuses. Also folds in action ranges, `tg_thrown` (`Thrown`) and `deployRange` (`Deploy`).
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>actor</kbd> `Actor` (optional, defaults to `item.parent`).
+
+</details>
+
+---
+
+<details>
+<summary><b><code>getWeaponProfiles_WithBonus</code></b> → <code>Array&lt;Object&gt;</code></summary>
+
+<br>
+
+```js
+api.getWeaponProfiles_WithBonus(weapon, actor)[weapon.system.selected_profile_index ?? 0].range
+```
+
+All profiles with bonuses merged into `range`/`damage` (`base_range`/`base_damage` keep the originals).
+
+**Params:** <kbd>weapon</kbd> `Item` · <kbd>actor</kbd> `Actor` (optional, defaults to `weapon.parent`).
+
+</details>
+
+---
+
+<details>
+<summary><b><code>getSensorRange_WithBonus</code></b> → <code>number</code></summary>
+
+<br>
+
+```js
+api.getSensorRange_WithBonus(actor)
+```
+
+Actor's effective sensor range (`system.sensor_range`, else `10`), plus any `Sensor` range-type bonuses.
+
+**Params:** <kbd>actor</kbd> `Actor|Token`.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>hasTag</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
+
+```js
+await api.hasTag(item, 'smart')   // or 'tg_smart'
+```
+
+True if the item has the tag (bonus-aware). Accepts the LID with or without `tg_`.
+
+</details>
+
+---
+
 #### Simple lookups
 
 | Function | Returns | Description |
@@ -472,77 +392,3 @@ Returns the single highest reach value across all scanned weapons. Scans `Range`
 | `getWeaponType(item)` | `string` | Weapon subtype (e.g. `"Superheavy Rifle"`, `"Melee"`). Synchronous, no bonuses. |
 | `getItemType(item)` | `string` | Lancer item type (e.g. `"Weapon"`, `"System"`, `"mech_weapon"`). |
 | `getActivationIcon(actionOrActivation)` | `string` | Icon path or CSS class. Accepts `"reaction"`, `"quick"`, `"full"`, `"protocol"`, `"free"` or an action object. |
-
----
-
-## Resource Management
-
-<details>
-<summary><b><code>setReaction</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.setReaction(actorOrToken, value)
-```
-
-Sets the reaction availability flag on an actor's action tracker.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>actorOrToken</kbd> | `Token\|Actor` | The token or actor to update |
-| <kbd>value</kbd> | `boolean` | `true` = reaction available, `false` = reaction spent |
-
-</details>
-
----
-
-<details>
-<summary><b><code>setItemResource</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.setItemResource(item, nb, counterIndex)
-```
-
-Sets a resource value on an item. Auto-detects the resource type.
-
-Detection order:
-1. **Talent** → `system.counters[counterIndex].value` (clamped to counter `min`/`max`)
-2. **Uses** (`uses.max > 0`) → `system.uses.value` (clamped `0..max`)
-3. **Loaded** → `system.loaded` (`Boolean(nb)`)
-4. **Charged** → `system.charged` (`Boolean(nb)`)
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>item</kbd> | `Item` | *required* | The item document to update |
-| <kbd>nb</kbd> | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
-| <kbd>counterIndex</kbd> | `number` | `0` | For talent items: which counter to update. |
-
-</details>
-
----
-
-<details>
-<summary><b><code>updateTokenSystem</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.updateTokenSystem(token, data)
-```
-
-Updates system data on a token's actor. Automatically routes through the GM socket if the current user doesn't own the actor.
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token</kbd> | `Token` | The token whose actor to update |
-| <kbd>data</kbd> | `Object` | Update data object (e.g. `{ 'system.burn': 0, 'system.hp.value': 10 }`) |
-
-**Example:**
-```js
-await api.updateTokenSystem(target, { 'system.burn': 0 });
-```
-
-</details>

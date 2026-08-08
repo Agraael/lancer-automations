@@ -1,7 +1,21 @@
 <form class="lancer-dialog-base la-config-form" autocomplete="off">
-    <header class="lancer-dialog-header" style="margin-bottom: 0;">
-        <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
-        <div class="lancer-dialog-subtitle">Module configuration</div>
+    <style>
+        .la-config-links a { display: inline-flex; align-items: center; gap: 5px; color: #fff; font-size: 0.85em; text-decoration: none; opacity: 0.85; transition: opacity 0.15s; }
+        .la-config-links a:hover { opacity: 1; text-shadow: 0 0 6px rgba(255, 255, 255, 0.6); }
+        .la-config-links i { font-size: 0.95em; }
+        :root.la-dark .la-config-form .la-section,
+        :root.la-dark .la-config-form .la-subsection-header { color: var(--la-accent) !important; border-bottom-color: var(--la-accent) !important; }
+    </style>
+    <header class="lancer-dialog-header" style="margin-bottom: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+        <div>
+            <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
+            <div class="lancer-dialog-subtitle">Module configuration</div>
+        </div>
+        <nav class="la-config-links" aria-label="Module links" style="display: flex; gap: 16px; align-items: center; flex-shrink: 0; margin-top: 6px;">
+            <a href="https://github.com/Agraael/lancer-automations" target="_blank" rel="noopener" title="Documentation (GitHub)"><i class="fab fa-github"></i>Doc</a>
+            <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener" title="Contact me (Discord)"><i class="fab fa-discord"></i>Contact me</a>
+            <a href="https://www.patreon.com/c/LaSossis" target="_blank" rel="noopener" title="Support on Patreon"><i class="fab fa-patreon"></i>Patreon</a>
+        </nav>
     </header>
 
     <nav class="sheet-tabs tabs la-config-tabs" data-group="primary" style="flex-wrap: wrap; position: relative; padding-right: 32px;">
@@ -70,22 +84,22 @@
             {{else if this.isKeybinding}}
             <div class="la-keybinding-row" data-full-key="{{this.fullKey}}" style="display:flex; align-items:center; gap:10px; margin:2px 0; padding:4px 8px; border-bottom:1px dotted color-mix(in srgb, var(--primary-color, #782e22) 25%, transparent);">
                 <div style="flex:1; min-width:0;">
-                    <div style="font-weight:bold; font-size:0.9em; color:#2b2b2b; line-height:1.2;">{{this.name}}</div>
-                    {{#if this.hint}}<div style="font-size:0.74em; color:#666; line-height:1.25; margin-top:1px;">{{this.hint}}</div>{{/if}}
+                    <div style="font-weight:bold; font-size:0.9em; color:var(--la-ink); line-height:1.2;">{{this.name}}</div>
+                    {{#if this.hint}}<div style="font-size:0.74em; color:var(--la-ink-dim); line-height:1.25; margin-top:1px;">{{this.hint}}</div>{{/if}}
                 </div>
                 <div class="la-kb-binds" style="display:flex; flex-direction:row; flex-wrap:nowrap; gap:4px; align-items:center; flex-shrink:0; line-height:1;">
                     <button type="button" class="la-kb-add" title="Add binding" style="width:16px; height:16px; flex:0 0 auto; padding:0; line-height:1; border:1px solid var(--primary-color, #991e2a); background:var(--primary-color, #991e2a); color:#fff; cursor:pointer; border-radius:50%; font-size:0.6em; margin:0;"><i class="fas fa-plus"></i></button>
                     {{#each this.bindings}}
                     <button type="button" class="la-kb-key" data-idx="{{@index}}" title="Click to rebind. Right-click to remove." style="width:auto; flex:0 0 auto; padding:2px 8px; height:24px; line-height:20px; border:1px solid #999; background:#fff; color:#2b2b2b; border-radius:3px; font-family:monospace; font-size:0.82em; cursor:pointer; box-shadow:0 1px 0 #888; margin:0;">{{this.display}}</button>
                     {{/each}}
-                    <button type="button" class="la-kb-reset" title="Reset to default" style="width:24px; height:24px; flex:0 0 auto; padding:0; line-height:1; border:1px solid #888; background:rgba(0,0,0,0.04); color:#555; cursor:pointer; border-radius:3px; font-size:0.75em; margin:0;"><i class="fas fa-undo"></i></button>
+                    <button type="button" class="la-kb-reset" title="Reset to default" style="width:24px; height:24px; flex:0 0 auto; padding:0; line-height:1; border:1px solid var(--la-edge); background:rgba(0,0,0,0.04); color:var(--la-ink-dim); cursor:pointer; border-radius:3px; font-size:0.75em; margin:0;"><i class="fas fa-undo"></i></button>
                 </div>
             </div>
             {{else if this.isTour}}
             <div class="la-tour-row" data-full-key="{{this.fullKey}}" style="display:flex; align-items:center; gap:10px; margin:2px 0; padding:6px 8px; border-bottom:1px dotted color-mix(in srgb, var(--primary-color, #782e22) 25%, transparent);">
                 <div style="flex:1; min-width:0;">
-                    <div style="font-weight:bold; font-size:0.9em; color:#2b2b2b; line-height:1.2;">{{this.title}}{{#if this.stepCount}}<span style="font-weight:normal; color:#888; font-size:0.85em; margin-left:6px;">· {{this.stepCount}} steps</span>{{/if}}</div>
-                    {{#if this.description}}<div style="font-size:0.78em; color:#666; line-height:1.3; margin-top:2px;">{{this.description}}</div>{{/if}}
+                    <div style="font-weight:bold; font-size:0.9em; color:var(--la-ink); line-height:1.2;">{{this.title}}{{#if this.stepCount}}<span style="font-weight:normal; color:var(--la-ink-dim); font-size:0.85em; margin-left:6px;">· {{this.stepCount}} steps</span>{{/if}}</div>
+                    {{#if this.description}}<div style="font-size:0.78em; color:var(--la-ink-dim); line-height:1.3; margin-top:2px;">{{this.description}}</div>{{/if}}
                 </div>
                 <button type="button" class="la-tour-play" title="Start tour" style="width:auto; flex:0 0 auto; padding:4px 14px; height:26px; line-height:18px; border:1px solid var(--primary-color, #991e2a); background:var(--primary-color, #991e2a); color:#fff; cursor:pointer; border-radius:3px; font-size:0.85em; font-weight:bold; margin:0; white-space:nowrap;"><i class="fas fa-play"></i> Play</button>
             </div>
@@ -142,6 +156,9 @@
                         {{/if}}
                         {{#if this.isFolder}}
                             <file-picker name="{{this.key}}" type="folder" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
+                        {{/if}}
+                        {{#if this.isAudio}}
+                            <file-picker name="{{this.key}}" type="audio" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
                         {{/if}}
                         {{#if this.isColor}}
                             <input type="color" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />

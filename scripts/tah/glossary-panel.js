@@ -1,12 +1,15 @@
 /* global $, game, fromUuid */
 
 import { playUiSound } from './sound.js';
+import { tahScale } from './item-helpers.js';
 
 /** Pull every visible scan journal entry. */
-function _collectVisibleScans() {
+function _collectVisibleScans()
+{
     /** @type {any[]} */
     const out = [];
-    for (const entry of game.journal ?? []) {
+    for (const entry of game.journal ?? [])
+    {
         const flag = entry.flags?.['lancer-automations']?.scan;
         if (!flag)
             continue;
@@ -28,8 +31,10 @@ function _collectVisibleScans() {
     return out;
 }
 
-export class GlossaryPanel {
-    constructor({ el, cancelCollapse, scheduleCollapse }) {
+export class GlossaryPanel
+{
+    constructor({ el, cancelCollapse, scheduleCollapse })
+    {
         this._el = el;
         this._cancelCollapse = cancelCollapse;
         this._scheduleCollapse = scheduleCollapse;
@@ -37,27 +42,34 @@ export class GlossaryPanel {
         this._anchor = null;
     }
 
-    get isVisible() {
+    get isVisible()
+    {
         return this._panel?.is(':visible') ?? false;
     }
 
-    close() {
-        if (this._panel) {
+    close()
+    {
+        if (this._panel)
+        {
             const panel = this._panel;
             this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function () {
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function ()
+            {
                 $(this).remove();
             });
         }
     }
 
-    refresh() {
+    refresh()
+    {
         if (this._panel && this._anchor)
             this.open(this._anchor);
     }
 
-    open(anchorRow) {
-        if (this._panel) {
+    open(anchorRow)
+    {
+        if (this._panel)
+        {
             this._panel.stop(true).remove();
             this._panel = null;
         }
@@ -75,17 +87,20 @@ export class GlossaryPanel {
         const list = $(`<div class="la-hud-glossary-list"></div>`);
         const empty = $(`<div class="la-hud-glossary-empty">No scans visible to you yet.</div>`);
 
-        const renderRows = (filter) => {
+        const renderRows = (filter) =>
+        {
             list.empty();
             const q = filter?.trim().toLowerCase() ?? '';
             const filtered = q
                 ? scans.filter((s) => s.name.toLowerCase().includes(q) || s.displayName.toLowerCase().includes(q))
                 : scans;
-            if (!filtered.length) {
+            if (!filtered.length)
+            {
                 list.append(empty.clone());
                 return;
             }
-            for (const s of filtered) {
+            for (const s of filtered)
+            {
                 const row = $(`<div class="la-glossary-row">
                     <img class="la-glossary-row__img" src="${s.img}" alt="">
                     <div class="la-glossary-row__body">
@@ -94,29 +109,36 @@ export class GlossaryPanel {
                     </div>
                     <i class="fas fa-book-open la-glossary-row__icon"></i>
                 </div>`);
-                row.on('mouseenter', () => {
+                row.on('mouseenter', () =>
+                {
                     this._cancelCollapse();
                     playUiSound('statusHover');
-                    row.css('background', 'color-mix(in srgb, var(--primary-color) 18%, #f5f5f5)');
+                    row.css('background', 'color-mix(in srgb, var(--la-plate), #000 12%)');
                     const clip = row.find('.la-hud-clip')[0];
                     const pan  = row.find('.la-hud-pan')[0];
-                    if (clip && pan) {
+                    if (clip && pan)
+                    {
                         const overflow = pan.scrollWidth - clip.clientWidth;
                         if (overflow > 4)
                             $(clip).stop(true).delay(300).animate({ scrollLeft: overflow }, { duration: overflow * 20, easing: 'linear' });
                     }
                 });
-                row.on('mouseleave', () => {
-                    row.css('background', '#fff');
+                row.on('mouseleave', () =>
+                {
+                    row.css('background', 'var(--la-plate)');
                     row.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
                 });
-                row.on('click', async (ev) => {
+                row.on('click', async (ev) =>
+                {
                     ev.stopPropagation();
-                    try {
+                    try
+                    {
                         const doc = /** @type {any} */ (await fromUuid(s.uuid));
                         if (doc?.sheet)
                             doc.sheet.render(true);
-                    } catch (e) {
+                    }
+                    catch (e)
+                    {
                         console.error('lancer-automations | Glossary click failed', e);
                     }
                 });
@@ -131,10 +153,11 @@ export class GlossaryPanel {
 
         panel.append(list);
 
-        let topInHud = anchorRow.offset().top - this._el.offset().top;
+        const scale = tahScale();
+        let topInHud = (anchorRow.offset().top - this._el.offset().top) / scale;
         const parentCol = anchorRow.closest('[class*="la-hud-col"]').length ? anchorRow.closest('[class*="la-hud-col"]') : anchorRow.parent();
         const leftInHud = parentCol.length
-            ? (parentCol.offset().left - this._el.offset().left + /** @type {number} */ (parentCol.outerWidth()))
+            ? ((parentCol.offset().left - this._el.offset().left) / scale + /** @type {number} */ (parentCol.outerWidth()))
             : /** @type {number} */ (/** @type {any} */ (this._el.children().first()).outerWidth());
         panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
 
@@ -145,16 +168,17 @@ export class GlossaryPanel {
         const hudOffset = this._el.offset();
         const hudTop = hudOffset.top;
         const hudLeft = hudOffset.left;
-        const panelLeftOnPage = hudLeft + leftInHud;
-        const maxWidth = Math.max(280, window.innerWidth - panelLeftOnPage - margin);
+        const panelLeftOnPage = hudLeft + leftInHud * scale;
+        const maxWidth = Math.max(280, (window.innerWidth - panelLeftOnPage - margin) / scale);
         panel.css({ maxWidth });
-        const maxHeight = Math.max(180, window.innerHeight - hudTop - topInHud - margin);
+        const maxHeight = Math.max(180, (window.innerHeight - hudTop - margin) / scale - topInHud);
         panel.css({ maxHeight });
         const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
-        const maxTopInHud = window.innerHeight - margin - panelHeight - hudTop;
-        if (topInHud > maxTopInHud) {
-            topInHud = Math.max(margin - hudTop, maxTopInHud);
-            const newMaxHeight = Math.max(180, window.innerHeight - hudTop - topInHud - margin);
+        const maxTopInHud = (window.innerHeight - margin - panelHeight - hudTop) / scale;
+        if (topInHud > maxTopInHud)
+        {
+            topInHud = Math.max((margin - hudTop) / scale, maxTopInHud);
+            const newMaxHeight = Math.max(180, (window.innerHeight - hudTop - margin) / scale - topInHud);
             panel.css({ top: topInHud, maxHeight: newMaxHeight });
         }
 

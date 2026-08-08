@@ -1,73 +1,12 @@
-import { chooseToken, startChoiceCard, deployWeaponToken, knockBackToken } from "../interactive/index.js";
+import { startChoiceCard, deployWeaponToken, knockBackToken } from "../interactive/index.js";
 import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
-import { accDiffTargetToken } from "../combat/grid-helpers.js";
+import { accDiffTargetToken, getMinGridDistance } from "../combat/grid-helpers.js";
 import { injectKnockbackCheckbox } from "../bonuses/genericBonuses.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX } from "../fx/actionFX.js";
 import { ActiveFlowState } from "./flows.js";
 
-export async function statRollTargetSelectStep(state) {
-    if (!game.settings.get('lancer-automations', 'statRollTargeting')) {
-        return true;
-    }
-
-    if (state.la_extraData?.targetTokenId || state.la_extraData?.chooseToken === false) {
-        return true;
-    }
-
-    const actor = state.actor;
-    const token = actor.token?.object || canvas.tokens.get(actor.token?.id) || canvas.tokens.controlled[0];
-    if (!token) {
-        return true;
-    }
-
-    // Infer stat from path (e.g. system.hull -> HULL)
-    const STATS = new Set(['AGI', 'HULL', 'ENG', 'SYS', 'GRIT', 'TIER']);
-    let statName = "STAT";
-    if (state.data.path) {
-        const parts = state.data.path.split('.');
-        statName = parts[parts.length - 1].toUpperCase();
-    }
-
-    let targets = [];
-    if (STATS.has(state.data.title)) {
-        targets = await chooseToken(token, {
-            title: `${statName} SAVE TARGET`,
-            description: `Select a target to make it a Skill Save (Optional)`,
-            count: 1,
-            range: null,
-            includeSelf: true
-        });
-    }
-
-    if (targets && targets.length > 0) {
-        const targetToken = targets[0];
-        state.la_extraData = state.la_extraData || {};
-        state.la_extraData.targetTokenId = targetToken.id;
-
-        let targetVal = 10;
-        const targetActor = targetToken.actor;
-
-        if (targetActor.type === "npc" || targetActor.type === "deployable") {
-            targetVal = targetActor.system.save || 10;
-        } else if (targetActor.type === "mech") {
-            const path = state.data.path;
-            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
-        }
-
-        state.la_extraData.targetVal = targetVal;
-
-        const currentTitle = state.data.title || `${statName} Check`;
-        let newTitle = currentTitle.replace("Check", "Save");
-        if (!newTitle.includes("Save"))
-            newTitle += " Save";
-
-        state.data.title = `${newTitle} (>= ${targetVal})`;
-    }
-
-    return true;
-}
-
-export async function throwChoiceStep(state) {
+export async function throwChoiceStep(state)
+{
     if (!game.settings.get('lancer-automations', 'enableThrowFlow'))
         return true;
     if (state.la_extraData?.is_throw)
@@ -100,12 +39,14 @@ export async function throwChoiceStep(state) {
         choices: [
             { text: `Attack (${weaponRanges})`,
                 icon: "cci cci-melee",
-                callback: () => {
+                callback: () =>
+                {
                     isThrow = false;
                 } },
             { text: `Throw (${throwRange})`,
                 icon: "fas fa-hammer",
-                callback: () => {
+                callback: () =>
+                {
                     isThrow = true;
                 } }
         ]
@@ -120,24 +61,29 @@ export async function throwChoiceStep(state) {
 
 // After v3's initAttackData builds acc_diff, mirror LA's throw choice into the native
 // thrown flag so v3's attack HUD opens with the checkbox ticked (and range/rules update).
-export async function syncThrowToAccDiffStep(state) {
+export async function syncThrowToAccDiffStep(state)
+{
     const isThrow = !!state.la_extraData?.is_throw;
     const weapon = state.data?.acc_diff?.weapon;
-    if (weapon) weapon.thrown = isThrow;
+    if (weapon)
+        weapon.thrown = isThrow;
     return true;
 }
 
 // After v3's HUD closes, mirror the native thrown flag BACK into LA's is_throw so the user
 // can opt into throw mechanics via the HUD checkbox without going through LA's dialog.
-export async function syncAccDiffToThrowStep(state) {
-    if (state.data?.acc_diff?.weapon?.thrown) {
+export async function syncAccDiffToThrowStep(state)
+{
+    if (state.data?.acc_diff?.weapon?.thrown)
+    {
         state.la_extraData = state.la_extraData || {};
         state.la_extraData.is_throw = true;
     }
     return true;
 }
 
-export async function throwDeployStep(state) {
+export async function throwDeployStep(state)
+{
     if (!state.la_extraData?.is_throw)
         return true;
 
@@ -151,15 +97,18 @@ export async function throwDeployStep(state) {
     const targetInfos = state.data?.acc_diff?.targets || [];
 
     let deployTarget = null;
-    for (let i = 0; i < hitResults.length; i++) {
-        if (hitResults[i]?.hit) {
+    for (let i = 0; i < hitResults.length; i++)
+    {
+        if (hitResults[i]?.hit)
+        {
             const tDoc = hitResults[i]?.target ?? accDiffTargetToken(targetInfos[i]);
             deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
             if (deployTarget)
                 break;
         }
     }
-    if (!deployTarget && targetInfos.length > 0) {
+    if (!deployTarget && targetInfos.length > 0)
+    {
         const tDoc = accDiffTargetToken(targetInfos[0]);
         deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
     }
@@ -174,28 +123,32 @@ export async function throwDeployStep(state) {
     return true;
 }
 
-export async function knockbackInjectStep(state) {
+export async function knockbackInjectStep(state)
+{
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
     injectKnockbackCheckbox(state);
     return true;
 }
 
-export async function knockbackDamageStep(state) {
+export async function knockbackDamageStep(state)
+{
     if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
         return true;
-    const kb = state.data?._csmKnockback;
-    if (!kb?.enabled)
+    const knockback = state.data?._csmKnockback;
+    if (!knockback?.enabled)
         return true;
 
-    const distance = kb.value || 1;
+    const distance = knockback.value || 1;
     const targets = state.data?.targets || [];
     const hitTokens = [];
 
-    for (const targetInfo of targets) {
-        const t = targetInfo.target;
-        if (t) {
-            const tokenObj = t.object || (t.id ? canvas.tokens.get(t.id) : null) || t;
+    for (const targetInfo of targets)
+    {
+        const target = targetInfo.target;
+        if (target)
+        {
+            const tokenObj = target.object || (target.id ? canvas.tokens.get(target.id) : null) || target;
             if (tokenObj)
                 hitTokens.push(tokenObj);
         }
@@ -218,10 +171,12 @@ export async function knockbackDamageStep(state) {
 }
 
 export const _lwfxSuppressActors = new Set();
-export function _actorSuppressId(x) {
+export function _actorSuppressId(x)
+{
     return x?.actor?.uuid ?? x?.uuid ?? x?.actor?.id ?? x?.id ?? null;
 }
-function _suppressNextLwfxFor(actorOrToken) {
+function _suppressNextLwfxFor(actorOrToken)
+{
     const id = _actorSuppressId(actorOrToken);
     if (!id)
         return;
@@ -229,36 +184,146 @@ function _suppressNextLwfxFor(actorOrToken) {
     setTimeout(() => _lwfxSuppressActors.delete(id), 3000);
 }
 
-export async function playInlineAttackFX(state) {
+export const _lwfxForceActors = new Set();
+function _forceNextLwfxFor(actorOrToken)
+{
+    const id = _actorSuppressId(actorOrToken);
+    if (!id)
+        return;
+    _lwfxForceActors.add(id);
+    setTimeout(() => _lwfxForceActors.delete(id), 3000);
+}
+
+export async function playInlineAttackFX(state)
+{
     const title = state.data?.title;
     const fxPlayer = LA_INLINE_ATTACK_FX[title];
     if (!fxPlayer)
         return true;
     _suppressNextLwfxFor(state.actor);
-    try {
+    try
+    {
         await fxPlayer(state);
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.error(`lancer-automations | FX "${title}" failed:`, e);
     }
     return true;
 }
 
-export async function playThrowFXIfNeeded(state) {
+export async function playThrowFXIfNeeded(state)
+{
     if (!state.la_extraData?.is_throw)
         return true;
     _suppressNextLwfxFor(state.actor);
-    try {
+    try
+    {
         await playDefaultThrowFX(state);
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.error('lancer-automations | throw FX failed:', e);
     }
     return true;
 }
 
+const LWFX_PACK_ID = 'lancer-weapon-fx.weaponfx';
+const LWFX_RANGED_DEFAULT_NAME = 'Pistol';
+
+function _basicAttackContext(state)
+{
+    const sourceToken = state.actor?.getActiveTokens?.()[0] ?? state.actor?.token?.object ?? null;
+    const hitResults = state.data?.hit_results ?? [];
+    const accDiffTargets = state.data?.acc_diff?.targets ?? [];
+    const targetTokens = [];
+    for (let idx = 0; idx < Math.max(hitResults.length, accDiffTargets.length); idx++)
+    {
+        const target = hitResults[idx]?.target ?? accDiffTargets[idx]?.target ?? null;
+        if (target)
+            targetTokens.push(target);
+    }
+    const targetsMissed = new Set(hitResults.filter(hitResult => !hitResult.hit).map(hitResult => hitResult.target?.id).filter(Boolean));
+    const targetsCrit = new Set(hitResults.filter(hitResult => hitResult.crit).map(hitResult => hitResult.target?.id).filter(Boolean));
+    return { sourceToken, targetTokens, targetsMissed, targetsCrit };
+}
+
+async function _resolveLwfxMacro(name)
+{
+    const pack = game.packs?.get(LWFX_PACK_ID);
+    if (!pack)
+        return null;
+    const search = (name ?? '').toLowerCase().trim();
+    const docs = await pack.getDocuments();
+    return docs.find(doc => (doc.name ?? '').toLowerCase().trim() === search) ?? null;
+}
+
+async function _playLwfxRangedDefault(actor, context)
+{
+    const macro = await _resolveLwfxMacro(LWFX_RANGED_DEFAULT_NAME);
+    if (!macro)
+        return;
+    const MacroCls = CONFIG.Macro?.documentClass ?? globalThis.Macro;
+    if (!MacroCls)
+        return;
+    const tempMacro = new MacroCls(macro.toObject());
+    tempMacro.flags['lancer-weapon-fx'] = {
+        ...(tempMacro.flags['lancer-weapon-fx'] ?? {}),
+        flowInfo: {
+            sourceToken: context.sourceToken,
+            macroUuid: macro.uuid,
+            targetTokens: context.targetTokens,
+            targetsMissed: context.targetsMissed,
+            targetsCrit: context.targetsCrit,
+        },
+    };
+    tempMacro.ownership.default = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+    _forceNextLwfxFor(actor);
+    await tempMacro.execute({ actor: context.sourceToken?.actor, token: context.sourceToken });
+}
+
+// Item-less basic melee attack vs a target more than 1 grid away: play lwfx's ranged default instead of its melee one.
+export async function playBasicRangedFXIfNeeded(state)
+{
+    if (state.la_extraData?.is_throw)
+        return true;
+    if (LA_INLINE_ATTACK_FX[state.data?.title])
+        return true;
+    if (state.data?.attack_type !== 'Melee')
+        return true;
+
+    const context = _basicAttackContext(state);
+    if (!context.sourceToken || context.targetTokens.length === 0)
+        return true;
+
+    let nearest = Infinity;
+    for (const target of context.targetTokens)
+    {
+        const dist = getMinGridDistance(context.sourceToken, target);
+        if (dist < nearest)
+            nearest = dist;
+    }
+    if (nearest <= 1)
+        return true;
+
+    _suppressNextLwfxFor(state.actor);
+    try
+    {
+        await _playLwfxRangedDefault(state.actor, context);
+    }
+    catch (e)
+    {
+        console.error('lancer-automations | basic ranged FX failed:', e);
+    }
+    return true;
+}
+
 // Damage flows spawned from a basic attack pick up tags/bonuses injected on the attack.
-export async function pullInjectedTagsFromAttack(state) {
+export async function pullInjectedTagsFromAttack(state)
+{
     const tags = ActiveFlowState.current?.injectedTags;
-    if (Array.isArray(tags) && tags.length > 0) {
+    if (Array.isArray(tags) && tags.length > 0)
+    {
         if (!state.data)
             state.data = {};
         state.data.tags = [...(state.data.tags || []), ...tags];
@@ -267,7 +332,8 @@ export async function pullInjectedTagsFromAttack(state) {
     }
 
     const flowBonus = ActiveFlowState.current?.flow_bonus;
-    if (Array.isArray(flowBonus) && flowBonus.length > 0) {
+    if (Array.isArray(flowBonus) && flowBonus.length > 0)
+    {
         state.la_extraData = state.la_extraData || {};
         state.la_extraData.flow_bonus = [...(state.la_extraData.flow_bonus || []), ...flowBonus];
     }

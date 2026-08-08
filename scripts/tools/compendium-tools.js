@@ -4,13 +4,14 @@
  * Looks up a macro by name in the lancer-automations compendium and executes it.
  * @returns {Promise<void>}
  */
-export async function executePackMacro(macroName, scope = {}) {
+export async function executePackMacro(macroName, scope = {})
+{
     const packKey = "lancer-automations.macros";
     const pack = game.packs.get(packKey);
     if (!pack)
         return ui.notifications.error(`lancer-automations macro pack not found`);
     const index = await pack.getIndex();
-    const entry = index.find(e => e.name === macroName);
+    const entry = index.find(indexEntry => indexEntry.name === macroName);
     if (!entry)
         return ui.notifications.error(`Macro "${macroName}" not found in lancer-automations pack`);
     const macro = await pack.getDocument(entry._id);
@@ -18,58 +19,53 @@ export async function executePackMacro(macroName, scope = {}) {
 }
 
 /**
- * THE PACKER
  * Synchronizes your source files into the Lancer Automations Macros compendium.
  */
-export async function packMacros() {
-    if (!game.user.isGM) {
+export async function packMacros()
+{
+    if (!game.user.isGM)
         return ui.notifications.error("Only the GM can pack macros.");
-    }
 
     const packKey = "lancer-automations.macros";
     const pack = game.packs.get(packKey);
 
-    if (!pack) {
+    if (!pack)
         return ui.notifications.error(`Compendium '${packKey}' not found. Ensure you updated module.json and RESTARTED Foundry.`);
-    }
 
     const sourcePath = "modules/lancer-automations/packs_source/macros";
 
-    try {
-        // Browse the folder to find all JSON metadata files
+    try
+    {
         const browse = await FilePicker.browse("data", sourcePath);
-        const jsonFiles = browse.files.filter(f => f.endsWith(".json"));
+        const jsonFiles = browse.files.filter(filePath => filePath.endsWith(".json"));
 
-        if (jsonFiles.length === 0) {
+        if (jsonFiles.length === 0)
             return ui.notifications.warn(`No .json files found in ${sourcePath}`);
-        }
 
         ui.notifications.info(`Synchronizing ${jsonFiles.length} macros into ${pack.label}...`);
 
         // Clear existing entries for a clean sync
         const docs = await pack.getDocuments();
-        for (let doc of docs) {
+        for (let doc of docs)
             await doc.delete();
-        }
 
-        for (const jsonPath of jsonFiles) {
-            // Fetch metadata
+        for (const jsonPath of jsonFiles)
+        {
             const response = await fetch(jsonPath);
             const metadata = await response.json();
 
             let command = "";
-            if (metadata.command_source) {
+            if (metadata.command_source)
+            {
                 // Fetch actual script command from the .js file
                 const jsPath = `${sourcePath}/${metadata.command_source}`;
                 const jsResponse = await fetch(jsPath);
-                if (jsResponse.ok) {
+                if (jsResponse.ok)
                     command = await jsResponse.text();
-                } else {
+                else
                     console.error(`lancer-automations | Failed to fetch command source: ${jsPath}`);
-                }
             }
 
-            // Create temporary macro and import to pack
             const macro = await Macro.create({
                 name: metadata.name,
                 type: metadata.type || "script",
@@ -79,12 +75,14 @@ export async function packMacros() {
             });
 
             await pack.importDocument(macro);
-            await macro.delete(); // Delete the temporary world macro
+            await macro.delete();
             console.log(`lancer-automations | Synced macro: ${metadata.name}`);
         }
 
         ui.notifications.info("Macro compendium synchronization complete!");
-    } catch (error) {
+    }
+    catch (error)
+    {
         console.error("lancer-automations | Error during macro packing:", error);
         ui.notifications.error("An error occurred while packing macros. Check the console for details.");
     }

@@ -11,7 +11,7 @@
 
     {{#if isGmInput}}
     {{#if gmInputBody}}
-    <div class="la-scan-card" style="border-left-color:{{section.trait}};">
+    <div class="la-scan-card" style="--la-accent:{{section.trait}};">
         <div class="la-scan-card-body" style="white-space:pre-wrap;">{{gmInputBody}}</div>
     </div>
     {{else}}
@@ -30,9 +30,9 @@
         {{/each}}
     </div>
 
-    {{#if chatStats.length}}
-    <div class="la-scan-row la-scan-stats-row" style="margin-bottom:4px;">
-        {{#each chatStats}}
+    {{#if chatStats2.length}}
+    <div class="la-scan-row la-scan-stats2-row" style="margin-bottom:4px;">
+        {{#each chatStats2}}
         <div class="la-scan-stat-cell">
             <div class="la-scan-stat-label">{{label}}</div>
             <div class="la-scan-stat-value">{{value}}{{#if max}}<span style="font-size:0.7em;opacity:0.6;">/{{max}}</span>{{/if}}</div>
@@ -41,9 +41,9 @@
     </div>
     {{/if}}
 
-    {{#if chatStats2.length}}
-    <div class="la-scan-row la-scan-stats2-row" style="margin-bottom:6px;">
-        {{#each chatStats2}}
+    {{#if chatStats.length}}
+    <div class="la-scan-row la-scan-stats-row" style="margin-bottom:6px;">
+        {{#each chatStats}}
         <div class="la-scan-stat-cell">
             <div class="la-scan-stat-label">{{label}}</div>
             <div class="la-scan-stat-value">{{value}}{{#if max}}<span style="font-size:0.7em;opacity:0.6;">/{{max}}</span>{{/if}}</div>
@@ -54,26 +54,58 @@
 
     {{#if weapons.length}}
     <div style="font-size:0.85em;margin:4px 0;">
-        <span class="la-scan-row-label" style="background:{{section.weapon}};">WPN</span>
+        <span class="la-scan-row-label" style="background:{{section.weapon}};"><i class="cci cci-weapon"></i>WPN</span>
         {{#each weapons}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if techSystems.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.tech}};"><i class="cci cci-tech-quick"></i>TECH</span>
+        {{#each techSystems}}<span class="la-scan-tag">{{name}}</span>{{/each}}
     </div>
     {{/if}}
 
     {{#if systems.length}}
     <div style="font-size:0.85em;margin:4px 0;">
-        <span class="la-scan-row-label" style="background:{{section.system}};">SYS</span>
+        <span class="la-scan-row-label" style="background:{{section.system}};"><i class="cci cci-system"></i>SYS</span>
         {{#each systems}}<span class="la-scan-tag">{{name}}</span>{{/each}}
     </div>
     {{/if}}
 
-    {{#if npcFeatureGroups.length}}
-    {{#each npcFeatureGroups}}
+    {{#if npcWeaponsFlat.length}}
     <div style="font-size:0.85em;margin:4px 0;">
-        <span class="la-scan-row-label" style="background:{{../section.feature}};">{{origin}}</span>
-        {{#each features}}<span class="la-scan-tag">{{name}}</span>{{/each}}
-        {{#each weapons}}<span class="la-scan-tag" style="background:rgba(183,28,28,0.12);border-color:#b71c1c;">{{name}}</span>{{/each}}
+        <span class="la-scan-row-label" style="background:{{section.weapon}};"><i class="cci cci-weapon"></i>WPN</span>
+        {{#each npcWeaponsFlat}}<span class="la-scan-tag">{{name}}</span>{{/each}}
     </div>
-    {{/each}}
+    {{/if}}
+
+    {{#if npcTechFlat.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.tech}};"><i class="cci cci-tech-quick"></i>TECH</span>
+        {{#each npcTechFlat}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if npcReactionsFlat.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.reaction}};"><i class="cci cci-reaction"></i>REACT</span>
+        {{#each npcReactionsFlat}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if npcSystemsFlat.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.system}};"><i class="cci cci-system"></i>SYS</span>
+        {{#each npcSystemsFlat}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
+    {{/if}}
+
+    {{#if npcTraitsFlat.length}}
+    <div style="font-size:0.85em;margin:4px 0;">
+        <span class="la-scan-row-label" style="background:{{section.trait}};"><i class="cci cci-trait"></i>TRAIT</span>
+        {{#each npcTraitsFlat}}<span class="la-scan-tag">{{name}}</span>{{/each}}
+    </div>
     {{/if}}
     {{/if}}
 

@@ -6,19 +6,26 @@ export {
     pointerToWorld,
     drawRangeHighlight,
     createPulsingRangeHighlight,
+    createMergedRangeHighlight,
     drawMovementTrace,
     getGridDistance,
     showOverlapStackPicker,
     cancelRulerDrag,
     applyKnockbackMoves,
     gridLineWidth,
+    RANGE_GLOW,
 } from "./canvas-helpers.js";
 
 export { chooseToken } from "./tools/chooseToken.js";
-export { placeZone } from "./tools/placeZone.js";
+export { placeZone, tokensInTemplate } from "./tools/placeZone.js";
 export { moveToken } from "./tools/moveToken.js";
 export { knockBackToken } from "./tools/knockBackToken.js";
 export { placeToken } from "./tools/placeToken.js";
 export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";
 export { pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape } from "./tools/pickAreaTargetToggle.js";
-export { clearSingleTargetShape, beginTargetSession } from "./target-shapes.js";
+export { clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark } from "./target-shapes.js";
+export { rangePulse, RANGE_PULSE_PRIORITY } from "./range-pulse-manager.js";
+export {
+    toggleAdvancedMeasure, openAdvancedMeasure, closeAdvancedMeasure,
+    isAdvancedMeasureActive, initAdvancedMeasureAutoClose, resetAdvancedMeasureState,
+} from "./tools/advancedMeasure.js";

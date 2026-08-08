@@ -46,7 +46,8 @@ const ZDA_TEMPLATE = {
     },
 };
 
-async function ensureZDAAura(tokenDoc) {
+async function ensureZDAAura(tokenDoc)
+{
     if (!game.modules.get('grid-aware-auras')?.active)
         return;
     const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
@@ -63,7 +64,8 @@ async function ensureZDAAura(tokenDoc) {
 }
 
 // Create ZDA on token creation.
-Hooks.on('createToken', async (tokenDoc, _options, userId) => {
+Hooks.on('createToken', async (tokenDoc, _options, userId) =>
+{
     if (userId !== game.user.id)
         return;
     if (!game.modules.get('grid-aware-auras')?.active)
@@ -75,27 +77,34 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) => {
 });
 
 // Global toggle function — call from macro or console.
-window.toggleLancerZDA = async function () {
+window.toggleLancerZDA = async function ()
+{
     const controlled = canvas.tokens.controlled;
-    if (controlled.length === 0) {
+    if (controlled.length === 0)
+    {
         ui.notifications.warn("No tokens selected");
         return;
     }
-    for (const token of controlled) {
+    for (const token of controlled)
+    {
         const actorType = token.actor?.type;
         if (!['mech', 'npc', 'pilot'].includes(actorType))
             continue;
         const existingAuras = token.document.getFlag('grid-aware-auras', 'auras') || [];
         const zdaAura = existingAuras.find(a => a.name === 'ZDA');
-        if (zdaAura) {
+        if (zdaAura)
+        {
             zdaAura.enabled = !zdaAura.enabled;
             await token.document.setFlag('grid-aware-auras', 'auras', existingAuras);
-        } else {
+        }
+        else
+        {
             await ensureZDAAura(token.document);
             // Enable it after creation.
             const refreshed = token.document.getFlag('grid-aware-auras', 'auras') || [];
             const created = refreshed.find(a => a.name === 'ZDA');
-            if (created) {
+            if (created)
+            {
                 created.enabled = true;
                 await token.document.setFlag('grid-aware-auras', 'auras', refreshed);
             }

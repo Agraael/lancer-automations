@@ -1,0 +1,6 @@
+{
+    "name": "L.A - Effect Manager",
+    "type": "script",
+    "img": "modules/lancer-automations/icons/gears.svg",
+    "command_source": "EffectManager.js"
+}

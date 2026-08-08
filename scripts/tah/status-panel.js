@@ -2,21 +2,47 @@
 
 import { removeGlobalBonus, removeConstantBonus } from '../bonuses/genericBonuses.js';
 import { playUiSound } from './sound.js';
+import { tahScale } from './item-helpers.js';
 
-function getBonusDetailStr(/** @type {any} */ bonus) {
+function getBonusDetailStr(/** @type {any} */ bonus)
+{
     if (bonus.type === 'accuracy')
         return `Accuracy +${bonus.val}`;
     if (bonus.type === 'difficulty')
         return `Difficulty +${bonus.val}`;
     if (bonus.type === 'stat')
-        return `${bonus.stat?.split('.').pop() || bonus.stat} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
+    {
+        const name = bonus.stat?.split('.').pop() || bonus.stat;
+        if ((bonus.statMode || 'add') === 'replace')
+            return `${name} = ${bonus.val}`;
+        return `${name} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
+    }
     if (bonus.type === 'damage')
-        return (bonus.damage || []).map((/** @type {any} */ dmg) => `${dmg.val} ${dmg.type}`).join(' + ');
+    {
+        const mode = bonus.damageMode || 'add';
+        const entries = bonus.damage || [];
+        if (mode === 'change_type')
+        {
+            const parts = entries.map((/** @type {any} */ dmg) =>
+            {
+                const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
+                return `${from} → ${dmg.to}`;
+            });
+            return `Change Type: ${parts.join(', ')}`;
+        }
+        const body = entries.map((/** @type {any} */ dmg) => `${dmg.val} ${dmg.type}`).join(' + ');
+        if (mode === 'replace')
+            return `Replace: ${body}`;
+        if (mode === 'add_base')
+            return `Add: ${body}`;
+        return body;
+    }
     if (bonus.type === 'tag')
         return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : 'Add'} ${bonus.tagName} ${bonus.val}`;
     if (bonus.type === 'range')
         return `${bonus.rangeMode === 'override' ? 'Set' : 'Add'} ${bonus.rangeType} ${bonus.val}`;
-    if (bonus.type === 'immunity') {
+    if (bonus.type === 'immunity')
+    {
         if (bonus.subtype === 'effect' && bonus.effects)
             return `Immunity: ${bonus.effects.join(', ')}`;
         if ((bonus.subtype === 'damage' || bonus.subtype === 'resistance') && bonus.damageTypes)
@@ -29,7 +55,8 @@ function getBonusDetailStr(/** @type {any} */ bonus) {
             return 'Miss immunity';
         return bonus.subtype;
     }
-    if (bonus.type === 'target_modifier') {
+    if (bonus.type === 'target_modifier')
+    {
         const labels = {
             invisible: 'Invisible (50% miss)',
             no_invisible: 'Not Invisible',
@@ -50,11 +77,16 @@ function getBonusDetailStr(/** @type {any} */ bonus) {
     return bonus.type || '?';
 }
 
-const BG_DEFAULT = '#f5f5f5';
-const BG_HOVER   = 'color-mix(in srgb, var(--primary-color) 18%, #f5f5f5)';
+const BG_DEFAULT = 'var(--la-plate)';
+const BG_HOVER   = 'color-mix(in srgb, var(--la-plate), #000 12%)';
+// Row text: plate ink when inactive (flips with the plate), dark on the light active/permanent bg.
+const FG_DEFAULT = 'var(--la-ink)';
+const FG_ACTIVE  = '#111';
 
-export class StatusPanel {
-    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth }) {
+export class StatusPanel
+{
+    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth })
+    {
         this._actor           = actor;
         this._token           = token;
         this._tokens          = tokens ?? [token];
@@ -69,36 +101,44 @@ export class StatusPanel {
         this._subtypePanel = null;
     }
 
-    get isVisible() {
+    get isVisible()
+    {
         return this._panel?.is(':visible') ?? false;
     }
 
-    close() {
+    close()
+    {
         $('.la-status-tooltip').remove();
-        if (this._subtypePanel) {
+        if (this._subtypePanel)
+        {
             this._subtypePanel.remove();
             this._subtypePanel = null;
         }
-        if (this._panel) {
+        if (this._panel)
+        {
             const panel = this._panel;
             this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function() {
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function()
+            {
                 $(this).remove();
             });
         }
     }
 
-    syncRows() {
+    syncRows()
+    {
         if (!this._panel || !this._actor)
             return;
         const actor = this._actor;
-        const hasSC = !!game.modules.get('statuscounter')?.active;
-        this._panel.find('[data-status-id]').each(function() {
+        const hasStatusCounter = !!game.modules.get('statuscounter')?.active;
+        this._panel.find('[data-status-id]').each(function()
+        {
             const rowEl = $(this);
-            const sid = rowEl.attr('data-status-id');
-            const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff => eff.statuses?.has(sid) && !eff.disabled);
+            const statusId = rowEl.attr('data-status-id');
+            const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff => eff.statuses?.has(statusId) && !eff.disabled);
             const nowActive = effects.length > 0;
-            const nowPerm = nowActive && effects.some(/** @type {any} */ eff => {
+            const nowPerm = nowActive && effects.some(/** @type {any} */ eff =>
+            {
                 const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
                 return dur?.label === 'permanent';
@@ -107,10 +147,10 @@ export class StatusPanel {
             rowEl.data('permanent', nowPerm);
             const bg = nowActive ? (nowPerm ? '#f0e0a0' : '#b8d4f0') : BG_DEFAULT;
             const border = nowActive ? (nowPerm ? '#a07020' : '#1a4a7a') : 'transparent';
-            rowEl.css({ background: bg, borderLeftColor: border });
-            const totalStack = hasSC ? effects.reduce((sum, /** @type {any} */ eff) => sum + (eff.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
+            rowEl.css({ background: bg, borderLeftColor: border, color: nowActive ? FG_ACTIVE : FG_DEFAULT });
+            const totalStack = hasStatusCounter ? effects.reduce((sum, /** @type {any} */ eff) => sum + (eff.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
             const parts = [];
-            if (hasSC && totalStack > 1)
+            if (hasStatusCounter && totalStack > 1)
                 parts.push(`×${totalStack}`);
             if (effects.length > 1)
                 parts.push(`[${effects.length}]`);
@@ -118,14 +158,17 @@ export class StatusPanel {
         });
     }
 
-    refresh() {
+    refresh()
+    {
         if (this._panel && this._anchor)
             this.open(this._anchor);
     }
 
-    open(anchorRow) {
+    open(anchorRow)
+    {
         $('.la-status-tooltip').remove();
-        if (this._panel) {
+        if (this._panel)
+        {
             this._panel.stop(true).remove();
             this._panel = null;
         }
@@ -135,12 +178,11 @@ export class StatusPanel {
         if (!actor || !token)
             return;
 
-        // ── Module checks ──────────────────────────────────────────────────────
         const hasSC  = !!game.modules.get('statuscounter')?.active;
-        const hasTCS = !!game.modules.get('temporary-custom-statuses')?.active;
-        const tcsApi = hasTCS ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
-        const savedStatuses = hasTCS ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
-        const activeCustomEffects = hasTCS
+        const hasTempCustomStatuses = !!game.modules.get('temporary-custom-statuses')?.active;
+        const tempCustomStatusesApi = hasTempCustomStatuses ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
+        const savedStatuses = hasTempCustomStatuses ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
+        const activeCustomEffects = hasTempCustomStatuses
             ? /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff =>
                 eff.getFlag?.('temporary-custom-statuses', 'isCustom') &&
                 !eff.getFlag?.('lancer-automations', 'linkedBonusId')
@@ -148,25 +190,27 @@ export class StatusPanel {
             : [];
         const customMap = new Map();
         savedStatuses.forEach(/** @type {any} */ saved => customMap.set(saved.name, { name: saved.name, icon: saved.icon }));
-        activeCustomEffects.forEach(/** @type {any} */ eff => {
+        activeCustomEffects.forEach(/** @type {any} */ eff =>
+        {
             const name = eff.getFlag?.('temporary-custom-statuses', 'originalName') || eff.name;
             if (!customMap.has(name))
                 customMap.set(name, { name, icon: eff.img ?? '' });
         });
         const customSaved = [...customMap.values()];
 
-        // ── Data helpers ───────────────────────────────────────────────────────
         // active first, alphabetic within each group
         const activeStatusIds = new Set();
-        for (const eff of /** @type {any} */ (actor.effects)) {
+        for (const eff of /** @type {any} */ (actor.effects))
+        {
             if (eff.disabled)
                 continue;
-            for (const sid of (eff.statuses ?? []))
-                activeStatusIds.add(sid);
+            for (const statusId of (eff.statuses ?? []))
+                activeStatusIds.add(statusId);
         }
         const allStatuses = (/** @type {any} */ (CONFIG).statusEffects ?? [])
             .filter(/** @type {any} */ status => status.id)
-            .sort(/** @type {any} */ (aStatus, bStatus) => {
+            .sort(/** @type {any} */ (aStatus, bStatus) =>
+            {
                 const aActive = activeStatusIds.has(aStatus.id);
                 const bActive = activeStatusIds.has(bStatus.id);
                 if (aActive !== bActive)
@@ -182,9 +226,10 @@ export class StatusPanel {
 
         const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
 
-        // permanent if any active effect declares duration.label === 'permanent'
-        const isPermanent = (/** @type {any} */ status) => {
-            for (const eff of getEffectsForStatus(status.id)) {
+        const isPermanent = (/** @type {any} */ status) =>
+        {
+            for (const eff of getEffectsForStatus(status.id))
+            {
                 const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
                 if (dur?.label === 'permanent')
@@ -202,12 +247,13 @@ export class StatusPanel {
         const activeBorder = (/** @type {boolean} */ perm) => perm ? ACTIVE_BORDER_PERM : ACTIVE_BORDER_NORMAL;
 
         const isCustomActive = (/** @type {string} */ name) =>
-            /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ e =>
-                (e.getFlag?.('temporary-custom-statuses', 'originalName') === name || e.name === name) &&
-                !e.disabled
+            /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ eff =>
+                (eff.getFlag?.('temporary-custom-statuses', 'originalName') === name || eff.name === name) &&
+                !eff.disabled
             );
 
-        const getStatusBadge = (/** @type {any} */ s) => {
+        const getStatusBadge = (/** @type {any} */ s) =>
+        {
             const effects = getEffectsForStatus(s.id);
             if (!effects.length)
                 return '';
@@ -220,20 +266,24 @@ export class StatusPanel {
             return parts.join(' ');
         };
 
-        const buildStatusTooltip = (/** @type {any} */ status) => {
+        const buildStatusTooltip = (/** @type {any} */ status) =>
+        {
             const effects = getEffectsForStatus(status.id);
             const lines = [];
             if (status.description)
                 lines.push(`<div class="la-tooltip-line">${status.description}</div>`);
-            for (const eff of effects) {
+            for (const eff of effects)
+            {
                 const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 const stackCount = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
                 let label = 'Base Effect';
-                if (laFlags?.consumption) {
+                if (laFlags?.consumption)
+                {
                     const trigger = laFlags.consumption?.trigger;
                     const triggerLabel = Array.isArray(trigger) ? trigger.join(', ') : trigger;
                     label = `Consume: ${typeof laFlags.consumption === 'string' ? laFlags.consumption : (triggerLabel ?? laFlags.consumption?.type ?? 'Effect')}`;
-                } else if (laFlags?.linkedBonusId)
+                }
+                else if (laFlags?.linkedBonusId)
                     label = 'Bonus Effect';
                 const stackStr = stackCount && stackCount > 1 ? ` ×${stackCount}` : '';
                 if (effects.length > 1 || stackStr)
@@ -245,53 +295,55 @@ export class StatusPanel {
             return lines.length ? lines.join('') : null;
         };
 
-        // ── In-place helpers ───────────────────────────────────────────────────
-        const setRowActive = (/** @type {any} */ rowEl, /** @type {boolean} */ nowActive, /** @type {boolean} */ perm = false) => {
+        const setRowActive =(/** @type {any} */ rowEl, /** @type {boolean} */ nowActive, /** @type {boolean} */ perm = false) =>
+        {
             rowEl.data('active', nowActive);
             rowEl.data('permanent', nowActive && perm);
             rowEl.css({
                 background: nowActive ? activeBg(perm) : BG_DEFAULT,
-                borderLeftColor: nowActive ? activeBorder(perm) : 'transparent'
+                borderLeftColor: nowActive ? activeBorder(perm) : 'transparent',
+                color: nowActive ? FG_ACTIVE : FG_DEFAULT
             });
         };
-        const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
+        const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) =>
+        {
             rowEl.find('.la-status-badge').text(getStatusBadge(s));
         };
 
-        // ── Tooltip helper ─────────────────────────────────────────────────────
-        const showTooltip = (/** @type {any} */ rowEl, /** @type {any} */ s) => {
+        const showTooltip =(/** @type {any} */ rowEl, /** @type {any} */ s) =>
+        {
             const body = buildStatusTooltip(s);
             if (!body)
                 return null;
             const label = game.i18n.localize(s.name ?? s.id);
-            const tt = $(`<div class="la-status-tooltip">
+            const tooltipEl = $(`<div class="la-status-tooltip">
                 <div class="la-status-tooltip__title">${label}</div>
                 <div class="la-status-tooltip__body">${body}</div>
             </div>`);
-            $('body').append(tt);
+            $('body').append(tooltipEl);
             const rect = /** @type {HTMLElement} */ (rowEl[0]).getBoundingClientRect();
-            const ttH = tt.outerHeight() ?? 0;
-            const top = Math.min(rect.top, window.innerHeight - ttH - 8);
-            tt.css({ top, left: rect.right + 6 });
-            return tt;
+            const tooltipHeight = tooltipEl.outerHeight() ?? 0;
+            const top = Math.min(rect.top, window.innerHeight - tooltipHeight - 8);
+            tooltipEl.css({ top, left: rect.right + 6 });
+            return tooltipEl;
         };
 
-        // ── Search bar ─────────────────────────────────────────────────────────
-        const searchBar = $(`<input type="text" class="la-status-search" placeholder="Search statuses…">`);
+        const searchBar =$(`<input type="text" class="la-status-search" placeholder="Search statuses…">`);
         const searchWrap = $(`<div class="la-status-search-wrap"><i class="fas fa-search la-status-search-icon"></i></div>`);
         searchWrap.append(searchBar);
 
-        // ── Status grid ────────────────────────────────────────────────────────
-        const gridEl = $(`<div class="lancer-scroll la-hud-status-grid"></div>`);
-        for (const s of allStatuses) {
-            const active = isActive(s);
-            const perm   = active && isPermanent(s);
-            const badge  = getStatusBadge(s);
+        const gridEl =$(`<div class="lancer-scroll la-hud-status-grid"></div>`);
+        for (const status of allStatuses)
+        {
+            const active = isActive(status);
+            const perm   = active && isPermanent(status);
+            const badge  = getStatusBadge(status);
             const bg     = active ? activeBg(perm) : BG_DEFAULT;
             const border = active ? activeBorder(perm) : 'transparent';
-            const rowEl = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};" data-status-id="${s.id}">
-                <img class="la-status-row__img" src="${s.icon ?? s.img ?? ''}" onerror="this.style.display='none'">
-                <span class="la-status-name">${game.i18n.localize(s.name ?? s.id)}</span>
+            const fg     = active ? FG_ACTIVE : FG_DEFAULT;
+            const rowEl = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};color:${fg};" data-status-id="${status.id}">
+                <img class="la-status-row__img" src="${status.icon ?? status.img ?? ''}" onerror="this.style.display='none'">
+                <span class="la-status-name">${game.i18n.localize(status.name ?? status.id)}</span>
                 <span class="la-status-badge">${badge}</span>
             </div>`);
             rowEl.data('active', active);
@@ -299,86 +351,106 @@ export class StatusPanel {
 
             let tooltipEl = /** @type {any} */ (null);
             let tooltipTimer = null;
-            rowEl.on('mouseenter', function() {
+            rowEl.on('mouseenter', function()
+            {
                 playUiSound('statusHover');
                 if (!$(this).data('active'))
-                    $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
+                    $(this).css({ background: BG_HOVER, borderLeftColor: 'var(--la-edge)' });
                 const self = $(this);
-                tooltipTimer = setTimeout(() => {
-                    tooltipEl = showTooltip(self, s);
+                tooltipTimer = setTimeout(() =>
+                {
+                    tooltipEl = showTooltip(self, status);
                 }, 600);
-            }).on('mouseleave', function() {
+            }).on('mouseleave', function()
+            {
                 clearTimeout(tooltipTimer); tooltipTimer = null;
                 tooltipEl?.remove(); tooltipEl = null;
                 const active = $(this).data('active');
                 const perm = $(this).data('permanent');
-                $(this).css({ background: active ? activeBg(perm) : BG_DEFAULT, borderLeftColor: active ? activeBorder(perm) : 'transparent' });
+                $(this).css({ background: active ? activeBg(perm) : BG_DEFAULT, borderLeftColor: active ? activeBorder(perm) : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
             });
 
-            // Left-click: toggle / increment / open subtype manager
-            rowEl.on('click', async () => {
+            rowEl.on('click', async () =>
+            {
                 playUiSound('toggle');
-                const effects = getEffectsForStatus(s.id);
-                if (effects.length > 1) {
-                    this._openSubtypeManager(actor, s, effects, rowEl);
+                const effects = getEffectsForStatus(status.id);
+                if (effects.length > 1)
+                {
+                    this._openSubtypeManager(actor, status, effects, rowEl);
                     return;
                 }
                 this._incDepth();
-                try {
-                    if (hasSC && effects.length === 1) {
+                try
+                {
+                    if (hasSC && effects.length === 1)
+                    {
                         const eff = effects[0];
                         await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
-                    } else {
-                        for (const t of this._tokens)
-                            await /** @type {any} */ (t).toggleEffect(s);
                     }
-                    updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s), isPermanent(s));
-                } finally {
+                    else
+                    {
+                        for (const token of this._tokens)
+                            await /** @type {any} */ (token).toggleEffect(status);
+                    }
+                    updateRowBadge(rowEl, status);
+                    setRowActive(rowEl, isActive(status), isPermanent(status));
+                }
+                finally
+                {
                     this._decDepth();
                 }
             });
 
-            // Right-click: decrement / delete
-            rowEl.on('contextmenu', async (ev) => {
+            rowEl.on('contextmenu', async (ev) =>
+            {
                 ev.preventDefault();
                 playUiSound('toggle');
-                const effects = getEffectsForStatus(s.id);
-                if (effects.length > 1) {
-                    this._openSubtypeManager(actor, s, effects, rowEl);
+                const effects = getEffectsForStatus(status.id);
+                if (effects.length > 1)
+                {
+                    this._openSubtypeManager(actor, status, effects, rowEl);
                     return;
                 }
-                if (effects.length === 0) {
+                if (effects.length === 0)
+                {
                     // Right-click on inactive: same as left-click toggle
                     this._incDepth();
-                    try {
-                        for (const t of this._tokens)
-                            await /** @type {any} */ (t).toggleEffect(s);
-                        updateRowBadge(rowEl, s);
-                        setRowActive(rowEl, isActive(s), isPermanent(s));
-                    } finally {
+                    try
+                    {
+                        for (const token of this._tokens)
+                            await /** @type {any} */ (token).toggleEffect(status);
+                        updateRowBadge(rowEl, status);
+                        setRowActive(rowEl, isActive(status), isPermanent(status));
+                    }
+                    finally
+                    {
                         this._decDepth();
                     }
                     return;
                 }
                 this._incDepth();
-                try {
+                try
+                {
                     const eff = effects[0];
                     const stack = getStack(eff);
-                    if (hasSC && stack > 1) {
+                    if (hasSC && stack > 1)
                         await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
-                    } else {
+                    else
+                    {
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                         // Broadcast removal to all other tokens
-                        for (const tok of this._tokens.slice(1)) {
-                            const tokenEff = [...tok.actor.effects].find(eff2 => eff2.statuses?.has(s.id) && !eff2.disabled);
+                        for (const tok of this._tokens.slice(1))
+                        {
+                            const tokenEff = [...tok.actor.effects].find(matchingEff => matchingEff.statuses?.has(status.id) && !matchingEff.disabled);
                             if (tokenEff)
                                 await tok.actor.deleteEmbeddedDocuments('ActiveEffect', [tokenEff.id]);
                         }
                     }
-                    updateRowBadge(rowEl, s);
-                    setRowActive(rowEl, isActive(s), isPermanent(s));
-                } finally {
+                    updateRowBadge(rowEl, status);
+                    setRowActive(rowEl, isActive(status), isPermanent(status));
+                }
+                finally
+                {
                     this._decDepth();
                 }
             });
@@ -386,44 +458,52 @@ export class StatusPanel {
             gridEl.append(rowEl);
         }
 
-        // ── Right column ───────────────────────────────────────────────────────
-        const rightEl = $(`<div class="la-hud-right-col"></div>`);
+        const rightEl =$(`<div class="la-hud-right-col"></div>`);
 
         const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
-        if (laApi?.executeEffectManager) {
-            const emBtn = $(`<button class="la-hud-util-btn">Effect Manager</button>`);
-            emBtn.on('mouseenter', () => playUiSound('statusHover'));
-            emBtn.on('click', () => {
+        if (laApi?.executeEffectManager)
+        {
+            const effectManagerBtn = $(`<button class="la-hud-util-btn">Effect Manager</button>`);
+            effectManagerBtn.on('mouseenter', () => playUiSound('statusHover'));
+            effectManagerBtn.on('click', () =>
+            {
                 playUiSound('toggle'); laApi.executeEffectManager();
             });
-            rightEl.append(emBtn);
+            rightEl.append(effectManagerBtn);
         }
         const clearBtn = $(`<button class="la-hud-util-btn la-hud-util-btn--secondary">Clear All Effects</button>`);
         clearBtn.on('mouseenter', () => playUiSound('statusHover'));
-        clearBtn.on('click', async () => {
+        clearBtn.on('click', async () =>
+        {
             playUiSound('toggle');
             this._incDepth();
-            try {
+            try
+            {
                 const ids = /** @type {any[]} */ ([...actor.effects]).map(/** @type {any} */ eff => eff.id);
                 if (ids.length)
                     await actor.deleteEmbeddedDocuments('ActiveEffect', ids);
-                gridEl.find('[data-status-id]').each(function() {
+                gridEl.find('[data-status-id]').each(function()
+                {
                     setRowActive($(this), false);
                     $(this).find('.la-status-badge').text('');
                 });
-            } finally {
+            }
+            finally
+            {
                 this._decDepth();
             }
         });
         rightEl.append(clearBtn);
 
-        if (hasTCS) {
+        if (hasTempCustomStatuses)
+        {
             const getCustomEffects = (/** @type {string} */ name) =>
                 /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ e =>
                     (e.getFlag?.('temporary-custom-statuses', 'originalName') === name || e.name === name) && !e.disabled
                 );
 
-            const getCustomBadge = (/** @type {string} */ name) => {
+            const getCustomBadge = (/** @type {string} */ name) =>
+            {
                 const effs = getCustomEffects(name);
                 if (!effs.length)
                     return '';
@@ -438,111 +518,135 @@ export class StatusPanel {
 
             rightEl.append($(`<div class="la-hud-panel-section-header">Custom</div>`));
             const customListEl = $(`<div class="lancer-scroll la-hud-custom-list"></div>`);
-            for (const cs of /** @type {any[]} */ (customSaved)) {
-                const active = isCustomActive(cs.name);
-                const badge  = getCustomBadge(cs.name);
+            for (const customStatus of /** @type {any[]} */ (customSaved))
+            {
+                const active = isCustomActive(customStatus.name);
+                const badge  = getCustomBadge(customStatus.name);
                 const bg     = active ? '#b8d4f0' : BG_DEFAULT;
                 const border = active ? '#1a4a7a' : 'transparent';
-                const cRow = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};">
-                    <img class="la-status-row__img" src="${cs.icon ?? ''}" onerror="this.style.display='none'">
-                    <span class="la-status-name">${cs.name}</span>
+                const fg     = active ? FG_ACTIVE : FG_DEFAULT;
+                const customRow = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};color:${fg};">
+                    <img class="la-status-row__img" src="${customStatus.icon ?? ''}" onerror="this.style.display='none'">
+                    <span class="la-status-name">${customStatus.name}</span>
                     <span class="la-status-badge">${badge}</span>
                 </div>`);
-                cRow.on('mouseenter', function() {
+                customRow.on('mouseenter', function()
+                {
                     playUiSound('statusHover');
                     if (!$(this).data('active'))
-                        $(this).css({ background: BG_HOVER, borderLeftColor: '#aaa' });
-                }).on('mouseleave', function() {
-                    const a = $(this).data('active');
-                    $(this).css({ background: a ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: a ? '#1a4a7a' : 'transparent' });
+                        $(this).css({ background: BG_HOVER, borderLeftColor: 'var(--la-edge)' });
+                }).on('mouseleave', function()
+                {
+                    const active = $(this).data('active');
+                    $(this).css({ background: active ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: active ? '#1a4a7a' : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
                 });
-                cRow.data('active', active);
+                customRow.data('active', active);
 
-                const updateCRow = () => {
-                    cRow.find('.la-status-badge').text(getCustomBadge(cs.name));
-                    setRowActive(cRow, isCustomActive(cs.name));
+                const updateCRow = () =>
+                {
+                    customRow.find('.la-status-badge').text(getCustomBadge(customStatus.name));
+                    setRowActive(customRow, isCustomActive(customStatus.name));
                     this.syncRows();
                 };
 
-                // Left-click: same as regular — increment stack if SC+active, else add/toggle
-                cRow.on('click', async () => {
+                customRow.on('click', async () =>
+                {
                     playUiSound('toggle');
-                    const effs = getCustomEffects(cs.name);
-                    if (effs.length > 1) {
-                        this._openSubtypeManager(actor, { id: cs.name, name: cs.name, icon: cs.icon }, effs, cRow);
+                    const effs = getCustomEffects(customStatus.name);
+                    if (effs.length > 1)
+                    {
+                        this._openSubtypeManager(actor, { id: customStatus.name, name: customStatus.name, icon: customStatus.icon }, effs, customRow);
                         return;
                     }
                     this._incDepth();
-                    try {
-                        if (hasSC && effs.length === 1) {
+                    try
+                    {
+                        if (hasSC && effs.length === 1)
+                        {
                             const eff = effs[0];
                             await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
-                        } else if (effs.length === 0) {
+                        }
+                        else if (effs.length === 0)
+                        {
                             for (const tok of this._tokens)
-                                await tcsApi.addStatus(tok.actor, cs.name, cs.icon, 1);
-                        } else {
+                                await tempCustomStatusesApi.addStatus(tok.actor, customStatus.name, customStatus.icon, 1);
+                        }
+                        else
+                        {
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [effs[0].id]);
-                            for (const tok of this._tokens.slice(1)) {
-                                const eff = [...tok.actor.effects].find(candidate => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || candidate.name === cs.name);
+                            for (const tok of this._tokens.slice(1))
+                            {
+                                const eff = [...tok.actor.effects].find(candidate => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || candidate.name === customStatus.name);
                                 if (eff)
                                     await tok.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             }
                         }
                         updateCRow();
-                    } finally {
+                    }
+                    finally
+                    {
                         this._decDepth();
                     }
                 });
 
-                // Right-click: same as regular — decrement/delete if active, add if inactive
-                cRow.on('contextmenu', async (ev) => {
+                customRow.on('contextmenu', async (ev) =>
+                {
                     ev.preventDefault();
                     playUiSound('toggle');
-                    const effs = getCustomEffects(cs.name);
-                    if (effs.length > 1) {
-                        this._openSubtypeManager(actor, { id: cs.name, name: cs.name, icon: cs.icon }, effs, cRow);
+                    const effs = getCustomEffects(customStatus.name);
+                    if (effs.length > 1)
+                    {
+                        this._openSubtypeManager(actor, { id: customStatus.name, name: customStatus.name, icon: customStatus.icon }, effs, customRow);
                         return;
                     }
-                    if (effs.length === 0) {
+                    if (effs.length === 0)
+                    {
                         this._incDepth();
-                        try {
-                            for (const t of this._tokens)
-                                await tcsApi.addStatus(t.actor, cs.name, cs.icon, 1);
+                        try
+                        {
+                            for (const token of this._tokens)
+                                await tempCustomStatusesApi.addStatus(token.actor, customStatus.name, customStatus.icon, 1);
                             updateCRow();
-                        } finally {
+                        }
+                        finally
+                        {
                             this._decDepth();
                         }
                         return;
                     }
                     this._incDepth();
-                    try {
+                    try
+                    {
                         const eff = effs[0];
                         const stack = getStack(eff);
-                        if (hasSC && stack > 1) {
+                        if (hasSC && stack > 1)
                             await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
-                        } else {
+                        else
+                        {
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                            for (const t of this._tokens.slice(1)) {
-                                const oe = [...t.actor.effects].find(e => e.getFlag?.('temporary-custom-statuses', 'originalName') === cs.name || e.name === cs.name);
-                                if (oe)
-                                    await t.actor.deleteEmbeddedDocuments('ActiveEffect', [oe.id]);
+                            for (const token of this._tokens.slice(1))
+                            {
+                                const matchingEff = [...token.actor.effects].find(eff => eff.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || eff.name === customStatus.name);
+                                if (matchingEff)
+                                    await token.actor.deleteEmbeddedDocuments('ActiveEffect', [matchingEff.id]);
                             }
                         }
                         updateCRow();
-                    } finally {
+                    }
+                    finally
+                    {
                         this._decDepth();
                     }
                 });
 
-                customListEl.append(cRow);
+                customListEl.append(customRow);
             }
             if (!customSaved.length)
                 customListEl.append($(`<div class="la-status-empty">No custom statuses</div>`));
             rightEl.append(customListEl);
         }
 
-        // ── Bonuses ────────────────────────────────────────────────────────────
-        const globalBonuses   = /** @type {any[]} */ (actor.getFlag('lancer-automations', 'global_bonuses')   || []);
+        const globalBonuses   =/** @type {any[]} */ (actor.getFlag('lancer-automations', 'global_bonuses')   || []);
         const constantBonuses = /** @type {any[]} */ (actor.getFlag('lancer-automations', 'constant_bonuses') || []);
         const allBonuses = [
             ...globalBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'global', idx: i })),
@@ -550,10 +654,12 @@ export class StatusPanel {
         ];
         rightEl.append($(`<div class="la-hud-panel-section-header">Bonuses</div>`));
         const bonusListEl = $(`<div class="lancer-scroll la-bonus-list"></div>`);
-        if (!allBonuses.length) {
+        if (!allBonuses.length)
             bonusListEl.append($(`<div class="la-status-empty">No bonuses</div>`));
-        } else {
-            for (const { bonus, kind } of allBonuses) {
+        else
+        {
+            for (const { bonus, kind } of allBonuses)
+            {
                 const detail = getBonusDetailStr(bonus);
                 const kindBadge = kind === 'constant' ? ' <span class="la-bonus-row__kind">(const)</span>' : '';
                 const row = $(`<div class="la-bonus-row" title="${bonus.name}: ${detail}">
@@ -563,13 +669,16 @@ export class StatusPanel {
                     </div>
                     <i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>
                 </div>`);
-                row.find('.la-bonus-del').on('mouseenter', function() {
+                row.find('.la-bonus-del').on('mouseenter', function()
+                {
                     $(this).css('opacity', '1');
                 })
-                    .on('mouseleave', function() {
+                    .on('mouseleave', function()
+                    {
                         $(this).css('opacity', '0.45');
                     })
-                    .on('click', async (ev) => {
+                    .on('click', async (ev) =>
+                    {
                         ev.stopPropagation();
                         if (kind === 'global')
                             await removeGlobalBonus(actor, bonus.id);
@@ -584,22 +693,24 @@ export class StatusPanel {
         }
         rightEl.append(bonusListEl);
 
-        // ── Assemble panel ──────────────────────────────────────────────────────
         const panel = $(`<div class="la-hud-status-panel"></div>`);
         const leftWrap = $(`<div class="la-status-leftwrap"></div>`);
         const header = $(`<div class="la-hud-col-label">Statuses</div>`);
-        searchBar.on('input', function () {
-            const q = String($(this).val()).toLowerCase().trim();
-            gridEl.find('[data-status-id]').each(function () {
+        searchBar.on('input', function ()
+        {
+            const query = String($(this).val()).toLowerCase().trim();
+            gridEl.find('[data-status-id]').each(function ()
+            {
                 const name = $(this).find('.la-status-name').text().toLowerCase();
-                $(this).toggle(!q || name.includes(q));
+                $(this).toggle(!query || name.includes(query));
             });
         });
         searchBar.on('click mousedown', (ev) => ev.stopPropagation());
         leftWrap.append(header, searchWrap, gridEl);
         panel.append(leftWrap, rightEl);
 
-        let topInHud  = anchorRow.offset().top - this._el.offset().top;
+        const scale = tahScale();
+        let topInHud  = (anchorRow.offset().top - this._el.offset().top) / scale;
         const leftInHud = /** @type {any} */ (this._el.children().first()).outerWidth();
         panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
 
@@ -609,9 +720,9 @@ export class StatusPanel {
         const margin = 8;
         const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
         const hudTop = this._el.offset().top;
-        const maxTopInHud = window.innerHeight - margin - panelHeight - hudTop;
+        const maxTopInHud = (window.innerHeight - margin - panelHeight - hudTop) / scale;
         if (topInHud > maxTopInHud)
-            topInHud = Math.max(margin - hudTop, maxTopInHud);
+            topInHud = Math.max((margin - hudTop) / scale, maxTopInHud);
         panel.css({ top: topInHud });
 
         panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
@@ -619,8 +730,10 @@ export class StatusPanel {
         this._panel = panel;
     }
 
-    _openSubtypeManager(actor, statusConfig, effects, anchorRow) {
-        if (this._subtypePanel) {
+    _openSubtypeManager(actor, statusConfig, effects, anchorRow)
+    {
+        if (this._subtypePanel)
+        {
             this._subtypePanel.remove(); this._subtypePanel = null;
         }
         const hasSC = !!game.modules.get('statuscounter')?.active;
@@ -628,20 +741,24 @@ export class StatusPanel {
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
 
         const panel = $(`<div class="la-hud-sub-panel"></div>`);
-        const hdr   = $(`<div class="la-hud-sub-header">${statusName} <span class="la-sub-close">✕</span></div>`);
+        const header = $(`<div class="la-hud-sub-header">${statusName} <span class="la-sub-close">✕</span></div>`);
         const body  = $(`<div></div>`);
-        panel.append(hdr, body);
-        hdr.find('.la-sub-close').on('click', () => {
+        panel.append(header, body);
+        header.find('.la-sub-close').on('click', () =>
+        {
             panel.remove(); this._subtypePanel = null;
         });
 
-        const refresh = () => {
+        const refresh = () =>
+        {
             const current = /** @type {any[]} */ ([...actor.effects]).filter(eff => effects.some(/** @type {any} */ orig => orig.id === eff.id));
-            if (!current.length) {
+            if (!current.length)
+            {
                 panel.remove(); this._subtypePanel = null; this.syncRows(); return;
             }
             body.empty();
-            for (const eff of current) {
+            for (const eff of current)
+            {
                 const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
                 let label = 'Base';
                 if (laFlags?.consumption)
@@ -656,7 +773,8 @@ export class StatusPanel {
                     ${hasSC ? `<span class="la-sub-plus la-sub-btn la-sub-btn--plus">+</span>` : ''}
                     <span class="la-sub-del la-sub-btn la-sub-btn--del">✕</span>
                 </div>`);
-                row.find('.la-sub-minus').on('click', async () => {
+                row.find('.la-sub-minus').on('click', async () =>
+                {
                     const liveEff = /** @type {any} */ (actor.effects).get(eff.id);
                     if (!liveEff)
                         return;
@@ -667,7 +785,8 @@ export class StatusPanel {
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                     refresh();
                 });
-                row.find('.la-sub-plus').on('click', async () => {
+                row.find('.la-sub-plus').on('click', async () =>
+                {
                     const liveEff = /** @type {any} */ (actor.effects).get(eff.id);
                     if (!liveEff)
                         return;
@@ -675,7 +794,8 @@ export class StatusPanel {
                     await liveEff.update({ 'flags.statuscounter.value': stack + 1, 'flags.statuscounter.visible': true });
                     refresh();
                 });
-                row.find('.la-sub-del').on('click', async () => {
+                row.find('.la-sub-del').on('click', async () =>
+                {
                     await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                     refresh();
                 });
@@ -689,14 +809,17 @@ export class StatusPanel {
         $('body').append(panel);
         this._subtypePanel = panel;
 
-        // Slide up from the row — fixed to body, animates like the HUD columns (opacity + position)
+        // Slide up from the row; fixed to body, animates like the HUD columns (opacity + position)
+        const scale = tahScale();
+        if (scale !== 1)
+            panel.css({ transform: `scale(${scale})`, 'transform-origin': 'top left' });
         const rect     = anchorRow[0].getBoundingClientRect();
-        const panelH   = panel.outerHeight() || 0;
-        const panelW   = panel.outerWidth()  || 200;
-        const goAbove  = rect.top - panelH > 4;
-        const finalTop = goAbove ? rect.top - panelH : rect.bottom;
-        const startTop = goAbove ? rect.top           : rect.bottom - panelH;
-        const left     = Math.min(rect.left, window.innerWidth - panelW - 8);
+        const panelHeight = (panel.outerHeight() || 0) * scale;
+        const panelWidth  = (panel.outerWidth()  || 200) * scale;
+        const goAbove  = rect.top - panelHeight > 4;
+        const finalTop = goAbove ? rect.top - panelHeight : rect.bottom;
+        const startTop = goAbove ? rect.top           : rect.bottom - panelHeight;
+        const left     = Math.min(rect.left, window.innerWidth - panelWidth - 8);
         panel.css({ position: 'fixed', top: startTop, left, zIndex: 9999, opacity: 0, width: 'fit-content' });
         panel.animate({ top: finalTop, opacity: 1 }, 250);
     }

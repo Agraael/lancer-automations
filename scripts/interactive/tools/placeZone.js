@@ -10,10 +10,12 @@ import {
 } from "../cards.js";
 
 import {
+    TG,
     addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     drawRangeHighlight, _groupCellsByDistance, _makeRangePulseTick, pointerToWorld,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 
 /**
  * Place a template zone on the map using Lancer's WeaponRangeTemplate.
@@ -24,19 +26,44 @@ import { playTargetingMove, playUiSound } from "../../tah/sound.js";
  * placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
  * ```
  */
-export async function placeZone(casterToken, options = {}) {
+/**
+ * Tokens currently inside a placed template, ready to pass to executeDamageRoll.
+ * Wraps templatemacro's `findContained` (elevation/terrain-aware, handles multi-cell
+ * tokens and donut templates) and maps the ids to actor-bearing Token placeables.
+ *
+ * @param {any} templateOrResult A template document, its placeable, or a `placeZone` result (`{ x, y, template }`).
+ * @returns {Token[]} Tokens inside the template that have an actor. Empty if templatemacro is unavailable.
+ */
+export function tokensInTemplate(templateOrResult)
+{
+    const doc = templateOrResult?.template   // placeZone result: { x, y, template }
+        ?? templateOrResult?.document        // placeable -> its document
+        ?? templateOrResult;                 // already a document
+    const tmApi = game.modules.get('templatemacro')?.api;
+    if (!tmApi?.findContained || !doc)
+        return [];
+    return tmApi.findContained(doc)
+        .map(id => canvas.tokens.get(id))
+        .filter(token => token?.actor);
+}
+
+export async function placeZone(casterToken, options = {})
+{
     const _opts = /** @type {any} */ (options);
 
     // Place zones in templatemacro's Advanced Mode (custom render) unless explicitly opted out.
     if (_opts.useCustomRender !== false)
         _opts.tmacGraphics = { ..._opts.tmacGraphics, useCustomRender: true };
 
-    // Direct placement — bypass interactive card when coordinates are provided
-    if (_opts.x !== undefined && _opts.y !== undefined) {
+    // Direct placement: bypass interactive card when coordinates are provided
+    if (_opts.x !== undefined && _opts.y !== undefined)
+    {
         const templateMacroApi = game.modules.get('templatemacro')?.api;
-        if (templateMacroApi?.placeZone) {
+        if (templateMacroApi?.placeZone)
+        {
             const result = await templateMacroApi.placeZone(options, _opts.hooks ?? {});
-            if (result && _opts.attachToToken) {
+            if (result && _opts.attachToToken)
+            {
                 const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
                 if (tokenDoc && templateMacroApi.attachTemplateToToken)
                     await templateMacroApi.attachTemplateToToken(result, tokenDoc);
@@ -52,9 +79,11 @@ export async function placeZone(casterToken, options = {}) {
             y: _opts.y,
             user: game.user.id
         }]);
-        if (created && _opts.attachToToken) {
+        if (created && _opts.attachToToken)
+        {
             const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
-            if (tokenDoc) {
+            if (tokenDoc)
+            {
                 const tmApi = game.modules.get('templatemacro')?.api;
                 if (tmApi?.attachTemplateToToken)
                     await tmApi.attachTemplateToToken({ template: created }, tokenDoc);
@@ -64,7 +93,8 @@ export async function placeZone(casterToken, options = {}) {
     }
 
     const _title = options.title || 'PLACE ZONE';
-    return _queueCard(() => new Promise(async (resolve) => {
+    return _queueCard(() => new Promise(async (resolve) =>
+    {
         const {
             range = null,
             size = 1,
@@ -81,38 +111,44 @@ export async function placeZone(casterToken, options = {}) {
             rangeOrigin = null
         } = /** @type {any} */ (options);
 
-        let rangeHighlight = null;
         const placedZones = [];
         let cancelled = false;
         let confirmed = false;
 
-        const pulseGraphic = new PIXI.Graphics();
-        addGraphicsBelowTokens(pulseGraphic);
-        let wavePulse = null;
-
-        // Draw range highlight if range is specified (low grey, very transparent)
         // rangeOrigin can be a {x, y} point to override the default casterToken origin
-        if (range !== null && (casterToken || rangeOrigin)) {
+        if (range !== null && (casterToken || rangeOrigin))
+        {
             const rangeAnchor = rangeOrigin || casterToken;
-            rangeHighlight = drawRangeHighlight(rangeAnchor, range, 0x888888, 0.1, false);
-
-            const isPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
-            const originOffsets = isPoint ? [pixelToOffset(rangeAnchor.x, rangeAnchor.y)] : getOccupiedOffsets(rangeAnchor);
-            const hexesByDist = _groupCellsByDistance(
-                originOffsets,
-                getInRangeOffsets(rangeAnchor, range, { includeSelf: true })
-            );
-            wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
-            canvas.app.ticker.add(wavePulse);
+            rangePulse.set('interactive:placeZone', {
+                priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
+                build: () =>
+                {
+                    const rangeHighlight = drawRangeHighlight(rangeAnchor, range, TG.rangeFill, 0.1, false);
+                    const pulseGraphic = new PIXI.Graphics();
+                    addGraphicsBelowTokens(pulseGraphic);
+                    const isPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
+                    const originOffsets = isPoint ? [pixelToOffset(rangeAnchor.x, rangeAnchor.y)] : getOccupiedOffsets(rangeAnchor);
+                    const hexesByDist = _groupCellsByDistance(
+                        originOffsets,
+                        getInRangeOffsets(rangeAnchor, range, { includeSelf: true })
+                    );
+                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: rangeAnchor?.document ? rangeAnchor : null });
+                    canvas.app.ticker.add(wavePulse);
+                    return () =>
+                    {
+                        canvas.app.ticker.remove(wavePulse);
+                        destroyGraphics(rangeHighlight);
+                        destroyGraphics(pulseGraphic);
+                    };
+                },
+            });
         }
 
         const restoreLayerClick = suppressTokenLayerClick();
 
-        const doCleanup = () => {
-            if (wavePulse)
-                canvas.app.ticker.remove(wavePulse);
-            destroyGraphics(rangeHighlight);
-            destroyGraphics(pulseGraphic);
+        const doCleanup = () =>
+        {
+            rangePulse.clear('interactive:placeZone');
             restoreLayerClick();
             _removeInfoCard(cardEl);
         };
@@ -129,23 +165,30 @@ export async function placeZone(casterToken, options = {}) {
             zoneType: type,
             zoneSize: size,
             relatedToken: casterToken,
-            onConfirm: () => {
+            onConfirm: () =>
+            {
                 confirmed = true;
             },
-            onCancel: () => {
+            onCancel: () =>
+            {
                 cancelled = true;
             }
         });
 
         // Lancer binds template-placement cancel to right-click (oncontextmenu) and has no Escape
         // handler. Swallow right-click; only Escape cancels the current placement.
-        const withEscOnlyCancel = (placePromise) => {
+        const withEscOnlyCancel = (placePromise) =>
+        {
             const view = /** @type {any} */ (canvas.app?.view);
             const lancerCancel = view?.oncontextmenu;
             if (!view || typeof lancerCancel !== 'function')
                 return placePromise;
-            view.oncontextmenu = (ev) => { ev?.preventDefault?.(); };
-            const onKey = (ev) => {
+            view.oncontextmenu = (ev) =>
+            {
+                ev?.preventDefault?.();
+            };
+            const onKey = (ev) =>
+            {
                 if (ev.key !== 'Escape')
                     return;
                 ev.preventDefault();
@@ -159,15 +202,26 @@ export async function placeZone(casterToken, options = {}) {
 
         const canPlaceMore = () => count === -1 || placedZones.length < count;
 
-        const refreshZoneCard = () => {
+        const refreshZoneCard = () =>
+        {
             _updateInfoCard(cardEl, "placeZone", {
                 placedZones,
                 canPlaceMore: canPlaceMore(),
-                onPlaceMore: () => { placing = true; },
-                onDeleteZone: async (idx) => {
+                onPlaceMore: () =>
+                {
+                    placing = true;
+                },
+                onDeleteZone: async (idx) =>
+                {
                     const removed = placedZones.splice(idx, 1);
-                    if (removed[0]?.template) {
-                        try { await removed[0].template.delete(); } catch (_) { /* ignore */ }
+                    if (removed[0]?.template)
+                    {
+                        try
+                        {
+                            await removed[0].template.delete();
+                        }
+                        catch (_)
+                        { /* ignore */ }
                     }
                     refreshZoneCard();
                 }
@@ -175,20 +229,24 @@ export async function placeZone(casterToken, options = {}) {
         };
 
         // One interactive placement; returns a { x, y, template } result, or null if cancelled.
-        const placeOne = async () => {
-            const onMove = (e) => {
+        const placeOne = async () =>
+        {
+            const onMove = (e) =>
+            {
                 const { x, y } = pointerToWorld(e);
                 const o = pixelToOffset(x, y);
                 playTargetingMove(o.col, o.row);
             };
             canvas.stage.on('pointermove', onMove);
-            try {
+            try
+            {
                 const templateMacroApi = game.modules.get('templatemacro')?.api;
-                if (templateMacroApi?.placeZone) {
-                    const res = await withEscOnlyCancel(templateMacroApi.placeZone(options, hooks));
-                    if (res)
+                if (templateMacroApi?.placeZone)
+                {
+                    const zoneResult = await withEscOnlyCancel(templateMacroApi.placeZone(options, hooks));
+                    if (zoneResult)
                         playUiSound('targetingConfirm');
-                    return res;
+                    return zoneResult;
                 }
                 const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: size });
                 const template = await withEscOnlyCancel(templatePreview.placeTemplate());
@@ -200,80 +258,109 @@ export async function placeZone(casterToken, options = {}) {
                     updateData.texture = texture;
                 await template.update(updateData);
                 return { x: template.x, y: template.y, template };
-            } finally {
+            }
+            finally
+            {
                 canvas.stage.off('pointermove', onMove);
             }
         };
 
-        const deleteAll = async () => {
-            for (const zone of placedZones) {
-                try { await zone.template.delete(); } catch (_) { /* ignore */ }
+        const deleteAll = async () =>
+        {
+            for (const zone of placedZones)
+            {
+                try
+                {
+                    await zone.template.delete();
+                }
+                catch (_)
+                { /* ignore */ }
             }
         };
 
-        try {
+        try
+        {
             refreshZoneCard();
 
-            while (true) {
-                if (cancelled) {
+            while (true)
+            {
+                if (cancelled)
+                {
                     await deleteAll();
                     doCleanup();
                     resolve(null);
                     return;
                 }
-                if (confirmed) {
+                if (confirmed)
+                {
                     doCleanup();
                     resolve(placedZones);
                     return;
                 }
-                // Idle: nothing to place right now — wait for Place / Confirm / Cancel.
-                if (!placing || !canPlaceMore()) {
-                    await new Promise(r => setTimeout(r, 100));
+                // Idle: nothing to place right now, wait for Place / Confirm / Cancel.
+                if (!placing || !canPlaceMore())
+                {
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     continue;
                 }
 
                 const result = await placeOne();
 
                 // Flags may have flipped while awaiting the placement.
-                if (cancelled) {
-                    if (result?.template) {
-                        try { await result.template.delete(); } catch (_) { /* ignore */ }
+                if (cancelled)
+                {
+                    if (result?.template)
+                    {
+                        try
+                        {
+                            await result.template.delete();
+                        }
+                        catch (_)
+                        { /* ignore */ }
                     }
                     await deleteAll();
                     doCleanup();
                     resolve(null);
                     return;
                 }
-                if (confirmed) {
+                if (confirmed)
+                {
                     doCleanup();
                     resolve(placedZones);
                     return;
                 }
 
                 // Escape during placement: stop auto-placing, idle for Place / Confirm / Cancel.
-                if (!result?.template) {
+                if (!result?.template)
+                {
                     placing = false;
                     continue;
                 }
 
-                if (range !== null && (casterToken || rangeOrigin)) {
+                if (range !== null && (casterToken || rangeOrigin))
+                {
                     const origin = rangeOrigin || casterToken;
                     let dist;
-                    if (origin.document) {
+                    if (origin.document)
+                    {
                         // Token origin: measure from nearest occupied hex (matches highlight)
                         const pointOffset = pixelToOffset(result.x, result.y);
                         const offsets = getOccupiedOffsets(origin);
-                        if (isHexGrid()) {
+                        if (isHexGrid())
+                        {
                             const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
-                            dist = Math.min(...offsets.map(o => cubeDistance(offsetToCube(o.col, o.row), pointCube)));
-                        } else {
-                            dist = Math.min(...offsets.map(o => Math.max(Math.abs(o.col - pointOffset.col), Math.abs(o.row - pointOffset.row))));
+                            dist = Math.min(...offsets.map(offset => cubeDistance(offsetToCube(offset.col, offset.row), pointCube)));
                         }
-                    } else {
+                        else
+                            dist = Math.min(...offsets.map(offset => Math.max(Math.abs(offset.col - pointOffset.col), Math.abs(offset.row - pointOffset.row))));
+                    }
+                    else
+                    {
                         // Point origin: simple grid distance
                         dist = Math.round(canvas.grid.measurePath([origin, { x: result.x, y: result.y }]).distance / canvas.dimensions.distance);
                     }
-                    if (dist > range) {
+                    if (dist > range)
+                    {
                         await result.template.delete();
                         ui.notifications.warn("Target is out of range!");
                         continue; // placing stays true -> retry
@@ -282,9 +369,11 @@ export async function placeZone(casterToken, options = {}) {
 
                 placedZones.push(result);
 
-                if (_opts.attachToToken && result.template) {
+                if (_opts.attachToToken && result.template)
+                {
                     const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
-                    if (tokenDoc) {
+                    if (tokenDoc)
+                    {
                         const tmApi = game.modules.get('templatemacro')?.api;
                         if (tmApi?.attachTemplateToToken)
                             await tmApi.attachTemplateToToken(result, tokenDoc);
@@ -296,9 +385,11 @@ export async function placeZone(casterToken, options = {}) {
                     placing = false;
 
                 refreshZoneCard();
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error(e);
             doCleanup();
             resolve(placedZones.length > 0 ? placedZones : null);

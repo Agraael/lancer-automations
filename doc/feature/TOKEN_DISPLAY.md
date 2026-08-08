@@ -18,7 +18,7 @@ Turn the bars on with **`tokenStatBar`** (Enable Custom Token Stat Bars). It nee
 
 ## What the bars show
 
-<img align="right" src="../img/td-bars.png" width="45%"/>
+<img align="right" src="../vid/td-bars.gif" width="45%"/>
 
 Under the token, depending on the actor type:
 
@@ -44,9 +44,9 @@ The settings hold the **world defaults**; each token can override them from **To
 - **Row height** - fixed pixels, or 0 to scale with the grid.
 - **Display stress** - show the pilot bond-stress bar (pilot tokens).
 
-**Minimum Bar Zoom Scale** keeps the bars a constant screen size below a given zoom so they don't shrink away on a zoomed-out map.
+**Minimum Bar Zoom Scale** keeps the bars a constant screen size below a given zoom level.
 
-Hold **Alt** to peek: while held, the bars show on every visible token regardless of its visibility mode, then revert when you let go.
+Hold **Alt** to peek: while held, the bars show on every visible token regardless of its visibility mode.
 
 <br clear="right"/>
 
@@ -59,9 +59,11 @@ The **Extra Bars** section of Token Config → Resources adds your own bars belo
 - a **value** and **max** that are either typed in (manual) or read from an actor data path,
 - **segmented** (a settable number of pips) or continuous fill,
 - a **label**, **width %**, **new line / same line** layout, **color**, and **icon**,
-- a **visibility** (owner / scanned / all), a **show-label-in-hint** toggle (whether the label shows next to the icon in the hover hint), optional **floating-text + sound** on change, and an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
+- a **visibility** (owner / scanned / all), a **show-label-in-hint** toggle (label next to the icon in the hint), optional **floating-text + sound** on change, and an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
 
 Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`); see [API_REFERENCE.md](../API_REFERENCE.md).
+
+Set on an item or actor instead of one token, an extra bar becomes a template that auto-adds to that actor's tokens. **Alt Sheets** custom fraction flags show up as bars here too.
 
 <br clear="right"/>
 

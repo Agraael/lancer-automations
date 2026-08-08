@@ -149,9 +149,12 @@ def collect_already_declared():
         if depth == 0:
             flat += ch
     declared = set()
-    for line in flat.split(';'):
-        line = line.strip()
-        if not line or line.startswith('//') or line.startswith('*') or line.startswith('/'):
+    for seg in flat.split(';'):
+        # Drop full-line // comments so a member glued under a `// ── header ──`
+        # line isn't skipped along with the comment.
+        seg = '\n'.join(l for l in seg.split('\n') if not l.strip().startswith('//'))
+        line = seg.strip()
+        if not line or line.startswith('*') or line.startswith('/'):
             continue
         m2 = re.match(r'^(\w+)\s*[(?:]', line)
         if m2:

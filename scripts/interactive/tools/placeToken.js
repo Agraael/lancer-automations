@@ -15,11 +15,14 @@ import {
 } from "../cards.js";
 
 import {
+    TG,
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     makeSafe, createCursorPreview, drawRangeHighlight,
     _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
+    suppressEvent,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
+import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 
 /**
  * Interactive tool to place tokens on the map with visual preview.
@@ -39,13 +42,13 @@ import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "..
  * @param {string|null} [options.team=null] - Token faction team override
  * @returns {Promise<Array<TokenDocument>|null>} Array of spawned token documents, or null if cancelled
  */
-export function placeToken(options = {}) {
+export function placeToken(options = {})
+{
     const _title = options.title || 'PLACE TOKEN';
-    return _queueCard(() => new Promise((resolve) => {
+    return _queueCard(() => new Promise((resolve) =>
+    {
         const {
             actor: actorInput = null,
-            range = null,
-            count = 1,
             extraData: defaultExtraData = {},
             origin = null,
             onSpawn = null,
@@ -58,27 +61,34 @@ export function placeToken(options = {}) {
             team = null,
             elevation = null
         } = /** @type {any} */ (options);
+        // range/count are `let` so the card can edit them live.
+        let range = /** @type {any} */ (options).range ?? null;
+        let count = /** @type {any} */ (options).count ?? 1;
 
-        // --- Normalize actor input into actorEntries ---
+        // Normalize actor input into actorEntries
         // Each entry: { actor, extraData, prototypeToken, texture }
         const actorEntries = [];
-        if (Array.isArray(actorInput)) {
-            for (const item of actorInput) {
-                const a = item.actor || item;
-                const ed = item.extraData || {};
-                const merged = { ...defaultExtraData, ...ed, flags: { ...(defaultExtraData.flags || {}), ...(ed.flags || {}) } };
-                const proto = a.prototypeToken ? a.prototypeToken.toObject() : {};
+        if (Array.isArray(actorInput))
+        {
+            for (const item of actorInput)
+            {
+                const actor = item.actor || item;
+                const itemExtraData = item.extraData || {};
+                const merged = { ...defaultExtraData, ...itemExtraData, flags: { ...(defaultExtraData.flags || {}), ...(itemExtraData.flags || {}) } };
+                const proto = actor.prototypeToken ? actor.prototypeToken.toObject() : {};
                 actorEntries.push({
-                    actor: a,
+                    actor: actor,
                     extraData: merged,
                     prototypeToken: proto,
                     texture: merged.texture?.src ?? (proto.texture?.src || ""),
                     width: merged.width ?? proto.width ?? 1,
                     height: merged.height ?? proto.height ?? 1,
-                    name: merged.name ?? proto.name ?? a.name ?? "Token"
+                    name: merged.name ?? proto.name ?? actor.name ?? "Token"
                 });
             }
-        } else if (actorInput) {
+        }
+        else if (actorInput)
+        {
             const proto = actorInput.prototypeToken ? actorInput.prototypeToken.toObject() : {};
             actorEntries.push({
                 actor: actorInput,
@@ -89,7 +99,9 @@ export function placeToken(options = {}) {
                 height: defaultExtraData.height ?? proto.height ?? 1,
                 name: defaultExtraData.name ?? proto.name ?? actorInput.name ?? "Token"
             });
-        } else {
+        }
+        else
+        {
             // No actor: empty proto
             actorEntries.push({
                 actor: null,
@@ -119,48 +131,92 @@ export function placeToken(options = {}) {
         const gridSize = canvas.grid.size;
 
         // Reference token with matching dimensions for pixel-perfect hex shapes
-        const refToken = (originToken && originToken.document.width === protoWidth && originToken.document.height === protoHeight)
+        let refToken = (originToken && originToken.document.width === protoWidth && originToken.document.height === protoHeight)
             ? originToken
-            : canvas.tokens.placeables.find(t => t.document.width === protoWidth && t.document.height === protoHeight) || null;
+            : canvas.tokens.placeables.find(placed => placed.document.width === protoWidth && placed.document.height === protoHeight) || null;
 
-        const placements = [];
-        let rangeHighlight = null;
-
-        const pulseGraphic = new PIXI.Graphics();
-        addGraphicsBelowTokens(pulseGraphic);
-        let wavePulse = null;
-
-        let inRangeSet = null;
-        if (range !== null && origin) {
-            const originForRange = originToken ?? (originOffset ? getHexCenter(originOffset.col, originOffset.row) : null);
-            if (originForRange) {
-                inRangeSet = getInRangeOffsets(originForRange, range, { includeSelf: true });
-                if (originToken) {
-                    rangeHighlight = drawRangeHighlight(originToken, range, 0x888888, 0.1, false);
-                } else {
-                    const hl = new PIXI.Graphics();
-                    hl.lineStyle(gridLineWidth(2), 0x888888, 0.3);
-                    hl.beginFill(0x888888, 0.1);
-                    for (const key of inRangeSet) {
-                        const [col, row] = key.split(',').map(Number);
-                        if (isHexGrid()) {
-                            drawHexAt(hl, col, row);
-                        } else {
-                            const center = getHexCenter(col, row);
-                            hl.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
-                        }
-                    }
-                    hl.endFill();
-                    addGraphicsBelowTokens(hl);
-                    rangeHighlight = hl;
-                }
-
-                const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
-                const hexesByDist = _groupCellsByDistance(originOffsetsForPulse, inRangeSet);
-                wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range);
-                canvas.app.ticker.add(wavePulse);
+        // No same-size token on the scene: synthesise one so large-token snapping and footprint still work.
+        if (!refToken)
+        {
+            try
+            {
+                const refDoc = new CONFIG.Token.documentClass({
+                    x: 0,
+                    y: 0,
+                    width: protoWidth,
+                    height: protoHeight,
+                    hexagonalShape: getActiveEntry().prototypeToken?.hexagonalShape ?? 0,
+                    name: "__laDeployRef"
+                }, { parent: canvas.scene });
+                refToken = {
+                    document: refDoc,
+                    w: protoWidth * gridSize,
+                    h: protoHeight * gridSize,
+                    getSnappedPosition: (pos) => refDoc.getSnappedPosition({ x: pos.x, y: pos.y })
+                };
+            }
+            catch (err)
+            {
+                console.warn("lancer-automations | placeToken: could not build synthetic reference token", err);
             }
         }
+
+        const placements = [];
+
+        let inRangeSet = null;
+        const rebuildRangePulse = () =>
+        {
+            const originForRange = originToken ?? (originOffset ? getHexCenter(originOffset.col, originOffset.row) : null);
+            if (range === null || !origin || !originForRange)
+            {
+                inRangeSet = null;
+                rangePulse.clear('interactive:placeToken');
+                return;
+            }
+            inRangeSet = getInRangeOffsets(originForRange, range, { includeSelf: true });
+            rangePulse.set('interactive:placeToken', {
+                priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
+                build: () =>
+                {
+                    let rangeHighlight;
+                    if (originToken)
+                        rangeHighlight = drawRangeHighlight(originToken, range, TG.rangeFill, 0.1, false);
+                    else
+                    {
+                        const highlightGraphics = new PIXI.Graphics();
+                        highlightGraphics.lineStyle(gridLineWidth(2), TG.rangeFill, 0.3);
+                        highlightGraphics.beginFill(TG.rangeFill, 0.1);
+                        for (const key of inRangeSet)
+                        {
+                            const [col, row] = key.split(',').map(Number);
+                            if (isHexGrid())
+                                drawHexAt(highlightGraphics, col, row);
+                            else
+                            {
+                                const center = getHexCenter(col, row);
+                                highlightGraphics.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
+                            }
+                        }
+                        highlightGraphics.endFill();
+                        addGraphicsBelowTokens(highlightGraphics);
+                        rangeHighlight = highlightGraphics;
+                    }
+                    const pulseGraphic = new PIXI.Graphics();
+                    addGraphicsBelowTokens(pulseGraphic);
+                    const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
+                    const hexesByDist = _groupCellsByDistance(originOffsetsForPulse, inRangeSet);
+                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: originToken ?? null });
+                    canvas.app.ticker.add(wavePulse);
+                    return () =>
+                    {
+                        canvas.app.ticker.remove(wavePulse);
+                        destroyGraphics(rangeHighlight);
+                        destroyGraphics(pulseGraphic);
+                    };
+                },
+            });
+        };
+        rebuildRangePulse();
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
 
@@ -168,33 +224,40 @@ export function placeToken(options = {}) {
         let autoElevation = true;
         let pendingElevationOffset = defaultElevation;
         let lastCursorOffset = null;
-        let lastCursorColor = 0x0088ff; // mirrors the live cursor's in-range/out-of-range colour
-        const groundAt = (offset) => {
-            const tAPI = globalThis.terrainHeightTools;
-            return tAPI ? (Number(getHexGroundElevation(offset.col, offset.row, tAPI)) || 0) : 0;
+        let lastCursorColor = TG.inRange; // mirrors the live cursor's in-range/out-of-range colour
+        const groundAt = (offset) =>
+        {
+            const terrainAPI = globalThis.terrainHeightTools;
+            return terrainAPI ? (Number(getHexGroundElevation(offset.col, offset.row, terrainAPI)) || 0) : 0;
         };
         const elevAt = (offset) => (autoElevation ? groundAt(offset) : 0) + pendingElevationOffset;
         const cursorElevLabel = makeText('', {
-            fontFamily: 'Arial', fontSize: Math.max(14, canvas.grid.size * 0.22),
-            fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold',
+            fontFamily: 'Arial',
+            fontSize: Math.max(14, canvas.grid.size * 0.22),
+            fill: 0xffffff,
+            stroke: 0x000000,
+            strokeThickness: gridLineWidth(4),
+            fontWeight: 'bold',
         });
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
         {
             const iso = getIsoProvider();
-            if (iso) {
+            if (iso)
+            {
                 cursorElevLabel.rotation = iso.reverseRotation;
                 cursorElevLabel.skew.set(iso.reverseSkewX, iso.reverseSkewY);
                 cursorElevLabel.scale.set(iso.counterScale, 1 / iso.counterScale);
             }
         }
-        canvas.stage.addChild(cursorElevLabel);
+        canvas.stage.addChild(cursorElevLabel).eventMode = 'none';
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
         const restoreLayerClick = suppressTokenLayerClick();
 
-        const getProtoOffsets = (centerCol, centerRow) => {
+        const getProtoOffsets = (centerCol, centerRow) =>
+        {
             if (protoWidth <= 1 && protoHeight <= 1)
                 return [{ col: centerCol, row: centerRow }];
 
@@ -208,13 +271,15 @@ export function placeToken(options = {}) {
             return [{ col: centerCol, row: centerRow }];
         };
 
-        const checkInRange = (col, row) => {
+        const checkInRange = (col, row) =>
+        {
             if (range === null || !origin)
                 return true;
             return inRangeSet ? inRangeSet.has(`${col},${row}`) : true;
         };
 
-        const getSpawnPosition = (centerCol, centerRow) => {
+        const getSpawnPosition = (centerCol, centerRow) =>
+        {
             const center = getHexCenter(centerCol, centerRow);
             if (refToken)
                 return snapTokenCenter(refToken, center);
@@ -224,20 +289,25 @@ export function placeToken(options = {}) {
             };
         };
 
-        const snapCursor = (tx, ty) => {
-            if (refToken) {
+        const snapCursor = (tx, ty) =>
+        {
+            if (refToken)
+            {
                 const snapped = snapTokenCenter(refToken, { x: tx, y: ty });
                 return pixelToOffset(snapped.x + refToken.w / 2, snapped.y + refToken.h / 2);
             }
             return pixelToOffset(tx, ty);
         };
 
-        const drawOffsets = (graphics, offsets) => {
-            for (const o of offsets) {
-                if (isHexGrid()) {
-                    drawHexAt(graphics, o.col, o.row);
-                } else {
-                    const center = getHexCenter(o.col, o.row);
+        const drawOffsets = (graphics, offsets) =>
+        {
+            for (const offset of offsets)
+            {
+                if (isHexGrid())
+                    drawHexAt(graphics, offset.col, offset.row);
+                else
+                {
+                    const center = getHexCenter(offset.col, offset.row);
                     graphics.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
                 }
             }
@@ -245,14 +315,14 @@ export function placeToken(options = {}) {
 
         let safeMove, safeClick, safeRight, safeKey;
         let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
-        const doCleanup = () => {
+        const doCleanup = () =>
+        {
             if (stopPresenceBeat)
                 stopPresenceBeat();
             clearToolPresence('placeToken');
             disposeCursorPreview();
             destroyGraphics(cursorElevLabel);
-            if (wavePulse)
-                canvas.app.ticker.remove(wavePulse);
+            rangePulse.clear('interactive:placeToken');
             if (safeClick)
                 canvas.stage.off('click', safeClick);
             if (safeRight)
@@ -262,10 +332,8 @@ export function placeToken(options = {}) {
             if (safeKey)
                 document.removeEventListener('keydown', safeKey, true);
 
-            destroyGraphics(rangeHighlight);
-            destroyGraphics(pulseGraphic);
-            for (const p of placements)
-                destroyGraphics(p.graphics);
+            for (const placement of placements)
+                destroyGraphics(placement.graphics);
 
             canvas.tokens.interactiveChildren = prevInteractive;
             restoreLayerClick();
@@ -273,13 +341,15 @@ export function placeToken(options = {}) {
                 _removeInfoCard(cardEl);
         };
 
-        const refreshCard = () => {
+        const refreshCard = () =>
+        {
             if (!cardEl)
                 return;
             const warnings = {};
-            placements.forEach((p, idx) => {
-                if (p.warning)
-                    warnings[idx] = [p.warning];
+            placements.forEach((placement, idx) =>
+            {
+                if (placement.warning)
+                    warnings[idx] = [placement.warning];
             });
             _updateInfoCard(cardEl, "placeToken", {
                 placements,
@@ -288,17 +358,20 @@ export function placeToken(options = {}) {
                 isMultiActor,
                 warnings,
                 autoElevation,
-                onToggleAutoElevation: () => {
+                onToggleAutoElevation: () =>
+                {
                     autoElevation = !autoElevation;
                     if (lastCursorOffset)
                         drawCursorAt(lastCursorOffset);
                     refreshCard();
                 },
-                onSelectActor: (idx) => {
+                onSelectActor: (idx) =>
+                {
                     activeActorIndex = idx;
                     refreshCard();
                 },
-                onDeletePlacement: (idx) => {
+                onDeletePlacement: (idx) =>
+                {
                     const removed = placements.splice(idx, 1);
                     destroyGraphics(removed[0]?.graphics);
                     refreshCard();
@@ -306,10 +379,12 @@ export function placeToken(options = {}) {
             });
         };
 
-        const doConfirm = async () => {
+        const doConfirm = async () =>
+        {
             const spawnedTokens = [];
             const allTokenData = [];
-            for (const p of placements) {
+            for (const p of placements)
+            {
                 const entry = actorEntries[p.actorIndex ?? 0];
                 const pos = getSpawnPosition(p.col, p.row);
                 const tokenData = foundry.utils.mergeObject(
@@ -317,10 +392,10 @@ export function placeToken(options = {}) {
                     entry.extraData || {}
                 );
 
-                if (disposition !== null) {
+                if (disposition !== null)
                     tokenData.disposition = disposition;
-                }
-                if (team !== null) {
+                if (team !== null)
+                {
                     tokenData.flags = tokenData.flags || {};
                     tokenData.flags['token-factions'] = tokenData.flags['token-factions'] || {};
                     tokenData.flags['token-factions'].team = team;
@@ -335,36 +410,46 @@ export function placeToken(options = {}) {
             }
 
             let createdIds;
-            if (game.user.isGM) {
+            if (game.user.isGM)
+            {
                 const created = await canvas.scene.createEmbeddedDocuments("Token", allTokenData);
                 createdIds = created.map(d => d.id);
-            } else {
+            }
+            else
+            {
                 const requestId = foundry.utils.randomID();
                 game.socket.emit('module.lancer-automations', {
                     action: "createTokens",
                     payload: { tokenDataArray: allTokenData, sceneId: canvas.scene.id, requestId }
                 });
-                createdIds = await new Promise((res) => {
-                    const handler = (data) => {
-                        if (data.action === 'createTokensResponse' && data.payload.requestId === requestId) {
+                createdIds = await new Promise((resolve) =>
+                {
+                    const handler = (data) =>
+                    {
+                        if (data.action === 'createTokensResponse' && data.payload.requestId === requestId)
+                        {
                             game.socket.off('module.lancer-automations', handler);
-                            res(data.payload.tokenIds);
+                            resolve(data.payload.tokenIds);
                         }
                     };
                     game.socket.on('module.lancer-automations', handler);
                 });
             }
 
-            for (let i = 0; i < createdIds.length; i++) {
+            for (let i = 0; i < createdIds.length; i++)
+            {
                 const id = createdIds[i];
                 const entry = actorEntries[placements[i]?.actorIndex ?? 0];
                 const doc = canvas.scene.tokens.get(id);
-                if (doc) {
+                if (doc)
+                {
                     spawnedTokens.push(doc);
 
-                    if (globalThis.Sequencer) {
+                    if (globalThis.Sequencer)
+                    {
                         const tokenObj = canvas.tokens.get(id);
-                        if (tokenObj) {
+                        if (tokenObj)
+                        {
                             new Sequence()
                                 .effect()
                                 .file("jb2a.extras.tmfx.inpulse.circle.01.normal")
@@ -393,13 +478,38 @@ export function placeToken(options = {}) {
             isMultiActor,
             relatedToken: originToken,
             onConfirm: doConfirm,
-            onCancel: () => {
+            onRangeChange: (newRange) =>
+            {
+                range = newRange;
+                rebuildRangePulse();
+                for (const placement of placements)
+                    placement.warning = checkInRange(placement.col, placement.row) ? null : 'Out of range (allowed)';
+                if (lastCursorOffset)
+                    drawCursorAt(lastCursorOffset);
+                refreshCard();
+                broadcastToolPresence('placeToken', presenceData());
+            },
+            onCountChange: (newCount) =>
+            {
+                count = newCount;
+                if (count !== -1 && placements.length > count)
+                {
+                    const removed = placements.splice(0, placements.length - count);
+                    for (const placement of removed)
+                        destroyGraphics(placement.graphics);
+                }
+                refreshCard();
+                broadcastToolPresence('placeToken', presenceData());
+            },
+            onCancel: () =>
+            {
                 doCleanup();
                 resolve(null);
             }
         });
 
-        const drawPlacementMarker = (centerCol, centerRow, elev) => {
+        const drawPlacementMarker = (centerCol, centerRow, elev) =>
+        {
             const container = new PIXI.Container();
             const graphics = new PIXI.Graphics();
             graphics.lineStyle(gridLineWidth(2), 0xff6400, 0.8);
@@ -421,7 +531,8 @@ export function placeToken(options = {}) {
             label.x = center.x;
             label.y = center.y - gridSize * 0.45;
             const iso = getIsoProvider();
-            if (iso) {
+            if (iso)
+            {
                 label.rotation = iso.reverseRotation;
                 label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
                 label.scale.set(iso.counterScale, 1 / iso.counterScale);
@@ -433,58 +544,67 @@ export function placeToken(options = {}) {
             return container;
         };
 
-        const elevStr = (e) => e > 0 ? `↑ ${e}` : e < 0 ? `↓ ${-e}` : `↕ 0`;
+        const formatElevation = (elev) => elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`;
         // Presence: live cursor footprint (blue) + placed markers (yellow) + elevation labels.
-        const presenceData = () => {
-            const placedCells = placements.flatMap(p => getProtoOffsets(p.col, p.row).map(o => `${o.col},${o.row}`));
-            const labels = placements.map(p => {
-                const c = getHexCenter(p.col, p.row);
-                return { x: c.x, y: c.y - gridSize * 0.45, text: elevStr(p.elevation) };
+        const presenceData = () =>
+        {
+            const placedCells = placements.flatMap(placement => getProtoOffsets(placement.col, placement.row).map(offset => `${offset.col},${offset.row}`));
+            const labels = placements.map(p =>
+            {
+                const center = getHexCenter(p.col, p.row);
+                return { x: center.x, y: center.y - gridSize * 0.45, text: formatElevation(p.elevation) };
             });
             const cells = lastCursorOffset
-                ? getProtoOffsets(lastCursorOffset.col, lastCursorOffset.row).map(o => `${o.col},${o.row}`)
+                ? getProtoOffsets(lastCursorOffset.col, lastCursorOffset.row).map(offset => `${offset.col},${offset.row}`)
                 : [];
             if (cursorElevLabel.visible)
                 labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
             return { cells, placedCells, labels, tokens: [], placedColor: 0xff6400, cellColor: lastCursorColor, relatedToken: originToken };
         };
-        const drawCursorAt = (offset) => {
+        const drawCursorAt = (offset) =>
+        {
             const inRange = checkInRange(offset.col, offset.row);
-            const color = inRange ? 0x0088ff : 0xff0000;
+            const color = inRange ? TG.inRange : TG.outOfRange;
             lastCursorColor = color;
             cursorPreview.clear();
             cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
             cursorPreview.beginFill(color, 0.4);
             drawOffsets(cursorPreview, getProtoOffsets(offset.col, offset.row));
             cursorPreview.endFill();
-            const c = getHexCenter(offset.col, offset.row);
-            cursorElevLabel.text = elevStr(elevAt(offset));
-            cursorElevLabel.x = c.x;
-            cursorElevLabel.y = c.y - canvas.grid.size * 0.45;
+            const center = getHexCenter(offset.col, offset.row);
+            cursorElevLabel.text = formatElevation(elevAt(offset));
+            cursorElevLabel.x = center.x;
+            cursorElevLabel.y = center.y - canvas.grid.size * 0.45;
             cursorElevLabel.visible = true;
             broadcastToolPresence('placeToken', presenceData());
         };
 
-        const moveHandler = (event) => {
-            const { x: tx, y: ty } = pointerToWorld(event);
-            const cursorOffset = snapCursor(tx, ty);
+        const moveHandler = (event) =>
+        {
+            const { x: worldX, y: worldY } = pointerToWorld(event);
+            const cursorOffset = snapCursor(worldX, worldY);
             lastCursorOffset = cursorOffset;
             playTargetingMove(cursorOffset.col, cursorOffset.row);
             drawCursorAt(cursorOffset);
         };
 
-        const clickHandler = (event) => {
+        const clickHandler = (event) =>
+        {
             const { x: tx, y: ty } = pointerToWorld(event);
 
             const cursorOffset = snapCursor(tx, ty);
 
-            if (count !== -1 && placements.length >= count) {
-                ui.notifications.warn(`Maximum of ${count} tokens already placed.`);
+            // Re-placing on the same cell is a no-op; at the count cap, recycle the oldest marker (FIFO).
+            if (placements.some(placement => placement.col === cursorOffset.col && placement.row === cursorOffset.row))
                 return;
+            if (count !== -1 && placements.length >= count)
+            {
+                const oldest = placements.shift();
+                destroyGraphics(oldest?.graphics);
             }
 
-            const warning = !checkInRange(cursorOffset.col, cursorOffset.row) ? 'Out of range' : null;
             const elev = elevAt(cursorOffset);
+            const warning = !checkInRange(cursorOffset.col, cursorOffset.row) ? 'Out of range (allowed)' : null;
             const graphics = drawPlacementMarker(cursorOffset.col, cursorOffset.row, elev);
             placements.push({
                 col: cursorOffset.col,
@@ -498,18 +618,17 @@ export function placeToken(options = {}) {
             refreshCard();
             broadcastToolPresence('placeToken', presenceData());
 
-            if (noCard && (count === -1 || placements.length >= count)) {
+            if (noCard && (count === -1 || placements.length >= count))
                 doConfirm();
-            }
         };
 
         const ascendKeys = keyCodesFor('elevationUp');
         const descendKeys = keyCodesFor('elevationDown');
-        const keyHandler = (event) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
+        const keyHandler = (event) =>
+        {
+            if (event.key === "Escape")
+            {
+                suppressEvent(event);
                 doCleanup();
                 resolve(null);
                 return;
@@ -522,9 +641,7 @@ export function placeToken(options = {}) {
             if (step === 0)
                 return;
             // Always swallow the key so it can't reach Foundry's controlled-token elevation handler.
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
+            suppressEvent(event);
             // Adjust the pending offset (next placement), not already-placed tokens.
             pendingElevationOffset += step;
             if (lastCursorOffset)
@@ -534,10 +651,14 @@ export function placeToken(options = {}) {
 
         refreshCard();
 
-        const safe = makeSafe('placeToken', () => {
-            try {
+        const safe = makeSafe('placeToken', () =>
+        {
+            try
+            {
                 doCleanup();
-            } catch { /* */ }
+            }
+            catch
+            { /* */ }
             resolve(null);
         });
         safeMove = safe(moveHandler);

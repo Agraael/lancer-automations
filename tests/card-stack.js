@@ -8,35 +8,44 @@
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function countVisibleCards() {
+import { _buildChoiceDialog } from "../scripts/interactive/combat.js";
+
+function countVisibleCards()
+{
     return $('.la-info-card:visible').length;
 }
 
-function countAllCards() {
+function countAllCards()
+{
     return $('.la-info-card').length;
 }
 
-function pass(name) {
+function pass(name)
+{
     console.log(`%c✅ PASS: ${name}`, 'color:limegreen; font-weight:bold;');
 }
 
-function fail(name, reason) {
+function fail(name, reason)
+{
     console.error(`❌ FAIL: ${name} — ${reason}`);
 }
 
-function assert(condition, name, reason) {
+function assert(condition, name, reason)
+{
     if (condition)
         pass(name);
     else
         fail(name, reason);
 }
 
-function getApi() {
+function getApi()
+{
     return game.modules.get('lancer-automations')?.api;
 }
 
 // ─── Test 1: OR mode — card closes immediately on choice ──────────────
-async function orBasic() {
+async function orBasic()
+{
     const api = getApi();
     console.log('%c── Test: OR basic ──', 'color:cyan;');
     let callbackRan = false;
@@ -46,7 +55,8 @@ async function orBasic() {
         mode: "or",
         choices: [
             { text: "Option A",
-                callback: async () => {
+                callback: async () =>
+                {
                     callbackRan = true;
                 } },
             { text: "Option B" }
@@ -65,7 +75,8 @@ async function orBasic() {
 }
 
 // ─── Test 2: AND mode — both choices required ────────────────────────
-async function andBasic() {
+async function andBasic()
+{
     const api = getApi();
     console.log('%c── Test: AND basic ──', 'color:cyan;');
     let cbA = false, cbB = false;
@@ -75,11 +86,13 @@ async function andBasic() {
         mode: "and",
         choices: [
             { text: "Step A",
-                callback: async () => {
+                callback: async () =>
+                {
                     cbA = true;
                 } },
             { text: "Step B",
-                callback: async () => {
+                callback: async () =>
+                {
                     cbB = true;
                 } }
         ]
@@ -101,10 +114,11 @@ async function andBasic() {
 }
 
 // ─── Test 3: AND mode — callback opens a sub-card (STACK PUSH) ──────
-async function andSubCard() {
+async function andSubCard()
+{
     const api = getApi();
     console.log('%c── Test: AND + sub-card (stack push) ──', 'color:cyan;');
-    let subCardResult = null;
+    let subCardResult = /** @type {any} */ (null);
 
     const p = api.startChoiceCard({
         title: "TEST AND PARENT",
@@ -112,7 +126,8 @@ async function andSubCard() {
         choices: [
             {
                 text: "Open Sub-Card",
-                callback: async () => {
+                callback: async () =>
+                {
                     subCardResult = await api.startChoiceCard({
                         title: "TEST SUB-CARD",
                         mode: "or",
@@ -125,7 +140,8 @@ async function andSubCard() {
             },
             {
                 text: "Simple Step",
-                callback: async () => { /* no-op */ }
+                callback: async () =>
+                { /* no-op */ }
             }
         ]
     });
@@ -149,7 +165,7 @@ async function andSubCard() {
     $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
     await delay(500);
 
-    assert(subCardResult === true, "Sub-card resolved with true", `got ${subCardResult}`);
+    assert(subCardResult?.choiceIdx === 0, "Sub-card resolved with choice 0", `got ${JSON.stringify(subCardResult)}`);
     assert(countVisibleCards() === 1, "Parent AND card visible again", `got ${countVisibleCards()}`);
 
     const parentTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
@@ -163,7 +179,8 @@ async function andSubCard() {
 }
 
 // ─── Test 4: External card queues behind active card ─────────────────
-async function externalQueues() {
+async function externalQueues()
+{
     const api = getApi();
     console.log('%c── Test: External card queues behind ──', 'color:cyan;');
     let firstDone = false;
@@ -173,7 +190,8 @@ async function externalQueues() {
         mode: "or",
         choices: [
             { text: "Done",
-                callback: async () => {
+                callback: async () =>
+                {
                     firstDone = true;
                 } }
         ]
@@ -187,7 +205,8 @@ async function externalQueues() {
         mode: "or",
         choices: [
             { text: "Done",
-                callback: async () => {
+                callback: async () =>
+                {
                     secondDone = true;
                 } }
         ]
@@ -219,7 +238,8 @@ async function externalQueues() {
 }
 
 // ─── Test 5: Cancel AND card ─────────────────────────────────────────
-async function andCancel() {
+async function andCancel()
+{
     const api = getApi();
     console.log('%c── Test: AND cancel ──', 'color:cyan;');
 
@@ -227,8 +247,12 @@ async function andCancel() {
         title: "TEST AND CANCEL",
         mode: "and",
         choices: [
-            { text: "Step A", callback: async () => {} },
-            { text: "Step B", callback: async () => {} }
+            { text: "Step A",
+                callback: async () =>
+                {} },
+            { text: "Step B",
+                callback: async () =>
+                {} }
         ]
     });
 
@@ -244,7 +268,8 @@ async function andCancel() {
 }
 
 // ─── Test 6: Nested stack (A → B → C) ────────────────────────────────
-async function nestedStack() {
+async function nestedStack()
+{
     const api = getApi();
     console.log('%c── Test: Nested stack A → B → C ──', 'color:cyan;');
 
@@ -254,14 +279,16 @@ async function nestedStack() {
         choices: [
             {
                 text: "Open B",
-                callback: async () => {
+                callback: async () =>
+                {
                     await api.startChoiceCard({
                         title: "STACK B",
                         mode: "and",
                         choices: [
                             {
                                 text: "Open C",
-                                callback: async () => {
+                                callback: async () =>
+                                {
                                     await api.startChoiceCard({
                                         title: "STACK C",
                                         mode: "or",
@@ -317,86 +344,85 @@ async function nestedStack() {
 }
 
 // ─── Test 7: Custom Validation (Barrage Mock) ──────────────────────
-async function barrageValidation() {
-    const api = getApi();
-    console.log('%c── Test: Custom Validation (Barrage Mock) ──', 'color:cyan;');
+async function barrageValidation()
+{
+    console.log('%c── Test: Custom Validation (mount dialog) ──', 'color:cyan;');
 
-    // Mock the Barrage validator
-    const barrageValidator = (selected) => {
+    const barrageValidator = (selected) =>
+    {
         if (selected.length === 0)
             return { valid: false, message: "Select 1 SH or 2 non-SH" };
-        if (selected.length === 1) {
+        if (selected.length === 1)
+        {
             const isSH = selected[0].sh;
             return isSH ? { valid: true, message: "SH selected" } : { valid: false, message: "Need SH or 2 mounts" };
         }
-        if (selected.length === 2) {
-            const anySH = selected.some(s => s.sh);
+        if (selected.length === 2)
+        {
+            const anySH = selected.some((mount) => mount.sh);
             return anySH ? { valid: false, message: "Cannot mix SH" } : { valid: true, message: "2 mounts selected" };
         }
         return { valid: false };
     };
 
-    const p = api.startChoiceCard({
-        title: "BARRAGE SELECTION",
-        mode: "vote", // We use vote so we can select multiple before confirming
+    const choices = [
+        { id: 0, item: { sh: false }, img: '', labelHtml: 'Mount A (Main)', sublabel: 'MAIN', selectable: true, destroyed: false },
+        { id: 1, item: { sh: false }, img: '', labelHtml: 'Mount B (Flex)', sublabel: 'FLEX', selectable: true, destroyed: false },
+        { id: 2, item: { sh: true }, img: '', labelHtml: 'Mount C (Superheavy)', sublabel: 'SUPERHEAVY', selectable: true, destroyed: false }
+    ];
+
+    const resultPromise = new Promise((resolve) => _buildChoiceDialog(choices, {
+        title: 'BARRAGE SELECTION',
+        titleHtml: 'BARRAGE SELECTION',
+        subtitle: 'Select 1 SH or 2 non-SH',
+        hint: 'Click mounts to select',
         numberToChoose: 2,
         selectionValidator: barrageValidator,
-        choices: [
-            { text: "Mount A (Main)", value: { sh: false }, icon: "A" },
-            { text: "Mount B (Flex)", value: { sh: false }, icon: "B" },
-            { text: "Mount C (Superheavy)", value: { sh: true }, icon: "C" }
-        ]
-    });
+        onContextMenu: null,
+        resolve
+    }));
 
     await delay(300);
-    assert(countVisibleCards() === 1, "Validation card visible", `got ${countVisibleCards()}`);
+    const msgText = () => $('.la-selection-validation-msg').last().text().trim();
+    const confirmDisabled = () => $('button.confirm').last().prop('disabled') === true;
+    const clickMount = (idx) => $(`.la-choice-item[data-idx="${idx}"]`).last()[0]?.click();
 
-    const $card = $('.la-info-card:visible');
-    const $msg = $card.find('.la-validation-message');
-    const $confirm = $card.find('button.la-confirm-vote');
+    assert($('.la-choice-item[data-idx]').length === 3, "Validation dialog shows 3 mounts", `got ${$('.la-choice-item[data-idx]').length}`);
+    assert(msgText() === "Select 1 SH or 2 non-SH", "Initial message correct", `got "${msgText()}"`);
+    assert(confirmDisabled(), "Confirm disabled initially", "");
 
-    // Initial state: 0 selected
-    assert($msg.text() === "Select 1 SH or 2 non-SH", "Initial message correct", `got ${$msg.text()}`);
-    assert($confirm.prop('disabled') === true, "Confirm disabled initially", "");
+    clickMount(0);
+    await delay(150);
+    assert(msgText() === "Need SH or 2 mounts", "1 non-SH message correct", `got "${msgText()}"`);
+    assert(confirmDisabled(), "Confirm disabled with 1 non-SH", "");
 
-    // Select Mount A (invalid)
-    $card.find('.la-choice-item[data-choice-index="0"]').trigger('click');
-    await delay(200);
-    assert($msg.text() === "Need SH or 2 mounts", "1 non-SH message correct", `got ${$msg.text()}`);
-    assert($confirm.prop('disabled') === true, "Confirm disabled with 1 non-SH", "");
+    clickMount(1);
+    await delay(150);
+    assert(msgText() === "2 mounts selected", "2 non-SH message correct", `got "${msgText()}"`);
+    assert(!confirmDisabled(), "Confirm enabled with 2 non-SH", "");
 
-    // Select Mount B (valid: 2 non-SH)
-    $card.find('.la-choice-item[data-choice-index="1"]').trigger('click');
-    await delay(200);
-    assert($msg.text() === "2 mounts selected", "2 non-SH message correct", `got ${$msg.text()}`);
-    assert($confirm.prop('disabled') === false, "Confirm enabled with 2 non-SH", "");
+    clickMount(1);
+    clickMount(2);
+    await delay(150);
+    assert(msgText() === "Cannot mix SH", "Mixed message correct", `got "${msgText()}"`);
+    assert(confirmDisabled(), "Confirm disabled with mix", "");
 
-    // Deselect B, select C (invalid: mixed)
-    $card.find('.la-choice-item[data-choice-index="1"]').trigger('click');
-    $card.find('.la-choice-item[data-choice-index="2"]').trigger('click');
-    await delay(200);
-    assert($msg.text() === "Cannot mix SH", "Mixed message correct", `got ${$msg.text()}`);
-    assert($confirm.prop('disabled') === true, "Confirm disabled with mix", "");
+    clickMount(0);
+    await delay(150);
+    assert(msgText() === "SH selected", "1 SH message correct", `got "${msgText()}"`);
+    assert(!confirmDisabled(), "Confirm enabled with 1 SH", "");
 
-    // Deselect A (valid: 1 SH)
-    $card.find('.la-choice-item[data-choice-index="0"]').trigger('click');
-    await delay(200);
-    assert($msg.text() === "SH selected", "1 SH message correct", `got ${$msg.text()}`);
-    assert($confirm.prop('disabled') === false, "Confirm enabled with 1 SH", "");
-
-    // Confirm choice
-    $confirm.trigger('click');
+    $('button.confirm').last()[0]?.click();
     await delay(400);
 
-    // In "vote" mode, startChoiceCard returns an array of selected choices
-    /** @type {any} */
-    const result = await p;
+    const result = await resultPromise;
     assert(Array.isArray(result) && result.length === 1 && result[0].sh, "Result returned correctly", `got ${JSON.stringify(result)}`);
-    assert(countVisibleCards() === 0, "Card cleaned up", `got ${countVisibleCards()}`);
+    assert($('.la-choice-item[data-idx]').length === 0, "Dialog cleaned up", `got ${$('.la-choice-item[data-idx]').length}`);
 }
 
 // ─── Test 8: Urgent card jumps the queue ─────────────────────────────
-async function urgentJumpsQueue() {
+async function urgentJumpsQueue()
+{
     const api = getApi();
     console.log('%c── Test: Urgent jumps queue ──', 'color:cyan;');
 
@@ -407,7 +433,8 @@ async function urgentJumpsQueue() {
         mode: "or",
         choices: [
             { text: "Finish",
-                callback: async () => {
+                callback: async () =>
+                {
                     firstDone = true;
                 } }
         ]
@@ -424,7 +451,8 @@ async function urgentJumpsQueue() {
         urgent: true,
         choices: [
             { text: "Done",
-                callback: async () => {
+                callback: async () =>
+                {
                     urgentDone = true;
                 } }
         ]
@@ -454,8 +482,120 @@ async function urgentJumpsQueue() {
     await p1;
 }
 
+// ─── Test 9: Normal card queues behind a visible urgent card ─────────
+async function normalQueuesBehindUrgent()
+{
+    const api = getApi();
+    console.log('%c── Test: Normal queues behind urgent ──', 'color:cyan;');
+
+    let urgentDone = false;
+    const pUrgent = api.startChoiceCard({
+        title: "URGENT UP",
+        mode: "or",
+        urgent: true,
+        choices: [{ text: "Done",
+            callback: async () =>
+            {
+                urgentDone = true;
+            } }]
+    });
+    await delay(300);
+    assert(countVisibleCards() === 1, "Urgent visible", `got ${countVisibleCards()}`);
+
+    let normalDone = false;
+    const pNormal = api.startChoiceCard({
+        title: "NORMAL BEHIND",
+        mode: "or",
+        choices: [{ text: "Done",
+            callback: async () =>
+            {
+                normalDone = true;
+            } }]
+    });
+    await delay(400);
+
+    assert(countAllCards() === 1, "Normal not shown yet (waiting behind urgent)", `got ${countAllCards()}`);
+    const upTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(upTitle === "URGENT UP", "Urgent still on top", `visible: "${upTitle}"`);
+    const badge = $('.la-info-card:visible .la-card-queue-banner b').first().text().trim();
+    assert(badge === "1", "Queue badge shows 1 pending behind urgent", `got "${badge}"`);
+
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(600);
+    assert(urgentDone, "Urgent callback ran", "");
+    await pUrgent;
+
+    assert(countVisibleCards() === 1, "Normal now visible", `got ${countVisibleCards()}`);
+    const nowTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(nowTitle === "NORMAL BEHIND", "Normal card now on top", `visible: "${nowTitle}"`);
+
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(400);
+    assert(normalDone, "Normal callback ran", "");
+    assert(countVisibleCards() === 0, "All cleaned up", `got ${countVisibleCards()}`);
+    await pNormal;
+}
+
+// ─── Test 10: Queue badge counts stacked urgent cards ────────────────
+async function badgeCountsStackedUrgent()
+{
+    const api = getApi();
+    console.log('%c── Test: Badge counts stacked urgent ──', 'color:cyan;');
+
+    let done1 = false;
+    const p1 = api.startChoiceCard({
+        title: "URGENT ONE",
+        mode: "or",
+        urgent: true,
+        choices: [{ text: "Done",
+            callback: async () =>
+            {
+                done1 = true;
+            } }]
+    });
+    await delay(300);
+    assert(countVisibleCards() === 1, "First urgent visible", `got ${countVisibleCards()}`);
+
+    let done2 = false;
+    const p2 = api.startChoiceCard({
+        title: "URGENT TWO",
+        mode: "or",
+        urgent: true,
+        choices: [{ text: "Done",
+            callback: async () =>
+            {
+                done2 = true;
+            } }]
+    });
+    await delay(300);
+
+    assert(countAllCards() === 2, "Both urgent cards in DOM", `got ${countAllCards()}`);
+    assert(countVisibleCards() === 1, "Only second urgent visible", `got ${countVisibleCards()}`);
+    const topTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(topTitle === "URGENT TWO", "Second urgent on top", `visible: "${topTitle}"`);
+    const badge = $('.la-info-card:visible .la-card-queue-banner b').first().text().trim();
+    assert(badge === "1", "Queue badge shows 1 stacked behind", `got "${badge}"`);
+
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(500);
+    assert(done2, "Second urgent callback ran", "");
+    await p2;
+
+    const backTitle = $('.la-info-card:visible .lancer-header span').first().text().trim();
+    assert(backTitle === "URGENT ONE", "First urgent reappears", `visible: "${backTitle}"`);
+    const badgeAfter = $('.la-info-card:visible .la-card-queue-banner').length;
+    assert(badgeAfter === 0, "Badge cleared when nothing behind", `got ${badgeAfter} banners`);
+
+    $('.la-info-card:visible .la-choice-item[data-choice-index="0"]').trigger('click');
+    await delay(400);
+    assert(done1, "First urgent callback ran", "");
+    assert(countVisibleCards() === 0, "All cleaned up", `got ${countVisibleCards()}`);
+    await p1;
+}
+
 // ─── Run All ─────────────────────────────────────────────────────────
-async function runAll() {
+async function runAll()
+{
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
     console.log('%c║   Card Stack Test Suite              ║', 'color:gold;');
     console.log('%c╚══════════════════════════════════════╝', 'color:gold;');
@@ -488,9 +628,15 @@ async function runAll() {
     await urgentJumpsQueue();
     await delay(500);
 
+    await normalQueuesBehindUrgent();
+    await delay(500);
+
+    await badgeCountsStackedUrgent();
+    await delay(500);
+
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
     console.log('%c║   All tests complete!                ║', 'color:gold;');
     console.log('%c╚══════════════════════════════════════╝', 'color:gold;');
 }
 
-export const CardStackTests = { orBasic, andBasic, andSubCard, externalQueues, andCancel, nestedStack, barrageValidation, urgentJumpsQueue, runAll };
+export const CardStackTests = { orBasic, andBasic, andSubCard, externalQueues, andCancel, nestedStack, barrageValidation, urgentJumpsQueue, normalQueuesBehindUrgent, badgeCountsStackedUrgent, runAll };

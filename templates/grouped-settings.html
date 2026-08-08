@@ -63,6 +63,9 @@
                 {{#if this.isFolder}}
                     <file-picker name="{{this.key}}" type="folder" value="{{this.value}}"></file-picker>
                 {{/if}}
+                {{#if this.isAudio}}
+                    <file-picker name="{{this.key}}" type="audio" value="{{this.value}}"></file-picker>
+                {{/if}}
                 {{#if this.isColor}}
                     <input type="color" name="{{this.key}}" value="{{this.value}}" style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
                 {{/if}}

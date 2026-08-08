@@ -22,19 +22,21 @@ const ICON_FILES = {
 
 //rank.svg  or npc_tier.svg
 /** @param {number|string|undefined} tier */
-function _tierFile(tier) {
-    const n = Number(tier);
-    if (!Number.isFinite(n))
+function _tierFile(tier)
+{
+    const tierNum = Number(tier);
+    if (!Number.isFinite(tierNum))
         return '';
-    if (n <= 1)
+    if (tierNum <= 1)
         return 'npc_tier_1.svg';
-    if (n === 2)
+    if (tierNum === 2)
         return 'npc_tier_2.svg';
     return 'npc_tier_3.svg';
 }
 
 /** @param {number|string|undefined} tier */
-export function getTierIcon(tier) {
+export function getTierIcon(tier)
+{
     const file = _tierFile(tier);
     if (!file)
         return '';
@@ -42,7 +44,8 @@ export function getTierIcon(tier) {
 }
 
 /** @param {string} label */
-export function getStatIcon(label) {
+export function getStatIcon(label)
+{
     const file = ICON_FILES[label];
     if (!file)
         return '';

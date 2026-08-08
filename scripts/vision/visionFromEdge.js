@@ -24,37 +24,42 @@ const SETTING_SAMPLE_MODE = 'visionFromEdgeSampleMode';
 const SETTING_SAMPLE_OFFSET = 'visionFromEdgeSampleOffset';
 const SOURCE_ID_PART = 'la-edge';
 
-function _getVisionSourceClass() {
+function _getVisionSourceClass()
+{
     return foundry?.canvas?.sources?.PointVisionSource
         ?? globalThis.PointVisionSource
         ?? null;
 }
 
-function _isEdgeVisionEnabled(tokenDoc) {
+function _isEdgeVisionEnabled(tokenDoc)
+{
     const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
-    if (flag === 'on') {
+    if (flag === 'on')
         return true;
-    }
-    if (flag === 'off') {
+    if (flag === 'off')
         return false;
-    }
     return game.settings.get(MODULE_ID, SETTING_ENABLED) === true;
 }
 
-function _getSampleCount(tokenDoc) {
+function _getSampleCount(tokenDoc)
+{
     const mode = game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE);
-    if (mode === 'corners4') {
+    if (mode === 'corners4')
         return 4;
-    }
-    if (mode === 'perimeter8') {
+    if (mode === 'perimeter8')
         return 8;
-    }
     const w = tokenDoc?.width ?? 1;
     const h = tokenDoc?.height ?? 1;
     return (w >= 3 || h >= 3) ? 8 : 4;
 }
 
-function _getSamplePoints(token) {
+export function getEdgeSamplePoints(token)
+{
+    return _getSamplePoints(token);
+}
+
+function _getSamplePoints(token)
+{
     const tokenDoc = token.document;
     const count = _getSampleCount(tokenDoc);
     // v13 deprecated Token#getSize in favor of TokenDocument#getSize.
@@ -66,9 +71,12 @@ function _getSamplePoints(token) {
     const cx = x0 + size.width / 2;
     const cy = y0 + size.height / 2;
     let eps = 0;
-    try {
+    try
+    {
         eps = Number(game.settings.get(MODULE_ID, SETTING_SAMPLE_OFFSET)) || 0;
-    } catch {
+    }
+    catch
+    {
         /* default */
     }
     const ix0 = x0 - eps;
@@ -82,7 +90,8 @@ function _getSamplePoints(token) {
         { x: ix1, y: iy1 },
         { x: ix0, y: iy1 }
     ];
-    if (count > 4) {
+    if (count > 4)
+    {
         raw.push(
             { x: cx, y: iy0 },
             { x: ix1, y: cy },
@@ -93,7 +102,8 @@ function _getSamplePoints(token) {
     return raw.map(pt => _nudgePastWall(pt, { x: cx, y: cy }, token));
 }
 
-function _getTokenVisionLOS(token) {
+export function getTokenVisionLOS(token)
+{
     const doc = token.document;
     const elev = doc.elevation ?? 0;
     const tokenHeight = doc.flags?.['wall-height']?.tokenHeight
@@ -102,10 +112,10 @@ function _getTokenVisionLOS(token) {
     return elev + tokenHeight;
 }
 
-function _edgeBlocksAtLOS(edge, los) {
-    if ((edge.sight ?? 0) <= 0) {
+function _edgeBlocksAtLOS(edge, los)
+{
+    if ((edge.sight ?? 0) <= 0)
         return false;
-    }
     const flags = edge.object?.document?.flags?.['wall-height']
         ?? edge.object?.flags?.['wall-height']
         ?? {};
@@ -114,47 +124,42 @@ function _edgeBlocksAtLOS(edge, los) {
     return wallBottom <= los && los <= wallTop;
 }
 
-function _nudgePastWall(sample, center, token) {
-    if (!canvas?.edges || !token) {
+function _nudgePastWall(sample, center, token)
+{
+    if (!canvas?.edges || !token)
         return sample;
-    }
-    const los = _getTokenVisionLOS(token);
+    const los = getTokenVisionLOS(token);
     const dx = center.x - sample.x;
     const dy = center.y - sample.y;
     const len2 = dx * dx + dy * dy;
-    if (len2 === 0) {
+    if (len2 === 0)
         return sample;
-    }
 
     const ownPrefix = `la-block-los-${token.id}-`;
     let closest = null;
     let closestT = Infinity;
-    for (const edge of canvas.edges.values()) {
-        if (edge.type !== 'wall') {
+    for (const edge of canvas.edges.values())
+    {
+        if (edge.type !== 'wall')
             continue;
-        }
-        if (edge.id?.startsWith(ownPrefix)) {
+        if (edge.id?.startsWith(ownPrefix))
             continue;
-        }
-        if (!_edgeBlocksAtLOS(edge, los)) {
+        if (!_edgeBlocksAtLOS(edge, los))
             continue;
-        }
-        if (!foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b)) {
+        if (!foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b))
             continue;
-        }
         const inter = foundry.utils.lineLineIntersection(sample, center, edge.a, edge.b);
-        if (!inter) {
+        if (!inter)
             continue;
-        }
         const t = ((inter.x - sample.x) * dx + (inter.y - sample.y) * dy) / len2;
-        if (t < closestT) {
+        if (t < closestT)
+        {
             closestT = t;
             closest = inter;
         }
     }
-    if (!closest) {
+    if (!closest)
         return sample;
-    }
     const len = Math.sqrt(len2);
     const past = 4;
     return {
@@ -163,22 +168,28 @@ function _nudgePastWall(sample, center, token) {
     };
 }
 
-function _edgeSourceId(token, idx) {
+function _edgeSourceId(token, idx)
+{
     return `${token.sourceId}.${SOURCE_ID_PART}.${idx}`;
 }
 
-function _destroyEdgeSources(token) {
-    if (!canvas?.effects?.visionSources) {
+function _destroyEdgeSources(token)
+{
+    if (!canvas?.effects?.visionSources)
         return false;
-    }
     const prefix = `${token.sourceId}.${SOURCE_ID_PART}.`;
     let removed = false;
-    for (const id of [...canvas.effects.visionSources.keys()]) {
-        if (id.startsWith(prefix)) {
+    for (const id of [...canvas.effects.visionSources.keys()])
+    {
+        if (id.startsWith(prefix))
+        {
             const source = canvas.effects.visionSources.get(id);
-            try {
+            try
+            {
                 source?.destroy?.();
-            } catch (e) {
+            }
+            catch (e)
+            {
                 // ignore
             }
             canvas.effects.visionSources.delete(id);
@@ -188,62 +199,60 @@ function _destroyEdgeSources(token) {
     return removed;
 }
 
-function _buildEdgeSources(token) {
-    if (!canvas?.effects?.visionSources || !token?.document) {
+function _buildEdgeSources(token)
+{
+    if (!canvas?.effects?.visionSources || !token?.document)
         return false;
-    }
     _destroyEdgeSources(token);
 
-    if (!token.document.sight?.enabled) {
+    if (!token.document.sight?.enabled)
         return false;
-    }
-    if (!token.vision || token.vision.disabled) {
+    if (!token.vision || token.vision.disabled)
         return false;
-    }
-    if (!_isEdgeVisionEnabled(token.document)) {
+    if (!_isEdgeVisionEnabled(token.document))
         return false;
-    }
 
     const SourceClass = _getVisionSourceClass();
-    if (!SourceClass) {
+    if (!SourceClass)
         return false;
-    }
 
     let primaryData;
-    try {
+    try
+    {
         primaryData = token._getVisionSourceData();
-    } catch (e) {
+    }
+    catch (e)
+    {
         return false;
     }
-    if (!primaryData) {
+    if (!primaryData)
         return false;
-    }
 
     const samples = _getSamplePoints(token);
     let added = false;
-    samples.forEach((pt, idx) => {
+    samples.forEach((pt, idx) =>
+    {
         const sourceId = _edgeSourceId(token, idx);
-        try {
+        try
+        {
             // Lie about shape/bounds so Foundry's sweep filters don't
             // claim the whole token footprint as "self area".
             const tinyBounds = new PIXI.Rectangle(pt.x - 1, pt.y - 1, 2, 2);
             const objectStandIn = new Proxy(token, {
-                get(target, prop) {
-                    if (prop === 'shape') {
+                get(target, prop)
+                {
+                    if (prop === 'shape')
                         return null;
-                    }
-                    if (prop === 'bounds') {
+                    if (prop === 'bounds')
                         return tinyBounds;
-                    }
                     return Reflect.get(target, prop, target);
                 }
             });
             const source = new SourceClass({ sourceId, object: objectStandIn });
             const halfSize = primaryData.externalRadius ?? 0;
             const clipRadius = primaryData.radius ?? 0;
-            if (clipRadius > 0) {
+            if (clipRadius > 0)
                 source._laEdgeClipCircle = new PIXI.Circle(primaryData.x, primaryData.y, clipRadius);
-            }
             source.initialize({
                 ...primaryData,
                 x: pt.x,
@@ -253,13 +262,14 @@ function _buildEdgeSources(token) {
                 radius: Math.max(0, (primaryData.radius ?? 0) - halfSize),
                 lightRadius: Math.max(0, (primaryData.lightRadius ?? 0) - halfSize)
             });
-            if (typeof source.add === 'function') {
+            if (typeof source.add === 'function')
                 source.add();
-            } else {
+            else
                 canvas.effects.visionSources.set(sourceId, source);
-            }
             added = true;
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn(`${MODULE_ID} | edge vision source ${idx} for token ${token.id} failed to initialize:`, e);
         }
     });
@@ -267,136 +277,136 @@ function _buildEdgeSources(token) {
 }
 
 let _pendingRefresh = false;
-function _refreshVision() {
-    if (!canvas?.perception) {
+function _refreshVision()
+{
+    if (!canvas?.perception)
         return;
-    }
-    if (_pendingRefresh) {
+    if (_pendingRefresh)
         return;
-    }
     _pendingRefresh = true;
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() =>
+    {
         _pendingRefresh = false;
-        if (canvas?.perception) {
+        if (canvas?.perception)
             canvas.perception.update({ refreshVision: true });
-        }
     });
 }
 
-function _isVisionRelevantChange(change) {
-    if (!change) {
+function _isVisionRelevantChange(change)
+{
+    if (!change)
         return false;
-    }
-    if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(k => k in change)) {
+    if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(k => k in change))
         return true;
-    }
-    if (change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined) {
+    if (change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined)
         return true;
-    }
     return false;
 }
 
-function _rebuildAll() {
-    if (!canvas?.tokens) {
+function _rebuildAll()
+{
+    if (!canvas?.tokens)
         return;
-    }
     let changed = false;
-    for (const token of canvas.tokens.placeables) {
-        if (_buildEdgeSources(token)) {
+    for (const token of canvas.tokens.placeables)
+    {
+        if (_buildEdgeSources(token))
             changed = true;
-        } else if (_destroyEdgeSources(token)) {
+        else if (_destroyEdgeSources(token))
             changed = true;
-        }
     }
-    if (changed) {
+    if (changed)
         _refreshVision();
-    }
 }
 
-function _onUpdateToken(tokenDoc, change) {
-    if (!_isVisionRelevantChange(change)) {
+function _onUpdateToken(tokenDoc, change)
+{
+    if (!_isVisionRelevantChange(change))
         return;
-    }
     const token = tokenDoc.object;
-    if (!token) {
+    if (!token)
         return;
-    }
     _buildEdgeSources(token);
     _refreshVision();
 }
 
-function _onCreateToken(tokenDoc) {
+function _onCreateToken(tokenDoc)
+{
     const token = tokenDoc.object;
-    if (!token) {
+    if (!token)
         return;
-    }
-    if (_buildEdgeSources(token)) {
+    if (_buildEdgeSources(token))
         _refreshVision();
-    }
 }
 
-function _onDeleteToken(tokenDoc) {
+function _onDeleteToken(tokenDoc)
+{
     const token = tokenDoc.object;
-    if (!token) {
+    if (!token)
         return;
-    }
-    if (_destroyEdgeSources(token)) {
+    if (_destroyEdgeSources(token))
         _refreshVision();
-    }
 }
 
-function _onCanvasReady() {
+function _onCanvasReady()
+{
     _rebuildAll();
-    if (game.settings.get(MODULE_ID, 'visionFromEdgeDebug')) {
+    if (game.settings.get(MODULE_ID, 'visionFromEdgeDebug'))
+    {
         /** @type {any} */ (globalThis).lancerVisionDebug?.show?.();
     }
 }
 
-function _cleanOrphanEdgeSources() {
-    if (!canvas?.effects?.visionSources) {
+function _cleanOrphanEdgeSources()
+{
+    if (!canvas?.effects?.visionSources)
         return;
-    }
     const validSourceIds = new Set((canvas.tokens?.placeables ?? []).map(t => t.sourceId));
     const marker = `.${SOURCE_ID_PART}.`;
     let changed = false;
-    for (const id of [...canvas.effects.visionSources.keys()]) {
+    for (const id of [...canvas.effects.visionSources.keys()])
+    {
         const markerIdx = id.indexOf(marker);
-        if (markerIdx === -1) {
+        if (markerIdx === -1)
             continue;
-        }
         const baseSourceId = id.slice(0, markerIdx);
-        if (validSourceIds.has(baseSourceId)) {
+        if (validSourceIds.has(baseSourceId))
             continue;
-        }
         const source = canvas.effects.visionSources.get(id);
-        try {
+        try
+        {
             source?.destroy?.();
-        } catch (e) {
+        }
+        catch (e)
+        {
             // ignore
         }
         canvas.effects.visionSources.delete(id);
         changed = true;
     }
-    if (changed) {
+    if (changed)
         _refreshVision();
-    }
 }
 
-function _onControlToken(token) {
-    try {
+function _onControlToken(token)
+{
+    try
+    {
         _buildEdgeSources(token);
         _refreshVision();
-    } catch (e) {
+    }
+    catch (e)
+    {
         // ignore
     }
 }
 
-function _onRenderTokenConfig(app, html) {
+function _onRenderTokenConfig(app, html)
+{
     const $html = (typeof jQuery !== 'undefined' && html instanceof jQuery) ? html : $(html);
     const $visionTab = $html.find('.tab[data-tab="vision"]');
-    if (!$visionTab.length) {
+    if (!$visionTab.length)
         return;
-    }
 
     const tokenDoc = app.token ?? app.object ?? app.document;
     const current = tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
@@ -422,22 +432,22 @@ function _onRenderTokenConfig(app, html) {
 let _debugContainer = null;
 let _debugHookIds = [];
 
-function _drawDebugMarkers() {
-    if (!_debugContainer) {
+function _drawDebugMarkers()
+{
+    if (!_debugContainer)
         return;
-    }
-    for (const c of _debugContainer.removeChildren()) {
+    for (const c of _debugContainer.removeChildren())
         c.destroy();
-    }
     const colors = [0xff0000, 0x00ff00, 0x3366ff, 0xffff00, 0xff00ff, 0x00ffff, 0xff8000, 0x8000ff];
-    for (const token of canvas.tokens?.controlled ?? []) {
+    for (const token of canvas.tokens?.controlled ?? [])
+    {
         const prefix = `${token.sourceId}.${SOURCE_ID_PART}.`;
         const center = token.center;
         let idx = 0;
-        for (const [id, source] of canvas.effects.visionSources.entries()) {
-            if (!id.startsWith(prefix)) {
+        for (const [id, source] of canvas.effects.visionSources.entries())
+        {
+            if (!id.startsWith(prefix))
                 continue;
-            }
             const color = colors[idx % colors.length];
             const g = new PIXI.Graphics();
             g.lineStyle(2, color, 0.6).moveTo(center.x, center.y).lineTo(source.data.x, source.data.y);
@@ -449,8 +459,10 @@ function _drawDebugMarkers() {
 }
 
 window.lancerVisionDebug = {
-    show() {
-        if (_debugContainer) {
+    show()
+    {
+        if (_debugContainer)
+        {
             _drawDebugMarkers();
             return;
         }
@@ -460,13 +472,12 @@ window.lancerVisionDebug = {
         _debugHookIds = events.map(name => ({ name, id: Hooks.on(name, _drawDebugMarkers) }));
         _drawDebugMarkers();
     },
-    hide() {
-        if (!_debugContainer) {
+    hide()
+    {
+        if (!_debugContainer)
             return;
-        }
-        for (const h of _debugHookIds) {
+        for (const h of _debugHookIds)
             Hooks.off(h.name, h.id);
-        }
         _debugHookIds = [];
         _debugContainer.destroy({ children: true });
         _debugContainer = null;
@@ -474,10 +485,11 @@ window.lancerVisionDebug = {
     refresh: _drawDebugMarkers
 };
 
-export function initVisionFromEdge() {
+export function initVisionFromEdge()
+{
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
         name: 'Vision From Edge',
-        hint: 'When enabled, all tokens have their vision computed from their perimeter (Lancer LOS-style) instead of from their center, allowing larger tokens to peek around corners. Per-token override available in the Token Config Vision tab.',
+        hint: 'Compute vision from the token perimeter so large tokens can peek around corners.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -487,12 +499,13 @@ export function initVisionFromEdge() {
 
     game.settings.register(MODULE_ID, 'visionFromEdgeDebug', {
         name: 'Vision From Edge: Debug Overlay',
-        hint: 'Draw the perimeter sample points on the canvas (calls lancerVisionDebug.show / hide).',
+        hint: 'Draw the perimeter sample points on the canvas.',
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
-        onChange: (val) => {
+        onChange: (val) =>
+        {
             const dbg = /** @type {any} */ (globalThis).lancerVisionDebug;
             if (val)
                 dbg?.show?.();
@@ -503,7 +516,7 @@ export function initVisionFromEdge() {
 
     game.settings.register(MODULE_ID, SETTING_SAMPLE_OFFSET, {
         name: 'Vision From Edge: Sample Offset (px)',
-        hint: 'How far from the bounding box the sample points sit. Positive = outset (beyond perimeter, larger peek-around); negative = inset (inside the token). Default 0.',
+        hint: 'Distance of the sample points from the token edge. Positive outsets, negative insets.',
         scope: 'world',
         config: false,
         type: Number,
@@ -514,7 +527,7 @@ export function initVisionFromEdge() {
 
     game.settings.register(MODULE_ID, SETTING_SAMPLE_MODE, {
         name: 'Vision From Edge: Sample Density',
-        hint: 'Number of vision sample points per flagged token. Adaptive uses 8 for tokens 3x3 or larger, 4 otherwise.',
+        hint: 'Vision sample points per token. Adaptive uses 8 for size 3+, else 4.',
         scope: 'world',
         config: false,
         type: String,
@@ -537,38 +550,45 @@ export function initVisionFromEdge() {
 
     // Wraps the per-token vision init so edges resync during animation,
     // control changes, and document updates.
-    Hooks.once('ready', () => {
-        if (typeof libWrapper === 'undefined') {
+    Hooks.once('ready', () =>
+    {
+        if (typeof libWrapper === 'undefined')
             return;
-        }
-        libWrapper.register(MODULE_ID, 'Token.prototype.initializeVisionSource', function (wrapped, ...args) {
+        libWrapper.register(MODULE_ID, 'Token.prototype.initializeVisionSource', function (wrapped, ...args)
+        {
             const result = wrapped(...args);
-            try {
+            try
+            {
                 const opts = args[0] ?? {};
-                if (opts.deleted) {
+                if (opts.deleted)
                     _destroyEdgeSources(this);
-                } else {
+                else
                     _buildEdgeSources(this);
-                }
-            } catch (e) {
+            }
+            catch (e)
+            {
                 // ignore
             }
             return result;
         }, 'WRAPPER');
 
         const VisionSourceClass = _getVisionSourceClass();
-        if (VisionSourceClass?.prototype?._createShapes) {
-            libWrapper.register(MODULE_ID, 'foundry.canvas.sources.PointVisionSource.prototype._createShapes', function (wrapped, ...args) {
+        if (VisionSourceClass?.prototype?._createShapes)
+        {
+            libWrapper.register(MODULE_ID, 'foundry.canvas.sources.PointVisionSource.prototype._createShapes', function (wrapped, ...args)
+            {
                 wrapped(...args);
                 const clip = this._laEdgeClipCircle;
-                if (!clip || !this.los?.applyConstraint) {
+                if (!clip || !this.los?.applyConstraint)
                     return;
-                }
-                try {
+                try
+                {
                     const clipped = this.los.applyConstraint(clip);
                     this.shape = clipped;
                     this.los = clipped;
-                } catch (e) {
+                }
+                catch (e)
+                {
                     // ignore
                 }
             }, 'WRAPPER');

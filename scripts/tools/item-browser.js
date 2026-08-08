@@ -1,36 +1,49 @@
 let _sharedPackItemCache = null;
 
-Hooks.on('lancer-automations.clearCaches', () => {
+Hooks.on('lancer-automations.clearCaches', () =>
+{
     _sharedPackItemCache = null;
 });
 
-async function _fetchPackItems() {
+async function _fetchPackItems()
+{
     if (_sharedPackItemCache)
         return _sharedPackItemCache;
 
     const items = [];
-    for (const pack of game.packs) {
+    for (const pack of game.packs)
+    {
         if (pack.documentName !== "Item")
             continue;
         const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
-        for (const entry of index) {
+        for (const entry of index)
+        {
             if (!entry.system?.lid)
                 continue;
             let actionCount = 0;
-            if (entry.type === "npc_feature") {
+            if (entry.type === "npc_feature")
+            {
                 if (entry.system?.trigger)
                     actionCount++;
                 if (entry.system?.actions)
                     actionCount += entry.system.actions.length;
-            } else {
+            }
+            else
+            {
                 if (entry.system?.ranks)
-                    entry.system.ranks.forEach(r => {
-                        actionCount += (r.actions?.length || 0);
+                {
+                    entry.system.ranks.forEach(rank =>
+                    {
+                        actionCount += (rank.actions?.length || 0);
                     });
+                }
                 if (entry.system?.profiles)
-                    entry.system.profiles.forEach(p => {
-                        actionCount += (p.actions?.length || 0);
+                {
+                    entry.system.profiles.forEach(profile =>
+                    {
+                        actionCount += (profile.actions?.length || 0);
                     });
+                }
                 if (entry.system?.actions)
                     actionCount += entry.system.actions.length;
             }
@@ -49,17 +62,19 @@ async function _fetchPackItems() {
  * Right-click an entry to open its sheet.
  * @returns {Promise<{lid: string, uuid: string}|null>}
  */
-export async function openItemBrowserDialog() {
+export async function openItemBrowserDialog()
+{
     const items = await _fetchPackItems();
 
-    const sortedTypes = [...new Set(items.map(i => i.type))].sort();
-    const typeOptions = sortedTypes.map(t =>
-        `<option value="${t}">${game.i18n.localize(CONFIG.Item.typeLabels?.[t]) || t}</option>`
+    const sortedTypes = [...new Set(items.map(item => item.type))].sort();
+    const typeOptions = sortedTypes.map(itemType =>
+        `<option value="${itemType}">${game.i18n.localize(CONFIG.Item.typeLabels?.[itemType]) || itemType}</option>`
     ).join('');
 
     const MAX_RESULTS = 50;
 
-    const buildItemHtml = (item) => {
+    const buildItemHtml = (item) =>
+    {
         const countLabel = item.actionCount > 1
             ? `<span style="font-size:0.8em;opacity:0.7;font-weight:normal;">(${item.actionCount} actions)</span>`
             : '';
@@ -73,7 +88,8 @@ export async function openItemBrowserDialog() {
         </div>`;
     };
 
-    return new Promise((resolve) => {
+    return new Promise((resolve) =>
+    {
         const dialog = new Dialog({
             title: "Find Item",
             content: `
@@ -103,23 +119,27 @@ export async function openItemBrowserDialog() {
             buttons: {
                 cancel: { label: '<i class="fas fa-times"></i> Cancel', callback: () => resolve(null) }
             },
-            render: (html) => {
+            render: (html) =>
+            {
                 const searchInput = html.find('#item-search');
                 const typeFilter = html.find('#type-filter');
                 const showAllCb = html.find('#show-all-items');
                 const listContainer = html.find('#item-list');
 
-                const updateList = () => {
+                const updateList = () =>
+                {
                     const query = (String)(searchInput.val()).toLowerCase().trim();
                     const type = typeFilter.val();
                     const showAll = showAllCb.is(':checked');
 
-                    if (!query && !showAll) {
+                    if (!query && !showAll)
+                    {
                         listContainer.html(`<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search items…</div>`);
                         return;
                     }
 
-                    const matched = items.filter(item => {
+                    const matched = items.filter(item =>
+                    {
                         if (type && item.type !== type)
                             return false;
                         if (!query)
@@ -127,7 +147,8 @@ export async function openItemBrowserDialog() {
                         return item.name.toLowerCase().includes(query) || item.lid.toLowerCase().includes(query);
                     });
 
-                    if (matched.length === 0) {
+                    if (matched.length === 0)
+                    {
                         listContainer.html(`<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No items found.</div>`);
                         return;
                     }
@@ -141,7 +162,8 @@ export async function openItemBrowserDialog() {
                 };
 
                 let _debounceTimer = null;
-                const debouncedUpdate = () => {
+                const debouncedUpdate = () =>
+                {
                     clearTimeout(_debounceTimer);
                     _debounceTimer = setTimeout(updateList, 120);
                 };
@@ -150,27 +172,32 @@ export async function openItemBrowserDialog() {
                 typeFilter.on('change', updateList);
                 showAllCb.on('change', updateList);
 
-                listContainer.on('click', '.item-browser-entry', (ev) => {
-                    const el = $(ev.currentTarget);
-                    resolve({ lid: el.data('lid'), uuid: el.data('uuid') });
+                listContainer.on('click', '.item-browser-entry', (ev) =>
+                {
+                    const entryEl = $(ev.currentTarget);
+                    resolve({ lid: entryEl.data('lid'), uuid: entryEl.data('uuid') });
                     dialog.close();
                 });
 
-                listContainer.on('contextmenu', '.item-browser-entry', async (ev) => {
+                listContainer.on('contextmenu', '.item-browser-entry', async (ev) =>
+                {
                     ev.preventDefault();
                     const uuid = $(ev.currentTarget).data('uuid');
-                    if (uuid) {
+                    if (uuid)
+                    {
                         const item = /** @type {Item} */ (await fromUuid(uuid));
                         if (item)
                             item.sheet.render(true);
                     }
                 });
 
-                listContainer.on('click', '.copy-lid-btn', async function (ev) {
+                listContainer.on('click', '.copy-lid-btn', async function (ev)
+                {
                     ev.preventDefault();
                     ev.stopPropagation();
                     const lid = $(this).closest('.item-browser-entry').data('lid');
-                    if (lid) {
+                    if (lid)
+                    {
                         await navigator.clipboard.writeText(lid);
                         ui.notifications.info(`Copied LID: ${lid}`);
                     }

@@ -14,6 +14,8 @@ interface TriggerDataBase {
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
     /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). */
     sendMessageToReactor(data: any, userId?: string | null): Promise<void>;
+    /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console; returns a summary. */
+    debugActivation(label?: string): any;
     [key: string]: any;
 }
 
@@ -345,7 +347,7 @@ interface TriggerDataOnDeploy extends TriggerDataBase {
 
 interface TriggerDataonHeatGain extends TriggerDataBase {
     triggeringToken: Token;
-    heatGained: number;
+    heatChange: number;
     currentHeat: number;
     inDangerZone: boolean;
     distanceToTrigger: number | null;
@@ -370,7 +372,7 @@ interface TriggerDataOnHpLoss extends TriggerDataBase {
 
 interface TriggerDataonHpGain extends TriggerDataBase {
     triggeringToken: Token;
-    hpRestored: number;
+    hpChange: number;
     currentHP: number;
     maxHP: number;
     distanceToTrigger: number | null;
@@ -474,6 +476,7 @@ type TriggerData =
 type TriggerType =
     | "onMove" | "onPreMove"
     | "onInvoluntaryMove"
+    | "onPreDamage"
     | "onDamage"
     | "onHit" | "onMiss"
     | "onAttack"
@@ -603,6 +606,9 @@ interface LancerAutomationsAPI {
         consumption?: ConsumptionConfig;
     }): Promise<string>;
     removeGlobalBonus(actor: any, bonusId: string, skipEffectRemoval?: boolean): Promise<void>;
+    consumeBonusUse(actor: any, bonus: any, opts?: { removeWhenNoUses?: boolean }): Promise<string | false>;
+    consumeImmunityUse(actor: any, subtype: string, state?: any): Promise<boolean>;
+    supportsConsumeOnUsage(type: string, subtype?: string | null): boolean;
     getGlobalBonuses(actor: any): any[];
     addConstantBonus(actor: any, bonusData: object, options?: object): Promise<void>;
     getConstantBonuses(actor: any): any[];
@@ -650,6 +656,7 @@ interface LancerAutomationsAPI {
         icon?: string;
         attachToToken?: TokenDocument | string;
     }): Promise<any>;
+    tokensInTemplate(templateOrResult: any): Token[];
     placeToken(options?: {
         actor?: any | any[];
         range?: number;
@@ -700,6 +707,13 @@ interface LancerAutomationsAPI {
     getTokenDistance(t1: Token, t2: Token, includeElevation?: boolean): number;
     getMinGridDistance(t1: Token, t2: Token, overridePos1?: { x: number; y: number }, includeElevation?: boolean): number;
     getGridDistance(p1: { x: number; y: number }, p2: { x: number; y: number }): number;
+    measureGridDistance(p1: { x: number; y: number }, p2: { x: number; y: number }): number;
+    snapTokenCenter(token: Token, center: { x: number; y: number }): { x: number; y: number };
+    getOccupiedCenters(token: Token, overridePos?: { x: number; y: number } | null): Array<{ x: number; y: number }>;
+    getHexCenter(col: number, row: number): { x: number; y: number };
+    pixelToOffset(x: number, y: number): { col: number; row: number };
+    neighborKeys(key: string): string[];
+    getCellToward(from: Token | { x: number; y: number }, toward: Token | { x: number; y: number }, opts?: { steps?: number; away?: boolean }): { x: number; y: number };
     isHostile(t1: Token, t2: Token): boolean;
     isFriendly(t1: Token, t2: Token): boolean;
     getTokenCells(token: Token): Array<[number, number]>;
@@ -725,6 +739,11 @@ interface LancerAutomationsAPI {
     getActorMaxThreat(actor: any): Promise<number>;
     getMaxWeaponRanges_WithBonus(input: any | any[]): Promise<Record<string, number>>;
     getMaxWeaponReach_WithBonus(input: any | any[]): Promise<number>;
+    getMaxItemRanges_WithBonus(item: any, actor?: any): Promise<Record<string, number>>;
+    getWeaponProfiles_WithBonus(weapon: any, actor?: any): any[];
+    getSensorRange_WithBonus(input: any): number;
+    hasTag(item: any, tagLid: string, actor?: any): Promise<boolean>;
+    debugActivation(triggerType: string, triggerData: any, reactorToken: any, item: any, activationName: string, label?: string): any;
     getWeaponType(item: any): string;
     getItemType(item: any): string;
     getWeaponProfiles_WithBonus(weapon: any, actor?: any): any[];
@@ -736,12 +755,14 @@ interface LancerAutomationsAPI {
     // ── Deployment & Thrown Weapons ───────────────────────────────────────────
     addItemFlags(item: any, flags: Record<string, any>): Promise<any>;
     getItemFlags(item: any, flagName?: string): any;
-    addExtraDeploymentLids(target: any, lids: string | string[]): Promise<any>;
+    addExtraDeploymentLids(target: any, lids: string | Array<string | { lid: string; tier?: number; range?: number; count?: number }>): Promise<any>;
     addExtraDeploymentActor(target: any, actors: any | string | Array<any | string>): Promise<any>;
     removeExtraDeploymentActor(target: any, actors: any | string | Array<any | string>): Promise<any>;
     getActorDeployables(tokenOrActor: any): string[];
-    getExtraDeployableOpts(target: any, key: string): { range?: number; count?: number } | null;
-    setExtraDeployableOpts(target: any, key: string, opts: { range?: number | null; count?: number | null }): Promise<any>;
+    getExtraDeployableOpts(target: any, key: string): { range?: number; count?: number; tier?: 1 | 2 | 3 } | null;
+    setExtraDeployableOpts(target: any, key: string, opts: { range?: number | null; count?: number | null; tier?: 1 | 2 | 3 | null }): Promise<any>;
+    isPrimaryActionHidden(item: any): boolean;
+    setHidePrimaryAction(itemOrUuid: any, hidden?: boolean): Promise<any>;
     consumeExtraAction(actor: any, actionName: string): Promise<boolean>;
     reloadExtraAction(actor: any, actionName: string): Promise<void>;
     rechargeExtraActionsForActor(actor: any): Promise<void>;
@@ -749,11 +770,14 @@ interface LancerAutomationsAPI {
     getItemActions(item: any): object[];
     getActorActions(tokenOrActor: Token | any): object[];
     removeExtraActions(target: any, filter?: Function | string | string[] | null): Promise<void>;
-    lockActorAction(target: any, actionName: string, sourceId: string): Promise<any>;
-    unlockActorAction(target: any, actionName: string, sourceId: string): Promise<any>;
+    lockActorAction(target: any, actionName: string, sourceIdOrOpts?: string | { reason?: string }, opts?: { reason?: string }): Promise<any>;
+    unlockActorAction(target: any, actionName: string, sourceId?: string): Promise<any>;
     isActionLocked(target: any, actionName: string): boolean;
     getLockedActions(target: any): string[];
     getItemDeployables(item: any, actor?: any): string[];
+    getAllItemDeployables(item: any): string[];
+    getOwnerTier(ownerActor: any, item?: any): number | null;
+    linkTierGate(entry: any, ownerActor: any, item?: any): boolean;
     placeDeployable(options: {
         deployable: any | string | Array<any | string>;
         ownerActor: any;
@@ -832,34 +856,114 @@ interface LancerAutomationsAPI {
 
     // ── ExtraBarsAPI ──
     /**
-     * Update the value of an extra-bar entry on a token.
-     * Manual entries write the per-token flag; path-bound entries write back through item.update() / actor.update().
-     * Accepts a number, a numeric string, or a delta string ("+2" / "-3").
-     * Returns the new value, or null if the token/entry is invalid.
+     * Update an extra-bar value. Token target: manual entry only. Item/Actor target:
+     * manual templates mutate + reinject; path templates write through .update().
      */
     updateExtraBarValue(
-        token: Token | TokenDocument | string,
+        target: Token | TokenDocument | Item | Actor | string,
         entryId: string,
         value: number | string,
     ): Promise<number | null>;
     /**
-     * Create a new extra bar by overlaying `partial` on the default shape.
-     * API-created entries default to visibility: 'scanned' (visible to owners, GM, and users who scanned the actor).
-     * Pass `visibility: 'owner' | 'scanned' | 'all'` to override.
-     * The default value/max bind to `system.hp.value` / `system.hp.max`.
-     * Returns the created entry id, or null on failure.
+     * Create an extra bar. Token target writes to statBarExtras (returns entry id).
+     * Item/Actor target writes to extraBarTemplates + auto-injects (returns template id).
      */
     addExtraBar(
-        token: Token | TokenDocument | string,
+        target: Token | TokenDocument | Item | Actor | string,
         partial?: object,
     ): Promise<string | null>;
     /**
-     * Remove an extra bar by id. Returns true if removed, false if not found or on failure.
+     * Remove an entry (Token) or template (Item/Actor) by id.
      */
     removeExtraBar(
-        token: Token | TokenDocument | string,
+        target: Token | TokenDocument | Item | Actor | string,
         entryId: string,
     ): Promise<boolean>;
+    /**
+     * List extra bars on a target. Token → statBarExtras entries. Item/Actor → template records [{ id, entry }].
+     */
+    getExtraBars(target: Token | TokenDocument | Item | Actor): Array<any>;
+
+    // ── ExtraConfigAPI ──
+    setItemAutoConsumeDisabled(
+        item: Item,
+        type: 'uses' | 'loading' | 'charged' | 'perTurn' | 'perRound' | 'reserveUsed',
+        disabled: boolean,
+    ): Promise<string[]>;
+    setItemAutoConsumeDisabledAll(item: Item, disabled: boolean): Promise<string[]>;
+    isAutoConsumeDisabled(item: Item, type: string): boolean;
+    getAutoConsumeDisabled(item: Item): Set<string>;
+    consumeItemResource(
+        item: Item,
+        type: 'uses' | 'loading' | 'charged' | 'perTurn' | 'perRound' | 'reserveUsed',
+        amount?: number,
+    ): Promise<number | boolean | null>;
+    rechargeItemResource(
+        item: Item,
+        type: 'uses' | 'loading' | 'charged' | 'perTurn' | 'perRound' | 'reserveUsed',
+        amount?: number,
+    ): Promise<number | boolean | null>;
+    configureItemExtraConfig(item: Item, patch: object): Promise<object>;
+    getExtraConfig(item: Item): object | null;
+
+    // ══ Public API — hand-typed (previously loose `any` in api.generated.d.ts) ══
+
+    // ── Overwatch / engagement (sync) ──
+    canEngage(token1: Token, token2: Token): boolean;
+    canProvokeReaction(triggering: Token, reactor: Token): boolean;
+    checkOverwatchCondition(reactor: Token, mover: Token, startPos: { x: number; y: number }): boolean;
+    updateAllEngagements(options?: object): Promise<void>;
+
+    // ── Movement cap (sync) ──
+    getMovementCap(tokenOrId: Token | TokenDocument | string): number;
+    initMovementCap(token: Token | TokenDocument | string): void;
+    undoMoveData(tokenOrId: Token | TokenDocument | string, distance?: number): void;
+
+    // ── Action / flow execution ──
+    executeBarrage(actorOrToken: any, bypassMount?: any, preTarget?: Token | null): Promise<void>;
+    executeInvade(actorOrToken: any, bypassChoice?: any): Promise<void>;
+    executeItemActivation(item: any, options?: { path?: string; flowName?: string }, extraData?: object): Promise<{ completed: boolean; flow?: any }>;
+    executeReactorExplosion(token: Token): Promise<void>;
+    executeReactorMeltdown(tokenOrActor: any, turns?: number | null): Promise<void>;
+    executeRest(token: Token): Promise<void>;
+    executeFall(paramToken: Token): Promise<void>;
+    executeStandingUp(token: Token): Promise<void>;
+    executeTeleport(token: Token | TokenDocument, cost: number): Promise<void>;
+    executeContestedCheck(input1: any, stat1: string, input2: any, stat2: string, options?: { title?: string; sendToOwner?: boolean }): Promise<{ winner: any; loser: any;[key: string]: any }>;
+    executeForceCheck(skill: string, targets?: Token[] | null, options?: { saveVs?: any; sendToOwner?: boolean; title?: string }): Promise<{ completed: boolean; results: any[] }>;
+    openForceCheckCard(preset?: { tokenA?: Token | null; skill?: string | null; range?: number | null; saveVs?: any; targets?: Token[] | null; sendToOwner?: boolean }): Promise<any>;
+    executeGenericBonusMenu(actor?: any): void;
+    executeDowntime(): Promise<void>;
+
+    // ── Scan ──
+    executeGenerateScan(targetsArg: any): Promise<void>;
+    executeScanOnActivation(reactorToken: Token): Promise<void>;
+    regenerateScans(opts?: object): Promise<{ updated: string[]; missing: string[]; skipped: string[] }>;
+
+    // ── Pilot reserves ──
+    openAddReserveDialog(tokenOrActor: any): Promise<void>;
+
+    // ── Throw flow ──
+    beginWeaponThrowFlow(weapon: any, options: object, extraData?: object): Promise<{ completed: boolean; flow?: object }>;
+
+    // ── Item queries (sync unless noted) ──
+    getItemType(item: any): string;
+    getWeaponType(item: any): string;
+    getWeaponProfiles_WithBonus(weapon: any, actor: any): any[];
+    getMaxItemRanges_WithBonus(item: any, actor: any): Promise<Record<string, number>>;
+    getItemTags_WithBonus(item: any, actor: any): Promise<any[]>;
+    getSensorRange_WithBonus(input: any): number;
+    hasTag(item: any, tagLid: string, actor?: any): Promise<boolean>;
+    debugActivation(triggerType: string, triggerData: any, reactorToken: any, item: any, activationName: string, label?: string): any;
+    isItemAvailable(item: any, reactionPath?: string): boolean;
+    isItemDisabled(item: any): boolean;
+    isDisableable(item: any): boolean;
+    setItemDisabled(item: any, disabled: boolean): Promise<any>;
+    getActivationIcon(actionOrActivation: object | string): string | null;
+    hasReactionAvailable(tokenOrActor: any): boolean;
+
+    // ── Bonus injection ──
+    injectBonusToFlowState(state: object, bonus: object): Promise<void>;
 
     [key: string]: any;
 }

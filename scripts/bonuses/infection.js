@@ -18,25 +18,38 @@ const MODULE_ID = 'lancer-automations';
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
 let _pendingInfection = null;
 
-function _infectionEnabled() {
-    try { return !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration'); }
-    catch { return false; }
+function _infectionEnabled()
+{
+    try
+    {
+        return !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration');
+    }
+    catch
+    {
+        return false;
+    }
 }
 
 /** Inject `infection` NumberField into actors schemas. Call during `init`. */
-export function injectInfectionSchemaField() {
+export function injectInfectionSchemaField()
+{
     const NumberField = foundry.data.fields.NumberField;
     const actorKeys = ['mech', 'npc', 'deployable', 'pilot'];
     let injected = 0;
-    for (const key of actorKeys) {
+    for (const key of actorKeys)
+    {
         const model = CONFIG.Actor.dataModels?.[key];
         if (!model?.schema?.fields)
             continue;
-        if (!model.schema.fields.infection) {
-            try {
+        if (!model.schema.fields.infection)
+        {
+            try
+            {
                 model.schema.fields.infection = new NumberField({ initial: 0, integer: true, min: 0 });
                 injected++;
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`${MODULE_ID} | Could not inject infection field into ${key} actor:`, e);
             }
         }
@@ -49,10 +62,11 @@ export function injectInfectionSchemaField() {
  * Add "Infection" to DamageType enum and all DamageField choices via ESM live bindings.
  * Call during `init`.
  */
-export async function injectInfectionDamageType() {
-    // On Forge VTT, relative imports resolve to a different origin than the original script tag's CDN URL,
-    // causing a duplicate module. Find the entry script's actual URL and import relative to that.
-    try {
+export async function injectInfectionDamageType()
+{
+    // Forge resolves relative imports to a different CDN origin (duplicate module); resolve against the entry script's URL.
+    try
+    {
         const lancerScript = /** @type {HTMLScriptElement} */ (document.querySelector('script[type="module"][src$="/lancer.mjs"]'));
         const baseUrl = lancerScript
             ? lancerScript.src.replace(/lancer\.mjs$/, '')
@@ -61,40 +75,55 @@ export async function injectInfectionDamageType() {
         const entryResp = await fetch(`${baseUrl}lancer.mjs`);
         const entryText = await entryResp.text();
         // Walk every `./*.mjs` import; the bundle order changed in newer Lancer.
-        const imports = [...entryText.matchAll(/import\s+(?:[^"']+from\s+)?["']\.\/([^"']+)["']/g)].map(m => m[1]);
+        const imports = [...entryText.matchAll(/import\s+(?:[^"']+from\s+)?["']\.\/([^"']+)["']/g)].map(match => match[1]);
 
         const isDamageTypeEnum = (obj) =>
             obj && typeof obj === 'object' && obj.Kinetic === 'Kinetic' && obj.Energy === 'Energy' && obj.Heat === 'Heat';
         let damageTypeEnum = null;
-        for (const rel of imports) {
-            try {
-                const bundle = await import(`${baseUrl}${rel}`);
-                for (const exp of Object.values(bundle)) {
-                    if (isDamageTypeEnum(exp)) { damageTypeEnum = exp; break; }
+        for (const relPath of imports)
+        {
+            try
+            {
+                const bundle = await import(`${baseUrl}${relPath}`);
+                for (const exportedValue of Object.values(bundle))
+                {
+                    if (isDamageTypeEnum(exportedValue))
+                    {
+                        damageTypeEnum = exportedValue; break;
+                    }
                 }
-                if (damageTypeEnum) break;
-            } catch { /* try next */ }
+                if (damageTypeEnum)
+                    break;
+            }
+            catch
+            { /* try next */ }
         }
-        if (damageTypeEnum && !damageTypeEnum.Infection) {
+        if (damageTypeEnum && !damageTypeEnum.Infection)
+        {
             damageTypeEnum.Infection = "Infection";
             console.log(`${MODULE_ID} | Added "Infection" to DamageType enum via bundle export`);
-        } else if (!damageTypeEnum) {
-            console.warn(`${MODULE_ID} | Could not locate DamageType enum in lancer bundle exports.`);
         }
-    } catch (e) {
+        else if (!damageTypeEnum)
+            console.warn(`${MODULE_ID} | Could not locate DamageType enum in lancer bundle exports.`);
+    }
+    catch (e)
+    {
         console.warn(`${MODULE_ID} | Could not patch DamageType enum:`, e);
     }
 
     // Patch DamageField choices in item schemas
     let patched = 0;
 
-    function traverseFields(fields) {
+    function traverseFields(fields)
+    {
         if (!fields)
             return;
-        for (const field of Object.values(fields)) {
+        for (const field of Object.values(fields))
+        {
             if (field.fields)
                 traverseFields(field.fields);
-            if (field.element) {
+            if (field.element)
+            {
                 if (field.element.fields)
                     traverseFields(field.element.fields);
                 if (field.element.element?.fields)
@@ -103,25 +132,29 @@ export async function injectInfectionDamageType() {
             if (field instanceof foundry.data.fields.StringField &&
                 Array.isArray(field.choices) &&
                 field.choices.includes('Kinetic') &&
-                !field.choices.includes('Infection')) {
+                !field.choices.includes('Infection'))
+            {
                 field.choices.push('Infection');
                 patched++;
             }
             // DamageTypeChecklistField: SchemaField with one BooleanField per damage type.
             if (field instanceof foundry.data.fields.SchemaField &&
                 field.fields?.Kinetic instanceof foundry.data.fields.BooleanField &&
-                !field.fields?.Infection) {
+                !field.fields?.Infection)
+            {
                 field.fields.Infection = new foundry.data.fields.BooleanField({ initial: true });
                 patched++;
             }
         }
     }
 
-    for (const model of Object.values(CONFIG.Item.dataModels ?? {})) {
+    for (const model of Object.values(CONFIG.Item.dataModels ?? {}))
+    {
         if (model?.schema?.fields)
             traverseFields(model.schema.fields);
     }
-    for (const model of Object.values(CONFIG.Actor.dataModels ?? {})) {
+    for (const model of Object.values(CONFIG.Actor.dataModels ?? {}))
+    {
         if (model?.schema?.fields)
             traverseFields(model.schema.fields);
     }
@@ -130,13 +163,14 @@ export async function injectInfectionDamageType() {
         console.log(`${MODULE_ID} | Added "Infection" to ${patched} DamageField choice list(s)`);
 }
 
-export function injectInfectionCSS() {
+export function injectInfectionCSS()
+{
     if (document.getElementById('la-infection-css'))
         return;
     const style = document.createElement('style');
     style.id = 'la-infection-css';
     style.textContent = `
-        /* Infection damage type icon — SVG inline, matched to CCI font glyph sizing */
+        /* Infection damage type icon: SVG inline, matched to CCI font glyph sizing */
         .cci-infection::before {
             content: "";
             display: inline-block;
@@ -144,7 +178,7 @@ export function injectInfectionCSS() {
             height: 1em;
             background: url("modules/lancer-automations/icons/infection.svg") center/contain no-repeat;
             vertical-align: -0.15em;
-            /* Default: white — matches all other CCI damage icons */
+            /* Default: white, matches all other CCI damage icons */
             filter: brightness(0) invert(1);
         }
         .damage--infection {
@@ -163,8 +197,8 @@ export function injectInfectionCSS() {
 
 // InfectionFlow: end-of-turn infection check, mirrors BurnFlow but uses Heat + system.infection.
 
-/** Init infection check data. */
-async function initInfectionCheckData(state) {
+async function initInfectionCheckData(state)
+{
     if (!_infectionEnabled())
         return false;
     if (!state.data)
@@ -178,7 +212,8 @@ async function initInfectionCheckData(state) {
     state.data.damage = [{ type: "Heat", val: infection.toString() }];
 
     const tokens = state.actor.getActiveTokens();
-    if (!tokens?.length) {
+    if (!tokens?.length)
+    {
         ui.notifications?.error("Infection flow requires the actor to have a token in the scene");
         return false;
     }
@@ -219,12 +254,14 @@ async function initInfectionCheckData(state) {
 }
 
 /** Roll a SYS check for infection (mirrors rollBurnCheck). */
-async function rollInfectionCheck(state) {
+async function rollInfectionCheck(state)
+{
     if (!state.data)
         throw new TypeError('Infection flow state missing!');
 
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
-    if (!StatRollFlow || typeof StatRollFlow !== 'function') {
+    if (!StatRollFlow || typeof StatRollFlow !== 'function')
+    {
         ui.notifications?.error('Could not find StatRollFlow for infection check.');
         return false;
     }
@@ -234,7 +271,8 @@ async function rollInfectionCheck(state) {
 
     state.data.check_total = rollFlow.state?.data?.result?.roll?.total;
 
-    if (game.dice3d) {
+    if (game.dice3d)
+    {
         const msg = game.messages?.contents?.[game.messages.contents.length - 1];
         if (msg)
             await game.dice3d.waitFor3DAnimationByMessageID(msg.id);
@@ -244,29 +282,31 @@ async function rollInfectionCheck(state) {
 }
 
 /** Check infection result: >= 10 clears, < 10 calls rollNormalDamage for heat. */
-async function checkInfectionResult(state) {
+async function checkInfectionResult(state)
+{
     if (!state.data)
         throw new TypeError('Infection flow state missing!');
     if (!state.data.check_total)
         throw new TypeError('Infection check not rolled!');
 
-    if (state.data.check_total >= 10) {
-        // Success — clear infection
+    if (state.data.check_total >= 10)
+    {
+        // Success: clear infection
         state.data.title = "INFECTION CLEARED!";
         state.data.icon = "mdi mdi-shield-check";
         await state.actor.update({ 'system.infection': 0 });
         return true;
     }
 
-    // Failure — apply heat via rollNormalDamage
+    // Failure: apply heat via rollNormalDamage
     const rollNormalDamage = game.lancer?.flowSteps?.get('rollNormalDamage');
-    if (!rollNormalDamage || typeof rollNormalDamage !== 'function') {
+    if (!rollNormalDamage || typeof rollNormalDamage !== 'function')
         throw new TypeError("Couldn't get rollNormalDamage flow step!");
-    }
     return await rollNormalDamage(state);
 }
 
-function onUpdateCombatInfection(combat, change, _options, _userId) {
+function onUpdateCombatInfection(combat, change, _options, _userId)
+{
     if (!('turn' in change) && change.round !== 1)
         return;
     if (!combat.combatants?.contents?.length)
@@ -289,7 +329,8 @@ function onUpdateCombatInfection(combat, change, _options, _userId) {
     _triggerInfectionFlow(prevActor);
 }
 
-function _triggerInfectionFlow(actor) {
+function _triggerInfectionFlow(actor)
+{
     const flowDef = game.lancer?.flows?.get('InfectionFlow');
     if (!flowDef)
         return;
@@ -298,8 +339,10 @@ function _triggerInfectionFlow(actor) {
     if (!FlowBase)
         return;
 
-    const GenericFlow = class extends FlowBase {
-        constructor(uuid, data) {
+    const GenericFlow = class extends FlowBase
+    {
+        constructor(uuid, data)
+        {
             super(uuid, data || {});
         }
     };
@@ -329,37 +372,41 @@ function _triggerInfectionFlow(actor) {
     }).begin();
 }
 
-function _getFlowBase() {
+function _getFlowBase()
+{
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
     return typeof StatRollFlow === 'function' ? Object.getPrototypeOf(StatRollFlow) : null;
 }
 
-async function clearInfectionOnStabilize(state) {
+async function clearInfectionOnStabilize(state)
+{
     if (!_infectionEnabled())
         return true;
     if (!state.actor)
         return true;
     const infection = state.actor.system?.infection ?? 0;
-    if (infection > 0) {
+    if (infection > 0)
+    {
         await state.actor.update({ 'system.infection': 0 });
         ui.notifications.info(`${state.actor.name}: Infection cleared by stabilize.`);
     }
     return true;
 }
 
-async function clearInfectionOnRepair(state) {
+async function clearInfectionOnRepair(state)
+{
     if (!_infectionEnabled())
         return true;
     if (!state.actor)
         return true;
     const infection = state.actor.system?.infection ?? 0;
-    if (infection > 0) {
+    if (infection > 0)
         await state.actor.update({ 'system.infection': 0 });
-    }
     return true;
 }
 
-export function registerInfectionFlows(flowSteps, flows) {
+export function registerInfectionFlows(flowSteps, flows)
+{
     flowSteps.set('lancer-automations:initInfectionCheckData', initInfectionCheckData);
     flowSteps.set('lancer-automations:rollInfectionCheck', rollInfectionCheck);
     flowSteps.set('lancer-automations:checkInfectionResult', checkInfectionResult);
@@ -381,15 +428,17 @@ export function registerInfectionFlows(flowSteps, flows) {
     flows.get('FullRepairFlow')?.insertStepAfter('executeFullRepair', 'lancer-automations:clearInfectionOnRepair');
 }
 
-export function initInfectionHooks() {
+export function initInfectionHooks()
+{
     // Inject infection into the resistances object (prepareBaseData rebuilds it from scratch)
-    if (typeof libWrapper !== 'undefined') {
+    if (typeof libWrapper !== 'undefined')
+    {
         libWrapper.register(MODULE_ID, 'CONFIG.Actor.documentClass.prototype.prepareBaseData',
-            function (wrapped) {
+            function (wrapped)
+            {
                 wrapped();
-                if (this.system?.resistances && !('infection' in this.system.resistances)) {
+                if (this.system?.resistances && !('infection' in this.system.resistances))
                     this.system.resistances.infection = false;
-                }
             }, 'WRAPPER');
     }
 
@@ -397,23 +446,27 @@ export function initInfectionHooks() {
 
     // Per-client snapshot so the floating text fires for players too.
     const _prevInfection = new Map();
-    const _seedInfection = () => {
-        for (const a of game.actors ?? []) {
-            if (a.system?.infection !== undefined)
-                _prevInfection.set(a.id, Number(a.system.infection ?? 0));
+    const _seedInfection = () =>
+    {
+        for (const actor of game.actors ?? [])
+        {
+            if (actor.system?.infection !== undefined)
+                _prevInfection.set(actor.id, Number(actor.system.infection ?? 0));
         }
     };
     Hooks.once('ready', _seedInfection);
     Hooks.on('canvasReady', _seedInfection);
-    Hooks.on('createActor', (actor) => {
+    Hooks.on('createActor', (actor) =>
+    {
         _prevInfection.set(actor.id, Number(actor.system?.infection ?? 0));
     });
-    Hooks.on('updateActor', (actor, change) => {
-        const newVal = change?.system?.infection;
-        if (newVal === undefined)
+    Hooks.on('updateActor', (actor, change) =>
+    {
+        const newInfection = change?.system?.infection;
+        if (newInfection === undefined)
             return;
         const prev = _prevInfection.get(actor.id) ?? 0;
-        const next = Number(newVal);
+        const next = Number(newInfection);
         _prevInfection.set(actor.id, next);
         const delta = next - prev;
         if (!delta)
@@ -422,7 +475,12 @@ export function initInfectionHooks() {
         if (!token || !canvas?.interface?.createScrollingText)
             return;
         let showScroll = true;
-        try { showScroll = !!game.settings.get('lancer', 'floatingNumbers'); } catch { /* ignore */ }
+        try
+        {
+            showScroll = !!game.settings.get('lancer', 'floatingNumbers');
+        }
+        catch
+        { /* ignore */ }
         if (!showScroll)
             return;
         canvas.interface.createScrollingText(token.center, `${delta > 0 ? '+' : ''}${delta} Infection`, {
@@ -437,40 +495,37 @@ export function initInfectionHooks() {
     });
 
     // Modify "took X damage" messages to show infection
-    Hooks.on('preCreateChatMessage', (msg) => {
+    Hooks.on('preCreateChatMessage', (msg) =>
+    {
         if (!_pendingInfection)
             return;
         let content = msg.content;
         if (!content?.includes('damage!') || !content?.includes('lancer-damage-undo'))
             return;
 
-        const inf = _pendingInfection;
-        const infStr = `${inf.amount}<i class="cci cci-infection damage--infection i--s"></i>`;
+        const pendingInfection = _pendingInfection;
+        const infectionBadge = `${pendingInfection.amount}<i class="cci cci-infection damage--infection i--s"></i>`;
 
-        if (content.includes('took 0') || content.match(/took\s+damage!/)) {
-            content = content.replace(/took 0\s*damage!|took\s+damage!/, `took ${infStr} infection!`);
-        } else {
-            content = content.replace(/damage!/, `damage + ${infStr} infection!`);
-        }
+        if (content.includes('took 0') || content.match(/took\s+damage!/))
+            content = content.replace(/took 0\s*damage!|took\s+damage!/, `took ${infectionBadge} infection!`);
+        else
+            content = content.replace(/damage!/, `damage + ${infectionBadge} infection!`);
 
         // Patch undo button's heat-delta to include infection heat
         content = content.replace(
             /data-heat-delta="(\d+)"/,
-            (match, existing) => `data-heat-delta="${parseInt(existing) + inf.amount}" data-infection-delta="${inf.amount}"`
+            (match, existing) => `data-heat-delta="${parseInt(existing) + pendingInfection.amount}" data-infection-delta="${pendingInfection.amount}"`
         );
 
         msg.updateSource({ content });
     });
 
     // AppliedDamage doesn't handle Infection natively; intercept the apply click and apply manually.
-    if (typeof libWrapper !== 'undefined') {
-        libWrapper.register(MODULE_ID, 'CONFIG.Actor.documentClass.prototype.damageCalc',
-            async function (wrapped, damage, options) {
-                await wrapped(damage, options);
-            }, 'WRAPPER');
-
+    if (typeof libWrapper !== 'undefined')
+    {
         // Capture infection data before the system's jQuery handler fires.
-        document.body.addEventListener('click', (ev) => {
+        document.body.addEventListener('click', (ev) =>
+        {
             const button = ev.target?.closest?.('.lancer-damage-apply');
             if (!button)
                 return;
@@ -485,10 +540,10 @@ export function initInfectionHooks() {
             const targetUuid = buttonGroup?.dataset?.target;
             if (!targetUuid)
                 return;
-            const targetResult = damageData.targetDamageResults?.find(tdr => tdr.target === targetUuid);
+            const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
             if (!targetResult)
                 return;
-            const infectionDmg = targetResult.damage?.filter(d => d.type === 'Infection')?.reduce((sum, d) => sum + (d.amount ?? 0), 0) ?? 0;
+            const infectionDmg = targetResult.damage?.filter(damageEntry => damageEntry.type === 'Infection')?.reduce((sum, damageEntry) => sum + (damageEntry.amount ?? 0), 0) ?? 0;
             if (infectionDmg <= 0)
                 return;
             const multipleSelect = buttonGroup.querySelector('select');
@@ -499,7 +554,8 @@ export function initInfectionHooks() {
         }, { capture: true });
 
         // Apply infection after the system's damageCalc has run.
-        document.body.addEventListener('click', async (ev) => {
+        document.body.addEventListener('click', async (ev) =>
+        {
             const button = ev.target?.closest?.('.lancer-damage-apply');
             if (!button)
                 return;
@@ -518,13 +574,13 @@ export function initInfectionHooks() {
             if (!targetUuid)
                 return;
 
-            const targetResult = damageData.targetDamageResults?.find(tdr => tdr.target === targetUuid);
+            const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
             if (!targetResult)
                 return;
 
             const infectionDmg = targetResult.damage
-                ?.filter(d => d.type === 'Infection')
-                ?.reduce((sum, d) => sum + (d.amount ?? 0), 0) ?? 0;
+                ?.filter(damageEntry => damageEntry.type === 'Infection')
+                ?.reduce((sum, damageEntry) => sum + (damageEntry.amount ?? 0), 0) ?? 0;
 
             if (infectionDmg <= 0)
                 return;
@@ -542,21 +598,22 @@ export function initInfectionHooks() {
                 return;
 
             // Run after the system's jQuery click handler.
-            setTimeout(async () => {
+            setTimeout(async () =>
+            {
                 const resistant = actor.system?.resistances?.infection;
                 const finalInfection = resistant ? Math.ceil(scaledInfection / 2) : scaledInfection;
 
                 const currentInfection = actor.system?.infection ?? 0;
                 const updates = { 'system.infection': currentInfection + finalInfection };
-                if (actor.hasHeatcap?.()) {
+                if (actor.hasHeatcap?.())
                     updates['system.heat.value'] = actor.system.heat.value + finalInfection;
-                }
                 await actor.update(updates);
                 _pendingInfection = null;
             }, 100);
         }, { capture: false });
 
-        document.body.addEventListener('click', async (ev) => {
+        document.body.addEventListener('click', async (ev) =>
+        {
             const button = ev.target?.closest?.('.la-infection-undo, .lancer-damage-undo[data-infection-delta]');
             if (!button)
                 return;
@@ -578,7 +635,8 @@ export function initInfectionHooks() {
             // Heat undo is handled by the system via data-heat-delta.
         });
 
-        document.body.addEventListener('click', async (ev) => {
+        document.body.addEventListener('click', async (ev) =>
+        {
             const button = ev.target?.closest?.('.la-infection-apply');
             if (!button)
                 return;
@@ -592,13 +650,13 @@ export function initInfectionHooks() {
             if (!actor?.isOwner)
                 return;
 
-            if (actor.hasHeatcap?.()) {
+            if (actor.hasHeatcap?.())
                 await actor.update({ 'system.heat.value': actor.system.heat.value + heat });
-            }
 
             button.style.display = 'none';
             const undoBtn = button.parentElement?.querySelector('.la-infection-undo');
-            if (undoBtn) {
+            if (undoBtn)
+            {
                 undoBtn.style.display = '';
                 undoBtn.dataset.heatDelta = String(heat);
             }
@@ -614,7 +672,8 @@ export function initInfectionHooks() {
 }
 
 /** Apply infection to an actor: immediately take heat + mark infection. */
-export async function applyInfection(actor, amount) {
+export async function applyInfection(actor, amount)
+{
     if (!actor || amount <= 0)
         return;
     const currentInfection = actor.system?.infection ?? 0;
@@ -641,7 +700,8 @@ export async function applyInfection(actor, amount) {
 }
 
 /** Inject infection stat card next to BURN on actor sheets. */
-export function onRenderActorSheetInfection(app, html, _data) {
+export function onRenderActorSheetInfection(app, html, _data)
+{
     const jHtml = html instanceof $ ? html : $(html);
     const actor = app.actor ?? app.document;
     if (!actor)
@@ -657,20 +717,23 @@ export function onRenderActorSheetInfection(app, html, _data) {
 
     // Base Lancer sheet
     const $burnCard = jHtml.find('input[name="system.burn"]').closest('.card.clipped');
-    if ($burnCard.length) {
+    if ($burnCard.length)
+    {
         _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection);
         return;
     }
 
     // Alternative sheet
     const $altBurnInput = jHtml.find('input[name="system.burn"]');
-    if ($altBurnInput.length) {
+    if ($altBurnInput.length)
+    {
         _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection);
         return;
     }
 }
 
-function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection) {
+function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection)
+{
 
     const actorUuid = actor.uuid;
 
@@ -690,26 +753,27 @@ function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection) {
     `;
 
     const $card = $(infectionCard);
-    $card.find('.la-infection-flow-button').on('click', () => {
-        if (infection > 0) {
+    $card.find('.la-infection-flow-button').on('click', () =>
+    {
+        if (infection > 0)
             _triggerInfectionFlow(actor);
-        } else {
+        else
             ui.notifications.warn('No infection to check.');
-        }
     });
 
     $burnCard.after($card);
 
     // Cap children width so the last NPC sheet stat doesn't stretch full row.
     const $wrapRow = $burnCard.closest('.wraprow.quintuple');
-    if ($wrapRow.length) {
+    if ($wrapRow.length)
         $wrapRow.children().css('max-width', '20%');
-    }
 }
 
-function _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection) {
+function _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection)
+{
     const $burnDiv = $altBurnInput.closest('.la-flexcol');
-    if (!$burnDiv.length) return;
+    if (!$burnDiv.length)
+        return;
 
     const infectionAlt = `
         <div class="la-flexcol -divider -flex0 -width3ch -textaligncenter -glow-prmy -margin0-r la-infection-alt"

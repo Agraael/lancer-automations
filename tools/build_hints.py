@@ -19,7 +19,9 @@ SKIP_FILES = {'codemirror-hints.js', 'codemirror-hints-data.js'}
 SKIP_DIRS  = {'typing', 'node_modules'}
 
 DOC_DIR = MODULE_ROOT / 'doc'
-DOC_FILES = ['API_REFERENCE.md', 'API_COMBAT.md', 'API_EFFECTS.md', 'API_INTERACTIVE.md', 'API_HOWTO.md']
+DOC_FILES = ['API_REFERENCE.md', 'API_COMBAT.md', 'API_SPATIAL.md', 'API_EFFECTS.md',
+             'API_INTERACTIVE.md', 'API_ITEMS.md', 'API_HUD.md', 'API_MOVEMENT.md',
+             'API_TOKEN_DISPLAY.md', 'API_HOWTO.md']
 DETAILS_RE = re.compile(
     r'<details>\s*<summary><b><code>(\w+)</code></b>[^\n]*\n([\s\S]*?)</details>',
     re.IGNORECASE,
@@ -88,18 +90,30 @@ def clean_args(args):
 
 
 def extract_schema_keys(body, param_name):
-    pattern = re.compile(
+    keys = []
+    seen = set()
+
+    def add(k):
+        if k and not k.startswith('...') and k not in seen:
+            seen.add(k)
+            keys.append(k)
+
+    # Destructuring: const { a, b = X, c: d } = options  (source key name)
+    destr_re = re.compile(
         r'(?:const|let|var)\s*\{([^}]+)\}\s*=\s*' + re.escape(param_name) + r'\b'
     )
-    m = pattern.search(body)
-    if not m:
-        return None
-    keys = []
-    for raw in m.group(1).split(','):
-        k = raw.split('=')[0].split(':')[0].strip()
-        if k:
-            keys.append(k)
-    return keys
+    for m in destr_re.finditer(body):
+        for raw in m.group(1).split(','):
+            add(raw.split('=')[0].split(':')[0].strip())
+
+    # Property access: options.foo / options?.foo (not preceded by . or a word char, so this.options / xOptions don't match)
+    prop_re = re.compile(
+        r'(?<![.\w$])' + re.escape(param_name) + r'\s*\??\.\s*([A-Za-z_$][\w$]*)'
+    )
+    for m in prop_re.finditer(body):
+        add(m.group(1))
+
+    return keys or None
 
 
 def _find_jsdoc_block(src, start_idx):

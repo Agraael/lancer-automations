@@ -1,38 +1,33 @@
 /* global game, canvas, Hooks, requestAnimationFrame */
 
-import { getHexGroundElevation } from '../combat/terrain-utils.js';
 import { ISO_SETTINGS, isIsoPerspectiveFeatureEnabled, ISO_PERSPECTIVE_ID } from '../setup/iso-settings.js';
 
 const ISO_MODULE_ID = ISO_PERSPECTIVE_ID;
 
-function _isoActive(scene) {
+function _isoActive(scene)
+{
     const mod = game.modules.get(ISO_MODULE_ID);
     if (!mod?.active)
         return false;
-    try {
+    try
+    {
         if (!game.settings.get(ISO_MODULE_ID, 'worldIsometricFlag'))
             return false;
-    } catch {
+    }
+    catch
+    {
         return false;
     }
     return !!(scene ?? canvas.scene)?.getFlag(ISO_MODULE_ID, 'isometricEnabled');
 }
 
-function _thtGroundAt(x, y) {
-    if (!globalThis.terrainHeightTools)
-        return 0;
-    try {
-        const offset = canvas.grid.getOffset({ x, y });
-        return getHexGroundElevation(offset.j, offset.i) || 0;
-    } catch {
-        return 0;
-    }
-}
+import { thtGroundAt as _thtGroundAt } from './movement-utils.js';
 
-function _isoElevationDelta(elevation) {
+function _isoElevationDelta(elevation)
+{
     const scale = canvas.scene.grid.size / canvas.scene.grid.distance;
-    const d = elevation * scale;
-    return { x: d, y: -d };
+    const delta = elevation * scale;
+    return { x: delta, y: -delta };
 }
 
 // Per-token eased terrain offset so elevation ramps instead of snapping cell-to-cell.
@@ -41,22 +36,32 @@ const BUMP_EASE = 0.22;
 
 // Debug accumulator. `globalThis._laIsoDebugOn = true` to record, `globalThis._laIsoDebug = null`
 // to clear before a move, then drag the token and inspect `globalThis._laIsoDebug[<tokenId>]`.
-function _laIsoDebug(token, frame) {
-    const _g = /** @type {any} */ (globalThis);
-    if (!_g._laIsoDebugOn) return;
+function _laIsoDebug(token, frame)
+{
+    const debugGlobals = /** @type {any} */ (globalThis);
+    if (!debugGlobals._laIsoDebugOn)
+        return;
     const id = token.document?.id;
-    if (!id) return;
-    _g._laIsoDebug = _g._laIsoDebug ?? {};
-    let buf = _g._laIsoDebug[id];
-    if (!buf) {
+    if (!id)
+        return;
+    debugGlobals._laIsoDebug = debugGlobals._laIsoDebug ?? {};
+    let buf = debugGlobals._laIsoDebug[id];
+    if (!buf)
+    {
         buf = { tokenName: token.document?.name, tokenId: id, autoClimbOn: null, frames: [] };
-        try { buf.autoClimbOn = !!game.settings.get('lancer-automations', 'enableClimbWaypoints'); } catch { /* ignore */ }
-        _g._laIsoDebug[id] = buf;
+        try
+        {
+            buf.autoClimbOn = !!game.settings.get('lancer-automations', 'enableClimbWaypoints');
+        }
+        catch
+        { /* ignore */ }
+        debugGlobals._laIsoDebug[id] = buf;
     }
     buf.frames.push(frame);
 }
 
-Hooks.on('refreshToken', (token) => {
+Hooks.on('refreshToken', (token) =>
+{
     if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.elevationAnimation))
         return;
     if (!_isoActive(token.scene))
@@ -67,86 +72,98 @@ Hooks.on('refreshToken', (token) => {
         return; // drag-preview clone: leave it at its own elevation, no bump
     if (token.document?.getFlag(ISO_MODULE_ID, 'isoTokenDisabled'))
         return;
-    try {
+    try
+    {
         if (!game.settings.get(ISO_MODULE_ID, 'enableHeightAdjustment'))
             return;
-    } catch {
+    }
+    catch
+    {
         return;
     }
 
     // Cancel iso-perspective's terrain contribution; rebuild it per-cell during a move so
     // the flying portion of doc.elevation stays visible.
     const doc = token.document;
-    const mv = doc.movement;
-    const w = token.w, h = token.h;
-    const animGround = _thtGroundAt(doc.x + w / 2, doc.y + h / 2);
+    const movement = doc.movement;
+    const width = token.w, height = token.h;
+    const animGround = _thtGroundAt({ x: doc.x + width / 2, y: doc.y + height / 2 });
     const elev = doc.elevation ?? 0;
-    const isMoving = !!mv && (
-        mv.origin.x !== mv.destination.x
-        || mv.origin.y !== mv.destination.y
-        || (mv.origin.elevation ?? 0) !== (mv.destination.elevation ?? 0)
+    const isMoving = !!movement && (
+        movement.origin.x !== movement.destination.x
+        || movement.origin.y !== movement.destination.y
+        || (movement.origin.elevation ?? 0) !== (movement.destination.elevation ?? 0)
     );
     let target;
-    let _dbgStartGround, _dbgDestGround, _dbgInterp, _dbgDElev, _dbgT, _dbgElevClimbed, _dbgClimbing;
-    if (isMoving) {
-        const startGround = _thtGroundAt(mv.origin.x + w / 2, mv.origin.y + h / 2);
-        const destGround = _thtGroundAt(mv.destination.x + w / 2, mv.destination.y + h / 2);
+    let _dbgStartGround, _dbgDestGround, _dbgInterpolatedTerrain, _dbgDElev, _dbgLerpT, _dbgElevClimbed, _dbgClimbing;
+    if (isMoving)
+    {
+        const startGround = _thtGroundAt({ x: movement.origin.x + width / 2, y: movement.origin.y + height / 2 });
+        const destGround = _thtGroundAt({ x: movement.destination.x + width / 2, y: movement.destination.y + height / 2 });
         _dbgStartGround = startGround; _dbgDestGround = destGround;
         let interpolatedTerrain;
-        if (startGround === destGround) {
+        if (startGround === destGround)
             interpolatedTerrain = startGround;
-        } else {
-            // t derived from doc.elev so flying ramps naturally across the move.
-            const dElev = (mv.destination.elevation ?? 0) - (mv.origin.elevation ?? 0);
-            const t = dElev !== 0 ? (elev - (mv.origin.elevation ?? 0)) / dElev : 0;
-            _dbgDElev = dElev; _dbgT = t;
-            interpolatedTerrain = startGround + (destGround - startGround) * t;
+        else
+        {
+            // lerpT derived from doc.elev so flying ramps naturally across the move.
+            const dElev = (movement.destination.elevation ?? 0) - (movement.origin.elevation ?? 0);
+            const lerpT = dElev !== 0 ? (elev - (movement.origin.elevation ?? 0)) / dElev : 0;
+            _dbgDElev = dElev; _dbgLerpT = lerpT;
+            interpolatedTerrain = startGround + (destGround - startGround) * lerpT;
         }
-        _dbgInterp = interpolatedTerrain;
-        _dbgElevClimbed = elev - (mv.origin.elevation ?? 0);
-        target = animGround - elev;
-    } else {
+        _dbgInterpolatedTerrain = interpolatedTerrain;
+        _dbgElevClimbed = elev - (movement.origin.elevation ?? 0);
         target = animGround - elev;
     }
+    else
+        target = animGround - elev;
 
-    _laIsoDebug(token, {
-        ts: Date.now(),
-        isMoving,
-        elev,
-        animGround,
-        target,
-        climbing: _dbgClimbing,
-        elevDelta: _dbgElevClimbed,
-        startGround: _dbgStartGround,
-        destGround: _dbgDestGround,
-        dElev: _dbgDElev,
-        t: _dbgT,
-        interpolatedTerrain: _dbgInterp,
-        docPos: { x: doc.x, y: doc.y },
-        mvOrigin: mv ? { x: mv.origin.x, y: mv.origin.y, elevation: mv.origin.elevation } : null,
-        mvDest: mv ? { x: mv.destination.x, y: mv.destination.y, elevation: mv.destination.elevation } : null,
-        passedCount: mv?.passed?.waypoints?.length ?? 0,
-        pendingCount: mv?.pending?.waypoints?.length ?? 0
-    });
-
-    let st = _smoothBump.get(token);
-    if (!st) {
-        st = { value: target, raf: null }; _smoothBump.set(token, st);
+    if (globalThis._laIsoDebugOn)
+    {
+        _laIsoDebug(token, {
+            ts: Date.now(),
+            isMoving,
+            elev,
+            animGround,
+            target,
+            climbing: _dbgClimbing,
+            elevDelta: _dbgElevClimbed,
+            startGround: _dbgStartGround,
+            destGround: _dbgDestGround,
+            dElev: _dbgDElev,
+            t: _dbgLerpT,
+            interpolatedTerrain: _dbgInterpolatedTerrain,
+            docPos: { x: doc.x, y: doc.y },
+            mvOrigin: movement ? { x: movement.origin.x, y: movement.origin.y, elevation: movement.origin.elevation } : null,
+            mvDest: movement ? { x: movement.destination.x, y: movement.destination.y, elevation: movement.destination.elevation } : null,
+            passedCount: movement?.passed?.waypoints?.length ?? 0,
+            pendingCount: movement?.pending?.waypoints?.length ?? 0
+        });
     }
-    st.value += (target - st.value) * BUMP_EASE;
-    if (Math.abs(st.value - target) < 0.02)
-        st.value = target;
 
-    if (st.value !== 0) {
-        const delta = _isoElevationDelta(st.value);
+    let bumpState = _smoothBump.get(token);
+    if (!bumpState)
+    {
+        bumpState = { value: target, raf: null }; _smoothBump.set(token, bumpState);
+    }
+    bumpState.value += (target - bumpState.value) * BUMP_EASE;
+    if (Math.abs(bumpState.value - target) < 0.02)
+        bumpState.value = target;
+
+    if (bumpState.value !== 0)
+    {
+        const delta = _isoElevationDelta(bumpState.value);
         token.mesh.position.x += delta.x;
         token.mesh.position.y += delta.y;
     }
 
     // The move stops firing refreshes, so nudge one more frame until the offset finishes easing.
-    if (st.value !== target && st.raf == null) {
-        st.raf = requestAnimationFrame(() => {
-            st.raf = null;
+    if (bumpState.value !== target && bumpState.raf == null)
+    {
+        bumpState.raf = requestAnimationFrame(() =>
+        {
+            bumpState.raf = null;
             if (!token.destroyed)
                 token.renderFlags.set({ refreshPosition: true });
         });
@@ -156,11 +173,13 @@ Hooks.on('refreshToken', (token) => {
 // iso resets mesh.anchor to (0.5, 0.5) on non-iso scenes, so put the doc's own anchor back.
 // updateToken with no movement-fields (eg movementAction-only) sets no renderFlags -> refreshToken
 // never fires, so the standalone refresh hook isn't enough.
-Hooks.once('ready', () => {
+Hooks.once('ready', () =>
+{
     const mod = game.modules.get(ISO_MODULE_ID);
     if (!mod?.active)
         return;
-    const restore = (token) => {
+    const restore = (token) =>
+    {
         if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.restoreAnchor))
             return;
         if (!token?.mesh)
@@ -179,25 +198,32 @@ Hooks.once('ready', () => {
 });
 
 // Sequencer's iso plugin re-skews isometricContainer every tick. Clamp it back per-frame.
-Hooks.on('createSequencerEffect', (effect) => {
+Hooks.on('createSequencerEffect', (effect) =>
+{
     if (!game.modules.get(ISO_MODULE_ID)?.active)
         return;
     if (_isoActive(canvas.scene))
         return;
-    const ticker = () => {
-        const ic = effect?.isometricContainer;
-        if (!ic || ic.destroyed || !ic.transform) {
+    const ticker = () =>
+    {
+        const isoContainer = effect?.isometricContainer;
+        if (!isoContainer || isoContainer.destroyed || !isoContainer.transform)
+        {
             PIXI.Ticker.shared.remove(ticker);
             return;
         }
-        if (ic.skew.x !== 0 || ic.skew.y !== 0)
-            ic.skew.set(0, 0);
-        if (ic.scale.x !== 1 || ic.scale.y !== 1)
-            ic.scale.set(1, 1);
+        if (isoContainer.skew.x !== 0 || isoContainer.skew.y !== 0)
+            isoContainer.skew.set(0, 0);
+        if (isoContainer.scale.x !== 1 || isoContainer.scale.y !== 1)
+            isoContainer.scale.set(1, 1);
     };
     PIXI.Ticker.shared.add(ticker);
-    Hooks.once('endedSequencerEffect', (e) => {
-        if (e === effect)
-            PIXI.Ticker.shared.remove(ticker);
-    });
+    const onEnded = (endedEffect) =>
+    {
+        if (endedEffect !== effect)
+            return;
+        PIXI.Ticker.shared.remove(ticker);
+        Hooks.off('endedSequencerEffect', endedId);
+    };
+    const endedId = Hooks.on('endedSequencerEffect', onEnded);
 });

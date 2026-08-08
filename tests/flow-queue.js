@@ -10,20 +10,27 @@ import { queue, runInFlowBody, _flowQueueDebug } from '../scripts/activations/fl
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-function pass(name) {
+function pass(name)
+{
     console.log(`%c✅ PASS: ${name}`, 'color:limegreen; font-weight:bold;');
 }
-function fail(name, reason) {
+function fail(name, reason)
+{
     console.error(`❌ FAIL: ${name} — ${reason}`);
 }
-function assert(cond, name, reason) {
-    if (cond) pass(name);
-    else fail(name, reason);
+function assert(cond, name, reason)
+{
+    if (cond)
+        pass(name);
+    else
+        fail(name, reason);
 }
 
 /** A fake flow body: resolves after `ms` and records the order it ran. */
-function makeFlow(ms, order, tag) {
-    return async () => {
+function makeFlow(ms, order, tag)
+{
+    return async () =>
+    {
         order.push(`start:${tag}`);
         await delay(ms);
         order.push(`end:${tag}`);
@@ -32,7 +39,8 @@ function makeFlow(ms, order, tag) {
 }
 
 // ─── Test 1: two top-level flows queue sequentially ───────────────────
-async function basicSequential() {
+async function basicSequential()
+{
     console.log('%c── Test: basic sequential ──', 'color:cyan;');
     const order = [];
     const p1 = queue(makeFlow(200, order, 'A'), 'A');
@@ -46,14 +54,16 @@ async function basicSequential() {
 }
 
 // ─── Test 2: indicator appears when 2+ flows queued ───────────────────
-async function indicatorAppears() {
+async function indicatorAppears()
+{
     console.log('%c── Test: indicator appears ──', 'color:cyan;');
     // Indicator only renders when there's a .lancer-hud target. Inject a fake
     // one so _renderIndicator has somewhere to attach.
     const fakeHud = document.createElement('div');
     fakeHud.className = 'lancer-hud';
     document.body.appendChild(fakeHud);
-    try {
+    try
+    {
         const p1 = queue(makeFlow(400, [], 'P1'), 'P1');
         const p2 = queue(makeFlow(100, [], 'P2'), 'P2');
         await delay(150);
@@ -63,20 +73,25 @@ async function indicatorAppears() {
         await Promise.all([p1, p2]);
         await delay(50);
         assert($('.la-flow-queue-indicator').length === 0, 'indicator gone after queue drains', '');
-    } finally {
+    }
+    finally
+    {
         fakeHud.remove();
     }
 }
 
 // ─── Test 3: re-entry — child inside body bypasses parent ─────────────
-async function reentryBypass() {
+async function reentryBypass()
+{
     console.log('%c── Test: re-entry bypass ──', 'color:cyan;');
     const order = [];
     let parentDone = false;
-    const parent = queue(async () => {
+    const parent = queue(async () =>
+    {
         order.push('start:parent');
         // The parent's body wraps in runInFlowBody so children bypass.
-        await runInFlowBody(async () => {
+        await runInFlowBody(async () =>
+        {
             // Spawn 2 children in parallel (Promise.all).
             await Promise.all([
                 queue(makeFlow(150, order, 'child1'), 'child1'),
@@ -97,12 +112,15 @@ async function reentryBypass() {
 }
 
 // ─── Test 4: top-level flow queues behind active parent re-entry ─────
-async function topLevelWaitsForParent() {
+async function topLevelWaitsForParent()
+{
     console.log('%c── Test: top-level waits for parent ──', 'color:cyan;');
     const order = [];
-    const parent = queue(async () => {
+    const parent = queue(async () =>
+    {
         order.push('start:parent');
-        await runInFlowBody(async () => {
+        await runInFlowBody(async () =>
+        {
             await queue(makeFlow(150, order, 'child1'), 'child1');
         });
         order.push('end:parent');
@@ -117,21 +135,30 @@ async function topLevelWaitsForParent() {
 }
 
 // ─── Test 5: inter-flow delay (~400 ms) ───────────────────────────────
-async function interFlowDelay() {
+async function interFlowDelay()
+{
     console.log('%c── Test: inter-flow delay ──', 'color:cyan;');
     const stamps = [];
-    const p1 = queue(async () => { stamps.push(performance.now()); }, 'A');
-    const p2 = queue(async () => { stamps.push(performance.now()); }, 'B');
+    const p1 = queue(async () =>
+    {
+        stamps.push(performance.now());
+    }, 'A');
+    const p2 = queue(async () =>
+    {
+        stamps.push(performance.now());
+    }, 'B');
     await Promise.all([p1, p2]);
     const gap = stamps[1] - stamps[0];
     assert(gap >= 350 && gap <= 700, `gap ≈ 400ms (got ${gap.toFixed(0)}ms)`, `gap=${gap}`);
 }
 
 // ─── Test 6: queue label introspection ────────────────────────────────
-async function debugLabels() {
+async function debugLabels()
+{
     console.log('%c── Test: debug labels ──', 'color:cyan;');
     let snapshot = null;
-    const p1 = queue(async () => {
+    const p1 = queue(async () =>
+    {
         await delay(100);
         snapshot = _flowQueueDebug();
     }, 'INSPECTED');
@@ -146,16 +173,20 @@ async function debugLabels() {
 }
 
 // ─── Test 7: HUD steps are queue-wrapped at runtime ───────────────────
-async function hudStepsAreWrapped() {
+async function hudStepsAreWrapped()
+{
     console.log('%c── Test: HUD steps wrapped ──', 'color:cyan;');
     const flowSteps = game.lancer?.flowSteps;
-    if (!flowSteps) {
+    if (!flowSteps)
+    {
         fail('hudStepsAreWrapped', 'game.lancer.flowSteps unavailable');
         return;
     }
-    for (const stepName of ['showAttackHUD', 'showDamageHUD', 'showStatRollHUD']) {
+    for (const stepName of ['showAttackHUD', 'showDamageHUD', 'showStatRollHUD'])
+    {
         const step = flowSteps.get(stepName);
-        if (!step) {
+        if (!step)
+        {
             fail('hudStepsAreWrapped', `${stepName} missing from registry`);
             continue;
         }
@@ -166,17 +197,21 @@ async function hudStepsAreWrapped() {
 }
 
 // ─── Test 8: non-HUD steps are NOT queue-wrapped ──────────────────────
-async function nonHudStepsBypass() {
+async function nonHudStepsBypass()
+{
     console.log('%c── Test: non-HUD steps bypass queue ──', 'color:cyan;');
     const flowSteps = game.lancer?.flowSteps;
-    if (!flowSteps) {
+    if (!flowSteps)
+    {
         fail('nonHudStepsBypass', 'game.lancer.flowSteps unavailable');
         return;
     }
     const expected = ['printOverchargeCard', 'printActionUseCard', 'printGenericCard', 'rollAttacks', 'rollOvercharge'];
-    for (const stepName of expected) {
+    for (const stepName of expected)
+    {
         const step = flowSteps.get(stepName);
-        if (!step) continue; // step may not exist on a particular Lancer version; skip
+        if (!step)
+            continue; // step may not exist on a particular Lancer version; skip
         const src = step.toString();
         assert(!src.includes('return queue('), `${stepName} not queue-wrapped`,
             `body excerpt: ${src.slice(0, 120)}`);
@@ -184,7 +219,8 @@ async function nonHudStepsBypass() {
 }
 
 // ─── Run All ──────────────────────────────────────────────────────────
-async function runAll() {
+async function runAll()
+{
     console.log('%c╔══════════════════════════════════════╗', 'color:gold;');
     console.log('%c║   Flow Queue Test Suite              ║', 'color:gold;');
     console.log('%c╚══════════════════════════════════════╝', 'color:gold;');

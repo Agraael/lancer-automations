@@ -6,8 +6,10 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let _client = null;
 
-export function getSupabase() {
-    if (_client) return _client;
+export function getSupabase()
+{
+    if (_client)
+        return _client;
     const { createClient } = globalThis.supabase;
     _client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }

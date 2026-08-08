@@ -1,9 +1,12 @@
 /*global FormApplication, Dialog, $, game, ui, saveDataToFile */
 
 import { ReactionManager, clearScriptCache } from "./reaction-manager.js";
+import { escapeHtml as esc } from "../tools/string-utils.js";
 
-export class ReactionExport extends FormApplication {
-    static get defaultOptions() {
+export class ReactionExport extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-export",
             title: "Export Configuration",
@@ -12,16 +15,20 @@ export class ReactionExport extends FormApplication {
         });
     }
 
-    async _updateObject(_event, _formData) {}
+    async _updateObject(_event, _formData)
+    {}
 
-    render(force = false, options = {}) {
+    render(force = false, options = {})
+    {
         ReactionManager.exportReactions();
         return this;
     }
 }
 
-export class ReactionImport extends FormApplication {
-    static get defaultOptions() {
+export class ReactionImport extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-import",
             title: "Import Configuration",
@@ -30,9 +37,11 @@ export class ReactionImport extends FormApplication {
         });
     }
 
-    async _updateObject(_event, _formData) {}
+    async _updateObject(_event, _formData)
+    {}
 
-    render(force = false, options = {}) {
+    render(force = false, options = {})
+    {
         new Dialog({
             title: "Import Configuration",
             content: `
@@ -47,17 +56,22 @@ export class ReactionImport extends FormApplication {
                 next: {
                     icon: '<i class="fas fa-file-import"></i>',
                     label: "Open",
-                    callback: async (html) => {
+                    callback: async (html) =>
+                    {
                         const fileInput = /** @type {HTMLInputElement} */ (html.find('input[name="importFile"]')[0]);
-                        if (!fileInput.files.length) {
+                        if (!fileInput.files.length)
+                        {
                             ui.notifications.warn("Please select a file to import.");
                             return;
                         }
-                        try {
+                        try
+                        {
                             const text = await fileInput.files[0].text();
                             const data = JSON.parse(text);
                             openImportSummary(data);
-                        } catch (e) {
+                        }
+                        catch (e)
+                        {
                             ui.notifications.error(`Failed to parse file: ${e.message}`);
                         }
                     }
@@ -73,19 +87,17 @@ export class ReactionImport extends FormApplication {
     }
 }
 
-function esc(s) {
-    return String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-}
-
-function fmtVal(v) {
-    if (v === null || v === undefined)
+function fmtVal(value)
+{
+    if (value === null || value === undefined)
         return '<em>—</em>';
-    if (typeof v === 'object')
-        return `<code>${esc(JSON.stringify(v))}</code>`;
-    return `<code>${esc(String(v))}</code>`;
+    if (typeof value === 'object')
+        return `<code>${esc(JSON.stringify(value))}</code>`;
+    return `<code>${esc(String(value))}</code>`;
 }
 
-function openImportSummary(data) {
+function openImportSummary(data)
+{
     const itemReactions = data.itemReactions ?? {};
     const generalReactions = data.generalReactions ?? {};
     const startupScripts = Array.isArray(data.startupScripts) ? data.startupScripts : [];
@@ -102,7 +114,8 @@ function openImportSummary(data) {
         </details>
     `;
 
-    const itemRows = Object.entries(itemReactions).map(([lid, group]) => {
+    const itemRows = Object.entries(itemReactions).map(([lid, group]) =>
+    {
         const reactions = (group?.reactions || []).filter(r => Object.keys(r).length !== 1 || r.enabled === undefined);
         const names = reactions.map(r => r.name).filter(Boolean).join(', ');
         return `<label style="display:flex;align-items:center;gap:6px;font-size:0.88em;">
@@ -117,7 +130,8 @@ function openImportSummary(data) {
             <span>${esc(name)}</span>
         </label>`);
 
-    const startupRows = startupScripts.map((s, i) => {
+    const startupRows = startupScripts.map((s, i) =>
+    {
         const key = s?.id ?? s?.name ?? String(i);
         const label = s?.name ?? key;
         return `<label style="display:flex;align-items:center;gap:6px;font-size:0.88em;">
@@ -126,7 +140,8 @@ function openImportSummary(data) {
         </label>`;
     });
 
-    const settingRow = (sec, key, current, imported) => {
+    const settingRow = (sec, key, current, imported) =>
+    {
         const same = JSON.stringify(current) === JSON.stringify(imported);
         return `<label style="display:flex;align-items:center;gap:6px;font-size:0.85em;${same ? 'opacity:0.55;' : ''}">
             <input type="checkbox" class="la-imp-pick" data-section="${sec}" data-key="${esc(key)}" ${same ? '' : 'checked'}>
@@ -135,27 +150,37 @@ function openImportSummary(data) {
         </label>`;
     };
 
-    const settingRows = Object.keys(settings).sort().map(k => {
-        const current = (() => {
-            try {
+    const settingRows = Object.keys(settings).sort().map(k =>
+    {
+        const current = (() =>
+        {
+            try
+            {
                 return game.settings.get('lancer-automations', k);
-            } catch {
+            }
+            catch
+            {
                 return undefined;
             }
         })();
         return settingRow('settings', k, current, settings[k]);
     });
 
-    const externalRows = Object.keys(externalSettings).sort().map(composite => {
+    const externalRows = Object.keys(externalSettings).sort().map(composite =>
+    {
         const dot = composite.indexOf('.');
         if (dot < 0)
             return '';
         const mod = composite.slice(0, dot);
         const key = composite.slice(dot + 1);
-        const current = (() => {
-            try {
+        const current = (() =>
+        {
+            try
+            {
                 return game.settings.get(mod, key);
-            } catch {
+            }
+            catch
+            {
                 return undefined;
             }
         })();
@@ -163,12 +188,14 @@ function openImportSummary(data) {
     });
 
     const keybindings = data.keybindings ?? {};
-    const fmtBindings = (arr) => {
-        if (!Array.isArray(arr) || !arr.length)
+    const fmtBindings = (bindings) =>
+    {
+        if (!Array.isArray(bindings) || !bindings.length)
             return '<em>none</em>';
-        return arr.map(b => esc([...(b.modifiers ?? []), b.key].join('+'))).join(', ');
+        return bindings.map(binding => esc([...(binding.modifiers ?? []), binding.key].join('+'))).join(', ');
     };
-    const keybindingRows = Object.keys(keybindings).sort().map(composite => {
+    const keybindingRows = Object.keys(keybindings).sort().map(composite =>
+    {
         const current = game.keybindings.bindings.get(composite) ?? [];
         const imported = keybindings[composite];
         const same = JSON.stringify(current) === JSON.stringify(imported);
@@ -204,9 +231,11 @@ function openImportSummary(data) {
             import: {
                 icon: '<i class="fas fa-file-import"></i>',
                 label: "Import Selected",
-                callback: async (html) => {
+                callback: async (html) =>
+                {
                     const selection = { itemReactions: new Set(), generalReactions: new Set(), startupScripts: new Set(), settings: new Set(), externalSettings: new Set(), keybindings: new Set() };
-                    html.find('.la-imp-pick:checked').each((_i, el) => {
+                    html.find('.la-imp-pick:checked').each((_i, el) =>
+                    {
                         const sec = $(el).data('section');
                         const key = $(el).data('key');
                         if (sec && selection[sec])
@@ -218,21 +247,28 @@ function openImportSummary(data) {
             cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
         },
         default: "import",
-        render: (html) => {
-            html.find('.la-imp-section-all').on('change', (ev) => {
+        render: (html) =>
+        {
+            html.find('.la-imp-section-all').on('change', (ev) =>
+            {
                 const sec = $(ev.currentTarget).data('section');
                 const on = /** @type {HTMLInputElement} */ (ev.currentTarget).checked;
-                html.find(`.la-imp-pick[data-section="${sec}"]`).each((_i, el) => {
+                html.find(`.la-imp-pick[data-section="${sec}"]`).each((_i, el) =>
+                {
                     /** @type {HTMLInputElement} */ (el).checked = on;
                 });
             });
-            html.find('.la-imp-all-on').on('click', () => {
-                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => {
+            html.find('.la-imp-all-on').on('click', () =>
+            {
+                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) =>
+                {
                     /** @type {HTMLInputElement} */ (el).checked = true;
                 });
             });
-            html.find('.la-imp-all-off').on('click', () => {
-                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) => {
+            html.find('.la-imp-all-off').on('click', () =>
+            {
+                html.find('.la-imp-pick, .la-imp-section-all').each((_i, el) =>
+                {
                     /** @type {HTMLInputElement} */ (el).checked = false;
                 });
             });
@@ -241,17 +277,19 @@ function openImportSummary(data) {
     dlg.render(true);
 }
 
-// ── Activation packs (Activations + Startup scripts) ───────────────────────
+// Activation packs (Activations + Startup scripts)
 
 const PACK_TYPE = 'lancer-automations-pack';
 
 // Defaults hold code as live functions; JSON drops those, so stringify (engine recompiles on import).
-function _serializeFns(value) {
+function _serializeFns(value)
+{
     if (typeof value === 'function')
         return value.toString();
     if (Array.isArray(value))
         return value.map(_serializeFns);
-    if (value && typeof value === 'object') {
+    if (value && typeof value === 'object')
+    {
         const out = {};
         for (const [k, v] of Object.entries(value))
             out[k] = _serializeFns(v);
@@ -260,7 +298,8 @@ function _serializeFns(value) {
     return value;
 }
 
-function packSection(id, label, rows) {
+function packSection(id, label, rows)
+{
     return `
         <details class="la-pack-sec" data-section="${id}" open>
             <summary style="cursor:pointer;font-weight:bold;padding:6px 8px;background:color-mix(in srgb, var(--primary-color), transparent 85%);border-radius:4px;margin-top:8px;display:flex;align-items:center;gap:6px;">
@@ -271,7 +310,8 @@ function packSection(id, label, rows) {
         </details>`;
 }
 
-function packGroup(groupId, label, count, rows) {
+function packGroup(groupId, label, count, rows)
+{
     return `
         <details class="la-pack-sec" data-group="${groupId}" open>
             <summary style="cursor:pointer;font-weight:bold;padding:6px 8px;background:color-mix(in srgb, var(--primary-color), transparent 85%);border-radius:4px;margin-top:8px;display:flex;align-items:center;gap:6px;">
@@ -282,7 +322,8 @@ function packGroup(groupId, label, count, rows) {
         </details>`;
 }
 
-function packPick(section, key, label, { disabled = false, note = '', group = '' } = {}) {
+function packPick(section, key, label, { disabled = false, note = '', group = '' } = {})
+{
     return `<label style="display:flex;align-items:center;gap:6px;font-size:0.88em;${disabled ? 'opacity:0.55;' : ''}">
         <input type="checkbox" class="la-pack-pick" data-section="${section}" data-key="${esc(key)}" data-group="${esc(group)}" ${disabled ? 'disabled' : 'checked'}>
         <span>${esc(label)}${note ? ` <em style="color:#888;">${esc(note)}</em>` : ''}</span>
@@ -295,27 +336,46 @@ const _packSelectAllBar = `
         <button type="button" class="la-pack-all-off" style="font-size:0.85em;padding:2px 8px;cursor:pointer;">Deselect all</button>
     </div>`;
 
-function _wirePackSelectAll(html) {
-    html.find('.la-pack-section-all').on('change', (ev) => {
+function _wirePackSelectAll(html)
+{
+    html.find('.la-pack-section-all').on('change', (ev) =>
+    {
         const sec = $(ev.currentTarget).data('section');
         const on = ev.currentTarget.checked;
-        html.find(`.la-pack-pick[data-section="${sec}"]:not(:disabled)`).each((_i, el) => { el.checked = on; });
+        html.find(`.la-pack-pick[data-section="${sec}"]:not(:disabled)`).each((_i, el) =>
+        {
+            el.checked = on;
+        });
     });
-    html.find('.la-pack-group-all').on('change', (ev) => {
+    html.find('.la-pack-group-all').on('change', (ev) =>
+    {
         const grp = $(ev.currentTarget).data('group');
         const on = ev.currentTarget.checked;
-        html.find(`.la-pack-pick[data-group="${grp}"]:not(:disabled)`).each((_i, el) => { el.checked = on; });
+        html.find(`.la-pack-pick[data-group="${grp}"]:not(:disabled)`).each((_i, el) =>
+        {
+            el.checked = on;
+        });
     });
-    html.find('.la-pack-all-on').on('click', () => {
-        html.find('.la-pack-pick:not(:disabled), .la-pack-section-all, .la-pack-group-all').each((_i, el) => { el.checked = true; });
+    html.find('.la-pack-all-on').on('click', () =>
+    {
+        html.find('.la-pack-pick:not(:disabled), .la-pack-section-all, .la-pack-group-all').each((_i, el) =>
+        {
+            el.checked = true;
+        });
     });
-    html.find('.la-pack-all-off').on('click', () => {
-        html.find('.la-pack-pick, .la-pack-section-all, .la-pack-group-all').each((_i, el) => { el.checked = false; });
+    html.find('.la-pack-all-off').on('click', () =>
+    {
+        html.find('.la-pack-pick, .la-pack-section-all, .la-pack-group-all').each((_i, el) =>
+        {
+            el.checked = false;
+        });
     });
 }
 
-function _activationRows(itemReactions, generalReactions) {
-    const itemRows = Object.entries(itemReactions).map(([lid, group]) => {
+function _activationRows(itemReactions, generalReactions)
+{
+    const itemRows = Object.entries(itemReactions).map(([lid, group]) =>
+    {
         const names = (group?.reactions || []).map(r => r.name).filter(Boolean).join(', ');
         return packPick('itemReactions', lid, names ? `${lid} — ${names}` : lid);
     });
@@ -323,25 +383,29 @@ function _activationRows(itemReactions, generalReactions) {
     return { itemRows, generalRows };
 }
 
-function _collectPackSelection(html, itemReactions, generalReactions, startupScripts) {
+function _collectPackSelection(html, itemReactions, generalReactions, startupScripts)
+{
     const items = {}, generals = {}, startups = [];
-    html.find('.la-pack-pick:checked').each((_i, el) => {
+    html.find('.la-pack-pick:checked').each((_i, el) =>
+    {
         const sec = $(el).data('section');
         const key = String($(el).data('key'));
         if (sec === 'itemReactions' && itemReactions[key])
             items[key] = itemReactions[key];
         else if (sec === 'generalReactions' && generalReactions[key])
             generals[key] = generalReactions[key];
-        else if (sec === 'startupScripts') {
-            const s = startupScripts.find(sc => (sc.id ?? sc.name ?? '') === key);
-            if (s)
-                startups.push(s);
+        else if (sec === 'startupScripts')
+        {
+            const script = startupScripts.find(sc => (sc.id ?? sc.name ?? '') === key);
+            if (script)
+                startups.push(script);
         }
     });
     return { items, generals, startups };
 }
 
-export function openPackExport() {
+export function openPackExport()
+{
     const itemReactions = ReactionManager.getAllReactions() || {};
     const generalReactions = ReactionManager.getGeneralReactions() || {};
     const startupScripts = ReactionManager.getStartupScripts() || [];
@@ -350,16 +414,20 @@ export function openPackExport() {
     const folders = ReactionManager.getFolders() || [];
     const keyToFolder = new Map();
     for (const f of folders)
+    {
         for (const k of (f.items || []))
             keyToFolder.set(k, f.name);
+    }
 
     const entries = [];
-    for (const [lid, group] of Object.entries(itemReactions)) {
+    for (const [lid, group] of Object.entries(itemReactions))
+    {
         const names = (group?.reactions || []).map(r => r.name).filter(Boolean).join(', ');
         const key = `item::${lid}`;
         entries.push({ section: 'itemReactions', dataKey: lid, label: names ? `${lid} — ${names}` : lid, group: keyToFolder.get(key) ?? group?.category ?? 'Unfiled' });
     }
-    for (const [name, reaction] of Object.entries(generalReactions)) {
+    for (const [name, reaction] of Object.entries(generalReactions))
+    {
         const key = `general::${name}`;
         entries.push({ section: 'generalReactions', dataKey: name, label: name, group: keyToFolder.get(key) ?? reaction?.category ?? 'Unfiled' });
     }
@@ -367,16 +435,27 @@ export function openPackExport() {
     const order = [];
     const seen = new Set();
     for (const f of folders)
-        if (!seen.has(f.name)) { order.push(f.name); seen.add(f.name); }
+    {
+        if (!seen.has(f.name))
+        {
+            order.push(f.name); seen.add(f.name);
+        }
+    }
     for (const g of [...new Set(entries.map(e => e.group))].sort((a, b) => a.localeCompare(b)))
-        if (!seen.has(g) && g !== 'Unfiled') { order.push(g); seen.add(g); }
+    {
+        if (!seen.has(g) && g !== 'Unfiled')
+        {
+            order.push(g); seen.add(g);
+        }
+    }
     order.push('Unfiled');
 
     const groupSections = order
         .filter(g => entries.some(e => e.group === g))
-        .map((g, i) => {
-            const rows = entries.filter(e => e.group === g).map(e => packPick(e.section, e.dataKey, e.label, { group: `g${i}` }));
-            return packGroup(`g${i}`, g, rows.length, rows);
+        .map((groupName, i) =>
+        {
+            const rows = entries.filter(entry => entry.group === groupName).map(entry => packPick(entry.section, entry.dataKey, entry.label, { group: `g${i}` }));
+            return packGroup(`g${i}`, groupName, rows.length, rows);
         });
 
     const startupRows = startupScripts.map((s, i) => packPick('startupScripts', s.id ?? s.name ?? String(i), s.name ?? s.id ?? `Script ${i + 1}`, { group: 'startups' }));
@@ -399,10 +478,12 @@ export function openPackExport() {
             export: {
                 icon: '<i class="fas fa-file-export"></i>',
                 label: "Export",
-                callback: (html) => {
+                callback: (html) =>
+                {
                     const name = String(html.find('.la-pack-name').val() ?? '').trim() || 'Activation Pack';
                     const { items, generals, startups } = _collectPackSelection(html, itemReactions, generalReactions, startupScripts);
-                    if (!Object.keys(items).length && !Object.keys(generals).length && !startups.length) {
+                    if (!Object.keys(items).length && !Object.keys(generals).length && !startups.length)
+                    {
                         ui.notifications.warn("Nothing selected to export.");
                         return;
                     }
@@ -415,8 +496,8 @@ export function openPackExport() {
                         generalReactions: generals,
                         startupScripts: startups,
                     });
-                    const safe = name.replace(/[^\w-]+/g, '_').slice(0, 60) || 'pack';
-                    saveDataToFile(JSON.stringify(pack, null, 2), "application/json", `la-pack-${safe}.json`);
+                    const safeName = name.replace(/[^\w-]+/g, '_').slice(0, 60) || 'pack';
+                    saveDataToFile(JSON.stringify(pack, null, 2), "application/json", `la-pack-${safeName}.json`);
                     ui.notifications.info(`Exported pack "${name}".`);
                 }
             },
@@ -427,7 +508,8 @@ export function openPackExport() {
     }, { width: 560, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
 
-export function openPackImport(onDone) {
+export function openPackImport(onDone)
+{
     new Dialog({
         title: "Import Pack",
         content: `
@@ -441,20 +523,26 @@ export function openPackImport(onDone) {
             next: {
                 icon: '<i class="fas fa-file-import"></i>',
                 label: "Open",
-                callback: async (html) => {
+                callback: async (html) =>
+                {
                     const fileInput = /** @type {HTMLInputElement} */ (html.find('input[name="packFile"]')[0]);
-                    if (!fileInput.files.length) {
+                    if (!fileInput.files.length)
+                    {
                         ui.notifications.warn("Please select a file to import.");
                         return;
                     }
-                    try {
+                    try
+                    {
                         const data = JSON.parse(await fileInput.files[0].text());
-                        if (data?.type !== PACK_TYPE) {
+                        if (data?.type !== PACK_TYPE)
+                        {
                             ui.notifications.error("That file isn't a Lancer Automations pack.");
                             return;
                         }
                         openPackImportSummary(data, onDone);
-                    } catch (e) {
+                    }
+                    catch (e)
+                    {
                         ui.notifications.error(`Failed to parse file: ${e.message}`);
                     }
                 }
@@ -465,7 +553,8 @@ export function openPackImport(onDone) {
     }, { width: 400, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
 
-function openPackImportSummary(data, onDone) {
+function openPackImportSummary(data, onDone)
+{
     const itemReactions = data.itemReactions ?? {};
     const generalReactions = data.generalReactions ?? {};
     const startupScripts = Array.isArray(data.startupScripts) ? data.startupScripts : [];
@@ -477,7 +566,8 @@ function openPackImportSummary(data, onDone) {
     );
 
     const { itemRows, generalRows } = _activationRows(itemReactions, generalReactions);
-    const startupRows = startupScripts.map((s, i) => {
+    const startupRows = startupScripts.map((s, i) =>
+    {
         const key = s.id ?? s.name ?? String(i);
         const dup = existingStartups.has(s.id) || existingStartups.has(s.name);
         return packPick('startupScripts', key, s.name ?? key, { disabled: dup, note: dup ? '(already present)' : '' });
@@ -502,7 +592,8 @@ function openPackImportSummary(data, onDone) {
             import: {
                 icon: '<i class="fas fa-file-import"></i>',
                 label: "Import Selected",
-                callback: async (html) => {
+                callback: async (html) =>
+                {
                     const { items, generals, startups } = _collectPackSelection(html, itemReactions, generalReactions, startupScripts);
                     await applyPackImport(packName, items, generals, startups);
                     if (typeof onDone === 'function')
@@ -516,7 +607,8 @@ function openPackImportSummary(data, onDone) {
     }, { width: 640, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
 
-function _uniqueFolderName(base) {
+function _uniqueFolderName(base)
+{
     const names = new Set(ReactionManager.getFolders().map(f => f.name));
     if (!names.has(base))
         return base;
@@ -527,10 +619,12 @@ function _uniqueFolderName(base) {
 }
 
 // Returns the folder name to use, or null if the user cancels at the clash prompt.
-async function _resolveFolderName(name) {
+async function _resolveFolderName(name)
+{
     if (!ReactionManager.getFolders().some(f => f.name === name))
         return name;
-    return await new Promise(resolve => {
+    return await new Promise(resolve =>
+    {
         new Dialog({
             title: "Folder Already Exists",
             content: `<p>A folder named <b>${esc(name)}</b> already exists.</p><p>Merge the pack into it, or create a new folder?</p>`,
@@ -544,30 +638,35 @@ async function _resolveFolderName(name) {
     });
 }
 
-async function applyPackImport(packName, itemReactions, generalReactions, startupScripts) {
+async function applyPackImport(packName, itemReactions, generalReactions, startupScripts)
+{
     const hasActivations = Object.keys(itemReactions).length || Object.keys(generalReactions).length;
 
     let folderName = null;
-    if (hasActivations) {
+    if (hasActivations)
+    {
         folderName = await _resolveFolderName(packName);
         if (folderName === null)
             return; // cancelled at the clash prompt
     }
 
-    if (Object.keys(itemReactions).length) {
-        const cur = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+    if (Object.keys(itemReactions).length)
+    {
+        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
         for (const [lid, group] of Object.entries(itemReactions))
-            cur[lid] = group;
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, cur);
+            current[lid] = group;
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, current);
     }
-    if (Object.keys(generalReactions).length) {
-        const cur = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    if (Object.keys(generalReactions).length)
+    {
+        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         for (const [name, reaction] of Object.entries(generalReactions))
-            cur[name] = reaction;
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, cur);
+            current[name] = reaction;
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, current);
     }
 
-    if (hasActivations && folderName) {
+    if (hasActivations && folderName)
+    {
         await ReactionManager.createFolder(folderName); // no-op if it already exists
         for (const lid of Object.keys(itemReactions))
             await ReactionManager.assignToFolder(folderName, `item::${lid}`);
@@ -576,20 +675,22 @@ async function applyPackImport(packName, itemReactions, generalReactions, startu
     }
 
     let addedStartups = 0;
-    if (startupScripts.length) {
-        const cur = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
-        const seen = new Set(cur.flatMap(s => [s.id, s.name].filter(Boolean)));
-        for (const s of startupScripts) {
+    if (startupScripts.length)
+    {
+        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+        const seen = new Set(current.flatMap(s => [s.id, s.name].filter(Boolean)));
+        for (const s of startupScripts)
+        {
             if ((s.id && seen.has(s.id)) || (s.name && seen.has(s.name)))
                 continue;
-            cur.push({ ...s, builtin: false });
+            current.push({ ...s, builtin: false });
             if (s.id)
                 seen.add(s.id);
             if (s.name)
                 seen.add(s.name);
             addedStartups++;
         }
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, cur);
+        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, current);
     }
 
     clearScriptCache();

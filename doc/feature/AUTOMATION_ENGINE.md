@@ -2,13 +2,15 @@
 
 [← Back to the README](../../README.md) · Engine internals: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
 
-The automation engine lets you automate almost anything in Lancer.
+<img src="../img/feature-automation-engine.png" width="55%"/>
+
+Automate almost any Lancer action.
 
 Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md)**.
 
-## What's automated out of the box
+## What's automated by default
 
-Lancer Automations provides basic automation for most of the game's base actions. But as of now there's no official, ready-made automation for specific NPC or mech items (yet). For those, it's up to you to build your own, and the Activation Manager is where you do it.
+Lancer Automations provides basic automation for most of the game's base actions. There's no ready-made automation for specific NPC or mech items yet. For those, it's up to you to build your own, and the Activation Manager is where you do it.
 
 ## The Activation Manager
 
@@ -37,7 +39,7 @@ Item-based automations need the item's LID. The **LID finder** on the Item tab b
 
 ## Configuring an activation
 
-![Reaction config form](../img/ae-reaction-config.png)
+![Reaction config form](../vid/ae-reaction-config.gif)
 
 Each activation is a small form. The main fields:
 
@@ -48,6 +50,45 @@ Each activation is a small form. The main fields:
 | **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, and out-of-combat. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type shown in the popup (Reaction / Quick / Full / ...), and frequency. |
 | **Text** | Override the trigger and effect descriptions shown in the popup. |
+
+### Example: react to your own activation
+
+The smallest useful activation: run your own code when an item's action is used. Exported, a self-reacting `onActivation` looks like this (this one shows a notification):
+
+```json
+{
+  "isGeneral": false,
+  "lid": "mf_balor_alt_hecatoncheires",
+  "name": "",
+  "reaction": {
+    "triggers": ["onActivation"],
+    "evaluate": "return true;",
+    "actionType": "Quick Action",
+    "frequency": "Unlimited",
+    "autoActivate": true,
+    "triggerSelf": true,
+    "triggerOther": false,
+    "outOfCombat": true,
+    "onlyOnSourceMatch": false,
+    "activationType": "code",
+    "activationMode": "instead",
+    "activationCode": "ui.notifications.info(\"The Action of this frame is activated\");",
+    "reactionPath": "core_system.passive_actions[0]"
+  }
+}
+```
+
+What makes it self-react on use:
+
+- **`triggers: ["onActivation"]`** - fires when the item's action runs.
+
+- **`triggerSelf: true`** (with `triggerOther: false`) - the acting token is the reactor, so it reacts to its own action.
+
+- **`autoActivate: true`** - runs silently, no popup.
+
+- **`activationMode: "instead"`** - your code replaces the action's flow. Use `"after"` to run alongside it.
+
+- **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action; drop `reactionPath` to bind the whole item.
 
 ## How an activation runs
 
@@ -81,7 +122,7 @@ When a trigger fires reactions that aren't set to auto-activate, they're collect
 
 ## Reaction economy
 
-If **`consumeReaction`** is on, activating a reaction spends that token's reaction for the round. The popup shows the reaction as unavailable once it's spent. This is optional.
+If **`consumeReaction`** is on, activating a reaction spends that token's reaction for the round. The popup shows the reaction as unavailable once it's spent.
 
 ## Startup scripts
 
@@ -95,11 +136,13 @@ The registration patterns are in [API_HOWTO.md](../API_HOWTO.md).
 
 ## The personal activation set
 
-Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net.
+Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section.
 
 > [!NOTE]
 > This is **my own stuff, not part of the core module**. It's literally the automations I built for my own games (my NPCs, my items), shared as-is. It isn't a complete or general library, and it won't automate your content. Treat it as a set of examples to learn from, not something to rely on.
 
 The worked examples are walked through in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md), and the patterns for registering your own automations from code are in [API_HOWTO.md](../API_HOWTO.md).
+
+Some of these deployables aren't in any official LCP. If a personal activation spawns one that won't resolve, import the small companion pack that ships with the module: [`extra/LaSossis_Npc_Deployables.lcp`](../../extra/LaSossis_Npc_Deployables.lcp).
 
 <img src="../img/ae-personal-set.png" width="45%"/>

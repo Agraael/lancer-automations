@@ -5,10 +5,13 @@ const MODULE = 'lancer-automations';
 const MIGRATIONS = [
     {
         id: 'tah.scopeMigration_clientToWorld_v1',
-        run() {
-            const keys = ['tah.showDisposition', 'tah.auraDefaultThreat', 'tah.auraDefaultSensor', 'tah.auraDefaultRange'];
-            for (const key of keys) {
-                try {
+        run()
+        {
+            const keys = ['tah.showDisposition'];
+            for (const key of keys)
+            {
+                try
+                {
                     const raw = globalThis.localStorage.getItem(`${MODULE}.${key}`);
                     if (raw === null)
                         continue;
@@ -17,14 +20,18 @@ const MIGRATIONS = [
                     if (value === def)
                         continue;
                     game.settings.set(MODULE, key, value);
-                } catch { /* ignore */ }
+                }
+                catch
+                { /* ignore */ }
             }
         },
     },
 ];
 
-Hooks.once('init', () => {
-    for (const m of MIGRATIONS) {
+Hooks.once('init', () =>
+{
+    for (const m of MIGRATIONS)
+    {
         game.settings.register(MODULE, m.id, {
             scope: 'world',
             config: false,
@@ -34,15 +41,20 @@ Hooks.once('init', () => {
     }
 });
 
-Hooks.once('ready', async () => {
+Hooks.once('ready', async () =>
+{
     if (!game.user.isGM)
         return;
-    for (const m of MIGRATIONS) {
+    for (const m of MIGRATIONS)
+    {
         if (game.settings.get(MODULE, m.id))
             continue;
-        try {
+        try
+        {
             await m.run();
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.error(`LA migration "${m.id}" failed`, e);
             continue;
         }

@@ -2,6 +2,7 @@
 
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { executeReactorMeltdown } from "../tools/misc-tools.js";
+import { pushEmbedButton } from "./alt-struct-helpers.js";
 
 const stressTableTitles = [
     "Critical Reactor Failure",
@@ -13,48 +14,55 @@ const stressTableTitles = [
     "Emergency Shunt",
 ];
 
-function stressTableDescriptions(roll, remStress) {
-    switch (roll) {
+function stressTableDescriptions(roll, remStress)
+{
+    switch (roll)
+    {
     // Used for multiple ones
-    case 0:
-        return "Your Mech is Exposed and Throttled, and suffers a reactor meltdown at the end of your next turn. You can end this effect by stabilizing, or by passing an <strong>ENGINEERING</strong> check as a quick action.";
-    case 1:
-        switch (remStress) {
-        case 2:
-            return "Your mech must roll an <strong>ENGINEERING</strong> check. On a success, it is Slowed and Throttled until the end of your next turn. On a failure, it is Exposed and suffers a reactor meltdown after 1d3 of your turns (rolled by the GM). This effect can be ended by stabilizing, or by making a successful <strong>ENGINEERING</strong> check as a quick action.";
+        case 0:
+            return "Your Mech is Exposed and Throttled, and suffers a reactor meltdown at the end of your next turn. You can end this effect by stabilizing, or by passing an <strong>ENGINEERING</strong> check as a quick action.";
         case 1:
-            return "Your mech is Exposed, and you must pass an <strong>ENGINEERING</strong> check. On a success, it becomes Throttled until the end of your next turn. On a failure, your mech suffers a reactor meltdown after 1d3 of your turns. This effect can be ended by stabilizing, or by passing an <strong>ENGINEERING</strong> check as a quick action.";
-        default:
-            return "Roll an <strong>ENGINEERING</strong> check. On a success, your mech is Slowed and Throttled until the end of your next turn. On a failure, your mech becomes Exposed.";
-        }
-    case 2:
-    case 3:
-    case 4:
-        return "Your mech suffers catastrophic disruption to power regulation as it tries to divert energy to critical safety systems. Your mech is Slowed and Throttled until the end of your next turn.";
-    case 5:
-    case 6:
-        return "Your mech's cooling systems manage to contain the increasing heat; however, your mech becomes Impaired until the end of your next turn.";
+            switch (remStress)
+            {
+                case 2:
+                    return "Your mech must roll an <strong>ENGINEERING</strong> check. On a success, it is Slowed and Throttled until the end of your next turn. On a failure, it is Exposed and suffers a reactor meltdown after 1d3 of your turns (rolled by the GM). This effect can be ended by stabilizing, or by making a successful <strong>ENGINEERING</strong> check as a quick action.";
+                case 1:
+                    return "Your mech is Exposed, and you must pass an <strong>ENGINEERING</strong> check. On a success, it becomes Throttled until the end of your next turn. On a failure, your mech suffers a reactor meltdown after 1d3 of your turns. This effect can be ended by stabilizing, or by passing an <strong>ENGINEERING</strong> check as a quick action.";
+                default:
+                    return "Roll an <strong>ENGINEERING</strong> check. On a success, your mech is Slowed and Throttled until the end of your next turn. On a failure, your mech becomes Exposed.";
+            }
+        case 2:
+        case 3:
+        case 4:
+            return "Your mech suffers catastrophic disruption to power regulation as it tries to divert energy to critical safety systems. Your mech is Slowed and Throttled until the end of your next turn.";
+        case 5:
+        case 6:
+            return "Your mech's cooling systems manage to contain the increasing heat; however, your mech becomes Impaired until the end of your next turn.";
     }
     return "";
 }
 
-const getRollCount = (roll, targetFace) => {
+const getRollCount = (roll, targetFace) =>
+{
     return roll
         ? roll.terms[0].results.filter((dieResult) => dieResult.result === targetFace).length
         : 0;
 };
 
-export async function altRollStress(state) {
+export async function altRollStress(state)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can roll stress.");
         return false;
     }
 
     // Skip this step for 1-stress NPCs.
-    if (actor.is_npc() && actor.system.stress.max === 1) {
+    if (actor.is_npc() && actor.system.stress.max === 1)
+    {
         const forcedRollIndex = 3;
         const forcedRemStress = 1;
         state.data = {
@@ -71,7 +79,8 @@ export async function altRollStress(state) {
     }
 
     if ((state.data?.reroll_data?.stress ?? actor.system.stress.value) >=
-    actor.system.stress.max) {
+    actor.system.stress.max)
+    {
         ui.notifications.info(
             "The mech is at full Stress, no stress check to roll."
         );
@@ -84,9 +93,10 @@ export async function altRollStress(state) {
     // If it's an NPC with legendary, change the formula to roll twice and keep the best result.
     if (actor.is_npc() &&
     actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
-    )) {
+    ))
+
         formula = `{${formula}, ${formula}}kh`;
-    }
+
     let roll = await new Roll(formula).evaluate();
 
     let rollTotal = roll.total;
@@ -111,12 +121,14 @@ export async function altRollStress(state) {
     return true;
 }
 
-export async function stressCheckMultipleOnes(state) {
+export async function stressCheckMultipleOnes(state)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
 
     let actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can roll stress.");
         return false;
     }
@@ -127,7 +139,8 @@ export async function stressCheckMultipleOnes(state) {
 
     // Crushing hits
     let onesRolled = getRollCount(roll, 1);
-    if (onesRolled > 1) {
+    if (onesRolled > 1)
+    {
         state.data.title = stressTableTitles[0];
         state.data.desc = stressTableDescriptions(0, 1);
     }
@@ -135,12 +148,14 @@ export async function stressCheckMultipleOnes(state) {
     return true;
 }
 
-export async function insertEngheckButton(state) {
+export async function insertEngineeringCheckButton(state)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
 
     let actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can roll stress.");
         return false;
     }
@@ -152,42 +167,29 @@ export async function insertEngheckButton(state) {
 
     const roll = result.roll;
 
-    switch (roll.total) {
-    case 1:
-        showEngCheckButton = true;
-        break;
+    switch (roll.total)
+    {
+        case 1:
+            showEngCheckButton = true;
+            break;
     }
 
     let onesRolled = getRollCount(roll, 1);
 
-    if (showEngCheckButton && !(onesRolled > 1)) {
-        state.data.embedButtons = state.data.embedButtons || [];
-        state.data.embedButtons.push(`<a
-            class="alt-struct-flow-button lancer-button"
-            data-flow-type="StressEngineeringCheckFlow"
-            data-check-type="engineering"
-            data-actor-id="${actor.uuid}"
-          >
-            <i class="fas fa-dice-d20 i--sm"></i> ENGINEERING
-          </a>`);
-    }
+    if (showEngCheckButton && !(onesRolled > 1))
+        pushEmbedButton(state, { flowType: 'StressEngineeringCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'ENGINEERING', attrs: { 'check-type': 'engineering' } });
     return true;
 }
 
-/**
- * Apply automatic effects based on stress/overheat roll result
- * - Power Fail (2-4): Apply SLOW + THROTTLED until end of next turn
- * - Emergency Shunt (5-6): Apply IMPAIRED until end of next turn
- * - Multiple 1s: Apply EXPOSED + THROTTLED (+ meltdown check)
- */
-export async function applyStressEffects(state) {
+/** Applies SLOW+THROTTLED (2-4), IMPAIRED (5-6), or EXPOSED+THROTTLED (multiple 1s, + meltdown check) per the roll. */
+export async function applyStressEffects(state)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
         return false;
-    }
 
     const result = state.data.result;
     if (!result)
@@ -196,113 +198,115 @@ export async function applyStressEffects(state) {
     const roll = result.roll;
     const rollTotal = roll.total;
 
-    // Get the token for this actor
     const tokens = actor.getActiveTokens();
-    if (!tokens || tokens.length === 0) {
+    if (!tokens || tokens.length === 0)
+    {
         console.log("lancer-automations (alt-struct): No active token found for actor");
         return true;
     }
 
     const token = tokens[0];
 
-    // Check for multiple 1s
     const onesRolled = getRollCount(roll, 1);
     const hasMultipleOnes = onesRolled > 1;
 
-    // Apply effects based on roll result
-    if (hasMultipleOnes) {
+    if (hasMultipleOnes)
+    {
     // Multiple 1s: EXPOSED + THROTTLED + Critical Meltdown
-        try {
+        try
+        {
             await applyEffectsToTokens({
                 tokens: [token],
                 effectNames: ["exposed", "throttled"],
                 note: "Critical Stress Failure",
                 duration: { label: 'end', turns: 1, rounds: 0 },
             });
-        } catch (error) {
+        }
+        catch (error)
+        {
             console.warn("lancer-automations (alt-struct): Could not apply EXPOSED + THROTTLED effects:", error);
         }
 
         // Add Critical Meltdown button
-        state.data.embedButtons = state.data.embedButtons || [];
-        state.data.embedButtons.push(`<a
-            class="alt-struct-flow-button lancer-button"
-            data-flow-type="CriticalMeltdownFlow"
-            data-actor-id="${actor.uuid}"
-          >
-            <i class="fas fa-radiation i--sm"></i> CRITICAL MELTDOWN
-          </a>`);
-    } else {
-    // Single die result
-        switch (rollTotal) {
-        case 2:
-        case 3:
-        case 4:
-        // Power Fail: SLOW + THROTTLED until end of next turn
-            try {
-                await applyEffectsToTokens({
-                    tokens: [token],
-                    effectNames: ["slow", "throttled"],
-                    note: "Power Fail",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                });
-            } catch (error) {
-                console.warn("lancer-automations (alt-struct): Could not apply SLOW + THROTTLED effects:", error);
-            }
-            break;
+        pushEmbedButton(state, { flowType: 'CriticalMeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'CRITICAL MELTDOWN' });
+    }
+    else
+    {
+        switch (rollTotal)
+        {
+            case 2:
+            case 3:
+            case 4:
+                // Power Fail: SLOW + THROTTLED until end of next turn
+                try
+                {
+                    await applyEffectsToTokens({
+                        tokens: [token],
+                        effectNames: ["slow", "throttled"],
+                        note: "Power Fail",
+                        duration: { label: 'end', turns: 1, rounds: 0 },
+                    });
+                }
+                catch (error)
+                {
+                    console.warn("lancer-automations (alt-struct): Could not apply SLOW + THROTTLED effects:", error);
+                }
+                break;
 
-        case 5:
-        case 6:
-        // Emergency Shunt: IMPAIRED until end of next turn
-            try {
-                await applyEffectsToTokens({
-                    tokens: [token],
-                    effectNames: ["impaired"],
-                    note: "Emergency Shunt",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
-                });
-            } catch (error) {
-                console.warn("lancer-automations (alt-struct): Could not apply IMPAIRED effect:", error);
-            }
-            break;
+            case 5:
+            case 6:
+                // Emergency Shunt: IMPAIRED until end of next turn
+                try
+                {
+                    await applyEffectsToTokens({
+                        tokens: [token],
+                        effectNames: ["impaired"],
+                        note: "Emergency Shunt",
+                        duration: { label: 'end', turns: 1, rounds: 0 },
+                    });
+                }
+                catch (error)
+                {
+                    console.warn("lancer-automations (alt-struct): Could not apply IMPAIRED effect:", error);
+                }
+                break;
 
-        case 1:
-        // Single 1: Engineering check required (handled by button)
-        // Effects applied after engineering check result
-            break;
+            case 1:
+                // Single 1: effects applied after the engineering check button resolves
+                break;
         }
     }
 
     return true;
 }
 
-/**
- * Apply effects based on engineering check result for single 1 stress roll
- */
-async function applyEngineeringCheckEffects(state, engineeringSuccess) {
+async function applyEngineeringCheckEffects(state, engineeringSuccess)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
         return false;
-    }
 
     const remStress = state.data.remStress;
 
-    // Get the token for this actor
     const tokens = actor.getActiveTokens();
-    if (!tokens || tokens.length === 0) {
+    if (!tokens || tokens.length === 0)
+    {
         console.log("lancer-automations (alt-struct): No active token found for actor");
         return true;
     }
 
     const token = tokens[0];
 
-    try {
-        if (remStress >= 3) {
+    try
+    {
+        if (remStress >= 3)
+        {
             // 3+ stress remaining
-            if (engineeringSuccess) {
+            if (engineeringSuccess)
+            {
                 // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
@@ -310,7 +314,9 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
-            } else {
+            }
+            else
+            {
                 // Failure: EXPOSED
                 await applyEffectsToTokens({
                     tokens: [token],
@@ -319,9 +325,12 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
             }
-        } else if (remStress === 2) {
+        }
+        else if (remStress === 2)
+        {
             // 2 stress remaining
-            if (engineeringSuccess) {
+            if (engineeringSuccess)
+            {
                 // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
@@ -329,7 +338,9 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
-            } else {
+            }
+            else
+            {
                 // Failure: EXPOSED + Meltdown
                 await applyEffectsToTokens({
                     tokens: [token],
@@ -339,18 +350,14 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                 });
 
                 // Add Meltdown button
-                state.data.embedButtons = state.data.embedButtons || [];
-                state.data.embedButtons.push(`<a
-                class="alt-struct-flow-button lancer-button"
-                data-flow-type="MeltdownFlow"
-                data-actor-id="${actor.uuid}"
-              >
-                <i class="fas fa-radiation i--sm"></i> MELTDOWN
-              </a>`);
+                pushEmbedButton(state, { flowType: 'MeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'MELTDOWN' });
             }
-        } else if (remStress === 1) {
+        }
+        else if (remStress === 1)
+        {
             // 1 stress remaining
-            if (engineeringSuccess) {
+            if (engineeringSuccess)
+            {
                 // Success: THROTTLED only
                 await applyEffectsToTokens({
                     tokens: [token],
@@ -358,35 +365,31 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess) {
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
-            } else {
+            }
+            else
+            {
                 // Failure: Meltdown
-                state.data.embedButtons = state.data.embedButtons || [];
-                state.data.embedButtons.push(`<a
-                class="alt-struct-flow-button lancer-button"
-                data-flow-type="MeltdownFlow"
-                data-actor-id="${actor.uuid}"
-              >
-                <i class="fas fa-radiation i--sm"></i> MELTDOWN
-              </a>`);
+                pushEmbedButton(state, { flowType: 'MeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'MELTDOWN' });
             }
         }
-    } catch (error) {
+    }
+    catch (error)
+    {
         console.warn("lancer-automations (alt-struct): Could not apply engineering check effects:", error);
     }
 
     return true;
 }
 
-/**
- * Handle Engineering check result for single 1 stress roll
- */
-export async function handleStressEngineeringCheckResult(state) {
+export async function handleStressEngineeringCheckResult(state)
+{
     console.log("lancer-automations (alt-struct): handleStressEngineeringCheckResult EXECUTING");
     if (!state.data)
         throw new TypeError(`Check flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can perform this action.");
         return false;
     }
@@ -399,32 +402,28 @@ export async function handleStressEngineeringCheckResult(state) {
     const DC = 10;
     const success = roll.total >= DC;
 
-    // Get the remStress from the actor
     const remStress = state.actor.system.stress.value;
 
     // Store remStress in state data for applyEngineeringCheckEffects
     state.data.remStress = remStress;
 
-    // Apply effects based on engineering check result
     await applyEngineeringCheckEffects(state, success);
 
     return true;
 }
 
-/**
- * Roll 1d3 for meltdown countdown
- */
-export async function rollMeltdownCountdown(state) {
+export async function rollMeltdownCountdown(state)
+{
     if (!state.data)
         throw new TypeError(`Meltdown flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can roll meltdown.");
         return false;
     }
 
-    // Roll 1d3 for meltdown countdown
     const roll = await new Roll("1d3").evaluate();
     const countdown = roll.total;
 
@@ -444,22 +443,21 @@ export async function rollMeltdownCountdown(state) {
     return true;
 }
 
-/**
- * Execute reactor meltdown with countdown from roll
- */
-export async function executeMeltdown(state) {
+/** Executes a reactor meltdown; countdown length comes from the roll. */
+export async function executeMeltdown(state)
+{
     if (!state.data)
         throw new TypeError(`Meltdown flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
         return false;
-    }
 
     const countdown = state.data.countdown || 1;
 
     const tokens = actor.getActiveTokens();
-    if (!tokens || tokens.length === 0) {
+    if (!tokens || tokens.length === 0)
+    {
         console.log("lancer-automations (alt-struct): No active token found for actor");
         return false;
     }
@@ -468,15 +466,15 @@ export async function executeMeltdown(state) {
     return true;
 }
 
-/**
- * Execute critical reactor meltdown (immediate, at end of next turn)
- */
-export async function executeCriticalMeltdown(state) {
+/** Executes a critical reactor meltdown: no countdown, resolves at end of next turn. */
+export async function executeCriticalMeltdown(state)
+{
     if (!state.data)
         state.data = {};
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
+    {
         ui.notifications.warn("Only npcs and mechs can have reactor meltdown.");
         return false;
     }
@@ -486,7 +484,8 @@ export async function executeCriticalMeltdown(state) {
     state.data.desc = "Your reactor goes critical and will melt down at the end of your next turn!";
 
     const tokens = actor.getActiveTokens();
-    if (!tokens || tokens.length === 0) {
+    if (!tokens || tokens.length === 0)
+    {
         console.log("lancer-automations (alt-struct): No active token found for actor");
         return false;
     }
@@ -495,57 +494,45 @@ export async function executeCriticalMeltdown(state) {
     return true;
 }
 
-/**
- * Handle noStressRemaining cases:
- * - If NPC with max stress = 1: Apply EXPOSED immediately (no duration)
- * - If remStress = 0 (critical): Add Critical Meltdown button
- */
-export async function handleNoStressRemaining(state) {
+/** noStressRemaining: NPC with max stress 1 gets EXPOSED; remStress 0 offers a Critical Meltdown button. */
+export async function handleNoStressRemaining(state)
+{
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
 
     const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc()) {
+    if (!actor.is_mech() && !actor.is_npc())
         return false;
-    }
 
     const remStress = state.data.remStress;
 
-    // Check if lancer-automations module is active
-    // Case 1: NPC with max stress = 1
-    if (actor.is_npc() && actor.system.stress.max === 1) {
+    if (actor.is_npc() && actor.system.stress.max === 1)
+    {
         const tokens = actor.getActiveTokens();
-        if (tokens && tokens.length > 0) {
+        if (tokens && tokens.length > 0)
+        {
             const token = tokens[0];
-            try {
+            try
+            {
                 // Apply EXPOSED without duration (permanent until removed)
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["exposed"],
                     note: "NPC Overheat",
                 });
-            } catch (error) {
+            }
+            catch (error)
+            {
                 console.warn("lancer-automations (alt-struct): Could not apply EXPOSED effect:", error);
             }
         }
     }
 
-    // Case 2: remStress = 0 (critical reactor failure)
-    else if (remStress === 0) {
-    // Add Critical Meltdown button
-        state.data.embedButtons = state.data.embedButtons || [];
-        state.data.embedButtons.push(`<a
-            class="alt-struct-flow-button lancer-button"
-            data-flow-type="CriticalMeltdownFlow"
-            data-actor-id="${actor.uuid}"
-          >
-            <i class="fas fa-radiation i--sm"></i> CRITICAL MELTDOWN
-          </a>`);
-    }
+    else if (remStress === 0)
+        pushEmbedButton(state, { flowType: 'CriticalMeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'CRITICAL MELTDOWN' });
 
-    if (!(actor.is_npc() && actor.system.stress.max === 1)) {
+    if (!(actor.is_npc() && actor.system.stress.max === 1))
         await actor.update({ "system.heat.value": 0 });
-    }
 
     return true;
 }

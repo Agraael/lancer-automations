@@ -24,6 +24,7 @@ const TRIGGER_MANIFEST = [
     { name: 'startRelatedFlow', args: '()' },
     { name: 'startRelatedFlowToReactor', args: '(userId, extraData, opts)' },
     { name: 'sendMessageToReactor', args: '(data, userId, opts)' },
+    { name: 'debugActivation', args: '(label)' },
     { name: 'cancel', args: '(reason)' },
     { name: 'cancelAttack', args: '(reason)' },
     { name: 'cancelTechAttack', args: '(reason)' },
@@ -91,6 +92,7 @@ const COMMON_TRIGGER_FIELDS = new Set([
     'triggeringToken', 'distanceToTrigger', 'canTriggerReaction',
     'flowState', 'actionData', 'extraData',
     'startRelatedFlow', 'startRelatedFlowToReactor', 'sendMessageToReactor',
+    'debugActivation',
 ]);
 
 const TRIGGER_FIELDS_BY_TRIGGER = {
@@ -105,6 +107,7 @@ const TRIGGER_FIELDS_BY_TRIGGER = {
     onInitTechAttack:    ['targets', 'cancelTechAttack'],
     onTechHit:           ['targets'],
     onTechMiss:          ['targets'],
+    onPreDamage:         ['targets', 'weapon', 'flowState'],
     onDamage:            ['target', 'damages', 'weapon', 'isCrit', 'isHit'],
     onPreStructure:      ['remainingStructure', 'cancelStructure'],
     onStructure:         ['remainingStructure', 'rollResult'],
@@ -164,11 +167,44 @@ const HAND_OPTION_SCHEMAS = {
         ['effectNames', '(string | EffectData)[]'],
         ['note', 'string'],
         ['duration', '{ label, turns?, rounds?, overrideTurnOriginId? }'],
+        ['checkEffectCallback', '(token, effectData) => boolean'],
+        ['notify', 'boolean | object'],
+    ],
+    'applyEffectsToTokens.extraOptions': [
+        ['consumption', '{ trigger, originId?, groupId?, grouped? }'],
+        ['linkedBonusId', 'string'],
+        ['allowStack', 'boolean'],
+        ['stack', 'number'],
+        ['changes', 'object[]'],
+        ['forceNew', 'boolean'],
+    ],
+    'setEffect.extraOptions': [
+        ['consumption', '{ trigger, originId?, groupId?, evaluate?, itemLid?, itemId?, actionName? }'],
+        ['linkedBonusId', 'string'],
+        ['stack', 'number'],
+        ['changes', 'object[]'],
+        ['allowStack', 'boolean'],
+        ['forceNew', 'boolean'],
+        ['statDirect', '{ key, value, preBonusValue }'],
+    ],
+    'moveToken.options': [
+        ['destination', '{ x, y }'],
+        ['teleport', 'boolean'],
+        ['action', 'string'],
+        ['range', 'number'],
+        ['cost', 'number'],
+        ['canBeBlocked', 'boolean'],
+        ['title', 'string'],
+        ['description', 'string'],
+        ['icon', 'string'],
+        ['headerClass', 'string'],
     ],
     'removeEffectsByNameFromTokens.options': [
         ['tokens', 'Token[]'],
         ['effectNames', 'string[]'],
+        ['originId', 'string'],
         ['extraFlags', 'object'],
+        ['notify', 'boolean | object'],
     ],
     'chooseToken.options': [
         ['range', 'number'],
@@ -196,16 +232,31 @@ const HAND_OPTION_SCHEMAS = {
         ['ignoreRange', 'boolean'],
     ],
     'placeToken.options': [
-        ['actor', 'Actor | string'],
-        ['multiActor', 'boolean'],
+        ['actor', 'Actor | Actor[] | { actor, extraData }[]'],
+        ['range', 'number'],
         ['count', 'number'],
+        ['extraData', 'object'],
+        ['origin', 'Token | { x, y }'],
+        ['onSpawn', '(newTokenDoc, origin) => void'],
+        ['title', 'string'],
+        ['description', 'string'],
+        ['icon', 'string'],
+        ['headerClass', 'string'],
+        ['noCard', 'boolean'],
+        ['disposition', 'number'],
+        ['team', 'string'],
+        ['elevation', 'number'],
     ],
     'spawnHardCover.options': [
+        ['range', 'number'],
+        ['count', 'number'],
         ['size', 'number'],
         ['name', 'string'],
-        ['persistent', 'boolean'],
+        ['title', 'string'],
+        ['description', 'string'],
     ],
     'executeBasicAttack.options': [
+        ['tags', 'TagField[]'],
         ['title', 'string'],
         ['attack_type', '"Melee" | "Ranged"'],
         ['lookupItem', 'Item'],
@@ -216,16 +267,36 @@ const HAND_OPTION_SCHEMAS = {
         ['detail', 'string'],
     ],
     'executeDamageRoll.options': [
-        ['critical', 'boolean'],
-        ['heat', 'number'],
-        ['noBonusDmg', 'boolean'],
+        ['tags', 'TagField[]'],
+        ['hit_results', 'object[]'],
+        ['has_normal_hit', 'boolean'],
+        ['has_crit_hit', 'boolean'],
+        ['ap', 'boolean'],
+        ['paracausal', 'boolean'],
+        ['half_damage', 'boolean'],
+        ['overkill', 'boolean'],
+        ['reliable', 'boolean'],
+        ['add_burn', 'boolean'],
+        ['invade', 'boolean'],
+        ['bonus_damage', 'object[]'],
     ],
     'addGlobalBonus.options': [
         ['duration', '"end" | "start" | "unlimited" | "indefinite" | "permanent" | "1 Round"'],
-        ['origin', 'Token'],
-        ['consumption', '{ trigger, itemLid?, grouped? }'],
+        ['durationTurns', 'number'],
+        ['origin', 'Token | string'],
+        ['icon', 'string'],
+        ['consumption', '{ trigger, originId?, groupId?, evaluate?, itemLid?, itemId?, actionName?, isBoost?, minDistance?, checkType?, checkAbove?, checkBelow? }'],
     ],
-    'createAura.config': [
+    'executeEffectManager.options': [
+        ['initialTab', '"bonus" | "manage" | string'],
+    ],
+    'executeSkirmish.opts': [
+        ['noFX', 'boolean'],
+    ],
+    'updateAllEngagements.options': [
+        ['excludeTokenId', 'string'],
+    ],
+    'createAura.auraConfig': [
         ['name', 'string'],
         ['radius', 'string | number'],
         ['unified', 'boolean'],
@@ -246,7 +317,29 @@ const HAND_OPTION_SCHEMAS = {
     ],
 };
 
-const OPTION_SCHEMAS = { ...AUTO_OPTION_SCHEMAS, ...HAND_OPTION_SCHEMAS };
+// Union hand + auto per key so a partial hand entry supplements the generated one instead of shadowing it (hand leads and wins on type; `...rest` keys dropped).
+function _mergeOptionSchemas(auto, hand)
+{
+    const out = {};
+    for (const key of new Set([...Object.keys(auto), ...Object.keys(hand)]))
+    {
+        const byName = new Map();
+        for (const pair of (hand[key] ?? []))
+        {
+            if (!String(pair[0]).startsWith('...'))
+                byName.set(pair[0], pair);
+        }
+        for (const pair of (auto[key] ?? []))
+        {
+            if (!String(pair[0]).startsWith('...') && !byName.has(pair[0]))
+                byName.set(pair[0], pair);
+        }
+        out[key] = [...byName.values()];
+    }
+    return out;
+}
+
+const OPTION_SCHEMAS = _mergeOptionSchemas(AUTO_OPTION_SCHEMAS, HAND_OPTION_SCHEMAS);
 
 const TYPE_FIELDS = {
     Actor: {
@@ -449,21 +542,24 @@ const VAR_TYPES = {
     combatant:       'Combatant',
 };
 
-function _walkType(typeName, segments) {
+function _walkType(typeName, segments)
+{
     let curType = typeName;
-    for (const seg of segments) {
+    for (const seg of segments)
+    {
         const fields = TYPE_FIELDS[curType];
         if (!fields)
             return null;
-        const f = fields[seg];
-        if (!f?.type)
+        const field = fields[seg];
+        if (!field?.type)
             return null;
-        curType = f.type;
+        curType = field.type;
     }
     return curType;
 }
 
-function _typeFieldsAsManifest(typeName) {
+function _typeFieldsAsManifest(typeName)
+{
     const fields = TYPE_FIELDS[typeName];
     if (!fields)
         return null;
@@ -489,13 +585,17 @@ const TRIGGER_OBJECT_BY_KIND = {
     startup:         null,
 };
 
+const _triggerReCache = new Map();
+
 let _apiCache = null;
-function _getApiList() {
+function _getApiList()
+{
     if (_apiCache)
         return _apiCache;
     const apiObj = game?.modules?.get?.('lancer-automations')?.api ?? {};
     const entries = [];
-    for (const apiName of Object.keys(apiObj)) {
+    for (const apiName of Object.keys(apiObj))
+    {
         if (typeof apiObj[apiName] !== 'function')
             continue;
         const args = HAND_SIGNATURE_OVERRIDES[apiName] ?? SIG_BY_NAME.get(apiName) ?? '(...)';
@@ -509,7 +609,8 @@ function _getApiList() {
     return _apiCache;
 }
 
-function _splitArgs(args) {
+function _splitArgs(args)
+{
     if (!args)
         return [];
     const inner = args.replace(/^\(/, '').replace(/\)$/, '').trim();
@@ -518,28 +619,36 @@ function _splitArgs(args) {
     const parts = [];
     let depth = 0;
     let buf = '';
-    for (const char of inner) {
-        if (char === '(' || char === '{' || char === '[') {
+    for (const char of inner)
+    {
+        if (char === '(' || char === '{' || char === '[')
+        {
             depth++;
             buf += char;
-        } else if (char === ')' || char === '}' || char === ']') {
+        }
+        else if (char === ')' || char === '}' || char === ']')
+        {
             depth--;
             buf += char;
-        } else if (char === ',' && depth === 0) {
+        }
+        else if (char === ',' && depth === 0)
+        {
             parts.push(buf.trim());
             buf = '';
-        } else {
-            buf += char;
         }
+        else
+            buf += char;
     }
     if (buf.trim())
         parts.push(buf.trim());
     return parts;
 }
 
-function _shortPart(part) {
+function _shortPart(part)
+{
     const noDefault = part.split('=')[0].trim();
-    if (noDefault.startsWith('{')) {
+    if (noDefault.startsWith('{'))
+    {
         const inner = noDefault.replace(/^\{/, '').replace(/\}$/, '').trim();
         if (!inner)
             return '{}';
@@ -556,7 +665,8 @@ function _shortPart(part) {
     return noDefault;
 }
 
-function _shortSig(args) {
+function _shortSig(args)
+{
     if (!args)
         return '';
     if (args === '(...)' || args === '()')
@@ -573,8 +683,10 @@ function _shortSig(args) {
 let _tooltipEl = null;
 let _tooltipTimer = null;
 
-function _hideTooltip() {
-    if (_tooltipTimer) {
+function _hideTooltip()
+{
+    if (_tooltipTimer)
+    {
         clearTimeout(_tooltipTimer);
         _tooltipTimer = null;
     }
@@ -583,14 +695,17 @@ function _hideTooltip() {
     _tooltipEl = null;
 }
 
-function _escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function _escapeHtml(str)
+{
+    return String(str ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-function _openDocPopup(name) {
+function _openDocPopup(name)
+{
     const entry = AUTO_DOC_INDEX[name];
     const ref = AUTO_DOC_REF[name];
-    if (!entry && !ref) {
+    if (!entry && !ref)
+    {
         ui?.notifications?.warn?.(`No doc reference for ${name}`);
         return;
     }
@@ -600,29 +715,34 @@ function _openDocPopup(name) {
     window.open(url, '_blank', 'noopener');
 }
 
-function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []) {
+function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = [])
+{
     _hideTooltip();
     const parts = _splitArgs(fullArgs);
-    const paramByName = new Map((params ?? []).map((p) => [p.name, p]));
+    const paramByName = new Map((params ?? []).map((param) => [param.name, param]));
     let body;
-    if (!fullArgs || fullArgs === '()' || fullArgs === '(...)') {
+    if (!fullArgs || fullArgs === '()' || fullArgs === '(...)')
         body = `<div class="la-hint-tt-paren">${fullArgs || '()'}</div>`;
-    } else {
-        const argLines = parts.map((p, i) => {
-            const eq = p.indexOf('=');
-            const namePart = eq >= 0 ? p.slice(0, eq).trim() : p;
-            const defPart = eq >= 0 ? ` = ${p.slice(eq + 1).trim()}` : '';
+    else
+    {
+        const argLines = parts.map((argStr, i) =>
+        {
+            const eq = argStr.indexOf('=');
+            const namePart = eq >= 0 ? argStr.slice(0, eq).trim() : argStr;
+            const defPart = eq >= 0 ? ` = ${argStr.slice(eq + 1).trim()}` : '';
             const comma = i < parts.length - 1 ? ',' : '';
             const lookupKey = namePart.replace(/^\{.*\}$/, 'options');
             const schema = OPTION_SCHEMAS[`${name}.${lookupKey}`];
             let schemaHtml = '';
-            if (schema) {
-                const lines = schema.map(([k, t]) => `<div class="la-hint-tt-schema-line"><span class="la-hint-tt-argname">${k}</span><span class="la-hint-tt-default">: ${t}</span></div>`).join('');
+            if (schema)
+            {
+                const lines = schema.map(([fieldName, fieldType]) => `<div class="la-hint-tt-schema-line"><span class="la-hint-tt-argname">${fieldName}</span><span class="la-hint-tt-default">: ${fieldType}</span></div>`).join('');
                 schemaHtml = `<div class="la-hint-tt-schema">${lines}</div>`;
             }
             const paramMeta = paramByName.get(namePart);
             let metaHtml = '';
-            if (paramMeta) {
+            if (paramMeta)
+            {
                 const typeHtml = paramMeta.type ? `<span class="la-hint-tt-argtype">: ${_escapeHtml(paramMeta.type)}</span>` : '';
                 const descHtml = paramMeta.desc ? `<div class="la-hint-tt-argdesc">${_escapeHtml(paramMeta.desc)}</div>` : '';
                 metaHtml = `${typeHtml}${descHtml}`;
@@ -641,19 +761,20 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
     _tooltipEl.className = 'la-hint-tooltip';
     _tooltipEl.innerHTML = `<div class="la-hint-tt-name">${name}</div>${summaryHtml}${body}${retHtml}`;
     document.body.appendChild(_tooltipEl);
-    const r = anchor.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     const ttRect = _tooltipEl.getBoundingClientRect();
-    let left = r.right + 8;
+    let left = anchorRect.right + 8;
     if (left + ttRect.width > window.innerWidth - 8)
-        left = Math.max(8, r.left - ttRect.width - 8);
-    let top = r.top;
+        left = Math.max(8, anchorRect.left - ttRect.width - 8);
+    let top = anchorRect.top;
     if (top + ttRect.height > window.innerHeight - 8)
         top = Math.max(8, window.innerHeight - ttRect.height - 8);
     _tooltipEl.style.top = `${top}px`;
     _tooltipEl.style.left = `${left}px`;
 }
 
-function _renderHint(el, _self, data) {
+function _renderHint(el, _self, data)
+{
     const name = data.displayName ?? data.text;
     const shortArgs = data.shortArgs ?? '';
     const isFn = !!data.fullArgs;
@@ -662,9 +783,11 @@ function _renderHint(el, _self, data) {
         : '';
     el.classList.add(isFn ? 'la-hint-fn' : 'la-hint-var');
     el.innerHTML = `<span class="la-hint-name">${name}</span><span class="la-hint-args"> ${shortArgs}</span>${docBtn}`;
-    if (data.hasDoc) {
+    if (data.hasDoc)
+    {
         const btn = el.querySelector('.la-hint-row-doc');
-        btn?.addEventListener('mousedown', (ev) => {
+        btn?.addEventListener('mousedown', (ev) =>
+        {
             ev.preventDefault();
             ev.stopPropagation();
             _openDocPopup(name);
@@ -672,7 +795,8 @@ function _renderHint(el, _self, data) {
     }
 }
 
-function _toCompletion(entry) {
+function _toCompletion(entry)
+{
     const fullArgs = entry.args ?? '';
     const isFn = !!fullArgs;
     return {
@@ -690,13 +814,15 @@ function _toCompletion(entry) {
     };
 }
 
-function _filter(entries, prefix) {
+function _filter(entries, prefix)
+{
     if (!prefix)
         return entries.map(_toCompletion);
     const prefixLo = prefix.toLowerCase();
     const starts = [];
     const contains = [];
-    for (const entry of entries) {
+    for (const entry of entries)
+    {
         const nameLo = entry.name.toLowerCase();
         if (nameLo.startsWith(prefixLo))
             starts.push(entry);
@@ -706,19 +832,23 @@ function _filter(entries, prefix) {
     return [...starts, ...contains].map(_toCompletion);
 }
 
-function _attachTooltipEvents(data, cm) {
+function _attachTooltipEvents(data, cm)
+{
     if (!data || !data.list?.length)
         return data;
-    CodeMirror.on(data, 'select', (entry, el) => {
+    CodeMirror.on(data, 'select', (entry, el) =>
+    {
         if (entry?.fullArgs && el)
             _showTooltip(el, entry.displayName ?? entry.text, entry.fullArgs, entry.returns, entry.summary, entry.params);
         else
             _hideTooltip();
     });
     CodeMirror.on(data, 'close', _hideTooltip);
-    CodeMirror.on(data, 'pick', (entry) => {
+    CodeMirror.on(data, 'pick', (entry) =>
+    {
         _hideTooltip();
-        if (cm && entry?._isFn) {
+        if (cm && entry?._isFn)
+        {
             const pos = cm.getCursor();
             cm.setCursor({ line: pos.line, ch: pos.ch - 1 });
         }
@@ -726,8 +856,9 @@ function _attachTooltipEvents(data, cm) {
     return data;
 }
 
-/** @param {any} cm @param {string} kind */
-function _getSelectedTriggers(cm) {
+/** @param {any} cm */
+function _getSelectedTriggers(cm)
+{
     const wrapper = cm?.getWrapperElement?.();
     if (!wrapper)
         return null;
@@ -735,8 +866,10 @@ function _getSelectedTriggers(cm) {
     if (!form)
         return null;
     const selected = new Set();
-    for (const checkbox of form.querySelectorAll('input[type="checkbox"][name^="trigger."]')) {
-        if (checkbox.checked) {
+    for (const checkbox of form.querySelectorAll('input[type="checkbox"][name^="trigger."]'))
+    {
+        if (checkbox.checked)
+        {
             const triggerName = checkbox.name.slice('trigger.'.length);
             if (triggerName)
                 selected.add(triggerName);
@@ -745,27 +878,33 @@ function _getSelectedTriggers(cm) {
     return selected.size > 0 ? selected : null;
 }
 
-function _filterTriggerManifestByForm(cm) {
+function _filterTriggerManifestByForm(cm)
+{
     const selected = _getSelectedTriggers(cm);
     if (!selected)
         return TRIGGER_MANIFEST;
     const allowed = new Set(COMMON_TRIGGER_FIELDS);
-    for (const triggerName of selected) {
+    for (const triggerName of selected)
+    {
         const fields = TRIGGER_FIELDS_BY_TRIGGER[triggerName];
         if (fields)
+        {
             for (const fieldName of fields)
                 allowed.add(fieldName);
+        }
     }
     return TRIGGER_MANIFEST.filter((entry) => allowed.has(entry.name));
 }
 
-function _hint(cm, kind) {
+function _hint(cm, kind)
+{
     const cur = cm.getCursor();
     const line = cm.getLine(cur.line);
     const before = line.slice(0, cur.ch);
 
     const apiMatch = before.match(/\bapi\.(\w*)$/);
-    if (apiMatch) {
+    if (apiMatch)
+    {
         const prefix = apiMatch[1];
         return _attachTooltipEvents({
             list: _filter(_getApiList(), prefix),
@@ -775,10 +914,17 @@ function _hint(cm, kind) {
     }
 
     const triggerObj = TRIGGER_OBJECT_BY_KIND[kind];
-    if (triggerObj) {
-        const re = new RegExp(`\\b${triggerObj}\\.(\\w*)$`);
+    if (triggerObj)
+    {
+        let re = _triggerReCache.get(triggerObj);
+        if (!re)
+        {
+            re = new RegExp(`\\b${triggerObj}\\.(\\w*)$`);
+            _triggerReCache.set(triggerObj, re);
+        }
         const trigMatch = before.match(re);
-        if (trigMatch) {
+        if (trigMatch)
+        {
             const prefix = trigMatch[1];
             const filtered = _filterTriggerManifestByForm(cm);
             return _attachTooltipEvents({
@@ -790,14 +936,17 @@ function _hint(cm, kind) {
     }
 
     const chainMatch = before.match(/(\w+(?:\.\w+)*)\.(\w*)$/);
-    if (chainMatch) {
+    if (chainMatch)
+    {
         const chain = chainMatch[1].split('.');
         const root = chain[0];
         const startType = VAR_TYPES[root];
-        if (startType) {
+        if (startType)
+        {
             const finalType = _walkType(startType, chain.slice(1));
             const fields = finalType ? _typeFieldsAsManifest(finalType) : null;
-            if (fields) {
+            if (fields)
+            {
                 const prefix = chainMatch[2];
                 return _attachTooltipEvents({
                     list: _filter(fields, prefix),
@@ -826,10 +975,10 @@ function _hint(cm, kind) {
  * @param {any} cm
  * @param {'evaluate'|'activationCode'|'onInit'|'onMessage'|'startup'} [kind]
  */
-// Lazy-load optional CodeMirror addons (autoCloseBrackets, match-highlighter).
-// Loading from module.json fails if _CodeMirror isn't loaded yet, so do it on demand.
+// Lazy-load optional addons (autoCloseBrackets, match-highlighter): module.json load fails before _CodeMirror exists.
 let _extraAddonsPromise = null;
-function _ensureExtraAddons() {
+function _ensureExtraAddons()
+{
     if (_extraAddonsPromise)
         return _extraAddonsPromise;
     if (typeof CodeMirror === 'undefined')
@@ -837,7 +986,8 @@ function _ensureExtraAddons() {
     const cmModule = game.modules.get('_CodeMirror');
     if (!cmModule?.active)
         return Promise.resolve(false);
-    const load = (src) => new Promise((resolve) => {
+    const load = (src) => new Promise((resolve) =>
+    {
         const s = document.createElement('script');
         s.src = src;
         s.async = false;
@@ -845,7 +995,8 @@ function _ensureExtraAddons() {
         s.onerror = () => resolve(false);
         document.head.appendChild(s);
     });
-    const loadCss = (href) => {
+    const loadCss = (href) =>
+    {
         if (document.querySelector(`link[href="${href}"]`))
             return;
         const l = document.createElement('link');
@@ -855,7 +1006,8 @@ function _ensureExtraAddons() {
     };
     loadCss('/modules/_CodeMirror/addon/dialog/dialog.css');
     loadCss('/modules/_CodeMirror/addon/fold/foldgutter.css');
-    _extraAddonsPromise = (async () => {
+    _extraAddonsPromise = (async () =>
+    {
         const closeOk = await load('/modules/_CodeMirror/addon/edit/closebrackets.js');
         const cursorOk = await load('/modules/_CodeMirror/addon/search/searchcursor.js');
         const matchOk = cursorOk && await load('/modules/_CodeMirror/addon/search/match-highlighter.js');
@@ -871,27 +1023,46 @@ function _ensureExtraAddons() {
     return _extraAddonsPromise;
 }
 
-export function installLancerHints(cm, kind = 'activationCode') {
+export function installLancerHints(cm, kind = 'activationCode')
+{
     if (!cm || typeof CodeMirror === 'undefined' || !CodeMirror.showHint)
         return;
-    _ensureExtraAddons().then((flags) => {
-        if (flags.closeOk) {
-            try { cm.setOption('autoCloseBrackets', true); } catch { /* addon missing */ }
+    _ensureExtraAddons().then((flags) =>
+    {
+        if (flags.closeOk)
+        {
+            try
+            {
+                cm.setOption('autoCloseBrackets', true);
+            }
+            catch
+            { /* addon missing */ }
         }
-        if (flags.matchOk) {
-            try { cm.setOption('highlightSelectionMatches', { showToken: /\w/ }); } catch { /* addon missing */ }
+        if (flags.matchOk)
+        {
+            try
+            {
+                cm.setOption('highlightSelectionMatches', { showToken: /\w/ });
+            }
+            catch
+            { /* addon missing */ }
         }
-        if (flags.foldOk) {
-            try {
+        if (flags.foldOk)
+        {
+            try
+            {
                 cm.setOption('foldGutter', true);
                 cm.setOption('gutters', ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']);
-            } catch { /* addon missing */ }
+            }
+            catch
+            { /* addon missing */ }
         }
-        // Bind Ctrl-/ (toggle line comment), Ctrl-F (search) — keymaps are no-ops if the addon isn't loaded.
+        // Bind Ctrl-/ (toggle line comment), Ctrl-F (search): keymaps are no-ops if the addon isn't loaded.
         const extra = { ...(cm.getOption('extraKeys') || {}) };
         if (flags.commentOk)
-            extra['Ctrl-/'] = (c) => c.toggleComment();
-        if (flags.searchOk) {
+            extra['Ctrl-/'] = (cm) => cm.toggleComment();
+        if (flags.searchOk)
+        {
             extra['Ctrl-F'] = 'findPersistent';
             extra['Ctrl-G'] = 'findNext';
             extra['Shift-Ctrl-G'] = 'findPrev';
@@ -907,7 +1078,8 @@ export function installLancerHints(cm, kind = 'activationCode') {
         ...prev,
         'Alt-Enter': trigger,
     });
-    cm.on('inputRead', (_cm, change) => {
+    cm.on('inputRead', (_cm, change) =>
+    {
         const ch = change.text?.[0] ?? '';
         if (!ch)
             return;
@@ -918,13 +1090,20 @@ export function installLancerHints(cm, kind = 'activationCode') {
     _installLancerSignatureTooltip(cm);
 }
 
-function _installLancerSignatureTooltip(cm) {
+function _installLancerSignatureTooltip(cm)
+{
     let tip = null;
-    const hide = () => {
-        if (tip) { tip.remove(); tip = null; }
+    const hide = () =>
+    {
+        if (tip)
+        {
+            tip.remove(); tip = null;
+        }
     };
-    const show = (text, x, y) => {
-        if (!tip) {
+    const show = (text, x, y) =>
+    {
+        if (!tip)
+        {
             tip = document.createElement('div');
             tip.className = 'la-cm-sigtip';
             tip.style.cssText = 'position:fixed;z-index:99999;background:#1a1a1a;border:1px solid #555;color:#e8a020;font-family:monospace;font-size:0.78em;padding:3px 6px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap;';
@@ -937,43 +1116,55 @@ function _installLancerSignatureTooltip(cm) {
         tip.style.left = left + 'px';
         tip.style.top = top + 'px';
     };
-    cm.on('cursorActivity', () => {
+    cm.on('cursorActivity', () =>
+    {
         const cur = cm.getCursor();
         const line = cm.getLine(cur.line) || '';
         const upto = line.slice(0, cur.ch);
         // Match: api.fnName( ... cursor here, no close paren yet on this line segment
-        const m = upto.match(/api\.(\w+)\([^)]*$/);
-        if (!m) { hide(); return; }
-        const name = m[1];
+        const sigMatch = upto.match(/api\.(\w+)\([^)]*$/);
+        if (!sigMatch)
+        {
+            hide(); return;
+        }
+        const name = sigMatch[1];
         const sig = SIG_BY_NAME.get(name);
-        const ret = RETURNS_BY_NAME.get(name);
-        if (!sig) { hide(); return; }
-        const text = `${name}${sig}${ret ? ` → ${ret}` : ''}`;
+        const returnType = RETURNS_BY_NAME.get(name);
+        if (!sig)
+        {
+            hide(); return;
+        }
+        const text = `${name}${sig}${returnType ? ` → ${returnType}` : ''}`;
         const coord = cm.cursorCoords(true, 'window');
         show(text, coord.left, coord.top);
     });
     cm.on('blur', hide);
-    cm.on('focus', () => { /* keep hidden until cursor moves */ });
+    cm.on('focus', () =>
+    { /* keep hidden until cursor moves */ });
 }
 
-function _installLancerArgOverlay(cm, kind) {
+function _installLancerArgOverlay(cm, kind)
+{
     const params = PARAMS_BY_KIND[kind] ?? [];
     if (!params.length)
         return;
     _ensureLancerArgStyle();
     const paramRe = new RegExp(`\\b(${params.join('|')})\\b`);
     cm.addOverlay({
-        token: (stream) => {
+        token: (stream) =>
+        {
             if (stream.match(paramRe))
                 return 'la-arg';
-            while (stream.next() != null && !paramRe.test(stream.peek() ?? '')) { /* advance */ }
+            while (stream.next() != null && !paramRe.test(stream.peek() ?? ''))
+            { /* advance */ }
             return null;
         }
     });
 }
 
 let _argStyleInjected = false;
-function _ensureLancerArgStyle() {
+function _ensureLancerArgStyle()
+{
     if (_argStyleInjected)
         return;
     _argStyleInjected = true;
@@ -982,6 +1173,7 @@ function _ensureLancerArgStyle() {
     document.head.appendChild(style);
 }
 
-export function refreshLancerHintCache() {
+export function refreshLancerHintCache()
+{
     _apiCache = null;
 }

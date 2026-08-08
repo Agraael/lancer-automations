@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-When a token dies, the module leaves a wreck where it stood. What that wreck is, a token or a flat tile, whether it blocks the field, and how it looks and sounds, is set per category and per token, and a wreck can be resurrected back into the original.
+When a token dies, the module leaves a wreck where it stood. Per category and per token you set what it is (token or flat tile), whether it blocks the field, and how it looks and sounds. Wrecks can be resurrected back into the original.
 
 ---
 

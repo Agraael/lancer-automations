@@ -24,7 +24,7 @@ A choice card pauses and waits for a player to pick. `startChoiceCard` has four 
 
 <img align="right" src="../img/it-stacking.png" width="45%"/>
 
-Lancer shows one roll card at a time, and so do these. When several fire at once (an area attack hitting five tokens, or a pile of reactions), they queue instead of overwriting each other: **attack, damage, and stat-roll** cards and the interactive cards above all wait their turn. A badge on the active card counts how many are still queued.
+Lancer shows one roll card at a time, and so do these. When several fire at once (an area attack hitting five tokens, or a pile of reactions), they queue instead of overwriting each other, including **attack, damage, and stat-roll** cards and the interactive cards above. A badge on the active card counts how many are still queued.
 
 <br clear="right"/>
 
@@ -33,6 +33,22 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 <img align="right" src="../img/it-target-picker.png" width="45%"/>
 
 **chooseToken** highlights the valid tokens in range and asks you to pick one or more, with an optional **filter** (allies only, for example). For area effects it switches to **blast / cone / line / burst**: place the shape on the canvas, **Ctrl+wheel** to rotate, and toggle **elevation-aware**, **auto-elevation**, and **propagation** (flood-fill that terrain blocks). **pickSingleTargetToggle** skips the card: click a token to toggle it as your target.
+
+<br clear="right"/>
+
+## HASE contest
+
+<img align="right" src="../img/it-contest.png" width="45%"/>
+
+**openHaseContestCard** sets up a contest between two tokens: pick each contender and its HASE stat, roll both sides, and compare. It's reachable from a token's **Contest** entry under Skills, and Search, Jockey, Grapple, and Break Free all run through it.
+
+<br clear="right"/>
+
+## Force check
+
+<img align="right" src="../vid/it-forcecheck.gif" width="45%"/>
+
+**openForceCheckCard** sends a HASE check to a batch of tokens: pick the skill, pick the targets like an attack roll, and each token's owner rolls it themselves. Give it a save-vs token and every check becomes a save against that actor's SAVE, pre-targeted in the roller's HUD. It's reachable from a token's **Force Check** entry under Skills.
 
 <br clear="right"/>
 
@@ -48,7 +64,7 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <img align="right" src="../img/it-knockback.png" width="45%"/>
 
-**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage. **placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination.
+**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage. **placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Shift+click** waypoints for multi-leg paths.
 
 <br clear="right"/>
 
@@ -56,9 +72,18 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <img align="right" src="../img/it-attack-target.png" width="45%"/>
 
-- **Target on an attack** - the attack HUD gets a full target / AoE picker; see [Attack Targeting](./ATTACK_TARGETING.md).
-- **Target on a check** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) lets you pick a token to roll against, using its save or matching stat as the difficulty.
-- **Range on the attack card** - **`rangePreviewOnAttackCard`** shows the attacker's range on the canvas when the attack card opens.
+The attack HUD's target and area buttons are covered in [Advanced Targeting and Measurement](./ATTACK_TARGETING.md#the-targeting-buttons). Two related settings:
+
+- **Target on a check** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) gets the same target button as an attack, using the picked token's save or matching stat as the difficulty.
+- **Range on the attack card** - **`rangePreviewOnAttackCard`** shows the attacker's reach on the canvas when the attack card opens, following the **Thrown** box for a thrown weapon.
+
+<br clear="right"/>
+
+## Colors
+
+<img align="right" src="../img/it-colors.png" width="45%"/>
+
+The **Colors** settings tab lets each player recolor the targeting and range-glow palette, with a button to reset them.
 
 <br clear="right"/>
 
@@ -81,13 +106,17 @@ Delayed appearance / reinforcement is in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUT
 
 <br clear="right"/>
 
-## Extras dialog
+## Add Extra
 
 <img align="right" src="../img/it-extras.png" width="45%"/>
 
-A GM dialog to attach **custom actions** (activation type, plus charges, recharge, and limited / per-turn / per-round uses) and **extra deployables** to an actor, without writing code. Open it from the TAH Utility menu.
+**Add Extra** attaches **custom actions** (activation type, plus charges, recharge, and limited / per-turn / per-round uses) and **extra deployables** to an actor, no code needed. It works on a token's actor, on the prototype actor, or directly on an **item** - and only lists the entries you create here.
+
+Open it from the **Add Extra** button on the actor or item sheet header, or from **TAH > Utility > Misc > Add Extra**. Anything attached to an item is stored on the item and follows it: whoever carries it gets the extras.
 
 <br clear="right"/>
+
+<img src="../vid/it-extras.gif" width="70%"/>
 
 ## Overlap token picker
 
@@ -99,4 +128,4 @@ With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows
 
 ## Share Interactive Tools
 
-With **`displayToolsToOthers`** on (the default), your in-progress tools, target picking, zone and token placement, and movement traces, show to other players as a faded ghost of the same shapes and highlights, so the table can follow what you're aiming. A hidden caster or hidden tokens are never broadcast.
+With **`displayToolsToOthers`** on (the default), your in-progress tools, target picking, zone/token placement, and movement traces show to other players as a faded ghost of the same shapes, so the table can follow what you're aiming at. A hidden caster or hidden tokens are never broadcast.

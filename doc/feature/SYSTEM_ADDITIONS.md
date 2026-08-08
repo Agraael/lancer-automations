@@ -18,7 +18,7 @@ Right-click a mech weapon, mech system, NPC feature, or weapon mod on its sheet 
 
 <img align="right" src="../img/sa-ammo.png" width="45%"/>
 
-The module handles a system's **ammo** a bit better, surfacing each entry on the system's sheet with a one-click **USE**.
+The module surfaces each of a system's **ammo** entries on its sheet with a one-click **USE**.
 
 <br clear="right"/>
 
@@ -34,6 +34,10 @@ A system's ammo is set up on its item sheet. The **Apply Fixes (LCP Data)** tool
 
 **Guardian**, **Bulwark**, and **Infection** are always registered. The **`additionalStatuses`** toggle (Statuses & FX tab) adds around seventeen more beyond Lancer's defaults, like Immovable, Throttled, Climber, Brace, Dazed, Resist All, and Aided.
 
+These are mine and predate the module by years: states LCPs and alternate structure tables describe but never register as statuses. Safe to leave off, automations that use them just skip.
+
+Some carry mechanics: **Resist All** sets every resistance, **Shredded** zeroes armor + resistances, **Throttled** pre-checks Half Damage on the damage card. Dead Rings LCP: **Stripped** zeroes armor, **Staggered** locks actions.
+
 <br clear="right"/>
 
 ## Permanent statuses
@@ -43,3 +47,9 @@ A status whose duration is set to **permanent** (in the [Effect Manager](./EFFEC
 ## Extra trackable attributes
 
 The module exposes **move** and **reaction** from the action tracker, plus **infection**, as token resource-bar options in the Token Config Resources tab.
+
+## Self-heat resistance
+
+With **`resistSelfHeat`** on (Combat tab, default on), a mech that resists Heat takes half of its own self-inflicted heat.
+
+With **`convertHeatToEnergyOnHeatless`** on (default on), Heat damage becomes Energy against targets with no heat capacity (pilots, biological NPCs), the way Lancer already does for pilots.

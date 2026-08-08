@@ -1,6 +1,9 @@
 /* global $, game */
 
-function relTime(/** @type {number} */ ts) {
+import { tahScale } from './item-helpers.js';
+
+function relTime(/** @type {number} */ ts)
+{
     const diff = (Date.now() - ts) / 1000;
     if (diff < 60)
         return `${Math.floor(diff)}s ago`;
@@ -11,8 +14,10 @@ function relTime(/** @type {number} */ ts) {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export class LogPanel {
-    constructor({ actor, token, el, cancelCollapse, scheduleCollapse }) {
+export class LogPanel
+{
+    constructor({ actor, token, el, cancelCollapse, scheduleCollapse })
+    {
         this._actor            = actor;
         this._token            = token;
         this._el               = el;
@@ -23,27 +28,34 @@ export class LogPanel {
         this._anchor = null;
     }
 
-    get isVisible() {
+    get isVisible()
+    {
         return this._panel?.is(':visible') ?? false;
     }
 
-    close() {
-        if (this._panel) {
+    close()
+    {
+        if (this._panel)
+        {
             const panel = this._panel;
             this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function () {
+            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function ()
+            {
                 $(this).remove();
             });
         }
     }
 
-    refresh() {
+    refresh()
+    {
         if (this._panel && this._anchor)
             this.open(this._anchor);
     }
 
-    open(anchorRow) {
-        if (this._panel) {
+    open(anchorRow)
+    {
+        if (this._panel)
+        {
             this._panel.stop(true).remove();
             this._panel = null;
         }
@@ -57,7 +69,8 @@ export class LogPanel {
         const actorId = actor.id;
 
         const messages = /** @type {any[]} */ ([...game.messages.values()])
-            .filter(m => {
+            .filter(m =>
+            {
                 const sp = m.speaker;
                 if (tokenId && sp.token === tokenId)
                     return true;
@@ -79,10 +92,12 @@ export class LogPanel {
         // Scrollable list
         const list = $(`<div class="la-hud-log-list"></div>`);
 
-        if (!messages.length) {
+        if (!messages.length)
             list.append(`<div class="la-log-empty">No log entries.</div>`);
-        } else {
-            for (const msg of messages) {
+        else
+        {
+            for (const msg of messages)
+            {
                 const div = document.createElement('div');
                 div.innerHTML = msg.content;
                 const headerEl = div.querySelector('.lancer-header, .lancer-stat-header, .card-header, h3');
@@ -97,21 +112,23 @@ export class LogPanel {
                     `<div class="la-log-content">${msg.content}</div>` +
                     `</div>`);
 
-                row.on('mouseenter', () => {
+                row.on('mouseenter', () =>
+                {
                     this._cancelCollapse();
                     row.css('background', '#ffe0e0');
                 });
-                row.on('mouseleave', () => {
+                row.on('mouseleave', () =>
+                {
                     row.css('background', '');
                 });
-                row.on('click', (ev) => {
+                row.on('click', (ev) =>
+                {
                     ev.stopPropagation();
                     const content = row.find('.la-log-content');
-                    if (content.css('max-height') === '0px') {
+                    if (content.css('max-height') === '0px')
                         content.css({ 'max-height': '500px', 'margin-top': '4px' });
-                    } else {
+                    else
                         content.css({ 'max-height': '0', 'margin-top': '0' });
-                    }
                 });
 
                 list.append(row);
@@ -121,10 +138,11 @@ export class LogPanel {
         panel.append(list);
 
         // Position to the right of the column containing the anchor row
-        const topInHud  = anchorRow.offset().top - this._el.offset().top;
+        const scale = tahScale();
+        const topInHud  = (anchorRow.offset().top - this._el.offset().top) / scale;
         const parentCol = anchorRow.closest('[class*="la-hud-col"]').length ? anchorRow.closest('[class*="la-hud-col"]') : anchorRow.parent();
         const leftInHud = parentCol.length
-            ? (parentCol.offset().left - this._el.offset().left + /** @type {number} */ (parentCol.outerWidth()))
+            ? ((parentCol.offset().left - this._el.offset().left) / scale + /** @type {number} */ (parentCol.outerWidth()))
             : /** @type {number} */ (/** @type {any} */ (this._el.children().first()).outerWidth());
         panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
 

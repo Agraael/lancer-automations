@@ -1,6 +1,6 @@
 /* global game, ui, Hooks */
 
-import { altRollStress, insertEngheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
+import { altRollStress, insertEngineeringCheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
 import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow } from "./structure.js";
 
 let _flowSteps = null;
@@ -29,7 +29,8 @@ const NEW_FLOW_KEYS = [
     "StressEngineeringCheckFlow", "MeltdownFlow", "CriticalMeltdownFlow"
 ];
 
-async function initSecondaryStructureCrushingHit(state) {
+async function initSecondaryStructureCrushingHit(state)
+{
     state.data = {
         type: "secondary_structure",
         title: "Equipment Destruction",
@@ -40,7 +41,8 @@ async function initSecondaryStructureCrushingHit(state) {
 }
 
 // Defer install to ready so the setting gate works and we don't stomp on other modules.
-export function registerAltStructFlowSteps(flowSteps, flows) {
+export function registerAltStructFlowSteps(flowSteps, flows)
+{
     _flowSteps = flowSteps;
     _flows = flows;
     _preInstallSnapshot.clear();
@@ -50,7 +52,8 @@ export function registerAltStructFlowSteps(flowSteps, flows) {
     _preRegisterCollisions.flows = NEW_FLOW_KEYS.filter(k => flows.get(k) != null);
 }
 
-function setupHooks(flowSteps, flows) {
+function setupHooks(flowSteps, flows)
+{
     flowSteps.set("npcOneStructStep", npcOneStructStep);
     flowSteps.set("rollStructureTable", altRollStructure);
     flowSteps.set("checkStructureMultipleOnes", structCheckMultipleOnes);
@@ -66,7 +69,8 @@ function setupHooks(flowSteps, flows) {
     flowSteps.set("initSecondaryStructureCrushingHit", initSecondaryStructureCrushingHit);
 
     const StructureFlow = flows.get("StructureFlow");
-    if (StructureFlow?.steps) {
+    if (StructureFlow?.steps)
+    {
         const idx = StructureFlow.steps.indexOf("printStructureCard");
         if (idx > -1)
             StructureFlow.steps.splice(idx, 0, "applyStructureEffects");
@@ -74,7 +78,8 @@ function setupHooks(flowSteps, flows) {
     flows.get("StructureFlow")?.insertStepBefore?.("preStructureRollChecks", "npcOneStructStep");
 
     const SecondaryStructureFlow = flows.get("SecondaryStructureFlow");
-    if (SecondaryStructureFlow?.steps) {
+    if (SecondaryStructureFlow?.steps)
+    {
         const idx = SecondaryStructureFlow.steps.indexOf("printSecondaryStructureCard");
         if (idx > -1)
             SecondaryStructureFlow.steps.splice(idx + 1, 0, "selectDestructionTargetDirectHitFallback", "printGenericCard");
@@ -90,7 +95,7 @@ function setupHooks(flowSteps, flows) {
 
     flowSteps.set("rollOverheatTable", altRollStress);
     flowSteps.set("checkOverheatMultipleOnes", stressCheckMultipleOnes);
-    flowSteps.set("overheatInsertEngCheckButton", insertEngheckButton);
+    flowSteps.set("overheatInsertEngCheckButton", insertEngineeringCheckButton);
     flowSteps.set("applyStressEffects", applyStressEffects);
     flowSteps.set("handleStressEngineeringCheckResult", handleStressEngineeringCheckResult);
     flowSteps.set("rollMeltdownCountdown", rollMeltdownCountdown);
@@ -98,7 +103,8 @@ function setupHooks(flowSteps, flows) {
     flowSteps.set("executeCriticalMeltdown", executeCriticalMeltdown);
 
     const OverheatFlow = flows.get("OverheatFlow");
-    if (OverheatFlow?.steps) {
+    if (OverheatFlow?.steps)
+    {
         const idx = OverheatFlow.steps.indexOf("printOverheatCard");
         if (idx > -1)
             OverheatFlow.steps.splice(idx, 0, "applyStressEffects");
@@ -109,9 +115,11 @@ function setupHooks(flowSteps, flows) {
     flows.set("CriticalMeltdownFlow", { name: "Critical Reactor Meltdown", steps: ["executeCriticalMeltdown", "printGenericCard"] });
 }
 
-function _detectPostRegisterConflicts(flowSteps) {
+function _detectPostRegisterConflicts(flowSteps)
+{
     const conflicts = [];
-    for (const key of ALL_STEP_KEYS) {
+    for (const key of ALL_STEP_KEYS)
+    {
         const snapshot = _preInstallSnapshot.get(key);
         const current = flowSteps.get(key) ?? null;
         if (snapshot !== current)
@@ -121,9 +129,11 @@ function _detectPostRegisterConflicts(flowSteps) {
 }
 
 // Stock Lancer step fns are named after their key; a mismatch means someone replaced it.
-function _detectPreRegisterOverrideHijacks() {
+function _detectPreRegisterOverrideHijacks()
+{
     const hijacked = [];
-    for (const key of OVERRIDE_STEP_KEYS) {
+    for (const key of OVERRIDE_STEP_KEYS)
+    {
         const fn = _preInstallSnapshot.get(key);
         if (typeof fn !== 'function')
             continue;
@@ -133,20 +143,24 @@ function _detectPreRegisterOverrideHijacks() {
     return hijacked;
 }
 
-export function initAltStructReady() {
+export function initAltStructReady()
+{
     const hasConflict = game.modules.get('lancer-alt-structure')?.active;
     const isEnabled = game.settings.get('lancer-automations', 'enableAltStruct');
 
     // One-struct NPCs is a separate opt-in from the full alt-struct rules.
-    if (!isEnabled) {
-        if (game.settings.get('lancer-automations', 'enableOneStructNpc')) {
+    if (!isEnabled)
+    {
+        if (game.settings.get('lancer-automations', 'enableOneStructNpc'))
+        {
             _flowSteps?.set('npcOneStructStep', npcOneStructStep);
             _flows?.get('StructureFlow')?.insertStepBefore?.('preStructureRollChecks', 'npcOneStructStep');
         }
         return;
     }
 
-    if (hasConflict) {
+    if (hasConflict)
+    {
         ui.notifications.warn(
             "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active - integrated version will not load. Disable one of them."
         );
@@ -159,7 +173,8 @@ export function initAltStructReady() {
     const preHijacks = _detectPreRegisterOverrideHijacks();
 
     const totalConflicts = preSteps.length + preFlows.length + postConflicts.length + preHijacks.length;
-    if (totalConflicts > 0) {
+    if (totalConflicts > 0)
+    {
         const parts = [];
         if (preSteps.length)
             parts.push(`new flow step(s) already claimed: ${preSteps.join(", ")}`);
@@ -168,7 +183,7 @@ export function initAltStructReady() {
         if (postConflicts.length)
             parts.push(`override step(s) modified after us: ${postConflicts.join(", ")}`);
         if (preHijacks.length)
-            parts.push(`override step(s) already replaced before us: ${preHijacks.map(h => `${h.key} (by ${h.byFunctionName})`).join(", ")}`);
+            parts.push(`override step(s) already replaced before us: ${preHijacks.map(conflict => `${conflict.key} (by ${conflict.byFunctionName})`).join(", ")}`);
         ui.notifications.warn(
             `Lancer Automations (Alt Structure): flow conflict detected. The other module's changes will be overwritten. ${parts.join(" | ")}. See console.`,
             { permanent: true }
@@ -181,10 +196,12 @@ export function initAltStructReady() {
 
     // Chain our handler in front of the original noStressRemaining.
     const originalNoStressRemaining = _flowSteps?.get("noStressRemaining");
-    if (!originalNoStressRemaining) {
+    if (!originalNoStressRemaining)
         console.warn("lancer-automations (alt-struct): noStressRemaining flow step not found");
-    } else {
-        _flowSteps.set("noStressRemaining", async function(state) {
+    else
+    {
+        _flowSteps.set("noStressRemaining", async function(state)
+        {
             await handleNoStressRemaining(state);
             return await originalNoStressRemaining(state);
         });
@@ -199,45 +216,53 @@ export function initAltStructReady() {
 
 let _chatHookRegistered = false;
 
-function _runAltStructFlow(btn) {
+function _runAltStructFlow(btn)
+{
     const flowType = btn.dataset.flowType;
     const actorId = btn.dataset.actorId;
-    if (!flowType || !actorId) {
+    if (!flowType || !actorId)
+    {
         ui.notifications?.error("Missing flow type or actor ID on alt-struct button.");
         return;
     }
     const Flow = /** @type {any} */ (game)?.lancer?.Flow;
     const flowDef = /** @type {any} */ (game)?.lancer?.flows?.get(flowType);
-    if (!Flow || !flowDef?.steps) {
+    if (!Flow || !flowDef?.steps)
+    {
         ui.notifications?.error(`Alt-struct flow "${flowType}" not registered.`);
         return;
     }
-    const data = { ...btn.dataset };
-    delete data.flowType;
-    delete data.actorId;
-    if (data.checkType) {
-        data.type = "stat";
-        data.path = `system.${data.checkType}`;
-        const cap = data.checkType[0].toUpperCase() + data.checkType.slice(1);
-        data.title = data.title ?? `${cap} Check`;
-        data.bonus = 0;
-        data.roll_str = "1d20";
+    const flowParams = { ...btn.dataset };
+    delete flowParams.flowType;
+    delete flowParams.actorId;
+    if (flowParams.checkType)
+    {
+        flowParams.type = "stat";
+        flowParams.path = `system.${flowParams.checkType}`;
+        const capitalizedCheckType = flowParams.checkType[0].toUpperCase() + flowParams.checkType.slice(1);
+        flowParams.title = flowParams.title ?? `${capitalizedCheckType} Check`;
+        flowParams.bonus = 0;
+        flowParams.roll_str = "1d20";
     }
-    class AltStructFlow extends Flow {}
+    class AltStructFlow extends Flow
+    {}
     AltStructFlow.steps = flowDef.steps;
     Object.defineProperty(AltStructFlow, "name", { value: flowType });
-    new AltStructFlow(actorId, data).begin();
+    new AltStructFlow(actorId, flowParams).begin();
 }
 
-function _registerChatHook() {
-    if (_chatHookRegistered) {
+function _registerChatHook()
+{
+    if (_chatHookRegistered)
         return;
-    }
     _chatHookRegistered = true;
-    Hooks.on("renderChatMessageHTML", (_app, htmlOrEl) => {
+    Hooks.on("renderChatMessageHTML", (_app, htmlOrEl) =>
+    {
         const root = htmlOrEl instanceof HTMLElement ? htmlOrEl : htmlOrEl[0];
-        root?.querySelectorAll(".alt-struct-flow-button").forEach(btn => {
-            btn.addEventListener("click", function (ev) {
+        root?.querySelectorAll(".alt-struct-flow-button").forEach(btn =>
+        {
+            btn.addEventListener("click", function (ev)
+            {
                 ev.stopPropagation();
                 _runAltStructFlow(this);
             });

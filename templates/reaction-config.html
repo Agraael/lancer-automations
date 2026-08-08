@@ -29,7 +29,7 @@
                 <button type="button" class="lancer-action-btn import-pack-btn"><i class="fas fa-file-import"></i>
                     Import Pack</button>
             </div>
-            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">Drag items onto folder headers to
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">Drag items onto folder headers to
                 organize.</p>
             <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
@@ -65,7 +65,7 @@
                             <span class="col-name" style="flex: 4;">
                                 <strong>{{this.folderName}}</strong>
                                 <span
-                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.items.length}})</span>
+                                    style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.items.length}})</span>
                             </span>
                             <span class="col-triggers" style="flex: 1;"></span>
                             <span class="col-controls" style="flex: 0.5; text-align: right;">
@@ -88,11 +88,11 @@
                                     <span class="col-name">
                                         <strong>{{this.name}}</strong>
                                         {{#if this.comments}}<span
-                                            style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                            style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                         <span
-                                            style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                            style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.reactions.length}})</span>
                                         <br><span
-                                            style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                            style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                                     </span>
                                     <span class="col-triggers">{{this.triggers}}</span>
                                     <span class="col-controls"></span>
@@ -113,9 +113,9 @@
                                         <span class="col-name">
                                             <strong>{{this.name}}</strong>
                                             {{#if this.comments}}<span
-                                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                                style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
-                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                                style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                                         </span>
                                         <span class="col-triggers">{{this.triggers}}</span>
                                         <span class="col-controls">
@@ -141,16 +141,16 @@
                                     {{#if this.isGeneral}}
                                     <strong>{{this.name}}</strong>
                                     {{#if this.comments}}<span
-                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
                                     <strong>{{this.name}}</strong>
                                     {{#if this.comments}}<span
-                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span
-                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                        style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                                     {{/if}}
                                     {{#if this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                        style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls">
@@ -188,9 +188,9 @@
                             <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                             <span class="col-name">
                                 <strong>{{this.name}}</strong> <span
-                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                    style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.reactions.length}})</span>
                                 <br><span
-                                    style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                    style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                             </span>
                             <span class="col-triggers">{{this.triggers}}</span>
                             <span class="col-controls"></span>
@@ -211,9 +211,9 @@
                                 <span class="col-name">
                                     <strong>{{this.name}}</strong>
                                     {{#if this.comments}}<span
-                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{#if this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                        style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls">
@@ -238,16 +238,16 @@
                             {{#if this.isGeneral}}
                             <strong>{{this.name}}</strong>
                             {{#if this.comments}}<span
-                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                             {{else}}
                             <strong>{{this.name}}</strong>
                             {{#if this.comments}}<span
-                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                             <br><span
-                                style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                             {{/if}}
                             {{#if this.reactionPath}}<br><span
-                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                         </span>
                         <span class="col-triggers">{{this.triggers}}</span>
                         <span class="col-controls">
@@ -258,7 +258,7 @@
                     {{/if}}
                     {{else}}
                     {{#unless customFolders.length}}
-                    <p class="notes" style="text-align: center; color: #666;">No custom activations defined.</p>
+                    <p class="notes" style="text-align: center; color: var(--la-ink-dim);">No custom activations defined.</p>
                     {{/unless}}
                     {{/each}}
                 </div>
@@ -267,7 +267,7 @@
 
         <!-- DEFAULTS TAB -->
         <div class="tab" data-tab="defaults">
-            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">Default activations from the
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">Default activations from the
                 registry. Click copy to create an editable override.</p>
             <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
@@ -302,7 +302,7 @@
                             <span class="col-name" style="flex: 3;">
                                 <strong>{{this.folderName}}</strong>
                                 <span
-                                    style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.items.length}})</span>
+                                    style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.items.length}})</span>
                             </span>
                             <span class="col-triggers" style="flex: 2;"></span>
                             <span class="col-controls" style="flex: 0.5;"></span>
@@ -319,11 +319,11 @@
                                     <span class="col-name">
                                         <strong>{{this.name}}</strong>
                                         {{#if this.comments}}<span
-                                            style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                            style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                         <span
-                                            style="font-size: 0.8em; color: #888; margin-left: 5px;">({{this.reactions.length}})</span>
+                                            style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.reactions.length}})</span>
                                         <br><span
-                                            style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                            style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                                     </span>
                                     <span class="col-triggers">{{this.triggers}}</span>
                                     <span class="col-controls"></span>
@@ -344,9 +344,9 @@
                                         <span class="col-name">
                                             <strong>{{this.name}}</strong>
                                             {{#if this.comments}}<span
-                                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                                style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
-                                                style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                                style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                                         </span>
                                         <span class="col-triggers">{{this.triggers}}</span>
                                         <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i
@@ -370,16 +370,16 @@
                                     {{#if this.isGeneral}}
                                     <strong>{{this.name}}</strong>
                                     {{#if this.comments}}<span
-                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
                                     <strong>{{this.name}}</strong>
                                     {{#if this.comments}}<span
-                                        style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
+                                        style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span
-                                        style="font-size:0.8em; color: #888; font-family: monospace;">{{this.subname}}</span>
+                                        style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
                                     {{/if}}
                                     {{#if this.reactionPath}}<br><span
-                                        style="font-size:0.8em; color: #666;">{{this.reactionPath}}</span>{{/if}}
+                                        style="font-size:0.8em; color: var(--la-ink-dim);">{{this.reactionPath}}</span>{{/if}}
                                 </span>
                                 <span class="col-triggers">{{this.triggers}}</span>
                                 <span class="col-controls"><a class="copy-default" title="Copy to Custom"><i
@@ -400,7 +400,7 @@
                 <button type="button" class="lancer-action-btn add-script"><i class="fas fa-plus"></i> Add
                     Script</button>
             </div>
-            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: #444;">
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">
                 Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable
                 helpers, then access them in activations via <code>api.getUserHelper(name)</code>.
             </p>
@@ -429,7 +429,7 @@
                             <strong>{{this.name}}</strong>
                             {{#if this.builtin}}<span class="script-builtin-badge">built-in</span>{{/if}}
                             {{#if this.description}}<span
-                                style="font-size: 0.8em; color: #888; font-style: italic; margin-left: 5px;">({{this.description}})</span>{{/if}}
+                                style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.description}})</span>{{/if}}
                         </span>
                         <span class="col-triggers">On Ready</span>
                         <span class="col-controls">
@@ -440,7 +440,7 @@
                         </span>
                     </div>
                     {{else}}
-                    <p class="notes" style="text-align: center; color: #666; padding: 16px;">No startup scripts defined.
+                    <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">No startup scripts defined.
                     </p>
                     {{/each}}
                 </div>
@@ -499,14 +499,14 @@
     /* ===== Reaction Items ===== */
     .reaction-item {
         padding: 5px;
-        border-bottom: 1px solid #ddd;
-        color: #000;
+        border-bottom: 1px solid var(--la-edge);
+        color: var(--la-ink);
         transition: background 0.15s ease;
     }
 
     .reaction-item:nth-child(even),
     .reaction-group-container:nth-child(even) .group-header {
-        background: rgba(0, 0, 0, 0.03);
+        background: color-mix(in srgb, var(--la-ink), transparent 90%);
     }
 
     .reaction-group-container:nth-child(odd) .group-header {
@@ -520,13 +520,13 @@
     /* ===== Folder Headers ===== */
     .folder-header {
         cursor: pointer;
-        background: #e8e8e8;
+        background: color-mix(in srgb, var(--la-plate), #000 8%);
         border-bottom: 1px solid #ccc;
         font-weight: 600;
     }
 
     .folder-header:hover {
-        background: #ddd !important;
+        background: color-mix(in srgb, var(--la-plate), #000 14%) !important;
     }
 
     .folder-header .folder-expand-icon {
@@ -535,7 +535,7 @@
 
     .folder-header .rename-folder-btn,
     .folder-header .delete-folder-btn {
-        color: #666;
+        color: var(--la-ink-dim);
     }
 
     .folder-header .rename-folder-btn:hover,
@@ -550,7 +550,7 @@
         border: 1px solid #ccc;
         border-top: none;
         border-radius: 0 0 4px 4px;
-        background: #fafafa;
+        background: var(--la-plate);
     }
 
     /* ===== Filter Bar ===== */
@@ -558,7 +558,7 @@
     .filter-bar select {
         border: 2px solid #999;
         background: #fff;
-        color: #000;
+        color: var(--la-ink);
         border-radius: 4px;
         font-size: 12px;
     }
@@ -572,7 +572,7 @@
 
     /* ===== Controls ===== */
     .col-controls a {
-        color: #666;
+        color: var(--la-ink-dim);
         margin-left: 4px;
         transition: color 0.15s ease;
     }
@@ -617,8 +617,8 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: var(--primary-color);
-        border: 1px solid var(--primary-color);
+        color: var(--la-accent);
+        border: 1px solid var(--la-accent);
         border-radius: 3px;
         padding: 0 4px;
         margin-left: 5px;
@@ -628,6 +628,6 @@
 
     /* ===== Notes ===== */
     .notes {
-        color: #555;
+        color: var(--la-ink-dim);
     }
 </style>

@@ -1,16 +1,15 @@
 /**
- * StatusFX — TokenMagic visual effects for Lancer statuses
+ * StatusFX: TokenMagic visual effects for Lancer statuses
  */
 /*global TokenMagic */
 
 import { getIsoProvider } from '../setup/iso-settings.js';
+import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
-// ---------------------------------------------------------------------------
 // Effect definitions
-// ---------------------------------------------------------------------------
 
 const FX_DEFAULTS = {
     // Master toggle
@@ -49,49 +48,63 @@ const FX_DEFAULTS = {
     actionFX:         false,
 };
 
-function getConfig() {
-    try {
+function getConfig()
+{
+    try
+    {
         const stored = game.settings.get(MODULE_ID, SETTING_FX_CONFIG);
         return { ...FX_DEFAULTS, ...stored };
-    } catch {
+    }
+    catch
+    {
         return { ...FX_DEFAULTS };
     }
 }
 
-export function isActionFXEnabled() {
-    try {
+export function isActionFXEnabled()
+{
+    try
+    {
         return getConfig().actionFX !== false;
-    } catch {
+    }
+    catch
+    {
         return true;
     }
 }
 
-function isMasterEnabled() {
-    try {
+function isMasterEnabled()
+{
+    try
+    {
         return getConfig().master;
-    } catch {
+    }
+    catch
+    {
         return false;
     }
 }
 
-function isFXEnabled(key) {
+function isFXEnabled(key)
+{
     if (!isMasterEnabled())
         return false;
     return getConfig()[`fx_${key}`] ?? false;
 }
 
-function isAutoEnabled(key) {
+function isAutoEnabled(key)
+{
     if (!isMasterEnabled())
         return false;
     return getConfig()[`auto_${key}`] ?? false;
 }
 
-// ---------------------------------------------------------------------------
 // Config Window (FormApplication)
-// ---------------------------------------------------------------------------
 
-export class StatusFXConfig extends FormApplication {
-    static get defaultOptions() {
+export class StatusFXConfig extends FormApplication
+{
+    static get defaultOptions()
+    {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'la-statusfx-config',
             title: 'Lancer Automations — Status FX Configuration',
@@ -101,12 +114,16 @@ export class StatusFXConfig extends FormApplication {
         });
     }
 
-    getData() {
+    getData()
+    {
         const config = getConfig();
         let additionalStatuses = true;
-        try {
+        try
+        {
             additionalStatuses = game.settings.get(MODULE_ID, 'additionalStatuses');
-        } catch { /* setting may not be registered yet */ }
+        }
+        catch
+        { /* setting may not be registered yet */ }
         const hasWeaponFX = !!game.modules.get('lancer-weapon-fx')?.active;
         return {
             master: config.master,
@@ -148,33 +165,38 @@ export class StatusFXConfig extends FormApplication {
         };
     }
 
-    async _updateObject(_event, formData) {
+    async _updateObject(_event, formData)
+    {
         const config = getConfig();
-        for (const [key, value] of Object.entries(formData)) {
+        for (const [key, value] of Object.entries(formData))
+        {
             // additionalStatuses is saved separately below
-            if (key === 'additionalStatuses') {
+            if (key === 'additionalStatuses')
                 continue;
-            }
             config[key] = value;
         }
         await game.settings.set(MODULE_ID, SETTING_FX_CONFIG, config);
 
         // additionalStatuses is its own world setting, not part of statusFXConfig
-        if ('additionalStatuses' in formData) {
-            try {
+        if ('additionalStatuses' in formData)
+        {
+            try
+            {
                 await game.settings.set(MODULE_ID, 'additionalStatuses', !!formData.additionalStatuses);
-            } catch (e) {
+            }
+            catch (e)
+            {
                 console.warn(`${MODULE_ID} | Could not save additionalStatuses setting`, e);
             }
         }
 
         ui.notifications.info('StatusFX configuration saved.');
 
-        if (config.actionFX !== false && !game.modules.get('jb2a_patreon')?.active) {
+        if (config.actionFX !== false && !game.modules.get('jb2a_patreon')?.active)
             ui.notifications.warn('Some Action FX use JB2A Patreon assets. Without it, those effects are skipped.');
-        }
 
-        try {
+        try
+        {
             /** @type {any} */
             const dialogOpts = {
                 id: 'reload-world-confirm',
@@ -185,23 +207,24 @@ export class StatusFXConfig extends FormApplication {
                 content: `<p>${game.i18n.localize('SETTINGS.ReloadPromptBody')}</p>`,
             };
             const reload = await foundry.applications.api.DialogV2.confirm(dialogOpts);
-            if (reload) {
-                if (game.user.can('SETTINGS_MODIFY')) {
+            if (reload)
+            {
+                if (game.user.can('SETTINGS_MODIFY'))
                     game.socket.emit('reload');
-                }
                 foundry.utils.debouncedReload();
             }
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn(`${MODULE_ID} | reload-confirm dialog failed`, e);
         }
     }
 }
 
-// ---------------------------------------------------------------------------
 // Settings registration
-// ---------------------------------------------------------------------------
 
-export function registerStatusFXSettings() {
+export function registerStatusFXSettings()
+{
     // Hidden config store (full config object including master toggle)
     game.settings.register(MODULE_ID, SETTING_FX_CONFIG, {
         scope: 'world',
@@ -213,9 +236,7 @@ export function registerStatusFXSettings() {
 
 }
 
-// ---------------------------------------------------------------------------
 // TokenMagic Effect Definitions
-// ---------------------------------------------------------------------------
 
 const dangerZoneEffect = [
     {
@@ -883,12 +904,10 @@ const corePowerEffect = [
     }
 ];
 
-// ---------------------------------------------------------------------------
 // Low-quality variants
 // Used when statusFXConfig.lowQuality is on. Outline-only swaps for the
 // expensive bloom/glow presets. Filter ids kept identical so add/remove logic
 // in EFFECT_MAP keeps matching.
-// ---------------------------------------------------------------------------
 
 const dangerZoneEffectLite = [
     {
@@ -950,9 +969,7 @@ const LOW_QUALITY_PRESETS = {
     jammed: jammedEffectLite,
 };
 
-// ---------------------------------------------------------------------------
 // Effect Map
-// ---------------------------------------------------------------------------
 
 const EFFECT_MAP = [
     { name: 'Danger Zone', key: 'dangerZone', preset: dangerZoneEffect, filterIds: ['DangerZoneGlow', 'DangerZoneBloom'] },
@@ -982,20 +999,18 @@ const EFFECT_MAP = [
     { name: 'Core Power Active', key: 'corePower', preset: corePowerEffect, filterIds: ['CorePowerBloom'] },
 ];
 
-// ---------------------------------------------------------------------------
 // Apply / Remove FX
-// ---------------------------------------------------------------------------
 
 /** Check if actor has the Enkidu alt frame (Tokugawa alt). */
-function isEnkiduFrame(actor) {
+function isEnkiduFrame(actor)
+{
     return actor?.items?.filter(item => item.system?.lid === 'mf_tokugawa_alt_enkidu').length > 0;
 }
 
-// ---------------------------------------------------------------------------
 // Auto-status logic
-// ---------------------------------------------------------------------------
 
-async function autoStatusDangerZone(actor) {
+async function autoStatusDangerZone(actor)
+{
     if (!isAutoEnabled('dangerZone'))
         return;
     const heat = actor.system?.heat;
@@ -1004,7 +1019,8 @@ async function autoStatusDangerZone(actor) {
     await actor.toggleStatusEffect('dangerzone', { active: heat.value / heat.max >= 0.5 });
 }
 
-async function autoStatusBurn(actor) {
+async function autoStatusBurn(actor)
+{
     if (!isAutoEnabled('burn'))
         return;
     const burn = actor.system?.burn;
@@ -1013,58 +1029,74 @@ async function autoStatusBurn(actor) {
     await actor.toggleStatusEffect('burn', { active: burn > 0 });
 }
 
-async function autoStatusOvershield(actor) {
+async function autoStatusOvershield(actor)
+{
     if (!isAutoEnabled('overshield'))
         return;
-    const os = actor.system?.overshield?.value;
-    if (os == null)
+    const overshield = actor.system?.overshield?.value;
+    if (overshield == null)
         return;
-    await actor.toggleStatusEffect('overshield', { active: os > 0 });
+    await actor.toggleStatusEffect('overshield', { active: overshield > 0 });
 }
 
-async function autoStatusInfection(actor) {
+async function autoStatusInfection(actor)
+{
     if (!isAutoEnabled('infection'))
         return;
     const infection = actor.system?.infection ?? 0;
     await actor.toggleStatusEffect('infection', { active: infection > 0 });
 }
 
-async function autoStatusCascading(actor) {
+async function autoStatusCascading(actor)
+{
     if (!isAutoEnabled('cascading'))
         return;
     const hasCascading = actor.items?.some?.(item => item.system?.cascading === true) ?? false;
     await actor.toggleStatusEffect('cascading', { active: hasCascading });
 }
 
-async function autoStatusCorePowerOn(actor) {
-    if (actor.statuses?.has('core_power_active'))
+async function autoStatusCorePowerOn(actor)
+{
+    if (actor.statuses?.has('core_power_active') || isAdditionalStatusUnavailable('core_power_active'))
         return;
     await actor.toggleStatusEffect('core_power_active', { active: true });
 }
 
-async function autoStatusCorePowerOff(actor) {
+async function autoStatusCorePowerOff(actor)
+{
     if (!actor?.statuses?.has('core_power_active'))
         return;
     await actor.toggleStatusEffect('core_power_active', { active: false });
 }
 
-// ---------------------------------------------------------------------------
 // Hook handlers
-// ---------------------------------------------------------------------------
 
-function onCreateActiveEffect(document, _change, _userId) {
+function _isTemplateAE(document)
+{
+    const laFlags = document?.flags?.['lancer-automations'];
+    return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
+}
+
+function onCreateActiveEffect(document, _change, _userId)
+{
     if (!isMasterEnabled())
+        return;
+    if (_isTemplateAE(document))
         return;
     reconcileStatusFX(document.parent);
 }
 
-function onDeleteActiveEffect(document, _change, _userId) {
+function onDeleteActiveEffect(document, _change, _userId)
+{
     if (!isMasterEnabled())
+        return;
+    if (_isTemplateAE(document))
         return;
     reconcileStatusFX(document.parent);
 }
 
-function onUpdateActor(actor, change, _options, userId) {
+function onUpdateActor(actor, change, _options, userId)
+{
     if (game.userId !== userId || !isMasterEnabled())
         return;
     if (change.system?.heat !== undefined)
@@ -1079,7 +1111,8 @@ function onUpdateActor(actor, change, _options, userId) {
         removeStatusesOnDeath(actor);
 }
 
-async function removeStatusesOnDeath(actor) {
+async function removeStatusesOnDeath(actor)
+{
     const config = getConfig();
     if (!config.removeStatusesOnDeath)
         return;
@@ -1094,11 +1127,10 @@ async function removeStatusesOnDeath(actor) {
     await actor.deleteEmbeddedDocuments('ActiveEffect', effects.map(effect => effect.id));
 }
 
-// ---------------------------------------------------------------------------
-// Conflict avoidance — block csm-lancer-qol's effect handling
-// ---------------------------------------------------------------------------
+// Conflict avoidance: block csm-lancer-qol's effect handling
 
-function blockQoLEffects() {
+function blockQoLEffects()
+{
     if (!isMasterEnabled())
         return;
     if (!game.modules.get('csm-lancer-qol')?.active)
@@ -1107,7 +1139,8 @@ function blockQoLEffects() {
     const qolAutoEnabled = game.settings.get('csm-lancer-qol', 'enableAutomation');
     const qolFXEnabled = game.settings.get('csm-lancer-qol', 'enableConditionEffects');
 
-    if (qolAutoEnabled || qolFXEnabled) {
+    if (qolAutoEnabled || qolFXEnabled)
+    {
         ui.notifications.warn(
             'Lancer Automations StatusFX is active — csm-lancer-qol\'s ' +
             (qolAutoEnabled && qolFXEnabled ? 'auto-status and condition effects are' :
@@ -1122,34 +1155,35 @@ function blockQoLEffects() {
 // so TMFX dupes them on every flag update. Stash a minimal fake puppet in the anime map
 // so the dedupe path finds it. Removed automatically by TMFX when the filter is deleted.
 const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture']);
-function _ensureFakePuppetsForCustomFilters(token) {
-    const tm = /** @type {any} */ (globalThis).TokenMagic;
-    const animeMap = tm?._getAnimeMap?.();
-    if (!animeMap) {
+function _ensureFakePuppetsForCustomFilters(token)
+{
+    const tokenMagic = /** @type {any} */ (globalThis).TokenMagic;
+    const animeMap = tokenMagic?._getAnimeMap?.();
+    if (!animeMap)
         return;
-    }
     const flagFilters = token.document?.flags?.tokenmagic?.filters ?? [];
-    for (const flagEntry of flagFilters) {
+    for (const flagEntry of flagFilters)
+    {
         const tmFilter = flagEntry?.tmFilters;
-        if (!tmFilter || !_NON_ANIME_FILTER_TYPES.has(tmFilter.tmFilterType)) {
+        if (!tmFilter || !_NON_ANIME_FILTER_TYPES.has(tmFilter.tmFilterType))
             continue;
-        }
         const placeableId = tmFilter.tmParams?.placeableId;
         const filterId = tmFilter.tmFilterId;
         const filterInternalId = tmFilter.tmFilterInternalId;
         let exists = false;
-        for (const anime of animeMap.values()) {
+        for (const anime of animeMap.values())
+        {
             const puppet = anime?.puppet;
             if (puppet?.placeableId === placeableId
                 && puppet?.filterId === filterId
-                && (!('filterInternalId' in puppet) || puppet.filterInternalId === filterInternalId)) {
+                && (!('filterInternalId' in puppet) || puppet.filterInternalId === filterInternalId))
+            {
                 exists = true;
                 break;
             }
         }
-        if (exists) {
+        if (exists)
             continue;
-        }
         const id = foundry.utils.randomID();
         animeMap.set(id, {
             animeId: id,
@@ -1159,46 +1193,53 @@ function _ensureFakePuppetsForCustomFilters(token) {
                 filterInternalId,
                 enabled: false,
                 animated: null,
-                setTMParams() { /* TMFX calls this on the puppet during its update branch */ },
-                normalizeTMParams() { /* same */ },
-                hasOwnProperty(prop) {
+                setTMParams()
+                { /* TMFX calls this on the puppet during its update branch */ },
+                normalizeTMParams()
+                { /* same */ },
+                hasOwnProperty(prop)
+                {
                     return prop in this;
                 }
             },
-            animate() { /* no-op */ }
+            animate()
+            { /* no-op */ }
         });
     }
 }
 
 // Sync TMFX filters with the actor's current AE state (add missing, remove orphans).
 // Debounced per actor to coalesce bursts and avoid races on token.flags.tokenmagic.filters.
-async function _doReconcileStatusFX(actor) {
-    if (!isMasterEnabled() || typeof TokenMagic === 'undefined' || !actor) {
+async function _doReconcileStatusFX(actor)
+{
+    if (!isMasterEnabled() || typeof TokenMagic === 'undefined' || !actor)
         return;
-    }
     const tokens = actor.getActiveTokens?.() ?? [];
-    if (!tokens.length) {
+    if (!tokens.length)
         return;
-    }
     const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
-    for (const token of tokens) {
+    for (const token of tokens)
+    {
         // Inject fake puppets before any add/delete so TMFX's hook sees them.
         _ensureFakePuppetsForCustomFilters(token);
-        for (const entry of EFFECT_MAP) {
+        for (const entry of EFFECT_MAP)
+        {
             const wantFilter = aeNames.has(entry.name) && isFXEnabled(entry.key);
             const hasFilter = entry.filterIds.some(fid => TokenMagic.hasFilterId(token, fid));
-            if (wantFilter && !hasFilter) {
+            if (wantFilter && !hasFilter)
+            {
                 let preset = entry.preset;
-                if (entry.key === 'dangerZone' && isEnkiduFrame(actor)) {
+                if (entry.key === 'dangerZone' && isEnkiduFrame(actor))
                     preset = enkiduDangerZoneEffect;
-                }
-                if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene)) {
+                if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene))
+                {
                     const base = entry.name === 'Hover'
                         ? flyingEffectIso.map(filter => ({ ...filter, filterId: filter.filterId.replace('Flying', 'Hover') }))
                         : flyingEffectIso;
                     preset = base;
                 }
-                if (getConfig().lowQuality && LOW_QUALITY_PRESETS[entry.key]) {
+                if (getConfig().lowQuality && LOW_QUALITY_PRESETS[entry.key])
+                {
                     preset = (entry.key === 'dangerZone' && isEnkiduFrame(actor))
                         ? enkiduDangerZoneEffectLite
                         : LOW_QUALITY_PRESETS[entry.key];
@@ -1207,25 +1248,27 @@ async function _doReconcileStatusFX(actor) {
                 // TMFX duplicates each filter on this call path (same class of bug as the
                 // chains/fracture workaround above). Keep only the first of each filterId.
                 const mesh = token.mesh;
-                if (mesh?.filters?.length) {
+                if (mesh?.filters?.length)
+                {
                     const seenIds = new Set();
-                    mesh.filters = mesh.filters.filter(filter => {
+                    mesh.filters = mesh.filters.filter(filter =>
+                    {
                         const id = filter.filterId;
-                        if (!id) {
+                        if (!id)
                             return true;
-                        }
-                        if (seenIds.has(id)) {
+                        if (seenIds.has(id))
                             return false;
-                        }
                         seenIds.add(id);
                         return true;
                     });
                 }
-            } else if (!wantFilter && hasFilter) {
-                for (const filterId of entry.filterIds) {
-                    if (TokenMagic.hasFilterId(token, filterId)) {
+            }
+            else if (!wantFilter && hasFilter)
+            {
+                for (const filterId of entry.filterIds)
+                {
+                    if (TokenMagic.hasFilterId(token, filterId))
                         await token.TMFXdeleteFilters(filterId);
-                    }
                 }
             }
         }
@@ -1233,69 +1276,106 @@ async function _doReconcileStatusFX(actor) {
 }
 
 const _reconcileTimers = new Map();
-function reconcileStatusFX(actor) {
-    if (!actor?.id) {
+function reconcileStatusFX(actor)
+{
+    if (!actor?.id)
         return;
-    }
-    if (!actor.isOwner) {
+    if (!actor.isOwner)
         return;
-    }
     const prev = _reconcileTimers.get(actor.id);
-    if (prev) {
+    if (prev)
         clearTimeout(prev);
-    }
-    const timer = setTimeout(() => {
+    const timer = setTimeout(() =>
+    {
         _reconcileTimers.delete(actor.id);
         _doReconcileStatusFX(actor);
     }, 50);
     _reconcileTimers.set(actor.id, timer);
 }
 
-// ---------------------------------------------------------------------------
-// Initialization
-// ---------------------------------------------------------------------------
+// TMFX restores fracture/chains from flags frozen; drop them so reconcile rebuilds them live.
+async function _reapplyCustomFiltersAfterLoad()
+{
+    if (!isMasterEnabled() || typeof TokenMagic === 'undefined')
+        return;
+    const customEntries = EFFECT_MAP.filter(entry =>
+        entry.preset?.some?.(filter => _NON_ANIME_FILTER_TYPES.has(filter.filterType)));
+    for (const token of canvas?.tokens?.placeables ?? [])
+    {
+        const actor = token.actor;
+        if (!actor?.isOwner)
+            continue;
+        const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
+        let relevant = false;
+        for (const entry of customEntries)
+        {
+            if (aeNames.has(entry.name) && isFXEnabled(entry.key))
+                relevant = true;
+            for (const filterId of entry.filterIds)
+            {
+                if (TokenMagic.hasFilterId(token, filterId))
+                {
+                    await token.TMFXdeleteFilters(filterId);
+                    relevant = true;
+                }
+            }
+        }
+        if (relevant)
+            reconcileStatusFX(actor);
+    }
+}
 
-export function initStatusFX() {
+// Initialization
+
+export function initStatusFX()
+{
     if (!isMasterEnabled())
         return;
 
     Hooks.on('createActiveEffect', onCreateActiveEffect);
     Hooks.on('deleteActiveEffect', onDeleteActiveEffect);
-    Hooks.on('updateActor', (actor, _change, _options, _userId) => {
+    Hooks.on('updateActor', (actor, _change, _options, _userId) =>
+    {
         onUpdateActor(actor, _change, _options, _userId);
         reconcileStatusFX(actor);
     });
-    Hooks.on('updateItem', (item, change, _options, userId) => {
-        if (game.userId !== userId || !isMasterEnabled()) {
+    Hooks.on('updateItem', (item, change, _options, userId) =>
+    {
+        if (game.userId !== userId || !isMasterEnabled())
             return;
-        }
-        if (change.system?.cascading !== undefined && item.parent) {
+        if (change.system?.cascading !== undefined && item.parent)
             autoStatusCascading(item.parent);
-        }
     });
 
     // Core Power Active: remove on combat end / combatant removed.
-    // (Activation registration is at module load time — see bottom of file.)
-    Hooks.on('preDeleteCombatant', (combatant) => {
-        if (combatant.actor) {
+    // (Activation registration is at module load time; see bottom of file.)
+    Hooks.on('preDeleteCombatant', (combatant) =>
+    {
+        if (combatant.actor)
             autoStatusCorePowerOff(combatant.actor);
-        }
     });
-    Hooks.on('preDeleteCombat', (combat) => {
-        for (const combatant of combat.combatants ?? []) {
-            if (combatant.actor) {
+    Hooks.on('preDeleteCombat', (combat) =>
+    {
+        for (const combatant of combat.combatants ?? [])
+        {
+            if (combatant.actor)
                 autoStatusCorePowerOff(combatant.actor);
-            }
         }
     });
+
+    Hooks.on('canvasReady', () => setTimeout(_reapplyCustomFiltersAfterLoad, 300));
+    if (canvas?.ready)
+        setTimeout(_reapplyCustomFiltersAfterLoad, 300);
 
     blockQoLEffects();
 
     console.log(`${MODULE_ID} | StatusFX initialized`);
 }
 
-Hooks.once('lancer.registerFlows', (steps, flows) => {
-    steps.set('addCorePowerSE', async ({ actor }) => {
+Hooks.once('lancer.registerFlows', (steps, flows) =>
+{
+    steps.set('addCorePowerSE', async ({ actor }) =>
+    {
         await autoStatusCorePowerOn(actor);
         return true;
     });

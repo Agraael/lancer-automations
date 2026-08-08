@@ -4,12 +4,13 @@ import { stringToAsyncFunction } from "../activations/reaction-manager.js";
 import { getWeaponType } from "../tools/misc-tools.js";
 import { playBonusAddedFX } from "../fx/actionFX.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
+import { linkTierGate } from "../interactive/deployables.js";
 
 /**
  * Session cache for compiled lambda conditions.
  * When a bonus `condition` field starts with `@@fn:`, the remainder is the serialized function source.
  * Compiled functions are cached here (keyed on source string) to avoid recompiling on every evaluation.
- * The source itself lives in the actor flag and survives page reloads — this cache is purely a
+ * The source itself lives in the actor flag and survives page reloads; this cache is purely a
  * performance optimization and is rebuilt on demand.
  */
 const serializedConditionCache = new Map();
@@ -30,9 +31,11 @@ const applyToConditionCache = new Map();
  * @param {string} preamble  JS source inserted before the return; typically defines `api` / `reactorToken`
  * @returns {Function}
  */
-function compileCachedLambda(src, cache, argNames, preamble) {
+function compileCachedLambda(src, cache, argNames, preamble)
+{
     let fn = cache.get(src);
-    if (!fn) {
+    if (!fn)
+    {
         fn = new Function(...argNames, `${preamble}return(${src})(${argNames.join(',')});`);
         cache.set(src, fn);
     }
@@ -43,11 +46,11 @@ function compileCachedLambda(src, cache, argNames, preamble) {
  * Resolve the reactor token for a bonus. Prefers `bonus.context.ownerTokenId`, falls back to
  * `state.actor`'s first active token. Used to provide `reactorToken` inside condition lambdas.
  */
-function resolveReactorToken(bonus, state) {
+function resolveReactorToken(bonus, state)
+{
     const ownerTokenId = bonus?.context?.ownerTokenId;
-    if (ownerTokenId) {
+    if (ownerTokenId)
         return canvas.tokens.get(ownerTokenId) ?? canvas.tokens.placeables.find(t => t.id === ownerTokenId) ?? null;
-    }
     return state?.actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
@@ -55,83 +58,89 @@ function resolveReactorToken(bonus, state) {
  * Evaluate `mod.applyToCondition` against one HUD target entry. Returns true if no condition is set.
  * Lambda must be synchronous and return a boolean.
  */
-function evaluateApplyToCondition(mod, targetEntry, state, reactorToken) {
+function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
+{
     if (!mod.applyToCondition)
         return true;
-    try {
+    try
+    {
         let fn;
-        if (typeof mod.applyToCondition === 'function') {
+        if (typeof mod.applyToCondition === 'function')
             fn = mod.applyToCondition;
-        } else if (typeof mod.applyToCondition === 'string' && mod.applyToCondition.startsWith('@@fn:')) {
+        else if (typeof mod.applyToCondition === 'string' && mod.applyToCondition.startsWith('@@fn:'))
+        {
             fn = compileCachedLambda(
                 mod.applyToCondition.slice('@@fn:'.length),
                 applyToConditionCache,
                 ['target', 'state', 'reactorToken'],
                 `const api=game.modules.get('lancer-automations')?.api;`
             );
-        } else {
-            return true;
         }
+        else
+            return true;
         const result = fn(targetEntry, state, reactorToken);
-        if (result instanceof Promise) {
+        if (result instanceof Promise)
+        {
             console.error(`lancer-automations | applyToCondition for "${mod.name || mod.id}" is async. Must be synchronous.`);
             return false;
         }
         return !!result;
-    } catch (e) {
+    }
+    catch (e)
+    {
         console.warn("lancer-automations | applyToCondition evaluation failed:", e);
         return false;
     }
 }
 
-// Current resource stats use direct actor.update() instead of ActiveEffect changes,
-// because AE changes get re-applied on every data refresh (breaking consumable resources like overshield).
+// These use direct actor.update(), not AE changes (AE re-applies each refresh, breaking consumables like overshield).
 const CURRENT_RESOURCE_STATS = new Set([
     'system.hp.value', 'system.heat.value', 'system.overshield.value',
     'system.burn', 'system.repairs.value'
 ]);
 
-export function flattenBonuses(bonuses) {
-    if (!bonuses) {
+export function flattenBonuses(bonuses)
+{
+    if (!bonuses)
         return [];
-    }
-    const arr = Array.isArray(bonuses) ? bonuses : [bonuses];
+    const bonusArray = Array.isArray(bonuses) ? bonuses : [bonuses];
     const flattened = [];
-    for (const b of arr) {
-        if (b.type === 'multi' && Array.isArray(b.bonuses)) {
-            b.bonuses.forEach((sub, idx) => {
+    for (const b of bonusArray)
+    {
+        if (b.type === 'multi' && Array.isArray(b.bonuses))
+        {
+            b.bonuses.forEach((sub, idx) =>
+            {
                 const flatSub = { ...sub };
-                if (!flatSub.id) {
+                if (!flatSub.id)
                     flatSub.id = `${b.id || 'multi'}_sub_${idx}`;
-                }
-                if (b.applyTo && !flatSub.applyTo) {
+                if (b.applyTo && !flatSub.applyTo)
                     flatSub.applyTo = b.applyTo;
-                }
-                if (!flatSub.source && b.source) {
+                if (!flatSub.source && b.source)
                     flatSub.source = b.source;
-                }
-                if (!flatSub.name && b.name) {
+                if (!flatSub.name && b.name)
                     flatSub.name = b.name;
-                }
-                if (b.context && !flatSub.context) {
+                if (b.context && !flatSub.context)
                     flatSub.context = b.context;
-                }
-                if (!flatSub.context && b.context) {
+                if (!flatSub.context && b.context)
                     flatSub.context = b.context;
-                }
+                if (flatSub.consumeOnUsage === undefined && b.consumeOnUsage !== undefined)
+                    flatSub.consumeOnUsage = b.consumeOnUsage;
                 flattened.push(flatSub);
             });
-        } else {
-            flattened.push(b);
         }
+        else
+            flattened.push(b);
     }
     return flattened;
 }
 
-async function delegateSetActorFlag(actor, ns, key, value) {
-    if (game.user.isGM || actor.isOwner) {
+async function delegateSetActorFlag(actor, ns, key, value)
+{
+    if (game.user.isGM || actor.isOwner)
         await actor.setFlag(ns, key, value);
-    } else {
+    else
+    {
         game.socket.emit('module.lancer-automations', {
             action: "setActorFlag",
             payload: { actorId: actor.id, ns, key, value }
@@ -143,7 +152,8 @@ async function delegateSetActorFlag(actor, ns, key, value) {
 /**
  * Mutates state.data.tags based on a tag bonus payload.
  */
-export function applyTagBonus(state, bonus) {
+export function applyTagBonus(state, bonus)
+{
     if (!state.data)
         state.data = {};
     if (!state.data.tags)
@@ -153,29 +163,33 @@ export function applyTagBonus(state, bonus) {
     const tagId = bonus.tagId;
     const isRemove = !!bonus.removeTag;
 
-    if (isRemove) {
-        // Filter out tag by LID or ID
+    if (isRemove)
+    {
         state.data.tags = state.data.tags.filter(t => t.id !== tagId && t.lid !== tagId);
         return;
     }
 
     // Adding or Overriding
     const existingIdx = state.data.tags.findIndex(t => t.id === tagId || t.lid === tagId);
-    if (existingIdx !== -1) {
+    if (existingIdx !== -1)
+    {
         // Tag exists. Modify it.
         const tag = { ...state.data.tags[existingIdx] }; // Clone so we don't mutate the base definition
         const isOverride = bonus.tagMode === 'override';
         const val = Number.parseInt(bonus.val) || 0;
 
-        if (isOverride) {
+        if (isOverride)
             tag.val = String(val);
-        } else {
+        else
+        {
             // Add
             const currentVal = Number.parseInt(tag.val) || Number.parseInt(tag.num_val) || 0;
             tag.val = String(currentVal + val);
         }
         state.data.tags[existingIdx] = tag;
-    } else {
+    }
+    else
+    {
         // Tag does not exist. Push a stub.
         state.data.tags.push({
             id: tagId,
@@ -192,7 +206,8 @@ export function applyTagBonus(state, bonus) {
  * Only used by getWeaponProfiles_WithBonus in misc-tools.js for offline range computation.
  * Range display in flows is handled by the libWrapper on currentProfile() / rangesFor().
  */
-export function mutateRangeWithBonus(state, bonus) {
+export function mutateRangeWithBonus(state, bonus)
+{
     if (!state.data)
         state.data = {};
     if (!state.data.range)
@@ -204,31 +219,35 @@ export function mutateRangeWithBonus(state, bonus) {
     const isChange = rangeMode === 'change';
     const val = Number.parseInt(bonus.val) || 0;
 
-    if (isChange) {
-        // Replace all ranges with a single entry of the specified type and value
+    if (isChange)
+    {
         const RangeClass = state.data.range[0]?.constructor;
         state.data.range.length = 0;
-        if (RangeClass && RangeClass !== Object) {
+        if (RangeClass && RangeClass !== Object)
             state.data.range.push(new RangeClass({ type: rangeType, val }));
-        } else {
+        else
             state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
-        }
-    } else {
+    }
+    else
+    {
         const existingIdx = state.data.range.findIndex(r => r.type === rangeType);
-        if (existingIdx !== -1) {
+        if (existingIdx !== -1)
+        {
             // Mutate in-place to preserve _Range prototype methods (icon getter, etc.)
             const entry = state.data.range[existingIdx];
-            if (isOverride) {
+            if (isOverride)
                 entry.val = val;
-            } else {
+            else
                 entry.val = (Number.parseInt(entry.val) || 0) + val;
-            }
-        } else {
+        }
+        else
+        {
             // Try to reuse the constructor from an existing range to preserve prototype methods
             const RangeClass = state.data.range[0]?.constructor;
-            if (RangeClass && RangeClass !== Object) {
+            if (RangeClass && RangeClass !== Object)
                 state.data.range.push(new RangeClass({ type: rangeType, val }));
-            } else {
+            else
+            {
                 // Fallback: plain object with computed icon
                 state.data.range.push({ type: rangeType, val, icon: `cci-${rangeType.toLowerCase()}`, formatted: `${rangeType} ${val}` });
             }
@@ -237,18 +256,121 @@ export function mutateRangeWithBonus(state, bonus) {
 
 }
 
+// 'add' goes through DOM injection in showDamageBonusNotification; only replace/add_base/change_type mutate here.
+export function mutateDamageWithBonus(state, bonus)
+{
+    if (!state.data)
+        state.data = {};
+    if (!Array.isArray(state.data.damage))
+        state.data.damage = [];
+
+    const mode = bonus.damageMode || 'add';
+    if (mode === 'add')
+        return;
+
+    const entries = bonus.damage || [];
+    if (entries.length === 0)
+        return;
+
+    const DamageClass = state.data.damage[0]?.constructor;
+    const makeDamage = (val, type) =>
+    {
+        if (DamageClass && DamageClass !== Object)
+        {
+            try
+            {
+                return new DamageClass({ type, val: String(val) });
+            }
+            catch (e)
+            { /* fall through to plain object */ }
+        }
+        return { type, val: String(val) };
+    };
+
+    if (mode === 'replace')
+    {
+        state.data.damage.length = 0;
+        for (const e of entries)
+            state.data.damage.push(makeDamage(e.val ?? '1d6', e.type ?? 'Kinetic'));
+        return;
+    }
+
+    if (mode === 'add_base')
+    {
+        for (const e of entries)
+            state.data.damage.push(makeDamage(e.val ?? '1d6', e.type ?? 'Kinetic'));
+        return;
+    }
+
+    if (mode === 'change_type')
+    {
+        // specific from-type wins over the 'all' fallback
+        const specific = new Map();
+        let allTarget = null;
+        for (const e of entries)
+        {
+            const from = e.from || 'all';
+            const to = e.to || e.type;
+            if (!to)
+                continue;
+            if (from === 'all')
+            {
+                if (!allTarget)
+                    allTarget = to;
+            }
+            else
+                specific.set(from, to);
+        }
+        for (const dmg of state.data.damage)
+        {
+            const target = specific.get(dmg.type) || allTarget;
+            if (target && target !== dmg.type)
+                dmg.type = target;
+        }
+    }
+}
+
+// One live session per HUD kind; re-scans targeter bonuses while the roll HUD is open.
+const liveBonusSessions = new Map();
+let liveBonusRefreshTimer = null;
+
+Hooks.on('updateActor', (actor, change) =>
+{
+    if (liveBonusSessions.size === 0)
+        return;
+    const laFlags = change.flags?.['lancer-automations'];
+    if (!laFlags || (laFlags.constant_bonuses === undefined && laFlags.global_bonuses === undefined))
+        return;
+    clearTimeout(liveBonusRefreshTimer);
+    liveBonusRefreshTimer = setTimeout(() =>
+    {
+        for (const [kind, session] of [...liveBonusSessions])
+        {
+            const age = Date.now() - session.created;
+            if (age > 600000 || (!session.isLive() && age > 10000))
+            {
+                liveBonusSessions.delete(kind);
+                continue;
+            }
+            session.refresh().catch(err => console.warn('lancer-automations | live bonus refresh:', err));
+        }
+    }, 150);
+});
+
 /**
  * Creates a generic bonus step for a specific flow type
  * @param {string} flowType - The flow type identifier (e.g., "attack", "tech_attack", "hull", "damage")
  * @returns {Function} The flow step function
  */
-function createGenericBonusStep(flowType) {
-    return async function genericAccuracyStepImpl(state) {
-        try {
+function createGenericBonusStep(flowType)
+{
+    return async function genericAccuracyStepImpl(state)
+    {
+        try
+        {
             const actor = state.actor;
-            if (!actor) {
+            if (!actor)
                 return true;
-            }
 
             const tags = getFlowTags(flowType, state);
             const collected = {
@@ -265,29 +387,19 @@ function createGenericBonusStep(flowType) {
                 disabledByUser: new Set()
             };
 
-            await processBonusBatch(flattenBonuses(actor.getFlag("lancer-automations", "global_bonuses")), flowType, tags, state, collected);
-            await processBonusBatch(actor.getFlag("lancer-automations", "constant_bonuses"), flowType, tags, state, collected);
+            await processBonusBatch(flattenBonuses(getGlobalBonuses(actor)), flowType, tags, state, collected);
+            await processBonusBatch(getConstantBonuses(actor), flowType, tags, state, collected);
             await processEphemeralBonuses(actor, flowType, tags, state, collected);
 
             const attackerId = actor.token?.id ?? canvas.tokens.placeables.find(tok => tok.actor?.id === actor.id)?.id;
             await collectTargeterBonuses(attackerId, flowType, tags, state, collected);
 
-            const hasAny = collected.netBonus !== 0 || collected.activeBonuses.length > 0 || collected.rangeBonuses.length > 0 ||
-                           collected.damageBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetedDamageBonuses.length > 0 ||
-                           collected.targetModifiers.length > 0;
-            if (!hasAny) {
-                return true;
-            }
-
-            if (!state.data) {
+            if (!state.data)
                 state.data = {};
-            }
-            if (!state.data.acc_diff) {
+            if (!state.data.acc_diff)
                 state.data.acc_diff = {};
-            }
-            if (!state.data.acc_diff.base) {
+            if (!state.data.acc_diff.base)
                 state.data.acc_diff.base = {};
-            }
 
             const base = state.data.acc_diff.base;
             if (typeof base.accuracy !== 'number')
@@ -295,62 +407,69 @@ function createGenericBonusStep(flowType) {
             if (typeof base.difficulty !== 'number')
                 base.difficulty = 0;
 
-            if (collected.netBonus > 0) {
+            if (collected.netBonus > 0)
                 base.accuracy += collected.netBonus;
-            } else if (collected.netBonus < 0) {
+            else if (collected.netBonus < 0)
                 base.difficulty += Math.abs(collected.netBonus);
-            }
 
             const appliedMode = new Map();
-            const applyTargetedBonuses = (accDiff) => {
+            const applyTargetedBonuses = (accDiff) =>
+            {
                 const count = accDiff.targets?.length || 0;
                 const accDiffBase = accDiff.base;
-                for (const bonus of collected.allTargetedBonuses) {
+                for (const bonus of collected.allTargetedBonuses)
+                {
                     const val = Number.parseInt(bonus.val) || 0;
-                    if (!val) {
+                    if (!val)
                         continue;
-                    }
 
                     const prevMode = appliedMode.get(bonus.id);
-                    if (prevMode === 'base') {
-                        if (bonus.type === 'difficulty') {
+                    if (prevMode === 'base')
+                    {
+                        if (bonus.type === 'difficulty')
                             accDiffBase.difficulty -= val;
-                        } else {
+                        else
                             accDiffBase.accuracy -= val;
-                        }
-                    } else if (prevMode === 'target') {
-                        accDiff.targets.forEach(targetEntry => {
-                            if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id)) {
-                                if (bonus.type === 'difficulty') {
+                    }
+                    else if (prevMode === 'target')
+                    {
+                        accDiff.targets.forEach(targetEntry =>
+                        {
+                            if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
+                            {
+                                if (bonus.type === 'difficulty')
                                     targetEntry.difficulty -= val;
-                                } else {
+                                else
                                     targetEntry.accuracy -= val;
-                                }
                             }
                         });
                     }
 
                     const matching = accDiff.targets?.filter(targetEntry => bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id)) ?? [];
-                    if (!matching.length) {
+                    if (!matching.length)
+                    {
                         appliedMode.set(bonus.id, null);
                         continue;
                     }
 
-                    if (count <= 1) {
-                        if (bonus.type === 'difficulty') {
+                    if (count <= 1)
+                    {
+                        if (bonus.type === 'difficulty')
                             accDiffBase.difficulty += val;
-                        } else {
+                        else
                             accDiffBase.accuracy += val;
-                        }
                         appliedMode.set(bonus.id, 'base');
-                    } else {
-                        matching.forEach(targetEntry => {
-                            if (!collected.disabledByUser.has(`${bonus.id}:${accDiffTargetToken(targetEntry)?.id}`)) {
-                                if (bonus.type === 'difficulty') {
+                    }
+                    else
+                    {
+                        matching.forEach(targetEntry =>
+                        {
+                            if (!collected.disabledByUser.has(`${bonus.id}:${accDiffTargetToken(targetEntry)?.id}`))
+                            {
+                                if (bonus.type === 'difficulty')
                                     targetEntry.difficulty += val;
-                                } else {
+                                else
                                     targetEntry.accuracy += val;
-                                }
                             }
                         });
                         appliedMode.set(bonus.id, 'target');
@@ -358,15 +477,14 @@ function createGenericBonusStep(flowType) {
                 }
             };
 
-            const getEffActive = () => [...collected.activeBonuses, ...collected.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'base')];
-            const getEffTargeted = () => collected.allTargetedBonuses.filter(b => appliedMode.get(b.id) === 'target');
+            const getEffectiveActiveBonuses = () => [...collected.activeBonuses, ...collected.allTargetedBonuses.filter(bonus => appliedMode.get(bonus.id) === 'base')];
+            const getEffectiveTargetedBonuses = () => collected.allTargetedBonuses.filter(bonus => appliedMode.get(bonus.id) === 'target');
 
-            if (collected.allTargetedBonuses.length > 0) {
+            if (collected.allTargetedBonuses.length > 0)
                 applyTargetedBonuses(state.data.acc_diff);
-            }
 
-            // Apply a single target modifier to a single target
-            const applyOneModifier = (t, mod) => {
+            const applyOneModifier = (t, mod) =>
+            {
                 if (mod.subtype === 'invisible' && t.plugins?.invisibility)
                     t.plugins.invisibility.data = 1;
                 else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
@@ -379,62 +497,93 @@ function createGenericBonusStep(flowType) {
                     t.cover = 2;
             };
 
-            const applyTargetModifiers = (hudData) => {
+            const applyTargetModifiers = (hudData) =>
+            {
                 if (collected.targetModifiers.length === 0)
                     return;
-                for (const targetEntry of (hudData.targets || [])) {
-                    for (const modifier of collected.targetModifiers) {
-                        if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0) {
+                for (const targetEntry of (hudData.targets || []))
+                {
+                    for (const modifier of collected.targetModifiers)
+                    {
+                        if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0)
+                        {
                             if (!modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
                         }
                         if (!evaluateApplyToCondition(modifier, targetEntry, state, resolveReactorToken(modifier, state)))
                             continue;
-                        if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility) {
+                        if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility)
                             targetEntry.plugins.invisibility.data = 1;
-                        } else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility) {
+                        else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility)
                             targetEntry.plugins.invisibility.data = 0;
-                        } else if (modifier.subtype === 'no_cover') {
+                        else if (modifier.subtype === 'no_cover')
                             targetEntry.cover = 0;
-                        } else if (modifier.subtype === 'soft_cover') {
+                        else if (modifier.subtype === 'soft_cover')
                             targetEntry.cover = Math.max(targetEntry.cover || 0, 1);
-                        } else if (modifier.subtype === 'hard_cover') {
+                        else if (modifier.subtype === 'hard_cover')
                             targetEntry.cover = 2;
-                        }
                         // Damage card modifiers (damage_hud_data targets)
-                        else if (modifier.subtype === 'ap' && targetEntry.ap !== undefined) {
+                        else if (modifier.subtype === 'ap' && targetEntry.ap !== undefined)
                             targetEntry.ap = true;
-                        } else if (modifier.subtype === 'half_damage' && targetEntry.halfDamage !== undefined) {
+                        else if (modifier.subtype === 'half_damage' && targetEntry.halfDamage !== undefined)
                             targetEntry.halfDamage = true;
-                        } else if (modifier.subtype === 'paracausal' && targetEntry.paracausal !== undefined) {
+                        else if (modifier.subtype === 'paracausal' && targetEntry.paracausal !== undefined)
                             targetEntry.paracausal = true;
-                        } else if (modifier.subtype === 'crit' && targetEntry.quality !== undefined) {
+                        else if (modifier.subtype === 'crit' && targetEntry.quality !== undefined)
                             targetEntry.quality = 2;
-                        } else if (modifier.subtype === 'hit' && targetEntry.quality !== undefined) {
+                        else if (modifier.subtype === 'hit' && targetEntry.quality !== undefined)
                             targetEntry.quality = Math.max(targetEntry.quality, 1);
-                        } else if (modifier.subtype === 'miss' && targetEntry.quality !== undefined) {
+                        else if (modifier.subtype === 'miss' && targetEntry.quality !== undefined)
                             targetEntry.quality = 0;
-                        }
                     }
                 }
             };
             applyTargetModifiers(state.data.acc_diff);
 
+            state.la_extraData = state.la_extraData || {};
+            const bonusUsage = {
+                flowType,
+                candidates: {},
+                enabledById: new Map(),
+                disabledByUser: collected.disabledByUser,
+                dmgEnabled: new Map(),
+                modEnabled: null,
+                appliedMode,
+                burned: new Set()
+            };
+            const addUsageCandidates = (list, bucket) =>
+            {
+                for (const bonus of list)
+                {
+                    if (!bonus?.id)
+                        continue;
+                    bonusUsage.candidates[bonus.id] = { id: bonus.id, bucket, type: bonus.type, subtype: bonus.subtype ?? null, consumeOnUsage: bonus.consumeOnUsage, uses: bonus.uses, applyTo: bonus.applyTo ?? null };
+                }
+            };
+            addUsageCandidates(collected.activeBonuses, 'acc');
+            addUsageCandidates(collected.allTargetedBonuses, 'targeted');
+            addUsageCandidates(collected.targetModifiers, 'tmod');
+            addUsageCandidates(collected.damageBonuses, 'damage');
+            addUsageCandidates(collected.targetedDamageBonuses, 'targetedDamage');
+            state.la_extraData.bonusUsage = bonusUsage;
+
             // For damage flows: inject target_modifier subtypes into state.data
             // so showDamageHUD picks them up when creating damage_hud_data.
             // Also poll for damage_hud_data to hook replaceTargets for new targets.
-            if (flowType === 'damage' && collected.targetModifiers.length > 0) {
-                const dmgMods = collected.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
+            let dmgLive = null;
+            if (flowType === 'damage')
+            {
+                const dmgMods = collected.targetModifiers.filter(mod => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(mod.subtype));
                 // Set global state.data flags for global mods, or per-target mods when single target AND target matches
                 const currentTargets = Array.from(game.user?.targets || []);
                 const targetCount = currentTargets.length;
-                for (const mod of dmgMods) {
+                for (const mod of dmgMods)
+                {
                     const isPerTarget = Array.isArray(mod.applyTo) && mod.applyTo.length > 0;
-                    if (isPerTarget) {
-                        if (targetCount > 1)
-                            continue;
-                        // Single target: only set global if the target matches applyTo
-                        if (targetCount === 1 && !mod.applyTo.includes(currentTargets[0]?.id))
+                    if (isPerTarget)
+                    {
+                        // Only set global for a single target that matches applyTo; 0 or 2+ targets rely on the per-target machinery
+                        if (targetCount !== 1 || !mod.applyTo.includes(currentTargets[0]?.id))
                             continue;
                     }
                     if (mod.subtype === 'ap')
@@ -445,9 +594,12 @@ function createGenericBonusStep(flowType) {
                         state.data.paracausal = true;
                 }
                 // Hook replaceTargets once damage_hud_data exists + apply per-target mods to initial targets
-                const applyDmgModsToTargets = (targets) => {
-                    for (const targetEntry of targets) {
-                        for (const modifier of dmgMods) {
+                const applyDmgModsToTargets = (targets) =>
+                {
+                    for (const targetEntry of targets)
+                    {
+                        for (const modifier of dmgMods)
+                        {
                             if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0 && !modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
                             if (!evaluateApplyToCondition(modifier, targetEntry, state, resolveReactorToken(modifier, state)))
@@ -467,101 +619,191 @@ function createGenericBonusStep(flowType) {
                         }
                     }
                 };
-                const hookDamageReplaceTargets = () => {
+                // Single-target damage HUDs render no target card; the visible toggles are the global config boxes
+                const toggleGlobalDmgBox = (subtype, desired) =>
+                {
+                    const areas = { half_damage: 'halfdamage', ap: 'grid-area: ap', paracausal: 'grid-area: paracausal' };
+                    const area = areas[subtype];
+                    if (!area)
+                        return;
+                    const $box = $('#damage-hud').find(`.damage-hud-options-grid > [style*="${area}"]`).find('input[type="checkbox"]').first();
+                    if ($box.length && !!$box.prop('checked') !== desired)
+                        $box[0].click();
+                };
+                const syncGlobalDmgBoxes = () =>
+                {
+                    const hudTargets = state.data.damage_hud_data?.targets ?? [];
+                    if (hudTargets.length !== 1)
+                        return;
+                    const targetId = accDiffTargetToken(hudTargets[0])?.id;
+                    for (const subtype of ['half_damage', 'ap', 'paracausal'])
+                    {
+                        const managed = dmgMods.filter(mod => mod.subtype === subtype);
+                        if (managed.length === 0)
+                            continue;
+                        const desired = managed.some(mod => !Array.isArray(mod.applyTo) || mod.applyTo.length === 0 || mod.applyTo.includes(targetId));
+                        toggleGlobalDmgBox(subtype, desired);
+                    }
+                };
+                // Display-only mirror of showDamageBonusNotification's modifier rows, for live changes
+                const syncDmgModRows = () =>
+                {
+                    const $form = $('#damage-hud');
+                    if ($form.length === 0)
+                        return;
+                    const $configGrid = $form.find('.damage-hud-options-grid');
+                    if ($configGrid.length === 0)
+                        return;
+                    const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
+                    const hudTargets = state.data.damage_hud_data?.targets || [];
+                    const currentTargetIds = hudTargets.map(target => accDiffTargetToken(target)?.id);
+                    const globalTMods = dmgMods.filter(mod =>
+                    {
+                        if (!Array.isArray(mod.applyTo) || mod.applyTo.length === 0)
+                            return true;
+                        if (hudTargets.length <= 1)
+                            return currentTargetIds.some(id => mod.applyTo.includes(id));
+                        return false;
+                    });
+                    let $myContainer = $configGrid.find('.csm-bonus-container');
+                    if ($myContainer.length === 0)
+                    {
+                        if (globalTMods.length === 0)
+                            return;
+                        $myContainer = $('<div class="csm-bonus-container" style="grid-column: 1 / -1; border-top: 1px solid var(--primary-light); margin-top: 5px; padding-top: 5px;"></div>');
+                        $myContainer.append('<h3 class="damage-hud-section lancer-border-primary svelte-1tnd08e" style="font-size: 0.9em; margin-bottom: 5px;">Global Bonuses</h3>');
+                        $configGrid.append($myContainer);
+                    }
+                    $myContainer.find('.la-tmod-dmg-row').remove();
+                    for (const mod of globalTMods)
+                    {
+                        const name = mod.name ? `${mod.name}: ${modLabels[mod.subtype] || mod.subtype}` : (modLabels[mod.subtype] || mod.subtype);
+                        const $row = $(`
+                            <div class="csm-bonus-config-row la-tmod-dmg-row" data-sub="${mod.subtype}" style="display: grid; grid-template-columns: 1fr; align-items: center; margin-bottom: 2px;">
+                                <label class="container svelte-wt0sk2" style="max-width: fit-content; padding-right: 0.5em;">
+                                    <input type="checkbox" class="svelte-wt0sk2" checked>
+                                    <span style="text-wrap: nowrap;">${name}</span>
+                                </label>
+                            </div>
+                        `);
+                        _remapSvelteScopes($row, $form);
+                        $myContainer.append($row);
+                    }
+                    $myContainer.toggle($myContainer.find('.csm-bonus-config-row').length > 0);
+                    _remapSvelteScopes($myContainer, $form);
+                };
+                const hookDamageReplaceTargets = () =>
+                {
                     if (!state.data.damage_hud_data?.replaceTargets)
                         return;
                     // Apply per-target mods to initial targets
                     applyDmgModsToTargets(state.data.damage_hud_data.targets || []);
                     const origReplace = state.data.damage_hud_data.replaceTargets.bind(state.data.damage_hud_data);
-                    state.data.damage_hud_data.replaceTargets = function(ts) {
+                    state.data.damage_hud_data.replaceTargets = function(ts)
+                    {
                         origReplace(ts);
                         applyDmgModsToTargets(this.targets);
+                        setTimeout(syncGlobalDmgBoxes, 50);
                         return this;
                     };
                 };
-                // Poll briefly — damage_hud_data is created in the next flow step
+                // Poll briefly; damage_hud_data is created in the next flow step
                 // Click per-target checkboxes in the damage HUD to trigger Svelte reactivity
-                const clickDmgPerTargetButtons = () => {
+                const setDmgCheckbox = (modifier, tokenIds, desired) =>
+                {
                     const $form = $('#damage-hud');
                     if ($form.length === 0)
                         return;
                     const $allCards = $form.find('.damage-hud-target-card');
                     const hudTargets = state.data.damage_hud_data?.targets || [];
-                    for (const modifier of dmgMods) {
-                        if (!Array.isArray(modifier.applyTo) || modifier.applyTo.length === 0)
-                            continue;
-                        $allCards.each(function (cardIndex) {
-                            const hudTarget = hudTargets[cardIndex];
-                            if (!hudTarget || !modifier.applyTo.includes(accDiffTargetToken(hudTarget)?.id))
-                                return;
-                            const $card = $(this);
-                            // Find and click the matching checkbox in the target card.
-                            // The Lancer damage HUD renders per-target checkboxes for AP, paracausal, 1/2.
-                            // We find them by their icon class or tooltip text.
-                            // The checkboxes in the card are labeled with icon/text
-                            // Find by sibling icon/text
-                            $card.find('label.container').each(function () {
-                                const labelText = $(this).text().trim().toLowerCase();
-                                const iconClass = $(this).find('i, img').attr('class') || '';
-                                let matched = false;
-                                if (modifier.subtype === 'half_damage' && (labelText.includes('½') || labelText.includes('half') || iconClass.includes('half')))
-                                    matched = true;
-                                if (modifier.subtype === 'ap' && (labelText.includes('ap') || labelText.includes('armor') || iconClass.includes('armor')))
-                                    matched = true;
-                                if (modifier.subtype === 'paracausal' && (labelText.includes('paracausal') || labelText.includes('reduce') || iconClass.includes('paracausal')))
-                                    matched = true;
-                                if (matched) {
-                                    const checkbox = $(this).find('input[type="checkbox"]')[0];
-                                    if (checkbox && !checkbox.checked) {
-                                        checkbox.checked = true;
-                                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                                    }
+                    $allCards.each(function (cardIndex)
+                    {
+                        const hudTarget = hudTargets[cardIndex];
+                        if (!hudTarget || !tokenIds.includes(accDiffTargetToken(hudTarget)?.id))
+                            return;
+                        // Match the per-target AP / paracausal / half checkboxes by icon class or tooltip text
+                        $(this).find('label.container').each(function ()
+                        {
+                            const labelText = $(this).text().trim().toLowerCase();
+                            const iconClass = $(this).find('i, img').attr('class') || '';
+                            let matched = false;
+                            if (modifier.subtype === 'half_damage' && (labelText.includes('½') || labelText.includes('half') || iconClass.includes('half')))
+                                matched = true;
+                            if (modifier.subtype === 'ap' && (labelText.includes('ap') || labelText.includes('armor') || iconClass.includes('armor')))
+                                matched = true;
+                            if (modifier.subtype === 'paracausal' && (labelText.includes('paracausal') || labelText.includes('reduce') || iconClass.includes('paracausal')))
+                                matched = true;
+                            if (matched)
+                            {
+                                const checkbox = $(this).find('input[type="checkbox"]')[0];
+                                if (checkbox && checkbox.checked !== desired)
+                                {
+                                    checkbox.checked = desired;
+                                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                                 }
-                            });
+                            }
                         });
+                    });
+                };
+                const clickDmgPerTargetButtons = () =>
+                {
+                    for (const modifier of dmgMods)
+                    {
+                        if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0)
+                            setDmgCheckbox(modifier, modifier.applyTo, true);
                     }
                 };
-                const poll = setInterval(() => {
-                    if (state.data.damage_hud_data) {
+                const poll = setInterval(() =>
+                {
+                    if (state.data.damage_hud_data)
+                    {
                         clearInterval(poll);
                         hookDamageReplaceTargets();
                         // Wait for HUD to render, then click per-target buttons
-                        setTimeout(clickDmgPerTargetButtons, 300);
+                        setTimeout(() =>
+                        {
+                            clickDmgPerTargetButtons();
+                            syncGlobalDmgBoxes();
+                        }, 300);
                     }
                 }, 50);
                 setTimeout(() => clearInterval(poll), 5000);
+                dmgLive = { dmgMods, applyDmgModsToTargets, setDmgCheckbox, clickDmgPerTargetButtons, toggleGlobalDmgBox, syncGlobalDmgBoxes, syncDmgModRows };
             }
 
             let reinjectCallback = null;
-            if (typeof state.data.acc_diff.replaceTargets === 'function') {
+            if (typeof state.data.acc_diff.replaceTargets === 'function')
+            {
                 const origReplace = state.data.acc_diff.replaceTargets.bind(state.data.acc_diff);
-                state.data.acc_diff.replaceTargets = function(newTargets) {
+                state.data.acc_diff.replaceTargets = function(newTargets)
+                {
                     origReplace(newTargets);
-                    if (collected.allTargetedBonuses.length > 0) {
+                    if (collected.allTargetedBonuses.length > 0)
                         applyTargetedBonuses(this);
-                    }
                     applyTargetModifiers(this);
-                    if (reinjectCallback) {
+                    if (reinjectCallback)
                         setTimeout(reinjectCallback, 50);
-                    }
                     return this;
                 };
             }
 
-            if (collected.activeBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetModifiers.length > 0) {
-                reinjectCallback = showBonusNotification(getEffActive, state, getEffTargeted, collected.disabledByUser);
-            }
+            if (collected.activeBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetModifiers.length > 0)
+                reinjectCallback = showBonusNotification(getEffectiveActiveBonuses, state, getEffectiveTargetedBonuses, collected.disabledByUser, bonusUsage.enabledById);
 
             // Inject target modifier toggles into the attack HUD
             const attackModSubtypes = new Set(['invisible', 'no_invisible', 'no_cover', 'soft_cover', 'hard_cover']);
             const attackMods = collected.targetModifiers.filter(m => attackModSubtypes.has(m.subtype));
-            if (attackMods.length > 0 && flowType !== 'damage') {
+            if (attackMods.length > 0 && flowType !== 'damage')
+            {
                 const modLabels = { invisible: 'Invisible (*)', no_invisible: 'Not Invisible', no_cover: 'No Cover', soft_cover: 'Soft Cover (+1)', hard_cover: 'Hard Cover (+2)' };
-                const modEnabled = new Map(attackMods.map(m => [m.id || m.subtype, true]));
+                const modEnabled = new Map(attackMods.map(mod => [mod.id || mod.subtype, true]));
+                bonusUsage.modEnabled = modEnabled;
                 // Save originals per target for restore on uncheck
                 const originals = new Map();
-                for (const t of (state.data.acc_diff?.targets || [])) {
-                    for (const mod of attackMods) {
+                for (const t of (state.data.acc_diff?.targets || []))
+                {
+                    for (const mod of attackMods)
+                    {
                         const key = `${accDiffTargetToken(t)?.id}::${mod.subtype}`;
                         if ((mod.subtype === 'invisible' || mod.subtype === 'no_invisible') && t.plugins?.invisibility)
                             originals.set(key, t.plugins.invisibility.data);
@@ -570,7 +812,8 @@ function createGenericBonusStep(flowType) {
                     }
                 }
 
-                const injectModToggles = () => {
+                const injectModToggles = () =>
+                {
                     const $form = $('form[id^="accdiff"]');
                     if ($form.length === 0)
                         return;
@@ -579,10 +822,10 @@ function createGenericBonusStep(flowType) {
                     // Get Svelte classes from Prone section or use hardcoded defaults
                     const $proneSection = $form.find('label span:contains("Prone")').closest('.accdiff-grid__section');
                     const $ref = $proneSection.find('label.container').first();
-                    const sClass = $proneSection.attr('class') || 'accdiff-grid accdiff-grid__section svelte-k5ear2';
-                    const cClass = $proneSection.find('.accdiff-grid__column').attr('class') || 'accdiff-grid__column svelte-k5ear2';
-                    const lClass = $ref.attr('class') || 'container svelte-wt0sk2';
-                    const iClass = $ref.find('input').attr('class') || 'svelte-wt0sk2';
+                    const sectionClass = $proneSection.attr('class') || 'accdiff-grid accdiff-grid__section svelte-k5ear2';
+                    const columnClass = $proneSection.find('.accdiff-grid__column').attr('class') || 'accdiff-grid__column svelte-k5ear2';
+                    const labelClass = $ref.attr('class') || 'container svelte-wt0sk2';
+                    const inputClass = $ref.find('input').attr('class') || 'svelte-wt0sk2';
 
                     const $allCards = $form.find('.accdiff-target');
                     const multiTarget = $allCards.length > 1;
@@ -592,18 +835,21 @@ function createGenericBonusStep(flowType) {
                     const perTargetMods = multiTarget ? attackMods.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
 
                     // Build toggle change handler
-                    const onToggle = (modifier, isOn) => {
+                    const onToggle = (modifier, isOn) =>
+                    {
                         const modKey = modifier.id || modifier.subtype;
                         modEnabled.set(modKey, isOn);
                         const reactorToken = resolveReactorToken(modifier, state);
-                        for (const targetEntry of (state.data.acc_diff?.targets || [])) {
+                        for (const targetEntry of (state.data.acc_diff?.targets || []))
+                        {
                             if (Array.isArray(modifier.applyTo) && modifier.applyTo.length > 0 && !modifier.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
                                 continue;
                             if (!evaluateApplyToCondition(modifier, targetEntry, state, reactorToken))
                                 continue;
-                            if (isOn) {
+                            if (isOn)
                                 applyOneModifier(targetEntry, modifier);
-                            } else {
+                            else
+                            {
                                 const originalKey = `${accDiffTargetToken(targetEntry)?.id}::${modifier.subtype}`;
                                 if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility)
                                     targetEntry.plugins.invisibility.data = 0;
@@ -615,21 +861,28 @@ function createGenericBonusStep(flowType) {
                         }
                     };
 
-                    // Inject global mods in the global section
-                    if (globalMods.length > 0) {
+                    if (globalMods.length > 0)
+                    {
                         let $insertAfter = $proneSection.length > 0 ? $proneSection : $form.find('label[for="accdiff-manual-adjust"]').closest('.accdiff-grid');
-                        if ($insertAfter.length > 0) {
-                            const html = globalMods.map(mod => {
+                        if ($insertAfter.length > 0)
+                        {
+                            const html = globalMods.map(mod =>
+                            {
                                 const mKey = mod.id || mod.subtype;
                                 const checked = modEnabled.get(mKey) !== false;
                                 const name = mod.name ? `${mod.name}: ${modLabels[mod.subtype]}` : modLabels[mod.subtype];
-                                return `<label class="${lClass} la-tmod-row" data-mkey="${mKey}" data-sub="${mod.subtype}" style="${checked ? '' : 'opacity:0.5;'}">` +
-                                    `<input type="checkbox" class="${iClass}" ${checked ? 'checked' : ''}> ` +
+                                return `<label class="${labelClass} la-tmod-row" data-mkey="${mKey}" data-sub="${mod.subtype}" style="${checked ? '' : 'opacity:0.5;'}">` +
+                                    `<input type="checkbox" class="${inputClass}" ${checked ? 'checked' : ''}> ` +
                                     `<span style="text-wrap: nowrap;">${name}</span></label>`;
                             }).join('');
-                            const $sec = $(`<div class="${sClass} la-target-modifier-section" style="width: 100%;"><div class="${cClass}">${html}</div></div>`);
-                            $insertAfter.after($sec);
-                            $sec.find('.la-tmod-row input').on('change', function () {
+                            const $modSection = $(`<div class="${sectionClass} la-target-modifier-section" style="width:100%;border-top:1px solid var(--primary-color,#991e2a);margin-top:6px;padding-top:4px;"><div class="${columnClass}">${html}</div></div>`);
+                            const $targeting = $form.find('.la-targeting-section').first();
+                            if ($targeting.length)
+                                $targeting.before($modSection);
+                            else
+                                $insertAfter.after($modSection);
+                            $modSection.find('.la-tmod-row input').on('change', function ()
+                            {
                                 const $row = $(this).closest('.la-tmod-row');
                                 const mKey = String($row.data('mkey'));
                                 const mod = globalMods.find(m => (m.id || m.subtype) === mKey);
@@ -643,11 +896,13 @@ function createGenericBonusStep(flowType) {
                     }
 
                     // Inject per-target mods into matching target cards
-                    for (const mod of perTargetMods) {
+                    for (const mod of perTargetMods)
+                    {
                         const mKey = mod.id || mod.subtype;
                         const checked = modEnabled.get(mKey) !== false;
                         const name = mod.name ? `${mod.name}: ${modLabels[mod.subtype]}` : modLabels[mod.subtype];
-                        $allCards.each(function () {
+                        $allCards.each(function ()
+                        {
                             const $card = $(this);
                             const tokenId = (mod.applyTo || []).find(id => $card.find(`label.target-name[for="${id}"]`).length > 0);
                             if (!tokenId)
@@ -659,12 +914,13 @@ function createGenericBonusStep(flowType) {
                             if ($body.length === 0)
                                 return;
                             const $siblingLabel = $form.find('.accdiff-grid__column label').first();
-                            const $row = $(`<label class="${$siblingLabel.attr('class') || lClass} la-tmod-row ${guardClass}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;${checked ? '' : 'opacity:0.5;'}">
-                                <input type="checkbox" class="${$siblingLabel.find('input').attr('class') || iClass}" ${checked ? 'checked' : ''}>
+                            const $row = $(`<label class="${$siblingLabel.attr('class') || labelClass} la-tmod-row ${guardClass}" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;${checked ? '' : 'opacity:0.5;'}">
+                                <input type="checkbox" class="${$siblingLabel.find('input').attr('class') || inputClass}" ${checked ? 'checked' : ''}>
                                 <span style="text-wrap:wrap;font-size:0.85em;line-height:1.1;" class="${$siblingLabel.find('span').attr('class') || ''}">${name}</span>
                             </label>`);
                             $body.append($row);
-                            $row.find('input').on('change', function () {
+                            $row.find('input').on('change', function ()
+                            {
                                 const on = $(this).is(':checked');
                                 $row.css('opacity', on ? '1' : '0.5');
                                 onToggle(mod, on);
@@ -674,20 +930,144 @@ function createGenericBonusStep(flowType) {
                 };
                 setTimeout(injectModToggles, 100);
                 const _prevReinject = reinjectCallback;
-                reinjectCallback = () => {
+                reinjectCallback = () =>
+                {
                     if (_prevReinject)
                         _prevReinject(); injectModToggles();
                 };
             }
 
-            if (flowType === 'damage') {
+            if (flowType === 'damage')
+            {
                 const dmgModifiers = collected.targetModifiers.filter(m => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(m.subtype));
-                if (collected.damageBonuses.length > 0 || collected.targetedDamageBonuses.length > 0 || dmgModifiers.length > 0) {
-                    showDamageBonusNotification(collected.damageBonuses, state, collected.targetedDamageBonuses, dmgModifiers);
-                }
+                if (collected.damageBonuses.length > 0 || collected.targetedDamageBonuses.length > 0 || dmgModifiers.length > 0)
+                    showDamageBonusNotification(collected.damageBonuses, state, collected.targetedDamageBonuses, dmgModifiers, bonusUsage.dmgEnabled);
             }
 
-        } catch (e) {
+            const liveSession = {
+                created: Date.now(),
+                isLive: () => !!document.querySelector(flowType === 'damage' ? '#damage-hud' : 'form[id^="accdiff"]'),
+                refresh: async () =>
+                {
+                    const fresh = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [], targetModifiers: [] };
+                    // Shallow-clone state so tag targeter bonuses re-collected here can't mutate the real flow
+                    const scanState = { ...state, data: { ...state.data, tags: Array.isArray(state.data?.tags) ? [...state.data.tags] : state.data?.tags } };
+                    await collectTargeterBonuses(attackerId, flowType, tags, scanState, fresh);
+                    const keyOf = (bonus) => `${bonus.applyTo?.[0] ?? ''}:${bonus.id ?? bonus.name ?? ''}`;
+                    let changed = false;
+
+                    for (const { list, bucket } of [{ list: 'allTargetedBonuses', bucket: 'targeted' }, { list: 'targetModifiers', bucket: 'tmod' }])
+                    {
+                        const freshKeys = new Set(fresh[list].map(keyOf));
+                        const currentTargeter = collected[list].filter(bonus => bonus._targeter);
+                        const currentKeys = new Set(currentTargeter.map(keyOf));
+
+                        for (const bonus of currentTargeter)
+                        {
+                            if (freshKeys.has(keyOf(bonus)))
+                                continue;
+                            changed = true;
+                            if (list === 'allTargetedBonuses')
+                            {
+                                const val = Number.parseInt(bonus.val) || 0;
+                                const prevMode = appliedMode.get(bonus.id);
+                                const accDiff = state.data.acc_diff;
+                                if (val && prevMode === 'base' && accDiff?.base)
+                                {
+                                    if (bonus.type === 'difficulty')
+                                        accDiff.base.difficulty -= val;
+                                    else
+                                        accDiff.base.accuracy -= val;
+                                }
+                                else if (val && prevMode === 'target')
+                                {
+                                    for (const targetEntry of (accDiff?.targets ?? []))
+                                    {
+                                        if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
+                                        {
+                                            if (bonus.type === 'difficulty')
+                                                targetEntry.difficulty -= val;
+                                            else
+                                                targetEntry.accuracy -= val;
+                                        }
+                                    }
+                                }
+                                appliedMode.delete(bonus.id);
+                            }
+                            else if (flowType === 'damage' && dmgLive)
+                            {
+                                const hudTargets = state.data.damage_hud_data?.targets ?? [];
+                                for (const targetEntry of hudTargets)
+                                {
+                                    if (Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0 && !bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
+                                        continue;
+                                    if (bonus.subtype === 'ap')
+                                        targetEntry.ap = false;
+                                    else if (bonus.subtype === 'half_damage')
+                                        targetEntry.halfDamage = false;
+                                    else if (bonus.subtype === 'paracausal')
+                                        targetEntry.paracausal = false;
+                                }
+                                if (Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0)
+                                    dmgLive.setDmgCheckbox(bonus, bonus.applyTo, false);
+                                if (hudTargets.length === 1)
+                                {
+                                    const singleId = accDiffTargetToken(hudTargets[0])?.id;
+                                    if (!Array.isArray(bonus.applyTo) || bonus.applyTo.length === 0 || bonus.applyTo.includes(singleId))
+                                        dmgLive.toggleGlobalDmgBox(bonus.subtype, false);
+                                }
+                            }
+                            const staleIndex = collected[list].indexOf(bonus);
+                            if (staleIndex >= 0)
+                                collected[list].splice(staleIndex, 1);
+                            if (bonus.id)
+                                delete bonusUsage.candidates[bonus.id];
+                        }
+
+                        for (const bonus of fresh[list])
+                        {
+                            if (currentKeys.has(keyOf(bonus)))
+                                continue;
+                            changed = true;
+                            collected[list].push(bonus);
+                            if (bonus.id)
+                                bonusUsage.candidates[bonus.id] = { id: bonus.id, bucket, type: bonus.type, subtype: bonus.subtype ?? null, consumeOnUsage: bonus.consumeOnUsage, uses: bonus.uses, applyTo: bonus.applyTo ?? null };
+                        }
+                    }
+
+                    if (!changed)
+                        return;
+
+                    if (flowType === 'damage')
+                    {
+                        if (dmgLive)
+                        {
+                            dmgLive.dmgMods.length = 0;
+                            dmgLive.dmgMods.push(...collected.targetModifiers.filter(mod => ['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss'].includes(mod.subtype)));
+                            dmgLive.applyDmgModsToTargets(state.data.damage_hud_data?.targets ?? []);
+                            dmgLive.clickDmgPerTargetButtons();
+                            dmgLive.syncGlobalDmgBoxes();
+                            dmgLive.syncDmgModRows();
+                        }
+                    }
+                    else
+                    {
+                        if (state.data.acc_diff)
+                        {
+                            applyTargetedBonuses(state.data.acc_diff);
+                            applyTargetModifiers(state.data.acc_diff);
+                        }
+                        if (reinjectCallback)
+                            setTimeout(reinjectCallback, 50);
+                        else if (collected.activeBonuses.length > 0 || collected.allTargetedBonuses.length > 0 || collected.targetModifiers.length > 0)
+                            reinjectCallback = showBonusNotification(getEffectiveActiveBonuses, state, getEffectiveTargetedBonuses, collected.disabledByUser, bonusUsage.enabledById);
+                    }
+                }
+            };
+            liveBonusSessions.set(flowType === 'damage' ? 'damage' : 'accdiff', liveSession);
+        }
+        catch (e)
+        {
             console.error("lancer-automations | Error in genericAccuracyStep:", e);
         }
 
@@ -698,41 +1078,58 @@ function createGenericBonusStep(flowType) {
 /**
  * Internal helper to process a list of bonuses and sort them into results buckets.
  */
-async function processBonusBatch(bonuses, flowType, tags, state, results) {
+async function processBonusBatch(bonuses, flowType, tags, state, results)
+{
     if (!Array.isArray(bonuses))
         return;
     const targets = Array.from(game.user?.targets || []);
 
-    for (const bonus of bonuses) {
-        if (bonus.applyToTargetter || !(await isBonusApplicable(bonus, tags, state)) || bonus.type === 'stat' || bonus.type === 'range') {
+    for (const bonus of bonuses)
+    {
+        if (bonus.applyToTargetter || !(await isBonusApplicable(bonus, tags, state)) || bonus.type === 'stat' || bonus.type === 'range')
             continue;
-        }
 
-        if (bonus.type === 'target_modifier') {
+        if (bonus.type === 'target_modifier')
+        {
             results.targetModifiers.push(bonus);
             results.activeBonuses.push(bonus);
-        } else if (bonus.type === 'tag') {
+        }
+        else if (bonus.type === 'tag')
+        {
             applyTagBonus(state, bonus);
             results.activeBonuses.push(bonus);
-        } else if (bonus.type === 'damage' && flowType === 'damage') {
-            const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
-            if (hasTarget) {
-                if (targets.some(target => bonus.applyTo.includes(target.id))) {
-                    results.targetedDamageBonuses.push(bonus);
-                }
-            } else {
-                results.damageBonuses.push(bonus);
+        }
+        else if (bonus.type === 'damage' && flowType === 'damage')
+        {
+            const damageMode = bonus.damageMode || 'add';
+            if (damageMode !== 'add')
+            {
+                // Non-add modes mutate the weapon in wrapShowDamageHUD; just record it as active.
+                results.activeBonuses.push(bonus);
+                continue;
             }
-        } else if (bonus.type !== 'damage') {
             const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
-            if (hasTarget) {
+            if (hasTarget)
+            {
+                if (targets.some(target => bonus.applyTo.includes(target.id)))
+                    results.targetedDamageBonuses.push(bonus);
+            }
+            else
+                results.damageBonuses.push(bonus);
+        }
+        else if (bonus.type !== 'damage')
+        {
+            const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+            if (hasTarget)
+            {
                 const injectedBonus = { ...bonus, id: bonus.id || foundry.utils.randomID() };
                 results.allTargetedBonuses.push(injectedBonus);
-            } else {
+            }
+            else
+            {
                 let val = Number.parseInt(bonus.val) || 0;
-                if (bonus.type === 'difficulty') {
+                if (bonus.type === 'difficulty')
                     val = -val;
-                }
                 results.netBonus += val;
                 results.activeBonuses.push(bonus);
             }
@@ -740,129 +1137,126 @@ async function processBonusBatch(bonuses, flowType, tags, state, results) {
     }
 }
 
-/**
- * Specifically handles ephemeral bonuses and their consumption.
- */
 const ATTACK_TARGET_MOD_SUBTYPES = new Set(['invisible', 'no_invisible', 'no_cover', 'soft_cover', 'hard_cover']);
 const DAMAGE_TARGET_MOD_SUBTYPES = new Set(['ap', 'half_damage', 'paracausal', 'crit', 'hit', 'miss']);
-function targetModSubtypeMatchesFlow(subtype, flowType) {
+function targetModSubtypeMatchesFlow(subtype, flowType)
+{
     if (flowType === 'damage')
         return DAMAGE_TARGET_MOD_SUBTYPES.has(subtype);
     return ATTACK_TARGET_MOD_SUBTYPES.has(subtype);
 }
 
-async function processEphemeralBonuses(actor, flowType, tags, state, results) {
+async function processEphemeralBonuses(actor, flowType, tags, state, results)
+{
     const bonuses = state?.la_extraData?.flow_bonus || [];
-    if (!bonuses.length) {
+    if (!bonuses.length)
         return;
-    }
     const remaining = [];
     let changed = false;
 
-    for (const b of bonuses) {
-        if (await isBonusApplicable(b, tags, state)) {
+    for (const b of bonuses)
+    {
+        if (!linkTierGate(b, actor))
+        {
+            remaining.push(b);
+            continue;
+        }
+        if (await isBonusApplicable(b, tags, state))
+        {
             // Defer target_modifier bonuses whose subtype doesn't apply to the current flow type
             // (e.g. half_damage during the attack flow) so they survive to the damage flow.
-            if (b.type === 'target_modifier' && !targetModSubtypeMatchesFlow(b.subtype, flowType)) {
+            if (b.type === 'target_modifier' && !targetModSubtypeMatchesFlow(b.subtype, flowType))
+            {
                 remaining.push(b);
                 continue;
             }
-            const res = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [], targetModifiers: [] };
-            await processBonusBatch([b], flowType, tags, state, res);
+            const batchResults = { netBonus: 0, activeBonuses: [], rangeBonuses: [], damageBonuses: [], allTargetedBonuses: [], targetedDamageBonuses: [], targetModifiers: [] };
+            await processBonusBatch([b], flowType, tags, state, batchResults);
 
             // If it was actually applicable and used in the current context, consume it
-            const consumed = (res.activeBonuses.length > 0) || (res.rangeBonuses.length > 0) ||
-                             (res.damageBonuses.length > 0) || (res.allTargetedBonuses.length > 0) ||
-                             (res.targetedDamageBonuses.length > 0) || (res.targetModifiers.length > 0) ||
-                             (res.netBonus !== 0);
+            const consumed = (batchResults.activeBonuses.length > 0) || (batchResults.rangeBonuses.length > 0) ||
+                             (batchResults.damageBonuses.length > 0) || (batchResults.allTargetedBonuses.length > 0) ||
+                             (batchResults.targetedDamageBonuses.length > 0) || (batchResults.targetModifiers.length > 0) ||
+                             (batchResults.netBonus !== 0);
 
-            if (consumed) {
-                results.netBonus += res.netBonus;
-                results.activeBonuses.push(...res.activeBonuses);
-                results.rangeBonuses.push(...res.rangeBonuses);
-                results.damageBonuses.push(...res.damageBonuses);
-                results.allTargetedBonuses.push(...res.allTargetedBonuses);
-                results.targetedDamageBonuses.push(...res.targetedDamageBonuses);
+            if (consumed)
+            {
+                results.netBonus += batchResults.netBonus;
+                results.activeBonuses.push(...batchResults.activeBonuses);
+                results.rangeBonuses.push(...batchResults.rangeBonuses);
+                results.damageBonuses.push(...batchResults.damageBonuses);
+                results.allTargetedBonuses.push(...batchResults.allTargetedBonuses);
+                results.targetedDamageBonuses.push(...batchResults.targetedDamageBonuses);
                 if (results.targetModifiers)
-                    results.targetModifiers.push(...res.targetModifiers);
+                    results.targetModifiers.push(...batchResults.targetModifiers);
                 changed = true;
-            } else {
-                remaining.push(b);
             }
-        } else {
-            remaining.push(b);
+            else
+                remaining.push(b);
         }
+        else
+            remaining.push(b);
     }
-    if (changed && state?.la_extraData) {
+    if (changed && state?.la_extraData)
         state.la_extraData.flow_bonus = remaining;
-    }
 }
 
 /**
  * Scans for bonuses from other tokens on the active scene (applyToTargetter).
  */
-async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, results) {
+async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, results)
+{
     const targets = Array.from(game.user?.targets || []);
-    for (const token of (game.scenes.active?.tokens ?? [])) {
-        if (!token.actor || token.id === attackerTokenId) {
+    for (const token of (game.scenes.active?.tokens ?? []))
+    {
+        if (!token.actor || token.id === attackerTokenId)
             continue;
-        }
         const sourceActor = token.actor;
         const isTargeted = targets.some(target => target.id === token.id);
-        const isApplicableTargeterBonus = async (bonus) => {
+        const isApplicableTargeterBonus = async (bonus) =>
+        {
             return bonus.applyToTargetter && (!bonus.applyTo?.length || bonus.applyTo.includes(attackerTokenId)) &&
                                    await isBonusApplicable(bonus, tags, state) && bonus.type !== 'stat';
         };
-        const routeToResults = (bonus) => {
-            const injected = { ...bonus, applyTo: [token.id], id: bonus.id || foundry.utils.randomID() };
-            if (bonus.type === 'damage') {
-                if (flowType === 'damage' && isTargeted) {
+        const routeToResults = (bonus) =>
+        {
+            const injected = { ...bonus, applyTo: [token.id], id: bonus.id || foundry.utils.randomID(), _targeter: true };
+            if (bonus.type === 'damage')
+            {
+                if (flowType === 'damage' && isTargeted)
                     results.targetedDamageBonuses.push(injected);
-                }
-            } else if (bonus.type === 'tag') {
+            }
+            else if (bonus.type === 'target_modifier')
+                results.targetModifiers.push(injected);
+            else if (bonus.type === 'tag')
+            {
                 applyTagBonus(state, bonus);
                 results.activeBonuses.push(injected);
-            } else {
-                results.allTargetedBonuses.push(injected);
             }
+            else
+                results.allTargetedBonuses.push(injected);
         };
 
-        for (const bonus of flattenBonuses(sourceActor.getFlag("lancer-automations", "global_bonuses"))) {
-            if (await isApplicableTargeterBonus(bonus)) {
+        for (const bonus of flattenBonuses(getGlobalBonuses(sourceActor)))
+        {
+            if (await isApplicableTargeterBonus(bonus))
                 routeToResults(bonus);
-            }
         }
-        for (const bonus of (sourceActor.getFlag("lancer-automations", "constant_bonuses") || [])) {
-            if (await isApplicableTargeterBonus(bonus)) {
+        for (const bonus of getConstantBonuses(sourceActor))
+        {
+            if (await isApplicableTargeterBonus(bonus))
                 routeToResults(bonus);
-            }
         }
-        /*
-        // This is the old ephemeral bonus system utilizing actor flags.
-        const ephemerals = sourceActor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
-        const rem = [];
-        let consumed = false;
-        for (const b of ephemerals) {
-            if (await filter(b) && isTargeted) {
-                route(b);
-                consumed = true;
-            } else {
-                rem.push(b);
-            }
-        }
-        if (consumed) {
-            updates.set(sourceActor, rem);
-        }
-        */
     }
 }
 
 /**
  * Determines the appropriate icon for a bonus based on its type and value.
- * @param {object} bonus - The bonus data
+ * @param {object} bonus
  * @returns {string} The path to the SVG icon
  */
-export function getBonusIcon(bonus) {
+export function getBonusIcon(bonus)
+{
     const ACC = "systems/lancer/assets/icons/white/accuracy.svg";
     const DIFF = "systems/lancer/assets/icons/white/difficulty.svg";
     const RANGE = "systems/lancer/assets/icons/white/range.svg";
@@ -881,12 +1275,15 @@ export function getBonusIcon(bonus) {
     if (bonus.type === 'immunity')
         return IMMUNITY;
 
-    if (bonus.type === 'multi' && Array.isArray(bonus.bonuses)) {
+    if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
+    {
         const counts = {};
         let maxCount = 0, maxType = null;
-        for (const sub of bonus.bonuses) {
+        for (const sub of bonus.bonuses)
+        {
             counts[sub.type] = (counts[sub.type] || 0) + 1;
-            if (counts[sub.type] > maxCount) {
+            if (counts[sub.type] > maxCount)
+            {
                 maxCount = counts[sub.type];
                 maxType = sub.type;
             }
@@ -898,16 +1295,19 @@ export function getBonusIcon(bonus) {
     return val >= 0 ? ACC : DIFF;
 }
 
-function getFlowTags(flowType, state) {
+function getFlowTags(flowType, state)
+{
     const tags = new Set(["all"]);
     const itemType = state.item?.system?.type?.toLowerCase();
 
-    const addWeaponClassTags = () => {
-        const wt = getWeaponType(state.item);
-        if (wt) {
-            if (wt === "Melee")
+    const addWeaponClassTags = () =>
+    {
+        const weaponType = getWeaponType(state.item);
+        if (weaponType)
+        {
+            if (weaponType === "Melee")
                 tags.add("melee");
-            else if (wt === "Nexus")
+            else if (weaponType === "Nexus")
                 tags.add("nexus");
             else
                 tags.add("ranged");
@@ -916,30 +1316,36 @@ function getFlowTags(flowType, state) {
             tags.add("tech");
     };
 
-    if (["attack", "basic_attack", "weapon_attack"].includes(flowType)) {
+    if (["attack", "basic_attack", "weapon_attack"].includes(flowType))
+    {
         tags.add("attack");
-        if (itemType) {
+        if (itemType)
             tags.add(itemType);
-        }
         addWeaponClassTags();
-    } else if (flowType === "tech_attack") {
+    }
+    else if (flowType === "tech_attack")
+    {
         tags.add("attack");
         tags.add("tech_attack");
         tags.add("tech");
-    } else if (flowType === "stat_roll") {
+    }
+    else if (flowType === "stat_roll")
+    {
         tags.add("check");
         const path = state.data?.path?.toLowerCase() || "";
-        ["hull", "agility", "systems", "engineering", "grit"].forEach(t => {
-            if (path.includes(t) || path.includes(t.slice(0, 3))) {
-                tags.add(t);
-            }
+        ["hull", "agility", "systems", "engineering", "grit"].forEach(statName =>
+        {
+            if (path.includes(statName) || path.includes(statName.slice(0, 3)))
+                tags.add(statName);
         });
-        if (state.actor?.is_npc && path.includes("tier")) {
+        if (state.actor?.is_npc && path.includes("tier"))
             tags.add("tier");
-        }
-    } else if (["structure", "overheat", "damage"].includes(flowType)) {
+    }
+    else if (["structure", "overheat", "damage"].includes(flowType))
+    {
         tags.add(flowType);
-        if (flowType === "damage") {
+        if (flowType === "damage")
+        {
             if (itemType)
                 tags.add(itemType);
             addWeaponClassTags();
@@ -948,21 +1354,27 @@ function getFlowTags(flowType, state) {
     return tags;
 }
 
-export function isBonusApplicable(bonus, flowTags, state) {
-    if (bonus.rollTypes && Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0) {
-        const hasMatch = bonus.rollTypes.some(t => flowTags.has(t.toLowerCase()));
+export function isBonusApplicable(bonus, flowTags, state)
+{
+    if (bonus.rollTypes && Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0)
+    {
+        const hasMatch = bonus.rollTypes.some(rollType => flowTags.has(rollType.toLowerCase()));
         if (!hasMatch)
             return false;
     }
 
-    if (bonus.condition) {
-        try {
+    if (bonus.condition)
+    {
+        try
+        {
             const context = bonus.context || {};
             let result;
-            if (typeof bonus.condition === 'function') {
+            if (typeof bonus.condition === 'function')
                 result = bonus.condition(state, state.actor, state.data, context);
-            } else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '') {
-                if (bonus.condition.startsWith('@@fn:')) {
+            else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '')
+            {
+                if (bonus.condition.startsWith('@@fn:'))
+                {
                     const fn = compileCachedLambda(
                         bonus.condition.slice('@@fn:'.length),
                         serializedConditionCache,
@@ -972,24 +1384,30 @@ export function isBonusApplicable(bonus, flowTags, state) {
                         `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??canvas.tokens.placeables.find(t=>t.id===ownerTokenId):null;`
                     );
                     result = fn(state, state.actor, state.data, context);
-                } else {
+                }
+                else
+                {
                     const fn = stringToAsyncFunction(bonus.condition, ['state', 'actor', 'data', 'context']);
                     result = fn(state, state.actor, state.data, context);
                 }
             }
-            if (result instanceof Promise) {
+            if (result instanceof Promise)
+            {
                 console.error(`lancer-automations | evaluate for "${bonus.name}" is async. Bonus condition must be synchronous.`);
                 return false;
             }
             if (!result)
                 return false;
-        } catch (e) {
+        }
+        catch (e)
+        {
             console.warn("lancer-automations | Condition evaluation failed:", e);
             return false;
         }
     }
 
-    if (bonus.itemLids && Array.isArray(bonus.itemLids) && bonus.itemLids.length > 0) {
+    if (bonus.itemLids && Array.isArray(bonus.itemLids) && bonus.itemLids.length > 0)
+    {
         if (!state.item)
             return false;
         const itemLid = state.item.system?.lid;
@@ -997,7 +1415,8 @@ export function isBonusApplicable(bonus, flowTags, state) {
             return false;
     }
 
-    if (bonus.itemId) {
+    if (bonus.itemId)
+    {
         if (!state.item)
             return false;
         if (state.item.id !== bonus.itemId && state.item._id !== bonus.itemId)
@@ -1012,24 +1431,25 @@ export function isBonusApplicable(bonus, flowTags, state) {
  * and also inject per-target bonus checkboxes into each matching target card.
  *
  * @param {Function} getBonuses         - Getter returning current global bonuses (re-called at each injection)
- * @param {object} state                - Flow state
+ * @param {object} state
  * @param {Function} getTargetedBonuses - Getter returning current targeted bonuses
  * @param {Set} disabledByUser          - Shared set of "${bonusId}:${tokenId}" keys for user-disabled bonuses
  */
-function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledByUser = new Set()) {
-    // Persistent enabled state by bonus ID — survives mode switches (base ↔ target)
-    const enabledById = new Map();
+function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledByUser = new Set(), enabledById = new Map())
+{
 
-    const getCurrentBonusStates = () => {
+    const getCurrentBonusStates = () =>
+    {
         const currentBonuses = typeof getBonuses === 'function' ? getBonuses() : (getBonuses || []);
-        return currentBonuses.map((b, index) => ({
-            ...b,
+        return currentBonuses.map((bonus, index) => ({
+            ...bonus,
             index,
-            enabled: enabledById.has(b.id) ? enabledById.get(b.id) : true
+            enabled: enabledById.has(bonus.id) ? enabledById.get(bonus.id) : true
         }));
     };
 
-    const updateFlowAccuracy = (bonus, wasEnabled) => {
+    const updateFlowAccuracy = (bonus, wasEnabled) =>
+    {
         if (bonus.type !== 'accuracy' && bonus.type !== 'difficulty')
             return;
         let val = Number.parseInt(bonus.val) || 0;
@@ -1039,11 +1459,13 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
         const $plusBtn = $('form[id^="accdiff"] button[data-tooltip="Add global accuracy"]');
         const $minusBtn = $('form[id^="accdiff"] button[data-tooltip="Add global difficulty"]');
 
-        if ($plusBtn.length === 0 || $minusBtn.length === 0) {
+        if ($plusBtn.length === 0 || $minusBtn.length === 0)
+        {
             const $plusBtnAlt = $('form[id^="accdiff"] button:has(.cci-accuracy)');
             const $minusBtnAlt = $('form[id^="accdiff"] button:has(.cci-difficulty)');
 
-            if ($plusBtnAlt.length > 0 && $minusBtnAlt.length > 0) {
+            if ($plusBtnAlt.length > 0 && $minusBtnAlt.length > 0)
+            {
                 const clickCount = Math.abs(val);
                 const $buttonToClick = wasEnabled ?
                     (val > 0 ? $minusBtnAlt : $plusBtnAlt) :
@@ -1061,12 +1483,12 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
             (val > 0 ? $minusBtn : $plusBtn) :
             (val > 0 ? $plusBtn : $minusBtn);
 
-        for (let i = 0; i < clickCount; i++) {
+        for (let i = 0; i < clickCount; i++)
             $buttonToClick[0].click();
-        }
     };
 
-    const renderBonusRow = (bonus, index) => {
+    const renderBonusRow = (bonus, index) =>
+    {
         const usesText = bonus.uses !== undefined ? ` (${bonus.uses} left)` : '';
         const isDifficulty = bonus.type === 'difficulty';
         const rawVal = Number.parseInt(bonus.val) || 0;
@@ -1082,8 +1504,10 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
         `;
     };
 
-    const bindEvents = ($container) => {
-        $container.find('.csm-bonus-checkbox').on('change', function() {
+    const bindEvents = ($container) =>
+    {
+        $container.find('.csm-bonus-checkbox').on('change', function()
+        {
             const bonusIndex = Number.parseInt($(this).data('index'));
             const bonusId = $(this).closest('label').data('bonus-id');
             const isChecked = $(this).is(':checked');
@@ -1098,7 +1522,8 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
         });
     };
 
-    const injectIntoCard = () => {
+    const injectIntoCard = () =>
+    {
         const $form = $('form[id^="accdiff"]');
         if ($form.length === 0)
             return false;
@@ -1109,12 +1534,14 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
         const $accContainer = $accurateLabel.closest('div');
         const $diffContainer = $inaccurateLabel.closest('div');
 
-        if ($accContainer.length > 0 && $diffContainer.length > 0) {
-            // Only remove global rows — leave per-target rows untouched
+        if ($accContainer.length > 0 && $diffContainer.length > 0)
+        {
+            // Only remove global rows; leave per-target rows untouched
             $form.find('.csm-global-bonus-row').remove();
 
             const bonusStates = getCurrentBonusStates();
-            bonusStates.forEach((bonus, index) => {
+            bonusStates.forEach((bonus, index) =>
+            {
                 const val = Number.parseInt(bonus.val) || 0;
                 if (val === 0)
                     return;
@@ -1126,14 +1553,16 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
                 const $row = $(rowHtml);
 
                 const $sibling = $target.find('label').first();
-                if ($sibling.length > 0) {
+                if ($sibling.length > 0)
+                {
                     const siblingClassStr = $sibling.attr('class') || '';
                     if (siblingClassStr)
                         $row.addClass(siblingClassStr);
 
                     const $siblingInput = $sibling.find('input').first();
                     const $myInput = $row.find('input').first();
-                    if ($siblingInput.length > 0) {
+                    if ($siblingInput.length > 0)
+                    {
                         const inputClassStr = $siblingInput.attr('class') || '';
                         if (inputClassStr)
                             $myInput.addClass(inputClassStr);
@@ -1141,7 +1570,8 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
                     const $siblingSpan = $sibling.find('span').first();
                     const $mySpan = $row.find('span').first();
-                    if ($siblingSpan.length > 0) {
+                    if ($siblingSpan.length > 0)
+                    {
                         const spanClassStr = $siblingSpan.attr('class') || '';
                         if (spanClassStr)
                             $mySpan.addClass(spanClassStr);
@@ -1160,20 +1590,24 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
     injectIntoCard();
 
-    // Re-inject on Svelte re-renders; only disconnect once the form was actually seen,
-    // otherwise the first pre-render mutation would tear us down before v3's HUD finishes.
+    // Re-inject on Svelte re-renders; only disconnect after formWasSeen or a pre-render mutation tears us down early.
     let reinjectPending = false;
     let formWasSeen = false;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() =>
+    {
         const $form = $('form[id^="accdiff"]');
-        if ($form.length === 0) {
-            if (formWasSeen) observer.disconnect();
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
             return;
         }
         formWasSeen = true;
-        if ($form.find('.csm-global-bonus-row').length === 0 && !reinjectPending) {
+        if ($form.find('.csm-global-bonus-row').length === 0 && !reinjectPending)
+        {
             reinjectPending = true;
-            setTimeout(() => {
+            setTimeout(() =>
+            {
                 injectIntoCard();
                 reinjectPending = false;
             }, 50);
@@ -1181,11 +1615,10 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     });
 
     const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0) {
+    if ($hudzone.length > 0)
         observer.observe($hudzone[0], { childList: true, subtree: true });
-    } else {
+    else
         observer.observe(document.body, { childList: true, subtree: true });
-    }
 
     // Safety disconnect after 10 minutes (dialog should never live this long)
     setTimeout(() => observer.disconnect(), 600000);
@@ -1203,9 +1636,10 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
  * render and for target cards added mid-dialog.
  *
  * State is already pre-set (via flow step + replaceTargets monkey-patch), so no button
- * clicking is needed at injection time — only on user toggle.
+ * clicking is needed at injection time, only on user toggle.
  */
-function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser) {
+function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser)
+{
     /**
      * Click the per-target accuracy (+) or difficulty (-) button inside a target card.
      * @param {JQuery} $card   - The .accdiff-target card element
@@ -1213,7 +1647,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
      * @param {number} count   - Number of times to click
      * @param {boolean} reverse - If true, click the opposite button
      */
-    const clickTargetButton = ($card, type, count, reverse = false) => {
+    const clickTargetButton = ($card, type, count, reverse = false) =>
+    {
         // The two .accdiff-button elements in the card: first = accuracy, last = difficulty
         const $btns = $card.find('.accdiff-button');
         if ($btns.length < 2)
@@ -1221,16 +1656,16 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
         const $accBtn = $btns.first();
         const $diffBtn = $btns.last();
         let $btn;
-        if (type === 'difficulty') {
+        if (type === 'difficulty')
             $btn = reverse ? $accBtn : $diffBtn;
-        } else {
+        else
             $btn = reverse ? $diffBtn : $accBtn;
-        }
         for (let i = 0; i < count; i++)
             $btn[0]?.click();
     };
 
-    const tryInjectTargeted = () => {
+    const tryInjectTargeted = () =>
+    {
         const $form = $('form[id^="accdiff"]');
         if ($form.length === 0)
             return false;
@@ -1244,7 +1679,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
 
         let injectedAny = false;
 
-        for (const bonus of targetedBonuses) {
+        for (const bonus of targetedBonuses)
+        {
             const val = Number.parseInt(bonus.val) || 0;
             if (val === 0)
                 continue;
@@ -1258,37 +1694,42 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             // Separate cards into matching and non-matching for this bonus
             const matchingCards = [];
             const nonMatchingCards = [];
-            $allCards.each(function() {
+            $allCards.each(function()
+            {
                 const $card = $(this);
                 let matchedTokenId = null;
-                for (const tokenId of (bonus.applyTo || [])) {
-                    if ($card.find(`label.target-name[for="${tokenId}"]`).length > 0) {
+                for (const tokenId of (bonus.applyTo || []))
+                {
+                    if ($card.find(`label.target-name[for="${tokenId}"]`).length > 0)
+                    {
                         matchedTokenId = tokenId;
                         break;
                     }
-                    if (targetName) {
-                        const hasName = $card.find('label.target-name').filter(function() {
+                    if (targetName)
+                    {
+                        const hasName = $card.find('label.target-name').filter(function()
+                        {
                             return $(this).find('span').first().text().trim() === targetName;
                         }).length > 0;
-                        if (hasName) {
+                        if (hasName)
+                        {
                             matchedTokenId = tokenId;
                             break;
                         }
                     }
                 }
-                if (matchedTokenId !== null) {
+                if (matchedTokenId !== null)
                     matchingCards.push({ $card, matchedTokenId });
-                } else {
+                else
                     nonMatchingCards.push($card);
-                }
             });
 
             // Only proceed if at least one card matches this bonus
             if (matchingCards.length === 0)
                 continue;
 
-            // Inject real checkbox into matching cards
-            for (const { $card, matchedTokenId } of matchingCards) {
+            for (const { $card, matchedTokenId } of matchingCards)
+            {
                 const $body = $card.find('.accdiff-target-body').first();
                 if ($body.length === 0)
                     continue;
@@ -1306,7 +1747,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                 `);
 
                 const $siblingLabel = $form.find('.accdiff-grid__column label').first();
-                if ($siblingLabel.length) {
+                if ($siblingLabel.length)
+                {
                     $row.addClass($siblingLabel.attr('class') || '');
                     $row.addClass(guardClass);
                     $row.find('input').addClass($siblingLabel.find('input').attr('class') || '');
@@ -1317,13 +1759,17 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                 injectedAny = true;
 
                 const capturedTokenId = matchedTokenId;
-                $row.find('.csm-tgt-bonus-checkbox').on('change', function() {
+                $row.find('.csm-tgt-bonus-checkbox').on('change', function()
+                {
                     const checked = $(this).is(':checked');
                     const key = `${bonus.id}:${capturedTokenId}`;
-                    if (checked) {
+                    if (checked)
+                    {
                         disabledByUser.delete(key);
                         clickTargetButton($card, bonus.type, val, false);
-                    } else {
+                    }
+                    else
+                    {
                         disabledByUser.add(key);
                         clickTargetButton($card, bonus.type, val, true);
                     }
@@ -1332,7 +1778,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             }
 
             // Inject invisible placeholders into non-matching cards to keep heights equal
-            for (const $card of nonMatchingCards) {
+            for (const $card of nonMatchingCards)
+            {
                 const $body = $card.find('.accdiff-target-body').first();
                 if ($body.length === 0)
                     continue;
@@ -1350,7 +1797,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                 `);
 
                 const $siblingLabel = $form.find('.accdiff-grid__column label').first();
-                if ($siblingLabel.length) {
+                if ($siblingLabel.length)
+                {
                     $placeholder.addClass($siblingLabel.attr('class') || '');
                     $placeholder.addClass(phGuard);
                     $placeholder.find('input').addClass($siblingLabel.find('input').attr('class') || '');
@@ -1371,8 +1819,10 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     // Observer for dynamic target changes
     const $form = $('form[id^="accdiff"]');
     const observeTarget = $form.length > 0 ? $form[0] : document.body;
-    const observer = new MutationObserver(() => {
-        if ($('form[id^="accdiff"]').length === 0) {
+    const observer = new MutationObserver(() =>
+    {
+        if ($('form[id^="accdiff"]').length === 0)
+        {
             observer.disconnect();
             return;
         }
@@ -1387,18 +1837,21 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
  * Inject global damage bonus checkboxes into the damage HUD,
  * and also inject per-target damage bonus checkboxes into each matching target card.
  */
-function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targetModifiers = []) {
+function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targetModifiers = [], usageDmgEnabled = null)
+{
     const bonusStates = bonuses.map((b, index) => ({
         ...b,
         index,
         enabled: true
     }));
 
-    const renderBonusRow = (bonus, index) => {
+    const renderBonusRow = (bonus, index) =>
+    {
         const usesText = bonus.uses !== undefined ? ` (${bonus.uses} left)` : '';
         const isEnabled = bonus.enabled;
 
-        const damageComponents = (bonus.damage || []).map(d => {
+        const damageComponents = (bonus.damage || []).map(d =>
+        {
             const typeLower = d.type.toLowerCase();
             return `
                 <i class="cci i--sm cci-${typeLower} damage--${typeLower} svelte-1tnd08e" data-tooltip="${d.type}"></i>
@@ -1419,14 +1872,18 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         `;
     };
 
-    const syncBonusToForm = async (bonusState, $bonusSection, $addBtn) => {
+    const syncBonusToForm = async (bonusState, $bonusSection, $addBtn) =>
+    {
         const bonusIdClass = `csm-bonus-controlled-${bonusState.index}`;
         const $existingRows = $bonusSection.find(`.${bonusIdClass}`);
 
-        if (bonusState.enabled) {
-            if ($existingRows.length === 0) {
+        if (bonusState.enabled)
+        {
+            if ($existingRows.length === 0)
+            {
                 const damages = bonusState.damage || [];
-                for (const damageEntry of damages) {
+                for (const damageEntry of damages)
+                {
                     $addBtn.click();
                     await new Promise(resolve => setTimeout(resolve, 100));
                     const $valInputs = $bonusSection.find('input[type="text"][placeholder="0"], input[type="number"]');
@@ -1434,7 +1891,8 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
 
                     const $rowContainer = $lastValInput.closest('.flexrow, .damage-grid-item, div');
 
-                    if ($rowContainer.length > 0 && !$rowContainer.hasClass(bonusIdClass)) {
+                    if ($rowContainer.length > 0 && !$rowContainer.hasClass(bonusIdClass))
+                    {
                         $rowContainer.addClass(bonusIdClass);
                         $rowContainer.addClass('csm-hidden-bonus-row');
                         $rowContainer.css('display', 'none');
@@ -1444,10 +1902,13 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                         $lastValInput[0].dispatchEvent(new Event('change', { bubbles: true }));
 
                         const $select = $rowContainer.find('select');
-                        if ($select.length > 0) {
-                            $select.find('option').each(function() {
+                        if ($select.length > 0)
+                        {
+                            $select.find('option').each(function()
+                            {
                                 if ($(this).text().toLowerCase() === damageEntry.type.toLowerCase() ||
-                                         $(this).val().toLowerCase() === damageEntry.type.toLowerCase()) {
+                                         $(this).val().toLowerCase() === damageEntry.type.toLowerCase())
+                                {
                                     $select.val($(this).val());
                                     return false;
                                 }
@@ -1457,54 +1918,63 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                     }
                 }
             }
-        } else {
-            $existingRows.each(function() {
+        }
+        else
+        {
+            $existingRows.each(function()
+            {
                 const $deleteBtn = $(this).find('button.delete, i.fa-trash, i.mdi-delete, button i.mdi-delete').closest('button');
-                if ($deleteBtn.length > 0) {
+                if ($deleteBtn.length > 0)
                     $deleteBtn.click();
-                } else {
+                else
                     $(this).remove(); // Fallback
-                }
             });
         }
     };
 
-    const doInject = ($form, resolvedTargeted, targetCount) => {
+    const doInject = ($form, resolvedTargeted, targetCount) =>
+    {
         const $configGrid = $form.find('.damage-hud-options-grid');
         if ($configGrid.length === 0)
             return false;
 
         let perCardBonuses = [];
-        if (resolvedTargeted.length > 0) {
-            if (targetCount <= 1) {
-                resolvedTargeted.forEach(bonus => {
+        if (resolvedTargeted.length > 0)
+        {
+            if (targetCount <= 1)
+            {
+                resolvedTargeted.forEach(bonus =>
+                {
                     bonusStates.push({ ...bonus, _fromTargeted: true, index: bonusStates.length, enabled: true });
                 });
-            } else {
-                perCardBonuses = resolvedTargeted;
             }
+            else
+                perCardBonuses = resolvedTargeted;
         }
 
         let $myContainer = $configGrid.find('.csm-bonus-container');
-        if ($myContainer.length === 0) {
+        if ($myContainer.length === 0)
+        {
             $myContainer = $('<div class="csm-bonus-container" style="grid-column: 1 / -1; border-top: 1px solid var(--primary-light); margin-top: 5px; padding-top: 5px;"></div>');
             $myContainer.append('<h3 class="damage-hud-section lancer-border-primary svelte-1tnd08e" style="font-size: 0.9em; margin-bottom: 5px;">Global Bonuses</h3>');
             $configGrid.append($myContainer);
 
-            setTimeout(async () => {
+            setTimeout(async () =>
+            {
                 // Must be serial; parallel calls race on .last() and leak default 1d6 Kin rows.
                 const $bonusSection = $form.find('.bonus-damage');
                 const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
-                if (!$addBtn.length) return;
-                for (const b of bonusStates) {
+                if (!$addBtn.length)
+                    return;
+                for (const b of bonusStates)
                     await syncBonusToForm(b, $bonusSection, $addBtn);
-                }
             }, 200);
-        } else {
-            $myContainer.find('.csm-bonus-config-row').remove();
         }
+        else
+            $myContainer.find('.csm-bonus-config-row').remove();
 
-        bonusStates.forEach((bonus, index) => {
+        bonusStates.forEach((bonus, index) =>
+        {
             const $row = $(renderBonusRow(bonus, index));
             _remapSvelteScopes($row, $form);
             $myContainer.append($row);
@@ -1515,7 +1985,8 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         // Inject target modifier rows (global and per-target)
         const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
         const currentTargetIds = (state.data.damage_hud_data?.targets || []).map(t => accDiffTargetToken(t)?.id);
-        const globalTMods = targetModifiers.filter(m => {
+        const globalTMods = targetModifiers.filter(m =>
+        {
             if (!Array.isArray(m.applyTo) || m.applyTo.length === 0)
                 return true;
             if (targetCount <= 1)
@@ -1524,7 +1995,8 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         });
         const perTargetTMods = targetCount > 1 ? targetModifiers.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
 
-        for (const mod of globalTMods) {
+        for (const mod of globalTMods)
+        {
             const name = mod.name ? `${mod.name}: ${modLabels[mod.subtype] || mod.subtype}` : (modLabels[mod.subtype] || mod.subtype);
             const $row = $(`
                 <div class="csm-bonus-config-row la-tmod-dmg-row" data-sub="${mod.subtype}" style="display: grid; grid-template-columns: 1fr; align-items: center; margin-bottom: 2px;">
@@ -1540,10 +2012,13 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
 
         $myContainer.toggle(bonusStates.length > 0 || globalTMods.length > 0);
 
-        $myContainer.find('.csm-bonus-checkbox').on('change', function() {
+        $myContainer.find('.csm-bonus-checkbox').on('change', function()
+        {
             const index = Number.parseInt($(this).data('index'));
             const isChecked = $(this).is(':checked');
             bonusStates[index].enabled = isChecked;
+            if (usageDmgEnabled && bonusStates[index].id)
+                usageDmgEnabled.set(bonusStates[index].id, isChecked);
 
             const $bonusSection = $form.find('.bonus-damage');
             const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
@@ -1555,12 +2030,15 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         });
 
         // Per-target modifier injection into target cards
-        if (perTargetTMods.length > 0) {
+        if (perTargetTMods.length > 0)
+        {
             const $allCards = $form.find('.damage-hud-target-card');
             const hudTargets = state.data.damage_hud_data?.targets || [];
-            for (const mod of perTargetTMods) {
+            for (const mod of perTargetTMods)
+            {
                 const name = mod.name ? `${mod.name}: ${modLabels[mod.subtype] || mod.subtype}` : (modLabels[mod.subtype] || mod.subtype);
-                $allCards.each(function (cardIndex) {
+                $allCards.each(function (cardIndex)
+                {
                     const $card = $(this);
                     // Match by card index -> hudTargets[index].target.id
                     const hudTarget = hudTargets[cardIndex];
@@ -1590,18 +2068,20 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
     let reinjectPending = false;
     let formWasSeen = false;
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() =>
+    {
         const $form = $('#damage-hud');
-        if ($form.length === 0) {
-            if (formWasSeen) observer.disconnect();
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
             return;
         }
         formWasSeen = true;
 
         const hudData = state.data?.damage_hud_data;
-        if (!hudData) {
+        if (!hudData)
             return;
-        }
 
         const currentTargets = hudData.targets || [];
         const sig = currentTargets.map(t => accDiffTargetToken(t)?.id).sort().join(',');
@@ -1610,65 +2090,67 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         const cardsFound = $form.find('.damage-hud-target-card').length;
 
         // Wait for cards to populate if there are multiple targets
-        if (targetCount > 1 && cardsFound < targetCount) {
+        if (targetCount > 1 && cardsFound < targetCount)
             return;
-        }
 
-        if (sig === prevTargetSig && hasContainer && !reinjectPending) {
+        if (sig === prevTargetSig && hasContainer && !reinjectPending)
             return;
-        }
 
-        if (reinjectPending) {
+        if (reinjectPending)
             return;
-        }
         reinjectPending = true;
 
-        setTimeout(() => {
+        setTimeout(() =>
+        {
             const refreshedForm = $('#damage-hud');
-            if (refreshedForm.length === 0) {
+            if (refreshedForm.length === 0)
+            {
                 reinjectPending = false;
                 return;
             }
 
             // Signature change logic
-            if (sig !== prevTargetSig) {
+            if (sig !== prevTargetSig)
+            {
                 prevTargetSig = sig;
                 // Clear per-card injections
-                targetedBonuses.forEach(bonus => {
-                    const gc = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
-                    refreshedForm.find(`.${gc}`).remove();
+                targetedBonuses.forEach(bonus =>
+                {
+                    const guardClass = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
+                    refreshedForm.find(`.${guardClass}`).remove();
                 });
-                refreshedForm.find('.damage-hud-target-card [class*="csm-tgt-dmg-ctrl-"]').each(function() {
+                refreshedForm.find('.damage-hud-target-card [class*="csm-tgt-dmg-ctrl-"]').each(function()
+                {
                     const $del = $(this).find('button').first();
-                    if ($del.length) {
+                    if ($del.length)
                         $del.click();
-                    } else {
+                    else
                         $(this).remove();
-                    }
                 });
 
                 // Remove targeted bonuses from bonusStates and their global damage entries
-                for (let i = bonusStates.length - 1; i >= 0; i--) {
-                    if (!bonusStates[i]._fromTargeted) {
+                for (let i = bonusStates.length - 1; i >= 0; i--)
+                {
+                    if (!bonusStates[i]._fromTargeted)
                         continue;
-                    }
                     const b = bonusStates[i];
                     b.enabled = false;
-                    const $bs = refreshedForm.find('.bonus-damage');
-                    const $addBtn = $bs.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
-                    if ($addBtn.length > 0) {
-                        syncBonusToForm(b, $bs, $addBtn);
-                    }
+                    const $bonusSection = refreshedForm.find('.bonus-damage');
+                    const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+                    if ($addBtn.length > 0)
+                        syncBonusToForm(b, $bonusSection, $addBtn);
                     bonusStates.splice(i, 1);
                 }
-                bonusStates.forEach((b, i) => {
+                bonusStates.forEach((b, i) =>
+                {
                     b.index = i;
                 });
             }
 
-            const newResolved = targetedBonuses.map(bonus => {
-                const ht = currentTargets.find(ht => (bonus.applyTo || []).includes(accDiffTargetToken(ht)?.id));
-                return ht ? { ...bonus } : null;
+            const newResolved = targetedBonuses.map(bonus =>
+            {
+                const hudTarget = currentTargets.find(candidate => (bonus.applyTo || []).includes(accDiffTargetToken(candidate)?.id));
+                return hudTarget ? { ...bonus } : null;
             }).filter(Boolean);
 
             doInject(refreshedForm, newResolved, targetCount);
@@ -1677,11 +2159,10 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
     });
 
     const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0) {
+    if ($hudzone.length > 0)
         observer.observe($hudzone[0], { childList: true, subtree: true });
-    } else {
+    else
         observer.observe(document.body, { childList: true, subtree: true });
-    }
 
     // Safety disconnect after 10 minutes
     setTimeout(() => observer.disconnect(), 600000);
@@ -1691,15 +2172,18 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
 
 /**
  * Inject per-target damage bonus checkboxes into each matching target card in the damage HUD.
- * Card order in DOM matches damage_hud_data.targets order — matched by index.
+ * Card order in DOM matches damage_hud_data.targets order, matched by index.
  */
-async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
-    if (!document.getElementById('csm-bonus-styles')) {
+async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets)
+{
+    if (!document.getElementById('csm-bonus-styles'))
+    {
         $('<style id="csm-bonus-styles">.target-bonus-damage-wrapper:not(:has(:not(.csm-hidden-bonus-row))){display:none!important}</style>')
             .appendTo('head');
     }
 
-    $form.find('.damage-hud-target-card').each(function(cardIndex) {
+    $form.find('.damage-hud-target-card').each(function(cardIndex)
+    {
         const $card = $(this);
         const tokenId = accDiffTargetToken(hudTargets[cardIndex])?.id;
         if (!tokenId)
@@ -1714,13 +2198,15 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
             return;
 
         const initialSyncs = [];
-        matchingBonuses.forEach((bonus, localIdx) => {
+        matchingBonuses.forEach((bonus, localIdx) =>
+        {
             const guardClass = `csm-tgt-dmg-${(bonus.id || bonus.name).replace(/[^a-z0-9]/gi, '-')}`;
             if ($card.find(`.${guardClass}`).length > 0)
                 return; // already injected
 
             const usesText = bonus.uses !== undefined ? ` (${bonus.uses} left)` : '';
-            const damageComponents = (bonus.damage || []).map(d => {
+            const damageComponents = (bonus.damage || []).map(d =>
+            {
                 const typeLower = d.type.toLowerCase();
                 return `<i class="cci i--sm cci-${typeLower} damage--${typeLower}" data-tooltip="${d.type}"></i>
                         <input class="reliable-value" type="text" value="${d.val}" disabled>`;
@@ -1740,33 +2226,39 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
             // Visual row goes after the AP/Paracausal/Half-damage config row
             $card.find('.damage-target-config').after($row);
 
-            // Track enabled state per row
             let enabled = true;
             const bonusIdClass = `csm-tgt-dmg-ctrl-${guardClass}-${localIdx}`;
 
-            const syncToCard = async (enable) => {
+            const syncToCard = async (enable) =>
+            {
                 const $addBtn = $bonusSection.find('.add-damage-type');
                 if (!$addBtn.length)
                     return;
 
                 const $existing = $bonusSection.find(`.${bonusIdClass}`);
 
-                if (enable && $existing.length === 0) {
-                    for (const d of (bonus.damage || [])) {
+                if (enable && $existing.length === 0)
+                {
+                    for (const d of (bonus.damage || []))
+                    {
                         $addBtn.click();
                         await new Promise(r => setTimeout(r, 50));
                         const $valInputs = $bonusSection.find('input[type="text"],input[type="number"]');
                         const $lastVal = $valInputs.last();
                         const $rowContainer = $lastVal.closest('.flexrow, .damage-grid-item, div');
-                        if ($rowContainer.length && !$rowContainer.hasClass(bonusIdClass)) {
+                        if ($rowContainer.length && !$rowContainer.hasClass(bonusIdClass))
+                        {
                             $rowContainer.addClass(bonusIdClass).addClass('csm-hidden-bonus-row').css('display', 'none');
                             $lastVal.val(d.val);
                             $lastVal[0].dispatchEvent(new Event('input', { bubbles: true }));
                             $lastVal[0].dispatchEvent(new Event('change', { bubbles: true }));
                             const $select = $rowContainer.find('select');
-                            if ($select.length) {
-                                $select.find('option').each(function() {
-                                    if ($(this).text().toLowerCase() === d.type.toLowerCase()) {
+                            if ($select.length)
+                            {
+                                $select.find('option').each(function()
+                                {
+                                    if ($(this).text().toLowerCase() === d.type.toLowerCase())
+                                    {
                                         $select.val($(this).val()); return false;
                                     }
                                 });
@@ -1774,8 +2266,11 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
                             }
                         }
                     }
-                } else if (!enable) {
-                    $existing.each(function() {
+                }
+                else if (!enable)
+                {
+                    $existing.each(function()
+                    {
                         const $del = $(this).find('button').first();
                         if ($del.length)
                             $del.click(); else
@@ -1786,17 +2281,21 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
 
             initialSyncs.push(() => syncToCard(true));
 
-            $row.find('.csm-tgt-dmg-checkbox').on('change', function() {
+            $row.find('.csm-tgt-dmg-checkbox').on('change', function()
+            {
                 enabled = $(this).is(':checked');
                 $(this).closest('label').css('opacity', enabled ? '1' : '0.5');
                 syncToCard(enabled);
             });
         });
 
-        if (initialSyncs.length) {
-            setTimeout(async () => {
+        if (initialSyncs.length)
+        {
+            setTimeout(async () =>
+            {
                 // Serial; parallel calls race on .last() and leak default 1d6 Kin rows.
-                for (const fn of initialSyncs) await fn();
+                for (const fn of initialSyncs)
+                    await fn();
             }, 200);
         }
     });
@@ -1808,41 +2307,51 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets) {
  * Stores the enabled/value state on state.data._csmKnockback for the knockback damage step.
  */
 // Each Lancer release rebuilds with a fresh svelte scope hash; detect rather than hardcode.
-function _detectSvelteScope($form, selector) {
+function _detectSvelteScope($form, selector)
+{
     const refs = $form.find(selector);
-    for (let i = 0; i < refs.length; i++) {
-        for (const cls of refs[i].classList) {
-            if (cls.startsWith('svelte-')) return cls;
+    for (let i = 0; i < refs.length; i++)
+    {
+        for (const cls of refs[i].classList)
+        {
+            if (cls.startsWith('svelte-'))
+                return cls;
         }
     }
     return '';
 }
 
 // Swap LA's hardcoded svelte scope classes for v3's live ones so templates don't need per-release edits.
-function _remapSvelteScopes($wrapper, $form) {
+function _remapSvelteScopes($wrapper, $form)
+{
     const containerScope = _detectSvelteScope($form, 'label.container');
     const valueScope = _detectSvelteScope($form, '.reliable-value, .damage-hud-section');
     const accdiffScope = _detectSvelteScope($form, '.accdiff-grid, .accdiff-other-grid');
-    if (containerScope) $wrapper.find('.svelte-wt0sk2').addClass(containerScope).removeClass('svelte-wt0sk2');
-    if (valueScope) $wrapper.find('.svelte-1tnd08e').addClass(valueScope).removeClass('svelte-1tnd08e');
-    if (accdiffScope) $wrapper.find('.svelte-k5ear2').addClass(accdiffScope).removeClass('svelte-k5ear2');
+    if (containerScope)
+        $wrapper.find('.svelte-wt0sk2').addClass(containerScope).removeClass('svelte-wt0sk2');
+    if (valueScope)
+        $wrapper.find('.svelte-1tnd08e').addClass(valueScope).removeClass('svelte-1tnd08e');
+    if (accdiffScope)
+        $wrapper.find('.svelte-k5ear2').addClass(accdiffScope).removeClass('svelte-k5ear2');
 }
 
-export function injectKnockbackCheckbox(state) {
+export function injectKnockbackCheckbox(state)
+{
     if (!state.data)
         state.data = {};
 
     // Read weapon tag to pre-fill
     const item = state.item;
     const tags = state.data?.tags || item?.system?.tags || [];
-    const kbTag = tags.find(t => t.id === "knockback" || t.lid === "tg_knockback");
-    const hasTag = !!kbTag;
-    let tagVal = hasTag ? (Number.parseInt(kbTag.val) || Number.parseInt(kbTag.num_val) || 1) : 1;
+    const knockbackTag = tags.find(t => t.id === "knockback" || t.lid === "tg_knockback");
+    const hasTag = !!knockbackTag;
+    let tagVal = hasTag ? (Number.parseInt(knockbackTag.val) || Number.parseInt(knockbackTag.num_val) || 1) : 1;
 
     // Shared state that the knockbackDamageStep will read
     state.data._csmKnockback = { enabled: hasTag, value: tagVal };
 
-    const doInject = () => {
+    const doInject = () =>
+    {
         const $form = $('#damage-hud');
         if ($form.length === 0)
             return false;
@@ -1855,9 +2364,10 @@ export function injectKnockbackCheckbox(state) {
         if ($configGrid.find('.csm-knockback-row').length > 0)
             return true;
         const currentAreas = $configGrid.css('grid-template-areas');
-        if (currentAreas && currentAreas.includes('empty')) {
+        if (currentAreas && currentAreas.includes('empty'))
             $configGrid.css('grid-template-areas', currentAreas.replace('empty', 'knockback'));
-        } else {
+        else
+        {
             $configGrid.css('grid-template-areas',
                 '"title title" "ap overkill" "paracausal reliable" "halfdamage knockback"'
             );
@@ -1884,19 +2394,33 @@ export function injectKnockbackCheckbox(state) {
 
         $configGrid.append($row);
 
-        // Bind checkbox toggle
-        $row.find('.csm-knockback-checkbox').on('change', function () {
+        $row.find('.csm-knockback-checkbox').on('change', function ()
+        {
             const isChecked = $(this).is(':checked');
             state.data._csmKnockback.enabled = isChecked;
             const $targets = $row.find('.csm-knockback-value, .csm-knockback-icon');
             if (isChecked)
-                $targets.stop(true, true).animate({ opacity: 1 }, { duration: 400, easing: 'linear', start: function () { $(this).css('display', ''); } });
+            {
+                $targets.stop(true, true).animate({ opacity: 1 }, { duration: 400,
+                    easing: 'linear',
+                    start: function ()
+                    {
+                        $(this).css('display', '');
+                    } });
+            }
             else
-                $targets.stop(true, true).animate({ opacity: 0 }, { duration: 400, easing: 'linear', complete: function () { $(this).css('display', 'none'); } });
+            {
+                $targets.stop(true, true).animate({ opacity: 0 }, { duration: 400,
+                    easing: 'linear',
+                    complete: function ()
+                    {
+                        $(this).css('display', 'none');
+                    } });
+            }
         });
 
-        // Bind value input
-        $row.find('.csm-knockback-value').on('input change', function () {
+        $row.find('.csm-knockback-value').on('input change', function ()
+        {
             state.data._csmKnockback.value = Number.parseInt(String($(this).val())) || 1;
         });
 
@@ -1910,16 +2434,21 @@ export function injectKnockbackCheckbox(state) {
     // observer from disconnecting on the first mutation BEFORE the HUD has finished rendering.
     let reinjectPending = false;
     let formWasSeen = false;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() =>
+    {
         const $form = $('#damage-hud');
-        if ($form.length === 0) {
-            if (formWasSeen) observer.disconnect();
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
             return;
         }
         formWasSeen = true;
-        if ($form.find('.csm-knockback-row').length === 0 && !reinjectPending) {
+        if ($form.find('.csm-knockback-row').length === 0 && !reinjectPending)
+        {
             reinjectPending = true;
-            setTimeout(() => {
+            setTimeout(() =>
+            {
                 doInject();
                 reinjectPending = false;
             }, 50);
@@ -1927,11 +2456,10 @@ export function injectKnockbackCheckbox(state) {
     });
 
     const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0) {
+    if ($hudzone.length > 0)
         observer.observe($hudzone[0], { childList: true, subtree: true });
-    } else {
+    else
         observer.observe(document.body, { childList: true, subtree: true });
-    }
 
     // Safety disconnect after 10 minutes
     setTimeout(() => observer.disconnect(), 600000);
@@ -1943,18 +2471,21 @@ export function injectKnockbackCheckbox(state) {
  * When checked, crosses out .bonus-damage and .csm-bonus-container visually.
  * Actual suppression is handled by noBonusDmgClearStep in main.js.
  */
-export function injectNoBonusDmgCheckbox(state) {
+export function injectNoBonusDmgCheckbox(state)
+{
     if (!state.data)
         state.data = {};
 
     state.la_extraData = state.la_extraData || {};
 
-    if (!state.la_extraData._csmNoBonusDmg?.enabled) {
+    if (!state.la_extraData._csmNoBonusDmg?.enabled)
+    {
         const hasFlag = !!(state.item?.getFlag('lancer-automations', 'noBonusDmg'));
         state.la_extraData._csmNoBonusDmg = { enabled: hasFlag };
     }
 
-    const applyStrikethrough = ($form) => {
+    const applyStrikethrough = ($form) =>
+    {
         const active = state.la_extraData._csmNoBonusDmg.enabled;
         $form.find('.bonus-damage').css({
             'text-decoration': active ? 'line-through' : '',
@@ -1968,7 +2499,8 @@ export function injectNoBonusDmgCheckbox(state) {
         });
     };
 
-    const doInject = () => {
+    const doInject = () =>
+    {
         const $form = $('#damage-hud');
         if ($form.length === 0)
             return false;
@@ -1977,17 +2509,17 @@ export function injectNoBonusDmgCheckbox(state) {
         if ($configGrid.length === 0)
             return false;
 
-        if ($configGrid.find('.csm-no-bonus-dmg-row').length > 0) {
+        if ($configGrid.find('.csm-no-bonus-dmg-row').length > 0)
+        {
             applyStrikethrough($form);
             return true;
         }
 
         const currentAreas = $configGrid.css('grid-template-areas') || '';
-        if (currentAreas.includes('empty')) {
+        if (currentAreas.includes('empty'))
             $configGrid.css('grid-template-areas', currentAreas.replace('empty', 'nobonusdmg'));
-        } else {
+        else
             $configGrid.css('grid-template-areas', currentAreas + ' "nobonusdmg nobonusdmg"');
-        }
 
         const checked = state.la_extraData._csmNoBonusDmg.enabled;
         const containerScope = _detectSvelteScope($form, 'label.container');
@@ -2005,7 +2537,8 @@ export function injectNoBonusDmgCheckbox(state) {
         $configGrid.append($row);
         applyStrikethrough($form);
 
-        $row.find('.csm-no-bonus-dmg-checkbox').on('change', function () {
+        $row.find('.csm-no-bonus-dmg-checkbox').on('change', function ()
+        {
             state.la_extraData._csmNoBonusDmg.enabled = $(this).is(':checked');
             applyStrikethrough($form);
         });
@@ -2017,30 +2550,142 @@ export function injectNoBonusDmgCheckbox(state) {
 
     let reinjectPending = false;
     let formWasSeen = false;
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() =>
+    {
         const $form = $('#damage-hud');
-        if ($form.length === 0) {
-            if (formWasSeen) observer.disconnect();
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
             return;
         }
         formWasSeen = true;
-        if ($form.find('.csm-no-bonus-dmg-row').length === 0 && !reinjectPending) {
+        if ($form.find('.csm-no-bonus-dmg-row').length === 0 && !reinjectPending)
+        {
             reinjectPending = true;
-            setTimeout(() => {
+            setTimeout(() =>
+            {
                 doInject();
                 reinjectPending = false;
             }, 50);
-        } else if (state.la_extraData._csmNoBonusDmg.enabled) {
+        }
+        else if (state.la_extraData._csmNoBonusDmg.enabled)
             applyStrikethrough($form);
+    });
+
+    const $hudzone = $('#hudzone');
+    if ($hudzone.length > 0)
+        observer.observe($hudzone[0], { childList: true, subtree: true });
+    else
+        observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => observer.disconnect(), 600000);
+}
+
+// Throttled checkbox in the damage HUD: drives global Half Damage; unchecking Half Damage drops it.
+export function injectThrottledCheckbox(state)
+{
+    state.la_extraData = state.la_extraData || {};
+    if (!state.la_extraData._laThrottled)
+        state.la_extraData._laThrottled = { enabled: !!state.actor?.statuses?.has?.('throttled') };
+    const throttledState = state.la_extraData._laThrottled;
+
+    const findHalfDamage = ($form) => $form.find('.damage-hud-options-grid > [style*="halfdamage"]').find('input[type="checkbox"]').first();
+
+    const doInject = () =>
+    {
+        const $form = $('#damage-hud');
+        if ($form.length === 0)
+            return false;
+        const $configGrid = $form.find('.damage-hud-options-grid');
+        if ($configGrid.length === 0)
+            return false;
+        if ($configGrid.find('.la-throttled-row').length > 0)
+            return true;
+
+        let areas = $configGrid.css('grid-template-areas') || '';
+        if (areas.includes('nobonusdmg nobonusdmg'))
+            areas = areas.replace('nobonusdmg nobonusdmg', 'nobonusdmg throttled');
+        else if (areas.includes('empty'))
+            areas = areas.replace('empty', 'throttled');
+        else
+            areas = areas + ' "throttled throttled"';
+        $configGrid.css('grid-template-areas', areas);
+
+        const containerScope = _detectSvelteScope($form, 'label.container');
+        const statusText = CONFIG.statusEffects?.find(effect => effect.id === 'throttled')?.description ?? '';
+        const $row = $(`
+            <div class="la-throttled-row" style="grid-area: throttled; display: flex; align-items: center; margin-top: 4px;">
+                <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;" data-tooltip="${statusText.replace(/"/g, '&quot;')}">
+                    <input type="checkbox" class="la-throttled-checkbox ${containerScope}" ${throttledState.enabled ? 'checked' : ''}>
+                    <span style="text-wrap: nowrap;">Throttled (Half Dmg)</span>
+                </label>
+            </div>
+        `);
+        $configGrid.append($row);
+
+        const syncHalfToThrottled = () =>
+        {
+            const $box = findHalfDamage($('#damage-hud'));
+            if ($box.length && $box.prop('checked') !== throttledState.enabled)
+                $box[0].click();
+        };
+
+        $row.find('.la-throttled-checkbox').on('change', function ()
+        {
+            throttledState.enabled = $(this).is(':checked');
+            syncHalfToThrottled();
+        });
+
+        $form.off('change.laThrottled').on('change.laThrottled', () =>
+        {
+            setTimeout(() =>
+            {
+                const $freshForm = $('#damage-hud');
+                const $box = findHalfDamage($freshForm);
+                if ($box.length && !$box.prop('checked') && throttledState.enabled)
+                {
+                    throttledState.enabled = false;
+                    $freshForm.find('.la-throttled-checkbox').prop('checked', false);
+                }
+            }, 0);
+        });
+
+        if (throttledState.enabled)
+            syncHalfToThrottled();
+        return true;
+    };
+
+    doInject();
+
+    let reinjectPending = false;
+    let formWasSeen = false;
+    const observer = new MutationObserver(() =>
+    {
+        const $form = $('#damage-hud');
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
+            return;
+        }
+        formWasSeen = true;
+        if ($form.find('.la-throttled-row').length === 0 && !reinjectPending)
+        {
+            reinjectPending = true;
+            setTimeout(() =>
+            {
+                doInject();
+                reinjectPending = false;
+            }, 50);
         }
     });
 
     const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0) {
+    if ($hudzone.length > 0)
         observer.observe($hudzone[0], { childList: true, subtree: true });
-    } else {
+    else
         observer.observe(document.body, { childList: true, subtree: true });
-    }
 
     setTimeout(() => observer.disconnect(), 600000);
 }
@@ -2052,7 +2697,8 @@ export const genericAccuracyStepStatRoll = createGenericBonusStep("stat_roll");
 export const genericBonusStepDamage = createGenericBonusStep("damage");
 
 /** @returns {Promise<string|undefined>} bonus ID, or undefined if no actor */
-export async function addGlobalBonus(actor, bonusData, options = {}) {
+export async function addGlobalBonus(actor, bonusData, options = {})
+{
     if (!actor)
         return;
     const bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
@@ -2062,19 +2708,19 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
     if (!bonusData.name)
         bonusData.name = "Unnamed Bonus";
 
-    // Lambda condition support — serialize function source into the condition field
-    if (typeof bonusData.condition === 'function') {
+    // Lambda condition support: serialize function source into the condition field
+    if (typeof bonusData.condition === 'function')
         bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
-    }
-    if (typeof bonusData.applyToCondition === 'function') {
+    if (typeof bonusData.applyToCondition === 'function')
         bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
-    }
 
     // Also handle lambda conditions on sub-bonuses (multi type)
-    if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses)) {
+    if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses))
+    {
         bonusData = {
             ...bonusData,
-            bonuses: bonusData.bonuses.map(sub => {
+            bonuses: bonusData.bonuses.map(sub =>
+            {
                 let out = sub;
                 if (typeof sub.condition === 'function')
                     out = { ...out, condition: '@@fn:' + sub.condition.toString() };
@@ -2086,33 +2732,114 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
     }
 
     const existingIdx = bonuses.findIndex(b => b.id === bonusData.id);
-    if (existingIdx !== -1) {
+    if (existingIdx !== -1)
         bonuses[existingIdx] = bonusData;
-    } else {
+    else
         bonuses.push(bonusData);
-    }
 
     await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
 
     options.duration = options.duration || { label: 'indefinite', turns: null, rounds: null };
-    if (options.duration) {
-        const token = actor.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
+    if (options.duration)
+    {
+        const token = options.forcePrototype
+            ? null
+            : (actor.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === actor.id));
 
-        if (token) {
+        if (!token)
+        {
+            // Prototype / no scene token: write the AE straight to the actor so spawns inherit it.
+            const icon = options.icon || getBonusIcon(bonusData);
+            const changes = [];
+            let statDirect = null;
+
+            if (bonusData.type === 'stat' && bonusData.stat)
+            {
+                const statMode = bonusData.statMode || 'add';
+                const raw = Number.parseInt(bonusData.val) || 0;
+                if (CURRENT_RESOURCE_STATS.has(bonusData.stat))
+                {
+                    const preBonusValue = foundry.utils.getProperty(actor, bonusData.stat) || 0;
+                    const delta = statMode === 'replace' ? raw - preBonusValue : raw;
+                    statDirect = { key: bonusData.stat, value: delta, preBonusValue };
+                }
+                else
+                {
+                    changes.push({
+                        key: bonusData.stat,
+                        value: String(raw),
+                        mode: statMode === 'replace' ? CONST.ACTIVE_EFFECT_MODES.OVERRIDE : CONST.ACTIVE_EFFECT_MODES.ADD
+                    });
+                }
+            }
+
+            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes)
+            {
+                for (const rt of bonusData.damageTypes)
+                {
+                    const lcType = rt.toLowerCase().trim();
+                    if (lcType)
+                        changes.push({ key: `system.resistances.${lcType}`, mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" });
+                }
+            }
+
+            const laFlags = { linkedBonusId: bonusData.id };
+            if (statDirect)
+                laFlags.statDirect = statDirect;
+            if (options.consumption?.trigger)
+            {
+                // No originId: reactions-engine falls back to each prototype-spawned token at trigger time, so each consumes independently.
+                laFlags.consumption = {
+                    trigger: options.consumption.trigger,
+                    groupId: options.consumption.groupId || null,
+                    evaluate: options.consumption.evaluate || null,
+                    itemLid: options.consumption.itemLid || null,
+                    itemId: options.consumption.itemId || null,
+                    actionName: options.consumption.actionName || null,
+                    isBoost: options.consumption.isBoost ?? null,
+                    minDistance: options.consumption.minDistance ?? null,
+                    checkType: options.consumption.checkType || null,
+                    checkAbove: options.consumption.checkAbove ?? null,
+                    checkBelow: options.consumption.checkBelow ?? null,
+                };
+            }
+            const effectData = { name: bonusData.name, img: icon, changes, flags: { 'lancer-automations': laFlags } };
+            if (bonusData.uses && bonusData.uses > 0)
+            {
+                foundry.utils.setProperty(effectData, 'flags.statuscounter.value', bonusData.uses);
+                foundry.utils.setProperty(effectData, 'flags.statuscounter.visible', bonusData.uses > 1);
+            }
+            await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+
+            if (statDirect)
+            {
+                let newVal = Math.max(0, statDirect.preBonusValue + statDirect.value);
+                const maxPath = statDirect.key.replace('.value', '.max');
+                if (maxPath !== statDirect.key)
+                {
+                    const maxVal = foundry.utils.getProperty(actor, maxPath);
+                    if (maxVal !== undefined)
+                        newVal = Math.min(newVal, maxVal);
+                }
+                await actor.update({ [statDirect.key]: newVal });
+            }
+        }
+        else if (token)
+        {
             let durationObj = { label: 'indefinite', turns: null, rounds: null };
 
-            if (options.duration !== 'indefinite' && game.combat) {
-                const turnsVal = options.durationTurns || 1;
-                durationObj = {
-                    label: options.duration || 'end',
-                    turns: turnsVal,
-                    rounds: 0
-                };
-                // Adjust if it's currently the origin's turn
+            if (options.duration !== 'indefinite' && game.combat)
+            {
+                const turnsVal = Number.isFinite(options.durationTurns) ? Math.max(0, options.durationTurns) : 1;
                 const originId = options.origin?.id || options.origin || token.id;
-                if (game.combat?.current?.tokenId === originId) {
-                    durationObj.turns = turnsVal + 1;
-                }
+                const isOriginTurn = game.combat?.current?.tokenId === originId;
+                const label = options.duration || 'end';
+                let turns;
+                if (label === 'end' && isOriginTurn)
+                    turns = turnsVal + 1;
+                else
+                    turns = turnsVal === 0 ? 1 : turnsVal;
+                durationObj = { label, turns, rounds: 0, _preAdjusted: true };
             }
 
             const icon = options.icon || getBonusIcon(bonusData);
@@ -2123,8 +2850,9 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
             if (bonusData.uses)
                 extraOptions.stack = bonusData.uses;
 
-            // If consumption trigger is configured, attach it (no 'uses' — stack handles that)
-            if (options.consumption?.trigger) {
+            // If consumption trigger is configured, attach it (no 'uses'; stack handles that)
+            if (options.consumption?.trigger)
+            {
                 extraOptions.consumption = {
                     trigger: options.consumption.trigger,
                     originId: options.consumption.originId || token.id,
@@ -2141,33 +2869,37 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
                 };
             }
 
-            if (bonusData.type === 'stat' && bonusData.stat) {
-                if (CURRENT_RESOURCE_STATS.has(bonusData.stat)) {
-                    // Direct modification for current resources - stored in flags for manual reversal
-                    // (AE changes don't work here because Foundry re-applies them after damage/healing)
-                    extraOptions.statDirect = {
-                        key: bonusData.stat,
-                        value: Number.parseInt(bonusData.val) || 0,
-                        preBonusValue: foundry.utils.getProperty(token.actor, bonusData.stat) || 0
-                    };
-                } else {
-                    // Use ActiveEffect changes for max/flat stats (Foundry auto-applies/reverses)
+            if (bonusData.type === 'stat' && bonusData.stat)
+            {
+                const statMode = bonusData.statMode || 'add';
+                const raw = Number.parseInt(bonusData.val) || 0;
+                if (CURRENT_RESOURCE_STATS.has(bonusData.stat))
+                {
+                    const preBonusValue = foundry.utils.getProperty(token.actor, bonusData.stat) || 0;
+                    // Store value as the delta so removal reverses just that delta (same as add mode).
+                    const delta = statMode === 'replace' ? raw - preBonusValue : raw;
+                    extraOptions.statDirect = { key: bonusData.stat, value: delta, preBonusValue };
+                }
+                else
+                {
                     extraOptions.changes = [{
                         key: bonusData.stat,
-                        value: String(Number.parseInt(bonusData.val) || 0),
-                        mode: CONST.ACTIVE_EFFECT_MODES.ADD
+                        value: String(raw),
+                        mode: statMode === 'replace' ? CONST.ACTIVE_EFFECT_MODES.OVERRIDE : CONST.ACTIVE_EFFECT_MODES.ADD
                     }];
                 }
             }
 
-            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes) {
-                if (!extraOptions.changes) {
+            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes)
+            {
+                if (!extraOptions.changes)
                     extraOptions.changes = [];
-                }
                 const resTypes = bonusData.damageTypes;
-                for (const rt of resTypes) {
+                for (const rt of resTypes)
+                {
                     const lcType = rt.toLowerCase().trim();
-                    if (lcType) {
+                    if (lcType)
+                    {
                         extraOptions.changes.push({
                             key: `system.resistances.${lcType}`,
                             mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE,
@@ -2193,12 +2925,14 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
             );
 
             // Apply direct stat modification for current resources (after effect is created)
-            if (extraOptions.statDirect) {
+            if (extraOptions.statDirect)
+            {
                 let newVal = extraOptions.statDirect.preBonusValue + extraOptions.statDirect.value;
                 newVal = Math.max(0, newVal);
                 // Clamp to max if applicable (e.g., hp.value can't exceed hp.max)
                 const maxPath = extraOptions.statDirect.key.replace('.value', '.max');
-                if (maxPath !== extraOptions.statDirect.key) {
+                if (maxPath !== extraOptions.statDirect.key)
+                {
                     const maxVal = foundry.utils.getProperty(token.actor, maxPath);
                     if (maxVal !== undefined)
                         newVal = Math.min(newVal, maxVal);
@@ -2222,7 +2956,8 @@ export async function addGlobalBonus(actor, bonusData, options = {}) {
  *   to remove all matching bonuses in a single flag update.
  * @returns {Promise<boolean>} true if at least one bonus was removed
  */
-export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false) {
+export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false)
+{
     if (!actor)
         return;
     let bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
@@ -2237,19 +2972,18 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
 
 
 
-    if (bonuses.length !== initialLength) {
+    if (bonuses.length !== initialLength)
+    {
         await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
 
-        if (!skipEffectRemoval && bonusesToRemove.length > 0) {
-            const token = actor.token?.object || canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
-            if (token && token.actor) {
-                const removedIds = new Set(bonusesToRemove.map(b => b.id));
-                const linkedEffects = token.actor.effects.filter(e =>
-                    removedIds.has(e.getFlag('lancer-automations', 'linkedBonusId'))
-                );
-                for (const e of linkedEffects)
-                    await e.delete();
-            }
+        if (!skipEffectRemoval && bonusesToRemove.length > 0)
+        {
+            const removedIds = new Set(bonusesToRemove.map(b => b.id));
+            const linkedEffects = actor.effects.filter(e =>
+                removedIds.has(e.getFlag('lancer-automations', 'linkedBonusId'))
+            );
+            for (const e of linkedEffects)
+                await e.delete();
         }
 
         return true;
@@ -2258,40 +2992,54 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
 }
 
 /** @returns {object[]} */
-export function getGlobalBonuses(actor) {
-    return actor ? (actor.getFlag("lancer-automations", "global_bonuses") || []) : [];
+export function getGlobalBonuses(actor)
+{
+    if (!actor)
+        return [];
+    return (actor.getFlag("lancer-automations", "global_bonuses") || [])
+        .filter(bonus => linkTierGate(bonus, actor));
 }
 
-export function getGlobalBonus(actor, bonusId) {
+export function getGlobalBonus(actor, bonusId)
+{
     if (!actor)
         return null;
     const bonuses = actor ? (actor.getFlag("lancer-automations", "global_bonuses") || []) : [];
     return bonuses.find(b => b.id === bonusId) || null;
 }
 
-Hooks.on("deleteActiveEffect", (effect) => {
-    const linkedBonusId = effect.getFlag("lancer-automations", "linkedBonusId");
-    if (linkedBonusId && effect.parent) {
-        // skipEffectRemoval=true because the effect is already being deleted
-        removeGlobalBonus(effect.parent, linkedBonusId, true);
-    }
+Hooks.on("deleteActiveEffect", (effect) =>
+{
+    // Item-source AEs: statDirect/maxChanges reversal runs when the transferred copy leaves the
+    // actor (see Stage 8). removeGlobalBonus on an item still safely no-ops via the flag branch.
+    const isItemParent = effect.parent?.documentName === 'Item';
 
-    // Reverse direct stat modification for current resource bonuses
+    const linkedBonusId = effect.getFlag("lancer-automations", "linkedBonusId");
+    if (linkedBonusId && effect.parent)
+        removeGlobalBonus(effect.parent, linkedBonusId, true);
+
+    if (isItemParent)
+        return;
+
     const statDirect = effect.getFlag('lancer-automations', 'statDirect');
-    if (statDirect && effect.parent) {
-        setTimeout(async () => {
+    if (statDirect && effect.parent)
+    {
+        setTimeout(async () =>
+        {
             const actor = effect.parent;
             if (!actor)
                 return;
             const currentVal = foundry.utils.getProperty(actor, statDirect.key) || 0;
             let newVal;
 
-            if (statDirect.value > 0) {
-                // Positive bonus: only remove what's left of the bonus (damage may have consumed it)
-                // remainingBonus = how much of our bonus is still present above the pre-bonus baseline
+            if (statDirect.value > 0)
+            {
+                // Positive bonus: only remove what's still present above the pre-bonus baseline (damage may have consumed part).
                 const remainingBonus = Math.max(0, Math.min(statDirect.value, currentVal - (statDirect.preBonusValue || 0)));
                 newVal = currentVal - remainingBonus;
-            } else {
+            }
+            else
+            {
                 // Negative bonus: give back full amount, clamp to max
                 newVal = currentVal - statDirect.value;
             }
@@ -2299,7 +3047,8 @@ Hooks.on("deleteActiveEffect", (effect) => {
             newVal = Math.max(0, newVal);
             // Clamp to max if applicable (e.g., hp.value can't exceed hp.max)
             const maxPath = statDirect.key.replace('.value', '.max');
-            if (maxPath !== statDirect.key) {
+            if (maxPath !== statDirect.key)
+            {
                 const maxVal = foundry.utils.getProperty(actor, maxPath);
                 if (maxVal !== undefined)
                     newVal = Math.min(newVal, maxVal);
@@ -2310,37 +3059,33 @@ Hooks.on("deleteActiveEffect", (effect) => {
 
     // Clamp .value when a .max stat bonus is reversed by Foundry
     const maxChanges = (effect.changes || []).filter(c =>
-        c.key?.endsWith('.max') && c.mode === CONST.ACTIVE_EFFECT_MODES.ADD
+        c.key?.endsWith('.max') && (c.mode === CONST.ACTIVE_EFFECT_MODES.ADD || c.mode === CONST.ACTIVE_EFFECT_MODES.OVERRIDE)
     );
-    if (maxChanges.length > 0 && effect.parent) {
-        setTimeout(async () => {
+    if (maxChanges.length > 0 && effect.parent)
+    {
+        setTimeout(async () =>
+        {
             const actor = effect.parent;
             if (!actor)
                 return;
             const updates = {};
-            for (const change of maxChanges) {
+            for (const change of maxChanges)
+            {
                 const valuePath = change.key.replace('.max', '.value');
                 const newMax = foundry.utils.getProperty(actor, change.key);
                 const currentValue = foundry.utils.getProperty(actor, valuePath);
-                if (currentValue !== undefined && newMax !== undefined && currentValue > newMax) {
+                if (currentValue !== undefined && newMax !== undefined && currentValue > newMax)
                     updates[valuePath] = newMax;
-                }
             }
-            if (Object.keys(updates).length > 0) {
+            if (Object.keys(updates).length > 0)
                 await actor.update(updates);
-            }
         }, 200);
     }
 });
 
 
-/**
- * Inject a bonus to the active flow state.
- * @param {Object} state - The flow state object
- * @param {Object} bonus - The bonus to inject
- * @returns {Promise<void>}
- */
-export async function injectBonusToFlowState(state, bonus) {
+export async function injectBonusToFlowState(state, bonus)
+{
     if (!state)
         return;
 
@@ -2356,80 +3101,559 @@ export async function injectBonusToFlowState(state, bonus) {
 }
 
 /** @returns {Promise<void>} */
-export async function addConstantBonus(actor, bonusData) {
-    if (!actor)
+export async function addConstantBonus(target, bonusData)
+{
+    if (!target)
         return;
-    const bonuses = duplicate(actor.getFlag("lancer-automations", "constant_bonuses") || []);
+    const bonuses = duplicate(target.getFlag("lancer-automations", "constant_bonuses") || []);
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();
 
-    // If condition is a function, serialize its source into the condition field so it survives reloads.
-    if (typeof bonusData.condition === 'function') {
+    if (typeof bonusData.condition === 'function')
         bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
-    }
-    if (typeof bonusData.applyToCondition === 'function') {
+    if (typeof bonusData.applyToCondition === 'function')
         bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
-    }
 
-    const existingIndex = bonuses.findIndex(b => b.id === bonusData.id);
+    if (target.documentName === 'Item')
+    {
+        console.warn('lancer-automations | addConstantBonus on Item is not supported - use linkBonusToItem instead.');
+        return;
+    }
+    const existingIndex = bonuses.findIndex(bonus => bonus.id === bonusData.id);
     if (existingIndex >= 0)
         bonuses[existingIndex] = bonusData;
     else
         bonuses.push(bonusData);
-    await delegateSetActorFlag(actor, "lancer-automations", "constant_bonuses", bonuses);
+    await delegateSetActorFlag(target, "lancer-automations", "constant_bonuses", bonuses);
 }
 
 /** @returns {object[]} */
-export function getConstantBonuses(actor) {
+export function getConstantBonuses(actor)
+{
     if (!actor)
         return [];
-    return actor.getFlag("lancer-automations", "constant_bonuses") || [];
+    return (actor.getFlag("lancer-automations", "constant_bonuses") || [])
+        .filter(bonus => linkTierGate(bonus, actor));
 }
 
 /**
  * Remove constant bonus(es) from an actor.
- * @param {Actor} actor
+ * @param {Actor} target
  * @param {string|function(bonuses): boolean} bonusIdOrPredicate - Bonus ID string to remove one,
  *   or a predicate function to remove all matching bonuses in a single flag update.
  * @returns {Promise<void>}
  */
-export async function removeConstantBonus(actor, bonusIdOrPredicate) {
-    if (!actor)
+export async function removeConstantBonus(target, bonusIdOrPredicate)
+{
+    if (!target)
         return;
-    const bonuses = duplicate(actor.getFlag("lancer-automations", "constant_bonuses") || []);
+    const bonuses = duplicate(target.getFlag("lancer-automations", "constant_bonuses") || []);
     const predicate = typeof bonusIdOrPredicate === 'function'
         ? bonusIdOrPredicate
-        : b => b.id === bonusIdOrPredicate;
-    const filtered = bonuses.filter(b => !predicate(b));
-    if (filtered.length !== bonuses.length) {
-        await delegateSetActorFlag(actor, "lancer-automations", "constant_bonuses", filtered);
+        : bonus => bonus.id === bonusIdOrPredicate;
+    const filtered = bonuses.filter(bonus => !predicate(bonus));
+    if (filtered.length !== bonuses.length)
+    {
+        if (target.documentName === 'Item')
+            await target.setFlag("lancer-automations", "constant_bonuses", filtered);
+        else
+            await delegateSetActorFlag(target, "lancer-automations", "constant_bonuses", filtered);
     }
 }
 
+function _bonusTemplateRuntimeId(sourceDoc, templateId)
+{
+    return `${sourceDoc.uuid}::${templateId}`;
+}
+
+async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
+{
+    if (!sourceDoc || !tokens?.length)
+        return;
+    const templates = sourceDoc.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+    if (!templates.length)
+        return;
+    for (const template of templates)
+    {
+        const runtimeId = _bonusTemplateRuntimeId(sourceDoc, template.id);
+        const persistedUses = Number.isFinite(template.lastRuntimeUses) ? Number(template.lastRuntimeUses) : undefined;
+        const templateUses = template.bonusData?.uses;
+        const uses = persistedUses !== undefined ? persistedUses : templateUses;
+        // Exhausted templates (persistedUses === 0) do not re-materialize until user resets uses.
+        if (persistedUses === 0 && templateUses !== undefined)
+            continue;
+        const rawDuration = template.addOptions?.duration;
+        const durationLabel = typeof rawDuration === 'string' ? rawDuration : rawDuration?.label;
+        const isConstant = durationLabel === 'constant';
+        for (const token of tokens)
+        {
+            const actor = token?.actor;
+            if (!actor)
+                continue;
+            if (!linkTierGate(template.bonusData, actor, sourceKey === 'sourceItemUuid' ? sourceDoc : null))
+                continue;
+            const markers = { [sourceKey]: sourceDoc.uuid, sourceTemplateId: template.id };
+            if (isConstant)
+            {
+                const existing = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'constant_bonuses') || []);
+                if (existing.some(bonus => bonus.id === runtimeId))
+                    continue;
+                const bonusDataOut = { ...(template.bonusData || {}), id: runtimeId, ...markers };
+                if (uses !== undefined)
+                    bonusDataOut.uses = uses;
+                try
+                {
+                    await delegateSetActorFlag(actor, 'lancer-automations', 'constant_bonuses', [...existing, bonusDataOut]);
+                }
+                catch (err)
+                {
+                    console.warn('lancer-automations | bonus template constant write failed:', err);
+                }
+                continue;
+            }
+            const already = (actor.getFlag?.('lancer-automations', 'global_bonuses') || []).some(bonus => bonus.id === runtimeId);
+            if (already)
+                continue;
+            const bonusDataOut = { ...(template.bonusData || {}), id: runtimeId, ...markers };
+            if (uses !== undefined)
+                bonusDataOut.uses = uses;
+            const optsOut = { ...(template.addOptions || {}), ...markers };
+            try
+            {
+                await addGlobalBonus(actor, bonusDataOut, optsOut);
+            }
+            catch (err)
+            {
+                console.warn('lancer-automations | bonus template materialize failed:', err);
+            }
+        }
+    }
+}
+
+/**
+ * Materialize all bonus templates on `item` to the given tokens via addGlobalBonus.
+ * Idempotent - skips tokens whose actor already carries the runtime bonus for that template.
+ * @param {any} item
+ * @param {any[]} tokens
+ */
+export async function applyItemBonusTemplatesToTokens(item, tokens)
+{
+    if (!item || item.system?.destroyed || item.system?.disabled)
+        return;
+    await _materializeBonusTemplatesToTokens(item, 'sourceItemUuid', tokens);
+}
+
+/**
+ * Materialize all bonus templates on prototype `actor` to the given tokens via addGlobalBonus.
+ * @param {any} actor
+ * @param {any[]} tokens
+ */
+export async function applyActorBonusTemplatesToTokens(actor, tokens)
+{
+    await _materializeBonusTemplatesToTokens(actor, 'sourceActorUuid', tokens);
+}
+
+async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = undefined)
+{
+    const sourceUuid = runtimeBonus?.sourceItemUuid ?? runtimeBonus?.sourceActorUuid;
+    const sourceTemplateId = runtimeBonus?.sourceTemplateId;
+    if (!sourceUuid || !sourceTemplateId)
+        return;
+    try
+    {
+        const source = /** @type {any} */ (await fromUuid(sourceUuid));
+        if (!source)
+            return;
+        const templates = source.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const template = templates.find(candidate => candidate.id === sourceTemplateId);
+        if (!template)
+            return;
+        const rawDuration = template?.addOptions?.duration;
+        const durationLabel = typeof rawDuration === 'string' ? rawDuration : rawDuration?.label;
+        let currentUses;
+        if (explicitUses !== undefined)
+            currentUses = explicitUses;
+        else
+        {
+            // Constant templates have no linked AE and no statuscounter to persist; skip.
+            if (durationLabel === 'constant')
+                return;
+            const linkedAE = /** @type {any[]} */ (Array.from(actor?.effects ?? [])).find(effect =>
+                effect.flags?.['lancer-automations']?.linkedBonusId === runtimeBonus.id);
+            const rawUses = linkedAE?.flags?.statuscounter?.value;
+            currentUses = Number.isFinite(Number(rawUses)) ? Number(rawUses) : (linkedAE ? undefined : 0);
+            if (currentUses === undefined)
+                return;
+        }
+        const updated = templates.map(candidate => candidate.id === sourceTemplateId ? { ...candidate, lastRuntimeUses: currentUses } : candidate);
+        await source.setFlag('lancer-automations', 'bonusTemplates', updated);
+    }
+    catch (err)
+    {
+        console.warn('lancer-automations | persistBonusUsesToTemplate failed:', err);
+    }
+}
+
+export function supportsConsumeOnUsage(type, subtype = null)
+{
+    if (['accuracy', 'difficulty', 'damage', 'target_modifier', 'reroll'].includes(type))
+        return true;
+    if (type === 'immunity')
+        return ['effect', 'crit', 'hit', 'miss', 'damage', 'provoke', 'terrain'].includes(subtype);
+    return false;
+}
+
+function _findStoredBonus(actor, bonusId)
+{
+    const search = (list, source) =>
+    {
+        for (const stored of list)
+        {
+            if (stored.id === bonusId)
+                return { stored, source };
+            if (stored.type === 'multi' && typeof bonusId === 'string' && bonusId.startsWith(`${stored.id}_sub_`))
+                return { stored, source };
+        }
+        return null;
+    };
+    return search(actor.getFlag('lancer-automations', 'global_bonuses') || [], 'global')
+        ?? search(actor.getFlag('lancer-automations', 'constant_bonuses') || [], 'constant');
+}
+
+// Burn one use of a bonus (dual-write uses + linked AE); removes it when exhausted. Auto-consume-triggered bonuses are skipped (their charges belong to the trigger engine).
+export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false } = {})
+{
+    if (!actor || !bonus?.id)
+        return false;
+    const found = _findStoredBonus(actor, bonus.id);
+    if (!found)
+        return false;
+    const { stored, source } = found;
+    const linkedEffect = /** @type {any} */ (Array.from(actor.effects ?? []).find(effect =>
+        effect.flags?.['lancer-automations']?.linkedBonusId === stored.id));
+    if (linkedEffect?.flags?.['lancer-automations']?.consumption?.trigger)
+        return false;
+    const currentUses = typeof stored.uses === 'number' ? stored.uses : null;
+    if (currentUses === null && !removeWhenNoUses)
+        return false;
+    if (currentUses !== null && currentUses > 1)
+    {
+        const newUses = currentUses - 1;
+        if (source === 'constant')
+            await addConstantBonus(actor, { ...stored, uses: newUses });
+        else
+        {
+            const bonuses = actor.getFlag('lancer-automations', 'global_bonuses') || [];
+            const updated = bonuses.map(existing => existing.id === stored.id ? { ...existing, uses: newUses } : existing);
+            await actor.setFlag('lancer-automations', 'global_bonuses', updated);
+            if (linkedEffect)
+                await linkedEffect.update({ 'flags.statuscounter.value': newUses });
+        }
+        await _persistBonusUsesToTemplate(actor, stored, newUses);
+        return stored.id;
+    }
+    await _persistBonusUsesToTemplate(actor, stored, 0);
+    if (source === 'global')
+        await removeGlobalBonus(actor, stored.id, false);
+    else
+        await removeConstantBonus(actor, stored.id);
+    return stored.id;
+}
+
+export async function consumeImmunityUse(actor, subtype, state = null)
+{
+    if (!actor)
+        return false;
+    const candidates = getImmunityBonuses(actor, subtype, state)
+        .filter(bonus => bonus.consumeOnUsage === true);
+    for (const bonus of candidates)
+    {
+        if (await consumeBonusUse(actor, bonus, { removeWhenNoUses: true }))
+            return true;
+    }
+    return false;
+}
+
+// Post-roll pass: burn "consume on usage" bonuses that actually applied in this flow.
+export async function burnBonusUsageForFlow(state)
+{
+    const usage = state?.la_extraData?.bonusUsage;
+    const actor = state?.actor;
+    if (!usage || !actor)
+        return;
+    for (const candidate of Object.values(usage.candidates))
+    {
+        if (candidate.consumeOnUsage === false || !supportsConsumeOnUsage(candidate.type, candidate.subtype))
+            continue;
+        if (typeof candidate.uses !== 'number')
+            continue;
+        if ([...usage.burned].some(id => candidate.id === id || String(candidate.id).startsWith(`${id}_sub_`)))
+            continue;
+        let used = false;
+        if (candidate.bucket === 'acc')
+            used = usage.enabledById.get(candidate.id) !== false;
+        else if (candidate.bucket === 'targeted')
+        {
+            const mode = usage.appliedMode?.get(candidate.id);
+            if (mode === 'base')
+                used = usage.enabledById.get(candidate.id) !== false;
+            else if (mode === 'target')
+            {
+                const targets = state.data?.acc_diff?.targets ?? [];
+                used = targets.some(entry =>
+                {
+                    const tokenId = accDiffTargetToken(entry)?.id;
+                    return tokenId && candidate.applyTo?.includes(tokenId) && !usage.disabledByUser?.has(`${candidate.id}:${tokenId}`);
+                });
+            }
+        }
+        else if (candidate.bucket === 'tmod')
+            used = (usage.modEnabled?.get(candidate.id || candidate.subtype)) !== false;
+        else
+            used = usage.dmgEnabled.get(candidate.id) !== false;
+        if (!used)
+            continue;
+        const storedId = await consumeBonusUse(actor, candidate, { removeWhenNoUses: candidate.consumeOnUsage === true });
+        if (storedId)
+            usage.burned.add(storedId);
+    }
+}
+
+async function _cleanupBonusRuntimes(actor, predicate)
+{
+    if (!actor)
+        return;
+    const globals = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'global_bonuses') || [])
+        .filter(predicate);
+    for (const runtime of globals)
+    {
+        try
+        {
+            await _persistBonusUsesToTemplate(actor, runtime);
+        }
+        catch (err)
+        {
+            console.warn('lancer-automations | bonus cleanup persist:', err);
+        }
+        try
+        {
+            await removeGlobalBonus(actor, runtime.id, false);
+        }
+        catch (err)
+        {
+            console.warn('lancer-automations | bonus cleanup remove:', err);
+        }
+    }
+    const constants = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'constant_bonuses') || []);
+    if (constants.some(predicate))
+    {
+        const remaining = constants.filter(bonus => !predicate(bonus));
+        try
+        {
+            await delegateSetActorFlag(actor, 'lancer-automations', 'constant_bonuses', remaining);
+        }
+        catch (err)
+        {
+            console.warn('lancer-automations | constant cleanup failed:', err);
+        }
+    }
+}
+
+/**
+ * Cleanup runtime bonuses on `actor` that originated from `item`.
+ * @param {any} item
+ * @param {any} actor
+ */
+// Duplicated tokens copy runtime bonuses stamped with the ORIGINAL token's uuids; purge those.
+export async function cleanupForeignBonusRuntimes(actor, isForeignSource)
+{
+    await _cleanupBonusRuntimes(actor, bonus =>
+    {
+        const source = bonus.sourceItemUuid ?? bonus.sourceActorUuid;
+        return source ? isForeignSource(source) : false;
+    });
+}
+
+export async function cleanupItemBonusesFromActor(item, actor)
+{
+    await _cleanupBonusRuntimes(actor, bonus => bonus.sourceItemUuid === item.uuid);
+}
+
+/**
+ * Cleanup runtime bonuses on all active-token actors originating from an actor template on `actor`.
+ * @param {any} actor
+ */
+export async function cleanupActorBonusesFromTokens(actor)
+{
+    const tokens = actor?.getActiveTokens?.() ?? [];
+    for (const token of tokens)
+    {
+        if (token?.actor)
+            await _cleanupBonusRuntimes(token.actor, bonus => bonus.sourceActorUuid === actor.uuid);
+    }
+}
+
+async function _cleanupItemBonusTemplateFromActor(item, actor, templateId)
+{
+    if (!actor)
+        return;
+    const runtimeId = _bonusTemplateRuntimeId(item, templateId);
+    await _cleanupBonusRuntimes(actor, bonus => bonus.id === runtimeId);
+}
+
+async function _cleanupActorBonusTemplateFromTokens(actor, templateId)
+{
+    const runtimeId = _bonusTemplateRuntimeId(actor, templateId);
+    const tokens = actor?.getActiveTokens?.() ?? [];
+    for (const token of tokens)
+    {
+        const target = token?.actor;
+        if (!target)
+            continue;
+        await _cleanupBonusRuntimes(target, bonus => bonus.id === runtimeId);
+    }
+}
+
+/**
+ * Stamp a bonus template on each item and immediately materialize on parent-actor tokens.
+ * @param {Object} options
+ * @param {any[]} options.items
+ * @param {Object} options.bonusData
+ * @param {Object} [options.addOptions]
+ * @param {Object} [extraOptions]
+ */
+export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { items = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
+    if (!bonusData)
+        return [];
+    const stamped = [];
+    for (const item of items)
+    {
+        if (!item || item.documentName !== 'Item')
+            continue;
+        const templateId = foundry.utils.randomID();
+        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...bonusData }), addOptions: { ...addOptions, ...extraOptions } };
+        const existing = item.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        await item.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
+        stamped.push({ item, templateId });
+        const parent = item.parent;
+        if (parent?.documentName === 'Actor')
+            await applyItemBonusTemplatesToTokens(item, parent.getActiveTokens?.() ?? []);
+    }
+    return stamped;
+}
+
+/**
+ * Stamp a bonus template on each actor (prototype) and immediately materialize on active tokens.
+ * @param {Object} options
+ * @param {any[]} options.actors
+ * @param {Object} options.bonusData
+ * @param {Object} [options.addOptions]
+ * @param {Object} [extraOptions]
+ */
+export async function linkBonusToActor(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { actors = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
+    if (!bonusData)
+        return [];
+    const stamped = [];
+    for (const actor of actors)
+    {
+        if (!actor || actor.documentName !== 'Actor')
+            continue;
+        const templateId = foundry.utils.randomID();
+        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...bonusData }), addOptions: { ...addOptions, ...extraOptions } };
+        const existing = actor.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        await actor.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
+        stamped.push({ actor, templateId });
+        await applyActorBonusTemplatesToTokens(actor, actor.getActiveTokens?.() ?? []);
+    }
+    return stamped;
+}
+
+/**
+ * Pop templates matching `templateId` from each item's bonusTemplates; cascade cleanup on parent actor.
+ * @param {Object} options
+ * @param {any[]} options.items
+ * @param {string} options.templateId
+ */
+export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
+{
+    const { items = [], templateId } = /** @type {any} */ (options);
+    if (!templateId)
+        return [];
+    const removed = [];
+    for (const item of items)
+    {
+        if (!item || item.documentName !== 'Item')
+            continue;
+        const existing = item.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const filtered = existing.filter(template => template.id !== templateId);
+        if (filtered.length === existing.length)
+            continue;
+        await item.setFlag('lancer-automations', 'bonusTemplates', filtered);
+        const parent = item.parent;
+        if (parent?.documentName === 'Actor')
+            await _cleanupItemBonusTemplateFromActor(item, parent, templateId);
+        removed.push({ item, templateId });
+    }
+    return removed;
+}
+
+/**
+ * Pop templates matching `templateId` from each actor's bonusTemplates; cascade cleanup on all tokens.
+ * @param {Object} options
+ * @param {any[]} options.actors
+ * @param {string} options.templateId
+ */
+export async function unlinkBonusFromActor(options = /** @type {any} */ ({}))
+{
+    const { actors = [], templateId } = /** @type {any} */ (options);
+    if (!templateId)
+        return [];
+    const removed = [];
+    for (const actor of actors)
+    {
+        if (!actor || actor.documentName !== 'Actor')
+            continue;
+        const existing = actor.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const filtered = existing.filter(template => template.id !== templateId);
+        if (filtered.length === existing.length)
+            continue;
+        await actor.setFlag('lancer-automations', 'bonusTemplates', filtered);
+        await _cleanupActorBonusTemplateFromTokens(actor, templateId);
+        removed.push({ actor, templateId });
+    }
+    return removed;
+}
+
 /** @returns {void} */
-export function executeGenericBonusMenu(actor = null) {
+export function executeGenericBonusMenu(actor = null)
+{
     executeEffectManager({ initialTab: 'bonus', actor });
 }
 
 /** @returns {object[]} */
-export function getImmunityBonuses(actor, subtype, state = null) {
-    if (!actor) {
+export function getImmunityBonuses(actor, subtype, state = null)
+{
+    if (!actor)
         return [];
-    }
 
     const constants = actor.getFlag("lancer-automations", "constant_bonuses") || [];
     const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
     const ephemerals = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
     const flowBonuses = state?.la_extraData?.flow_bonus || [];
 
-    return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses]).filter(b => b.type === "immunity" && b.subtype === subtype);
+    return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses])
+        .filter(bonus => bonus.type === "immunity" && bonus.subtype === subtype && linkTierGate(bonus, actor));
 }
 
 /** @returns {string[]} array of immunity source names; empty if not immune */
-export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null) {
-    if (!actor || !effectIdOrName) {
+export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null)
+{
+    if (!actor || !effectIdOrName)
         return [];
-    }
 
     const effectImmunities = getImmunityBonuses(actor, "effect", state);
     const matchedSources = [];
@@ -2437,55 +3661,53 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null, stat
     const incomingLower = effectIdOrName.toLowerCase();
     const incomingTail = incomingLower.split('.').pop();
 
-    for (const b of effectImmunities) {
-        if (!b.effects || !Array.isArray(b.effects)) {
+    for (const b of effectImmunities)
+    {
+        if (!b.effects || !Array.isArray(b.effects))
             continue;
-        }
 
-        const isImmune = b.effects.some(immuneName => {
+        const isImmune = b.effects.some(immuneName =>
+        {
             const immuneLower = immuneName.toLowerCase();
             const immuneTail = immuneLower.split('.').pop();
 
             // 1. Exact string matches
-            if (immuneLower === incomingLower || immuneTail === incomingTail) {
+            if (immuneLower === incomingLower || immuneTail === incomingTail)
                 return true;
-            }
 
             // 2. Inclusion checks (handles path-based vs simple names)
-            if (immuneLower.includes(incomingTail) || incomingLower.includes(immuneTail)) {
+            if (immuneLower.includes(incomingTail) || incomingLower.includes(immuneTail))
                 return true;
-            }
 
             // 3. If ActiveEffect is provided, check its native statuses and flags
-            if (effect) {
-                if (effect.statuses?.has(immuneTail) || effect.statuses?.has(immuneLower)) {
+            if (effect)
+            {
+                if (effect.statuses?.has(immuneTail) || effect.statuses?.has(immuneLower))
                     return true;
-                }
 
                 const flagName = effect.getFlag('lancer-automations', 'effect') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null);
-                if (flagName) {
+                if (flagName)
+                {
                     const flagLower = flagName.toLowerCase();
-                    if (flagLower === immuneLower || flagLower.includes(immuneTail)) {
+                    if (flagLower === immuneLower || flagLower.includes(immuneTail))
                         return true;
-                    }
                 }
             }
 
             return false;
         });
 
-        if (isImmune) {
+        if (isImmune)
             matchedSources.push(b.source || b.name || "Unknown Immunity");
-        }
     }
 
     return matchedSources;
 }
 
-export function checkDamageResistances(actor, damageType) {
-    if (!actor || !damageType) {
+export function checkDamageResistances(actor, damageType)
+{
+    if (!actor || !damageType)
         return [];
-    }
     const resistanceBonuses = getImmunityBonuses(actor, "resistance");
     const incomingLower = damageType.toLowerCase();
 
@@ -2494,41 +3716,120 @@ export function checkDamageResistances(actor, damageType) {
         .map(b => b.source || b.name || "Unknown Resistance");
 }
 
+// Bridges bonus-based resistances into damageCalc, which only reads system.resistances.
+let _pendingApplyHalvedActorUuid = null;
+export function initDamageCalcWrapper()
+{
+    if (typeof libWrapper === 'undefined')
+        return;
+
+    // Cards with the half-damage box checked already halved their numbers; skip the bridge for those.
+    document.body.addEventListener('click', (ev) =>
+    {
+        const button = ev.target?.closest?.('.lancer-damage-apply');
+        if (!button)
+            return;
+        _pendingApplyHalvedActorUuid = null;
+        const chatMessageElement = button.closest('.chat-message.message');
+        const damageData = game.messages?.get(chatMessageElement?.dataset.messageId)?.flags?.lancer?.damageData;
+        const targetUuid = button.closest('.lancer-damage-button-group')?.dataset?.target;
+        if (!damageData || !targetUuid)
+            return;
+        const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
+        if (targetResult?.half_damage)
+            _pendingApplyHalvedActorUuid = /** @type {any} */ (fromUuidSync(targetUuid))?.actor?.uuid ?? null;
+    }, { capture: true });
+
+    libWrapper.register('lancer-automations', 'CONFIG.Actor.documentClass.prototype.damageCalc',
+        async function (wrapped, damage, options)
+        {
+            const alreadyHalved = _pendingApplyHalvedActorUuid !== null && _pendingApplyHalvedActorUuid === this.uuid;
+            if (alreadyHalved)
+                _pendingApplyHalvedActorUuid = null;
+            const res = this.system?.resistances;
+            const bridged = [];
+            if (res && !alreadyHalved)
+            {
+                for (const type of ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat'])
+                {
+                    if (!res[type] && checkDamageResistances(this, type).length > 0)
+                    {
+                        res[type] = true;
+                        bridged.push(type);
+                    }
+                }
+            }
+            let hpLanded;
+            try
+            {
+                hpLanded = await wrapped(damage, options);
+            }
+            finally
+            {
+                for (const type of bridged)
+                    res[type] = false;
+            }
+            Hooks.callAll('lancer-automations.battelog.damageApplied', this, hpLanded);
+            return hpLanded;
+        }, 'WRAPPER');
+}
+
 /** @returns {object[]} damages with immune types zeroed */
-export function applyDamageImmunities(actor, damages, state = null) {
-    if (!actor || !damages) {
+export function applyDamageImmunities(actor, damages, state = null)
+{
+    if (!actor || !damages)
         return damages;
-    }
 
     const damageImmunities = getImmunityBonuses(actor, "damage", state);
-    if (damageImmunities.length === 0) {
+    if (damageImmunities.length === 0)
         return damages;
-    }
 
     const immuneTypes = new Set();
-    for (const b of damageImmunities) {
-        if (b.damageTypes) {
+    for (const b of damageImmunities)
+    {
+        if (b.damageTypes)
             b.damageTypes.forEach(t => immuneTypes.add(t.toLowerCase()));
-        }
     }
 
-    return damages.map(d => {
-        if (immuneTypes.has(d.type.toLowerCase())) {
+    return damages.map(d =>
+    {
+        if (immuneTypes.has(d.type.toLowerCase()))
+        {
             const newD = { ...d };
-            if (newD.val !== undefined) {
+            if (newD.val !== undefined)
                 newD.val = 0;
-            }
-            if (newD.amount !== undefined) {
+            if (newD.amount !== undefined)
                 newD.amount = 0;
-            }
             return newD;
         }
         return d;
     });
 }
 
+// Heat has no target on a heatless actor (pilot / bio NPC); Lancer's damageCalc does the same for pilots.
+export function convertHeatToEnergyIfHeatless(actor, damages)
+{
+    if (!actor || !Array.isArray(damages))
+        return damages;
+    try
+    {
+        if (!game.settings.get('lancer-automations', 'convertHeatToEnergyOnHeatless'))
+            return damages;
+    }
+    catch (_)
+    {
+        return damages;
+    }
+    const heatMax = actor.system?.heat?.max;
+    const heatless = heatMax === undefined || heatMax === null || heatMax === 0;
+    if (!heatless)
+        return damages;
+    return damages.map(d => (d?.type === 'Heat' ? { ...d, type: 'Energy' } : d));
+}
+
 /** @returns {Promise<boolean>} */
-export async function hasCritImmunity(actor, attackerActor = null, state = null) {
+export async function hasCritImmunity(actor, attackerActor = null, state = null)
+{
     if (!actor)
         return false;
     const candidates = getImmunityBonuses(actor, "crit", state);
@@ -2537,7 +3838,8 @@ export async function hasCritImmunity(actor, attackerActor = null, state = null)
     if (!attackerActor)
         return true;
     const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates) {
+    for (const b of candidates)
+    {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
     }
@@ -2545,7 +3847,8 @@ export async function hasCritImmunity(actor, attackerActor = null, state = null)
 }
 
 /** @returns {Promise<boolean>} */
-export async function hasHitImmunity(actor, attackerActor = null, state = null) {
+export async function hasHitImmunity(actor, attackerActor = null, state = null)
+{
     if (!actor)
         return false;
     const candidates = getImmunityBonuses(actor, "hit", state);
@@ -2554,7 +3857,8 @@ export async function hasHitImmunity(actor, attackerActor = null, state = null) 
     if (!attackerActor)
         return true;
     const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates) {
+    for (const b of candidates)
+    {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
     }
@@ -2562,7 +3866,8 @@ export async function hasHitImmunity(actor, attackerActor = null, state = null) 
 }
 
 /** @returns {Promise<boolean>} */
-export async function hasMissImmunity(actor, attackerActor = null, state = null) {
+export async function hasMissImmunity(actor, attackerActor = null, state = null)
+{
     if (!actor)
         return false;
     const candidates = getImmunityBonuses(actor, "miss", state);
@@ -2571,7 +3876,8 @@ export async function hasMissImmunity(actor, attackerActor = null, state = null)
     if (!attackerActor)
         return true;
     const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates) {
+    for (const b of candidates)
+    {
         if (await isBonusApplicable(b, new Set(), attackerState))
             return true;
     }
@@ -2579,13 +3885,38 @@ export async function hasMissImmunity(actor, attackerActor = null, state = null)
 }
 
 
+/**
+ * Read bonus templates attached to an item or a prototype actor
+ * (from `flags['lancer-automations'].bonusTemplates`).
+ * @param {any} source  Item or Actor
+ * @returns {any[]}
+ */
+export function getLinkedBonuses(source)
+{
+    if (!source)
+        return [];
+    return /** @type {any[]} */ (source.getFlag?.('lancer-automations', 'bonusTemplates') || []);
+}
+
 export const BonusesAPI = {
     addGlobalBonus,
     removeGlobalBonus,
     getGlobalBonuses,
+    consumeBonusUse,
+    consumeImmunityUse,
+    supportsConsumeOnUsage,
     addConstantBonus,
     removeConstantBonus,
     getConstantBonuses,
+    linkBonusToItem,
+    linkBonusToActor,
+    unlinkBonusFromItem,
+    unlinkBonusFromActor,
+    getLinkedBonuses,
+    applyItemBonusTemplatesToTokens,
+    applyActorBonusTemplatesToTokens,
+    cleanupItemBonusesFromActor,
+    cleanupActorBonusesFromTokens,
     executeGenericBonusMenu,
     getImmunityBonuses,
     checkEffectImmunities,

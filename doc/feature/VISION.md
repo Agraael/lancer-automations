@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-Lancer doesn't really have fog of war or vision, but if you like playing with light for immersion, these tools bring it closer to Lancer's rules: line of sight sampled from the token's edge, tokens that block sight, and Sensor / Battlefield Awareness detection modes. They work best with fog of war and token vision turned on.
+Lancer has no fog of war or vision, but these tools bring it closer to its rules: line of sight sampled from the token's edge, tokens that block sight, and Sensor / Battlefield Awareness detection modes. They work best with fog of war and token vision turned on.
 
 ---
 
@@ -14,11 +14,19 @@ The **Vision** tab.
 
 <br clear="right"/>
 
+## Lancer line of sight
+
+<img align="right" src="../img/vis-los.gif" width="45%"/>
+
+**`lancerLos`** emulates Lancer's line-of-sight rules: a token behind a wall stays visible if another token can see it. Turn on **`lancerLosDebug`** to see how it resolves.
+
+<br clear="right"/>
+
 ## Vision from edge
 
 <img align="right" src="../img/vis-from-edge.png" width="45%"/>
 
-Experimental. Vanilla Foundry checks line of sight from a token's centre; **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner the way Lancer means it to. A per-token override lives in the Token Config Vision tab.
+Experimental. Vanilla Foundry checks line of sight from a token's center; **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner. A per-token override lives in the Token Config Vision tab.
 
 Tune it with the **sample density** (`visionFromEdgeSampleMode`: 4 corners, 8 perimeter, or adaptive) and the **sample offset** (`visionFromEdgeSampleOffset`, how far outside the token the points sit). **`visionFromEdgeDebug`** draws the sample points on the canvas. With Wall Height, the samples respect elevation barriers.
 
@@ -30,7 +38,7 @@ Tune it with the **sample density** (`visionFromEdgeSampleMode`: 4 corners, 8 pe
 
 A token can be set to **block line of sight** through its footprint, from a checkbox in its Token Config Vision tab. The **Bulwark** status turns this on automatically (`bulwarkBlocksLineOfSight`).
 
-With **Wall Height** installed it's elevation-aware: the blocking edge sits just below the token's own height, so a token can see over another of the **same height** but not over a taller one.
+With **Wall Height** installed it's elevation-aware: the blocking edge sits slightly below the token's own height, so a token can see over another of the **same height** but not over a taller one.
 
 <br clear="right"/>
 
@@ -59,5 +67,5 @@ While a token is dragged, its vision can be shrunk so you don't reveal new map a
 
 Recomputing vision is expensive. Two toggles ease that on busy scenes:
 
-- **`visionAnimationThrottleFps`** caps how often vision and light refresh while a token is moving (0 = vanilla), to ease the load on busy scenes.
+- **`visionAnimationThrottleFps`** caps how often vision and light refresh while a token is moving (0 = vanilla).
 - **`disableVisionAboveControlled`** turns token vision off while more than N tokens are selected at once (0 = never), so batch-selecting doesn't recompute every token's sight.

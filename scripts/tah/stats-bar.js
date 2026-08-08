@@ -1,6 +1,6 @@
 /**
  * TAH Stats Bar
- * Pure function — no class coupling, no jQuery dependencies.
+ * Pure function: no class coupling, no jQuery dependencies.
  * Generates the inline HTML for the HP / heat / structure / pips display.
  */
 
@@ -10,12 +10,14 @@ import { playUiSound } from './sound.js';
 let _statsExpanded = false;
 
 /** Collapse the stats detail panel (call when the HUD closes). */
-export function resetStatsExpanded() {
+export function resetStatsExpanded()
+{
     _statsExpanded = false;
 }
 
 /** Linear interpolation between two RGB colours. t=0→colour1, t=1→colour2. */
-function lerpColor(r1, g1, b1, r2, g2, b2, t) {
+function lerpColor(r1, g1, b1, r2, g2, b2, t)
+{
     const r = Math.round(r1 + (r2 - r1) * t);
     const g = Math.round(g1 + (g2 - g1) * t);
     const b = Math.round(b1 + (b2 - b1) * t);
@@ -24,12 +26,13 @@ function lerpColor(r1, g1, b1, r2, g2, b2, t) {
 
 /**
  * Build the stats-bar HTML for the given actor.
- * Returns a raw HTML string — wrap in `$(...)` to get a jQuery element.
+ * Returns a raw HTML string; wrap in `$(...)` to get a jQuery element.
  * @param {any} actor
  * @param {any} [token]
  * @returns {string}
  */
-export function buildStatsHtml(actor, token = null) {
+export function buildStatsHtml(actor, token = null)
+{
     const sys = actor.system;
     const strVal    = sys.structure?.value ?? 0;
     const strMax    = sys.structure?.max  ?? 0;
@@ -84,7 +87,7 @@ export function buildStatsHtml(actor, token = null) {
     const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${repairs > 0 ? 1 : 0.3};">`;
     const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
     const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${reaction ? 1 : 0.3};">`;
-    const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}🛡</span>` : '';
+    const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}<i class="mdi mdi-hexagon-multiple-outline" style="font-size:1.05em;vertical-align:-1px;margin-left:1px;"></i></span>` : '';
 
     // Movement display
     const tokenId = token?.document?.id ?? token?.id ?? null;
@@ -92,23 +95,23 @@ export function buildStatsHtml(actor, token = null) {
         !!(/** @type {any} */ (game.combat)?.combatants?.find((/** @type {{ tokenId: string }} */ c) => c.tokenId === tokenId));
     const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(2px);display:inline-block;"></i>`;
     let movHtml;
-    if (inCombat && token) {
+    if (inCombat && token)
+    {
         const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
         const mh = api?.getMovementHistory?.(token);
         const regularCost = mh?.intentional?.regularCost ?? 0;
         const cap = api?.getMovementCap?.(token);
         let movColor;
-        if (cap <= 0) {
+        if (cap <= 0)
             movColor = '#aaa';
-        } else if (regularCost <= cap) {
+        else if (regularCost <= cap)
             movColor = lerpColor(76, 175, 80, 255, 235, 59, regularCost / cap);   // green→yellow
-        } else {
+        else
             movColor = lerpColor(255, 235, 59, 244, 67, 54, Math.min(1, (regularCost - cap) / cap));   // yellow→red
-        }
         movHtml = `${SEP}${movIcon}<span title="Movement used / cap" style="color:${movColor};">${regularCost}/${cap}</span>`;
-    } else {
-        movHtml = `${SEP}${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`;
     }
+    else
+        movHtml = `${SEP}${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`;
 
     // Secondary stats row
     const armor       = sys.armor ?? 0;
@@ -164,40 +167,46 @@ export function buildStatsHtml(actor, token = null) {
  * @param {any} [token]
  * @returns {JQuery}
  */
-export function buildStatsEl(actor, token = null) {
+export function buildStatsEl(actor, token = null)
+{
     const el = $(buildStatsHtml(actor, token));
     const detail = el.find('.la-stats-detail');
     const toggle = el.find('.la-stats-toggle');
     // Set initial width for animation
-    if (_statsExpanded) {
+    if (_statsExpanded)
         detail.css({ display: 'flex', 'flex-direction': 'column', overflow: 'hidden' });
-    } else {
+    else
         detail.css({ display: 'none', overflow: 'hidden' });
-    }
-    const openDetail = () => {
+    const openDetail = () =>
+    {
         if (_statsExpanded)
             return;
         _statsExpanded = true;
         detail.stop(true).css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
-            .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function () {
+            .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function ()
+            {
                 $(this).css('width', '');
             });
         toggle.find('span').text('◀');
     };
-    const closeDetail = () => {
+    const closeDetail = () =>
+    {
         if (!_statsExpanded)
             return;
         _statsExpanded = false;
-        detail.stop(true).animate({ width: 0, opacity: 0 }, 120, function () {
+        detail.stop(true).animate({ width: 0, opacity: 0 }, 120, function ()
+        {
             $(this).css({ display: 'none', width: '', opacity: '' });
         });
         toggle.find('span').text('▶');
     };
-    el.on('mouseenter', () => {
+    el.on('mouseenter', () =>
+    {
         playUiSound('details'); openDetail();
     });
     el.on('mouseleave', closeDetail);
-    toggle.on('click', (ev) => {
+    toggle.on('click', (ev) =>
+    {
         ev.stopPropagation();
         if (_statsExpanded)
             closeDetail();

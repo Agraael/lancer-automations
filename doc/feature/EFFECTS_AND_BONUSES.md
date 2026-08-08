@@ -29,9 +29,9 @@ Everything here can also be driven from automation code; signatures are in [API_
 
 Pick a status from the searchable grid and apply it with:
 
-- a **duration** - end of turn, start of turn, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running),
-- a **stack count**,
-- an optional **note** (e.g. "granted by X"),
+- a **duration** - end of turn, start of turn, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn; `0` means "next matching trigger" (end/start of the current turn if it's the origin's turn, otherwise the next one).
+- a **stack count**.
+- an optional **note** (e.g. "granted by X").
 - optional **consumption** (see below).
 
 Hover a status for its description. Save common setups as **presets** from the bar above the tab.
@@ -42,7 +42,7 @@ Hover a status for its description. Save common setups as **presets** from the b
 
 <img align="right" src="../img/em-custom.png" width="55%"/>
 
-This tab only appears when the **Temporary Custom Statuses** module is active; it's the front-end for that module's custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes). A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
+This tab appears only when the **Temporary Custom Statuses** module is active, as the front-end for its custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes). A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
 
 <br clear="right"/>
 
@@ -66,7 +66,7 @@ For anything the filters can't express, write a short **evaluate function** that
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
 - **General** - visible on the token. Give it a duration (end of turn, start of turn, or indefinite) and it shows an icon like a status, with optional charges.
-- **Constant** - invisible and permanent. In the dialog this is the **None (Permanent, no Icon)** duration; from code it's `addConstantBonus`, for baseline stats or immunities (see [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md)). It survives a reload.
+- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration; from code it's `addConstantBonus`, for baseline stats or immunities (see [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md)). It survives a reload.
 - **Flow** - injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from a reaction.
 
 Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](../API_EFFECTS.md).
@@ -80,8 +80,8 @@ Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](.
 | Type | What it does |
 |------|--------------|
 | **Accuracy / Difficulty** | Add accuracy or difficulty dice to matching rolls (attacks, checks, saves). |
-| **Damage** | Add extra damage of any type (e.g. +2d6 Kinetic), per-target or global. |
-| **Stat** | Change an actor stat: HP, Heat, Armor, Speed, Evasion, and so on. |
+| **Damage** | Bonus (default): add extra rows in the Bonus Damage section, per-target or global. Add: append rows to the weapon's Base Damage. Replace: substitute the weapon's Base Damage with a new set. Change Type: remap damage types (per-type from -> to, or a catch-all "All -> X"). Add, Replace, and Change Type are actor-wide only. |
+| **Stat** | Change an actor stat: HP, Heat, Armor, Speed, Evasion, etc. Modes: Add (delta) or Replace (set to `val`). |
 | **Tag** | Add, increment, override, or remove a weapon tag (Accurate, Overkill, ...). |
 | **Range** | Change a weapon's ranges (Range, Threat, Blast, Burst, Cone, Line). |
 | **Immunity** | Immunity to a damage type, effect, crit, terrain, or engagement. Prompts a choice card on incoming damage (below). |
@@ -101,6 +101,18 @@ Accuracy and difficulty bonuses show up in the roll HUD before you confirm; dama
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
 
+## Attach to items and prototype actors
+
+<img align="right" src="../img/em-item-template.png" width="45%"/>
+
+Statuses, bonuses, and extras can be attached to an **item** or a **prototype actor** instead of a scene token. Open the Effect Manager from the **L.A** button on the item or actor sheet header.
+
+Anything attached to an item follows the item: whoever carries it gets the effect, and it goes away if the item is destroyed or removed. Prototype actors work the same way, keyed on the actor: every token spawned from the prototype picks it up.
+
+When the owner is a tiered NPC, an entry can be **tier-gated** so it only applies at a chosen tier (T1 / T2 / T3).
+
+<br clear="right"/>
+
 ## Immunity and the choice card
 
 <img align="right" src="../img/em-immunity-card.png" width="53%"/>
@@ -113,7 +125,7 @@ When a token holds an immunity bonus and takes matching damage, a **choice card*
 
 <img align="right" src="../img/em-manage.png" width="55%"/>
 
-See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them outright. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Duplicate module effects that share a name collapse into one icon with a count badge.
+See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Duplicate module effects that share a name collapse into one icon with a count badge.
 
 <br clear="right"/>
 

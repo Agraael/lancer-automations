@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md)
 
-The cosmetic and feedback layer: visual effects on status effects, animations when actions fire, and sounds for most of what happens at the table. All optional, all tunable.
+The cosmetic and feedback layer: visual effects on statuses, animations when actions fire, and sounds for most table events. All optional.
 
 ---
 

@@ -1,6 +1,19 @@
-Hooks.on('lancer.statusesReady', () => {
+// filled in even when the toggle is off, so callers can tell "opted out" from "typo"
+let additionalStatusKeys = null;
+
+/** @param {any} nameOrId */
+export function isAdditionalStatusUnavailable(nameOrId)
+{
+    if (typeof nameOrId !== 'string' || !additionalStatusKeys?.has(nameOrId))
+        return false;
+    return !CONFIG.statusEffects?.some(status => status.id === nameOrId || status.name === nameOrId);
+}
+
+Hooks.on('lancer.statusesReady', () =>
+{
     // infection is always needed by StatusFX, even when additionalStatuses is off
-    if (!CONFIG.statusEffects.find(s => s.id === 'infection')) {
+    if (!CONFIG.statusEffects.find(s => s.id === 'infection'))
+    {
         CONFIG.statusEffects.push({
             id: "infection",
             name: "Infection",
@@ -9,7 +22,8 @@ Hooks.on('lancer.statusesReady', () => {
         });
     }
 
-    if (!CONFIG.statusEffects.find(s => s.id === 'guardian')) {
+    if (!CONFIG.statusEffects.find(s => s.id === 'guardian'))
+    {
         CONFIG.statusEffects.push({
             id: "guardian",
             name: "Guardian",
@@ -18,7 +32,8 @@ Hooks.on('lancer.statusesReady', () => {
         });
     }
 
-    if (!CONFIG.statusEffects.find(s => s.id === 'bulwark')) {
+    if (!CONFIG.statusEffects.find(s => s.id === 'bulwark'))
+    {
         CONFIG.statusEffects.push({
             id: "bulwark",
             name: "Bulwark",
@@ -28,30 +43,57 @@ Hooks.on('lancer.statusesReady', () => {
     }
 
     // fallback for users without csm-lancer-qol; that module normally provides these
-    if (!game.modules.get('csm-lancer-qol')?.active) {
+    if (!game.modules.get('csm-lancer-qol')?.active)
+    {
         const qolStatusEffects = [
             { id: "dangerzone", name: "Danger Zone", img: "systems/lancer/assets/icons/white/status_dangerzone.svg" },
             { id: "burn", name: "Burn", img: "icons/svg/fire.svg" },
-            { id: "overshield", name: "Overshield", img: "icons/svg/circle.svg" },
+            { id: "overshield", name: "Overshield", img: "modules/lancer-automations/icons/overshield.svg" },
             { id: "engaged", name: "Engaged", img: "systems/lancer/assets/icons/white/status_engaged.svg" },
             { id: "cascading", name: "Cascading", img: "icons/svg/paralysis.svg" },
             { id: "bolster", name: "Bolstered", img: "systems/lancer/assets/icons/white/accuracy.svg" },
             { id: "mia", name: "M.I.A.", img: "modules/lancer-automations/icons/mia_lg.svg" }
         ];
-        for (const eff of qolStatusEffects) {
-            if (!CONFIG.statusEffects.find(s => s.id === eff.id)) {
+        for (const eff of qolStatusEffects)
+        {
+            if (!CONFIG.statusEffects.find(s => s.id === eff.id))
                 CONFIG.statusEffects.push(eff);
-            }
         }
     }
 
-    if (!game.settings.get('lancer-automations', 'additionalStatuses'))
-        return;
+    // stripped (Dead Rings LCP): no armor
+    const stripped = CONFIG.statusEffects.find(effect => effect.id === 'DeadRings_statuses_stripped');
+    const strippedChanges = /** @type {any[]} */ (stripped?.changes ?? []);
+    if (stripped && !strippedChanges.some(change => change.key === 'system.armor'))
+    {
+        stripped.changes = /** @type {any} */ ([
+            ...strippedChanges,
+            { key: "system.armor", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "0" }
+        ]);
+    }
 
-    CONFIG.statusEffects.push({
+    // shredded: no armor, no resistances
+    const shredded = CONFIG.statusEffects.find(effect => effect.id === 'shredded');
+    const shreddedChanges = /** @type {any[]} */ (shredded?.changes ?? []);
+    if (shredded && !shreddedChanges.some(change => change.key === 'system.armor'))
+    {
+        shredded.changes = /** @type {any} */ ([
+            ...shreddedChanges,
+            { key: "system.armor", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "0" },
+            { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+            { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+            { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+            { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
+            { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" }
+        ]);
+    }
+
+    const additional = [{
         id: "resistance_all",
         name: "Resist All",
         img: "modules/lancer-automations/icons/resist_all.svg",
+        description: "You count as having RESISTANCE to all damage, burn, and heat: take half, rounded up.",
         changes: /** @type {any[]} */ ([
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
@@ -144,23 +186,32 @@ Hooks.on('lancer.statusesReady', () => {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
-        description: "You gain resistance to all damage, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
+        description: "You resist the triggering attack, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
+    },
+    {
+        id: "core_power_active",
+        name: "Core Power Active",
+        img: "systems/lancer/assets/icons/white/corepower.svg",
+        description: "Your core is active",
         changes: /** @type {any[]} */ ([
-            { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
-            { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
+            { key: "system.statuses.core_power_active", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
-    });
+    },
+    {
+        id: "dazed",
+        name: "Dazed",
+        img: "modules/lancer-automations/icons/dazed.svg",
+        description: "DAZED mechs can only take one quick action – they cannot OVERCHARGE, move normally, nor take full actions, reactions, or free actions."
+    }];
 
-    if (!CONFIG.statusEffects.find(s => s.id === 'dazed')) {
-        CONFIG.statusEffects.push({
-            id: "dazed",
-            name: "Dazed",
-            img: "modules/lancer-automations/icons/dazed.svg",
-            description: "DAZED mechs can only take one quick action – they cannot OVERCHARGE, move normally, nor take full actions, reactions, or free actions."
-        });
+    additionalStatusKeys = new Set(additional.flatMap(status => [status.id, status.name]));
+
+    if (!game.settings.get('lancer-automations', 'additionalStatuses'))
+        return;
+
+    for (const status of additional)
+    {
+        if (!CONFIG.statusEffects.find(existing => existing.id === status.id))
+            CONFIG.statusEffects.push(status);
     }
 });

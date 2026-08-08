@@ -1,24 +1,25 @@
 /* global $ */
 import { playUiSound } from './sound.js';
-/**
- * Generic HUD item children helpers for lancer-automations.
- * Builds col4 item lists from Foundry item data.
- * Designed to be extended for systems, traits, etc.
- */
+// HUD item helpers: status badges, icons, col4 action/profile lists, and detail-popup pips.
 
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 import { getActivationIcon } from '../tools/misc-tools.js';
-import { getPerSceneLimit, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
+import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags } from '../combat/per-frequency-tags.js';
+import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
 const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
 
+// Row icon size (px). Drives both svg images and mdi font glyphs so they match.
+export const HUD_ICON_SIZE = 20;
+
 export const rechargeIcon = (/** @type {boolean} */ charged) =>
     `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
 
-export function activationTheme(/** @type {string|null|undefined} */ activation) {
+export function activationTheme(/** @type {string|null|undefined} */ activation)
+{
     const normalized = (activation ?? '').toLowerCase().replaceAll(/[\s-]+/g, '_');
     if (normalized === 'protocol')
         return 'protocol';
@@ -36,63 +37,84 @@ export function activationTheme(/** @type {string|null|undefined} */ activation)
 }
 
 /**
- * Inspects any Lancer item OR standalone action object and returns its availability status
- * for display in the HUD. Checks: loading, recharge, limited uses, disabled, destroyed.
- * Works for weapons (uses active_profile tags), systems, traits, and any other item type.
- * For action objects (actor-level extras), reads tags / loaded / charged / uses directly.
- *
+ * Availability status of a Lancer item or standalone action object, for HUD badge display.
+ * Checks loading, recharge, limited uses, disabled, and destroyed.
  * @param {Item|object} itemOrAction
  * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, destroyed: boolean }}
  */
-export function getItemStatus(itemOrAction, extraAction = null) {
+export function getItemStatus(itemOrAction, extraAction = null, { subKey = null } = {})
+{
     const isItem = !!itemOrAction?.system;
     const sys = isItem ? itemOrAction.system : itemOrAction;
-    const activeTags = isItem ? (sys.active_profile?.tags ?? []) : [];
-    const baseTags   = sys.all_base_tags ?? sys.tags ?? [];
-    const itemTags = [...activeTags, ...baseTags];
+    const itemTags = itemAllTags(sys);
 
     let unavailable = !!(sys.disabled);
     const destroyed = !!(sys.destroyed);
     const parts = [];
     let badgeColor = '#3a9e6e'; // green = ready
 
-    const pushLoaded = (loaded) => {
-        if (loaded === false) {
+    const pushLoaded = (loaded) =>
+    {
+        if (loaded === false)
+        {
             parts.push('⬡'); unavailable = true; badgeColor = '#c33';
-        } else
+        }
+        else
             parts.push('⬢');
     };
-    const pushCharged = (charged) => {
-        if (charged === false) {
+    const pushCharged = (charged) =>
+    {
+        if (charged === false)
+        {
             parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33';
-        } else
+        }
+        else
             parts.push(rechargeIcon(true));
     };
-    const pushUses = (usesField) => {
-        let val = 0, max = 0;
-        if (usesField != null) {
+    const pushUses = (usesField) =>
+    {
+        let current = 0, max = 0;
+        if (usesField != null)
+        {
             if (typeof usesField === 'number')
-                val = usesField;
-            else {
-                val = usesField.value ?? 0; max = usesField.max ?? 0;
+                current = usesField;
+            else
+            {
+                current = usesField.value ?? 0; max = usesField.max ?? 0;
             }
         }
-        if (val <= 0) {
+        if (current <= 0)
+        {
             unavailable = true; badgeColor = '#c33';
-        } else if (val < max && badgeColor !== '#c33')
+        }
+        else if (current < max && badgeColor !== '#c33')
             badgeColor = '#cc7700';
-        parts.push(`${val}/${max}`);
+        parts.push(`${current}/${max}`);
     };
 
-    const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
-    const pushPerFreq = (max, used, iconReady, iconConsumed) => {
+    const perFreqOn = (() =>
+    {
+        try
+        {
+            return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags');
+        }
+        catch
+        {
+            return false;
+        }
+    })();
+    const pushPerFreq = (max, used, iconReady, iconConsumed) =>
+    {
         const ready = max - Math.min(max, used);
-        if (ready <= 0) {
+        if (ready <= 0)
+        {
             unavailable = true; badgeColor = '#c33';
-        } else if (ready < max && badgeColor !== '#c33')
+        }
+        else if (ready < max && badgeColor !== '#c33')
             badgeColor = '#cc7700';
         const pips = [];
-        for (let i = 0; i < max; i++) {
+        for (let i = 0; i < max; i++)
+        {
             const isReady = i < ready;
             pips.push(`<span class="mdi ${isReady ? iconReady : iconConsumed}" style="color:${isReady ? '#3a9e6e' : '#c33'};"></span>`);
         }
@@ -105,15 +127,25 @@ export function getItemStatus(itemOrAction, extraAction = null) {
         pushCharged(sys.charged);
     if (itemTags.some(tag => tag.lid === 'tg_limited'))
         pushUses(sys.uses);
-    if (perFreqOn) {
-        const perRound = Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0);
-        const perTurn = Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0);
+    if (perFreqOn)
+    {
+        const freqSub = extraAction ?? (isItem ? null : sys);
+        const perRound = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), freqSub ? getPerRoundLimitFromSub(freqSub) : getPerRoundLimit(itemOrAction));
+        const perTurn = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), freqSub ? getPerTurnLimitFromSub(freqSub) : getPerTurnLimit(itemOrAction));
         let perScene = 0;
-        if (extraAction) perScene = getPerSceneLimitFromSub(extraAction);
-        else if (isItem && itemOrAction.type !== 'frame') perScene = getPerSceneLimit(itemOrAction);
-        if (perRound > 0) pushPerFreq(perRound, Number(sys.uses_per_round?.value ?? 0), 'mdi-restart', 'mdi-restart-off');
-        if (perTurn > 0) pushPerFreq(perTurn, Number(sys.uses_per_turn?.value ?? 0), 'mdi-circle-slice-8', 'mdi-circle-outline');
-        if (perScene > 0) pushPerFreq(perScene, Number(sys.uses_per_scene?.value ?? 0), 'mdi-cog', 'mdi-cog-off');
+        if (freqSub)
+            perScene = getPerSceneLimitFromSub(freqSub);
+        else if (isItem && itemOrAction.type !== 'frame')
+            perScene = getPerSceneLimit(itemOrAction);
+        const freqUsed = (field) => subKey && isItem
+            ? getSubUsed(itemOrAction, subKey, field)
+            : Number(sys[field]?.value ?? 0);
+        if (perRound > 0)
+            pushPerFreq(perRound, freqUsed('uses_per_round'), 'mdi-restart', 'mdi-restart-off');
+        if (perTurn > 0)
+            pushPerFreq(perTurn, freqUsed('uses_per_turn'), 'mdi-circle-slice-8', 'mdi-circle-outline');
+        if (perScene > 0)
+            pushPerFreq(perScene, freqUsed('uses_per_scene'), 'mdi-cog', 'mdi-cog-off');
     }
 
     // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
@@ -130,24 +162,55 @@ export function getItemStatus(itemOrAction, extraAction = null) {
 }
 
 /**
- * Returns an HTML string for a small icon in a HUD row.
- * Accepts a web-relative SVG path (e.g. "systems/lancer/assets/icons/foo.svg")
- * or an MDI class string (e.g. "mdi mdi-hexagon-slice-3").
+ * HTML for a small HUD-row icon. `icon` is a web-relative SVG path or an MDI class string.
  * @param {string|null} icon
  * @returns {string}
  */
-export function laHudRenderIcon(icon) {
+export function isWhiteIcon(icon)
+{
+    return typeof icon === 'string'
+        && icon.endsWith('.svg')
+        && !icon.includes('/black/')
+        && (icon.includes('/white/') || icon.includes('modules/lancer-automations/') || icon.startsWith('icons/svg/'))
+        && !icon.includes('modules/lancer-automations/icons/stats/');
+}
+
+export function tahScale()
+{
+    try
+    {
+        return Number(game.settings.get('lancer-automations', 'tah.uiScale')) || 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
+
+export function laHudRenderIcon(icon)
+{
     if (!icon)
         return '';
-    if (icon.endsWith('.svg')) {
-        const isWhite = icon.includes('/white/')
-            || icon.includes('modules/lancer-automations/')
-            || icon.startsWith('icons/svg/');
+    if (icon.endsWith('.svg'))
+    {
+        const isWhite = isWhiteIcon(icon);
         const filter = isWhite ? 'invert(1)' : 'none';
         const cls = isWhite ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
-        return `<img class="${cls}" src="${icon}" style="width:20px;height:20px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+        // LA icons fill their viewBox edge-to-edge; system icons ship with whitespace. Pad to match.
+        const pad = icon.includes('modules/lancer-automations/') ? 'padding:2px;box-sizing:border-box;' : '';
+        return `<img class="${cls}" src="${icon}" style="width:${HUD_ICON_SIZE}px;height:${HUD_ICON_SIZE}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
-    return `<i class="${icon} la-hud-icon" style="font-size:1.15em;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+    return `<i class="${icon} la-hud-icon" style="font-size:${HUD_ICON_SIZE}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+}
+
+export function getDeployableIcon(depInfo)
+{
+    const type = String(depInfo?.type ?? '');
+    if (/mine/i.test(type))
+        return 'systems/lancer/assets/icons/white/mine.svg';
+    if (/drone/i.test(type))
+        return 'systems/lancer/assets/icons/white/drone.svg';
+    return 'systems/lancer/assets/icons/white/deployable.svg';
 }
 
 
@@ -158,27 +221,30 @@ export function laHudRenderIcon(icon) {
  * @param {Object}  [opts]
  * @param {Array}   [opts.defaultActions=[]]  Items shown at the very top (e.g. SKIRMISH / BARRAGE)
  * @param {Item}    [opts.modItem=null]        Weapon mod item
- * @param {Function} [opts.showPopup=null]     (popup, rowEl) => void — if provided, actions get right-click detail popups
- * @param {Function} [opts.onActivate=null]   (action) => void — if provided, actions get an onClick handler
+ * @param {Function} [opts.showPopup=null]     (popup, rowEl) => void - if provided, actions get right-click detail popups
+ * @param {Function} [opts.onActivate=null]   (action) => void - if provided, actions get an onClick handler
  * @returns {Array}
  */
-export function laHudItemChildren(item, opts = {}) {
+export function laHudItemChildren(item, opts = {})
+{
     const { defaultActions = [], modItem = null, showPopup = null, onActivate = null } = opts;
     const sys = item.system;
     const profiles = sys.profiles ?? [];
     const activeIdx = sys.selected_profile_index ?? 0;
     const activeProfileActions = profiles[activeIdx]?.actions ?? [];
     const taggedActions = [
-        ...getItemActions(item).map(a => ({ a, source: item })),
-        ...activeProfileActions.map(a => ({ a, source: item })),
-        ...getItemActions(modItem).map(a => ({ a, source: modItem })),
+        ...getItemActions(item).map(action => ({ action, source: item })),
+        ...activeProfileActions.map(action => ({ action, source: item })),
+        ...getItemActions(modItem).map(action => ({ action, source: modItem })),
     ];
     // Dedupe by (name, activation, source).
     const _seenActions = new Set();
     const _dedupedActions = [];
-    for (const entry of taggedActions) {
-        const key = `${entry.source?.id ?? '?'}|${entry.a?.name ?? ''}|${entry.a?.activation ?? ''}`;
-        if (_seenActions.has(key)) continue;
+    for (const entry of taggedActions)
+    {
+        const key = `${entry.source?.id ?? '?'}|${entry.action?.name ?? ''}|${entry.action?.activation ?? ''}`;
+        if (_seenActions.has(key))
+            continue;
         _seenActions.add(key);
         _dedupedActions.push(entry);
     }
@@ -186,10 +252,12 @@ export function laHudItemChildren(item, opts = {}) {
     taggedActions.push(..._dedupedActions);
     const items = [...defaultActions];
 
-    // ── Profiles ──────────────────────────────────────────────────────────────
-    if (profiles.length > 1) {
+    // Profiles
+    if (profiles.length > 1)
+    {
         items.push({ label: 'PROFILES', isSectionLabel: true });
-        profiles.forEach((profile, idx) => {
+        profiles.forEach((profile, idx) =>
+        {
             const isActive = idx === activeIdx;
             const profileName = profile.name || `Profile ${idx + 1}`;
             items.push({
@@ -200,7 +268,8 @@ export function laHudItemChildren(item, opts = {}) {
                 _profile: profile,
                 onClick: isActive ? null : async () => item.update({ 'system.selected_profile_index': idx }),
                 refreshCol4: () => laHudItemChildren(item, opts),
-                onRightClick: showPopup ? (row) => {
+                onRightClick: showPopup ? (row) =>
+                {
                     const bodyHtml = laRenderWeaponProfile(profile, false);
                     const subtitle = [profile.type, isActive ? 'Active' : null].filter(Boolean).join(' · ');
                     const popup = laDetailPopup('la-hud-popup la-hud-profile-popup', profileName, subtitle, bodyHtml, 'weapon');
@@ -210,19 +279,22 @@ export function laHudItemChildren(item, opts = {}) {
         });
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
-    if (taggedActions.length) {
+    // Actions
+    if (taggedActions.length)
+    {
         items.push({ label: 'ACTIONS', isSectionLabel: true });
-        taggedActions.forEach(({ a, source }) => {
+        taggedActions.forEach(({ action, source }) =>
+        {
             const entry = {
-                label: a.name,
-                icon: getActivationIcon(a),
-                onClick: onActivate ? () => onActivate(a, source) : null,
+                label: action.name,
+                icon: getActivationIcon(action),
+                onClick: onActivate ? () => onActivate(action, source) : null,
             };
-            entry.onRightClick = (row) => {
-                const bodyHtml = laRenderActionDetail(a, { sourceName: source?.name });
-                const subtitle = a.activation ?? '';
-                const popup = laDetailPopup('la-hud-popup la-hud-action-popup', a.name, subtitle, bodyHtml, activationTheme(a.activation));
+            entry.onRightClick = (row) =>
+            {
+                const bodyHtml = laRenderActionDetail(action, { sourceName: source?.name });
+                const subtitle = action.activation ?? '';
+                const popup = laDetailPopup('la-hud-popup la-hud-action-popup', action.name, subtitle, bodyHtml, activationTheme(action.activation));
                 if (showPopup)
                     showPopup(popup, row);
             };
@@ -230,8 +302,9 @@ export function laHudItemChildren(item, opts = {}) {
         });
     }
 
-    // ── Mod ───────────────────────────────────────────────────────────────────
-    if (modItem) {
+    // Mod
+    if (modItem)
+    {
         items.push({ label: 'MOD', isSectionLabel: true });
         items.push({ label: modItem.name, icon: ICON_MOD });
     }
@@ -245,26 +318,38 @@ export function laHudItemChildren(item, opts = {}) {
  * Does nothing if the item has none of those tags.
  * @param {any} item   Foundry Item document
  * @param {any} popup  jQuery popup element (from laDetailPopup)
- * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any, subData?: any }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge + optional sub-entry (trait/core_system) to restrict per-scene detection
+ * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any, subData?: any, subKey?: string }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge + optional sub-entry (trait/rank/core_system) to restrict per-freq detection + flag key for sub-scoped usage
  */
-export function appendItemPips(item, popup, depthCallbacks) {
+export function appendItemPips(item, popup, depthCallbacks)
+{
     const action = depthCallbacks?.action;
     const subData = depthCallbacks?.subData;
+    const subKey = depthCallbacks?.subKey ?? null;
     const isActorExtra = item?.documentName === 'Actor' && action?._addedViaExtrasUI === true;
     const sys = item?.system;
     const allTags = isActorExtra
         ? (action?.tags ?? [])
-        : (sys ? [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])] : []);
+        : itemAllTags(sys);
     const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading');
     const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge');
     const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited');
-    const perFreqOn = (() => { try { return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags'); } catch { return false; } })();
-    const perRoundMax = perFreqOn ? Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0) : 0;
-    const perTurnMax = perFreqOn ? Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0) : 0;
-    const sub = subData ?? action;
+    const perFreqOn = (() =>
+    {
+        try
+        {
+            return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags');
+        }
+        catch
+        {
+            return false;
+        }
+    })();
+    const subEntry = subData ?? action;
+    const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry) : getPerRoundLimit(item)) : 0;
+    const perTurnMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), subEntry ? getPerTurnLimitFromSub(subEntry) : getPerTurnLimit(item)) : 0;
     const perSceneMax = !perFreqOn || isActorExtra ? 0
-        : sub ? getPerSceneLimitFromSub(sub)
-        : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
+        : subEntry ? getPerSceneLimitFromSub(subEntry)
+            : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
     const isCoreActive = !!action && item?.type === 'frame' && (
         (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ candidate => candidate === action || candidate?.name === action?.name)
@@ -278,16 +363,33 @@ export function appendItemPips(item, popup, depthCallbacks) {
     const S_PIP = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
     const pipsWrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
     popup.children().last().prepend(pipsWrap);
+    if (item?.documentName === 'Item')
+    {
+        const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
+        cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(item));
+        pipsWrap.append(cfgRow);
+    }
 
-    const readState = () => {
-        if (isActorExtra) {
+    const readState = () =>
+    {
+        if (subKey)
+            return getSubUses(item, subKey);
+        if (isActorExtra)
+        {
             const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
             return list.find(entry => entry.name === action.name) ?? action;
         }
         return item.system;
     };
-    const patchState = async (patch) => {
-        if (isActorExtra) {
+    const patchState = async (patch) =>
+    {
+        if (subKey)
+        {
+            await patchSubUses(item, subKey, patch);
+            return;
+        }
+        if (isActorExtra)
+        {
             const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
             const idx = list.findIndex(entry => entry.name === action.name);
             if (idx < 0)
@@ -295,49 +397,60 @@ export function appendItemPips(item, popup, depthCallbacks) {
             const next = list.slice();
             next[idx] = { ...next[idx], ...patch };
             await item.setFlag('lancer-automations', 'extraActions', next);
-        } else {
+        }
+        else
+        {
             const flat = {};
-            for (const [key, val] of Object.entries(patch))
-                flat[`system.${key}`] = val;
+            for (const [key, value] of Object.entries(patch))
+                flat[`system.${key}`] = value;
             await /** @type {any} */ (item).update(flat);
         }
     };
 
-    const rebuild = () => {
+    const rebuild = () =>
+    {
         pipsWrap.empty();
         const state = readState();
-        if (hasLoading) {
+        if (hasLoading)
+        {
             const loaded = state.loaded !== false;
             const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
-            pip.on('click', async () => {
+            pip.on('click', async () =>
+            {
                 playUiSound('toggle');
                 await patchState({ loaded: !loaded });
                 rebuild();
             });
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading</span>`), pip));
         }
-        if (hasRecharge) {
+        if (hasRecharge)
+        {
             const charged = state.charged !== false;
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-            pip.on('click', async () => {
+            pip.on('click', async () =>
+            {
                 playUiSound('toggle');
                 await patchState({ charged: !charged });
                 rebuild();
             });
             pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged</span>`), pip));
         }
-        if (hasLimited && state.uses != null) {
+        if (hasLimited && state.uses != null)
+        {
             const isObj = typeof state.uses !== 'number';
-            const val = isObj ? (state.uses.value ?? 0) : state.uses;
+            const current = isObj ? (state.uses.value ?? 0) : state.uses;
             const max = isObj ? (state.uses.max ?? 0) : state.uses;
-            if (max > 0) {
+            if (max > 0)
+            {
                 const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
-                for (let i = 1; i <= max; i++) {
+                for (let i = 1; i <= max; i++)
+                {
                     const pipIdx = i;
-                    const pip = $(`<span style="${S_PIP}color:${pipIdx <= val ? '#3a9e6e' : '#444'};">${pipIdx <= val ? '⬢' : '⬡'}</span>`);
-                    pip.on('click', async () => {
+                    const pip = $(`<span style="${S_PIP}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
+                    pip.on('click', async () =>
+                    {
                         playUiSound('toggle');
-                        const newVal = Math.max(0, Math.min(max, pipIdx === val ? pipIdx - 1 : pipIdx));
+                        const newVal = Math.max(0, Math.min(max, pipIdx === current ? pipIdx - 1 : pipIdx));
                         await patchState(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
                         rebuild();
                     });
@@ -347,13 +460,16 @@ export function appendItemPips(item, popup, depthCallbacks) {
             }
         }
         const inCombat = !!game.combat?.started;
-        const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) => {
+        const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) =>
+        {
             const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
-            for (let i = 1; i <= max; i++) {
+            for (let i = 1; i <= max; i++)
+            {
                 const pipIdx = i;
                 const consumed = pipIdx <= used;
                 const pip = $(`<span style="${S_PIP}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
-                pip.on('click', async () => {
+                pip.on('click', async () =>
+                {
                     playUiSound('toggle');
                     const newUsed = pipIdx === used ? pipIdx - 1 : pipIdx;
                     await patchState({ [fieldKey]: { value: Math.max(0, Math.min(max, newUsed)) } });
@@ -369,12 +485,14 @@ export function appendItemPips(item, popup, depthCallbacks) {
             renderFreqRow('Per turn', perTurnMax, Number(state.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline', !inCombat);
         if (perSceneMax > 0)
             renderFreqRow('Per scene', perSceneMax, Number(state.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
-        if (isCoreActive) {
+        if (isCoreActive)
+        {
             const actor = item.parent ?? item.actor;
             const charged = (actor?.system?.core_energy ?? 0) > 0;
             const row = $(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Core Power</span>`));
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`);
-            pip.on('click', async (ev) => {
+            pip.on('click', async (ev) =>
+            {
                 ev.stopPropagation();
                 playUiSound('toggle');
                 const live = (actor?.system?.core_energy ?? 0) > 0;
@@ -390,14 +508,17 @@ export function appendItemPips(item, popup, depthCallbacks) {
     // Item-attached extras-UI action: render a second pip row whose tags are disjoint from the
     // item's (dedup guaranteed at add-time). State reads/writes go to the flag entry by name.
     const isItemDoc = item?.documentName === 'Item';
-    if (isItemDoc && action?._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length) {
-        const actHasLoading  = action.tags.some(t => t.lid === 'tg_loading');
-        const actHasRecharge = action.tags.some(t => t.lid === 'tg_recharge');
-        const actHasLimited  = action.tags.some(t => t.lid === 'tg_limited');
-        if (actHasLoading || actHasRecharge || actHasLimited) {
-            const readAct = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
+    if (isItemDoc && action?._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length)
+    {
+        const actionHasLoading  = action.tags.some(t => t.lid === 'tg_loading');
+        const actionHasRecharge = action.tags.some(t => t.lid === 'tg_recharge');
+        const actionHasLimited  = action.tags.some(t => t.lid === 'tg_limited');
+        if (actionHasLoading || actionHasRecharge || actionHasLimited)
+        {
+            const readActionState = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
                 .find(entry => entry.name === action.name) ?? action;
-            const patchAct = async (patch) => {
+            const patchActionState = async (patch) =>
+            {
                 const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
                 const idx = list.findIndex(entry => entry.name === action.name);
                 if (idx < 0)
@@ -406,80 +527,140 @@ export function appendItemPips(item, popup, depthCallbacks) {
                 next[idx] = { ...next[idx], ...patch };
                 await item.setFlag('lancer-automations', 'extraActions', next);
             };
-            const actWrap = $(`<div class="la-ea-pips" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-            popup.children().last().prepend(actWrap);
-            const rebuildAct = () => {
-                actWrap.empty();
-                const state = readAct();
-                if (actHasLoading) {
+            const actionWrap = $(`<div class="la-ea-pips" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+            popup.children().last().prepend(actionWrap);
+            const rebuildAction = () =>
+            {
+                actionWrap.empty();
+                const state = readActionState();
+                if (actionHasLoading)
+                {
                     const loaded = state.loaded !== false;
                     const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
-                    pip.on('click', async () => {
-                        playUiSound('toggle'); await patchAct({ loaded: !loaded }); rebuildAct();
+                    pip.on('click', async () =>
+                    {
+                        playUiSound('toggle'); await patchActionState({ loaded: !loaded }); rebuildAction();
                     });
-                    actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
+                    actionWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
                 }
-                if (actHasRecharge) {
+                if (actionHasRecharge)
+                {
                     const charged = state.charged !== false;
                     const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-                    pip.on('click', async () => {
-                        playUiSound('toggle'); await patchAct({ charged: !charged }); rebuildAct();
+                    pip.on('click', async () =>
+                    {
+                        playUiSound('toggle'); await patchActionState({ charged: !charged }); rebuildAction();
                     });
-                    actWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
+                    actionWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
                 }
-                if (actHasLimited && state.uses != null) {
+                if (actionHasLimited && state.uses != null)
+                {
                     const isObj = typeof state.uses !== 'number';
-                    const val = isObj ? (state.uses.value ?? 0) : state.uses;
+                    const current = isObj ? (state.uses.value ?? 0) : state.uses;
                     const max = isObj ? (state.uses.max ?? 0) : state.uses;
-                    if (max > 0) {
+                    if (max > 0)
+                    {
                         const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses*</span>`));
-                        for (let i = 1; i <= max; i++) {
+                        for (let i = 1; i <= max; i++)
+                        {
                             const pipIdx = i;
-                            const pip = $(`<span style="${S_PIP}color:${pipIdx <= val ? '#3a9e6e' : '#444'};">${pipIdx <= val ? '⬢' : '⬡'}</span>`);
-                            pip.on('click', async () => {
+                            const pip = $(`<span style="${S_PIP}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
+                            pip.on('click', async () =>
+                            {
                                 playUiSound('toggle');
-                                const newVal = Math.max(0, Math.min(max, pipIdx === val ? pipIdx - 1 : pipIdx));
-                                await patchAct(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
-                                rebuildAct();
+                                const newVal = Math.max(0, Math.min(max, pipIdx === current ? pipIdx - 1 : pipIdx));
+                                await patchActionState(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
+                                rebuildAction();
                             });
                             usesRow.append(pip);
                         }
-                        actWrap.append(usesRow);
+                        actionWrap.append(usesRow);
                     }
                 }
             };
-            rebuildAct();
+            rebuildAction();
         }
     }
 
     // Extra-action recharge pip (action-level, not item-level).
     // Uses the same "Charged" label + ▣/□ pip style as native tg_recharge items.
     const extraAction = depthCallbacks?.action;
-    if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI) {
-        const eaWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+    if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI)
+    {
+        const extraActionWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
         if (!pipsWrap.length)
-            popup.children().last().prepend(eaWrap);
-        const rebuildEa = () => {
-            const eaEntry = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(entry => entry.name === extraAction.name);
-            const charged = eaEntry ? eaEntry.charged !== false : extraAction.charged !== false;
-            eaWrap.find('.la-ea-recharge-row').remove();
+            popup.children().last().prepend(extraActionWrap);
+        const rebuildExtraAction = () =>
+        {
+            const extraActionEntry = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(entry => entry.name === extraAction.name);
+            const charged = extraActionEntry ? extraActionEntry.charged !== false : extraAction.charged !== false;
+            extraActionWrap.find('.la-ea-recharge-row').remove();
             const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
             row.append($(`<span style="${S_LBL}">Charged</span>`));
             const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-            pip.on('click', async () => {
+            pip.on('click', async () =>
+            {
                 playUiSound('toggle');
                 const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];
                 const match = actions.find(entry => entry.name === extraAction.name);
-                if (match) {
+                if (match)
+                {
                     match.charged = !match.charged;
                     await item.setFlag('lancer-automations', 'extraActions', actions);
                     extraAction.charged = match.charged;
                 }
-                rebuildEa();
+                rebuildExtraAction();
             });
             row.append(pip);
-            eaWrap.append(row);
+            extraActionWrap.append(row);
         };
-        rebuildEa();
+        rebuildExtraAction();
     }
+}
+
+// Consume pips for a merged reserve group (each copy is a binary system.used); clicking pip N sets N available.
+export function appendReservePips(group, popup)
+{
+    if (!Array.isArray(group) || !group.length || !group[0]?.system?.consumable)
+        return;
+    const total = group.length;
+    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
+    const S_PIP = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
+    const wrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+    popup.children().last().prepend(wrap);
+    const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
+    cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(group[0]));
+    wrap.append(cfgRow);
+    const pipHolder = $(`<div></div>`);
+    wrap.append(pipHolder);
+    const rebuild = () =>
+    {
+        pipHolder.empty();
+        const available = group.filter(copy => !copy.system?.used).length;
+        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
+        for (let slot = 1; slot <= total; slot++)
+        {
+            const pipIdx = slot;
+            const filled = pipIdx <= available;
+            const pip = $(`<span style="${S_PIP}color:${filled ? '#3a9e6e' : '#444'};">${filled ? '⬢' : '⬡'}</span>`);
+            pip.on('click', async () =>
+            {
+                playUiSound('toggle');
+                const target = Math.max(0, Math.min(total, pipIdx === available ? pipIdx - 1 : pipIdx));
+                await _setReserveAvailable(group, target);
+                rebuild();
+            });
+            row.append(pip);
+        }
+        pipHolder.append(row);
+    };
+    rebuild();
+}
+
+async function _setReserveAvailable(group, available)
+{
+    const updates = group
+        .map((copy, idx) => (!!copy.system?.used === (idx >= available)) ? null : copy.update({ 'system.used': idx >= available }))
+        .filter(Boolean);
+    await Promise.all(updates);
 }

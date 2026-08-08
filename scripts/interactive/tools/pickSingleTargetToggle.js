@@ -1,12 +1,11 @@
 /* global canvas, PIXI, game, document, window, performance */
 
-import {
-    isHexGrid, getHexCenter, pixelToOffset,
-    drawHexAt, getOccupiedOffsets,
-} from "../../combat/grid-helpers.js";
+import { pixelToOffset } from "../../combat/grid-helpers.js";
 
 import {
     pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator, gridLineWidth,
+    makeText, gridTextResolution, applyTargetInfoLabel, HIT_LABEL_STYLE, hitLabelFontSize, paintSingleMarkCursor,
+    suppressEvent,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { broadcastToolPresence, clearToolPresence } from "../presence.js";
@@ -14,20 +13,26 @@ import { syncTargetShapes } from "../target-shapes.js";
 
 // Cancel fn of the running picker (null when idle). Lets the launching button toggle it.
 let _activeCancel = null;
-export function isSingleTargetPickerActive() {
+export function isSingleTargetPickerActive()
+{
     return !!_activeCancel;
 }
-export function cancelSingleTargetPicker() {
+export function cancelSingleTargetPicker()
+{
     if (_activeCancel)
         _activeCancel();
 }
 
 /** Cardless single-target toggle picker. Click toggles game.user.targets and exits.
- *  Hold Shift to keep it open and target multiple tokens. */
-export function pickSingleTargetToggle(casterToken = null, { includeSelf = false } = {}) {
-    return new Promise((resolve) => {
+ *  Hold Shift to keep it open and target multiple tokens. `single` forces exactly one target (no multi). */
+export function pickSingleTargetToggle(casterToken = null, { includeSelf = false, single = false, hitChanceFor = null, range = null } = {})
+{
+    playUiSound('targeting');
+    return new Promise((resolve) =>
+    {
         syncTargetShapes(); // reconcile to current targets (keeps still-targeted shapes; no-op outside a session)
-        const allTokens = canvas.tokens.placeables.filter(t => {
+        const allTokens = canvas.tokens.placeables.filter(t =>
+        {
             if (!includeSelf && t.id === casterToken?.id)
                 return false;
             if (t.document.hidden && !game.user.isGM) // hidden tokens: GM-only
@@ -36,7 +41,37 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         });
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
-        const plus = createMultiPlusIndicator();
+        // No multi-target affordance in single mode (Shift can't add a second target here).
+        const plus = single ? { move()
+        {},
+        dispose()
+        {} } : createMultiPlusIndicator();
+
+        let hitLabel = null;
+        if (hitChanceFor)
+        {
+            hitLabel = makeText('', HIT_LABEL_STYLE);
+            hitLabel.style.fontSize = hitLabelFontSize();
+            hitLabel.anchor.set(0.5, 1);
+            hitLabel.eventMode = 'none';
+            hitLabel.visible = false;
+            canvas.stage.addChild(hitLabel);
+        }
+        const updateHitLabels = (hoveredToken) =>
+        {
+            if (!hitLabel)
+                return;
+            const res = hoveredToken ? hitChanceFor(hoveredToken) : null;
+            if (!res)
+            {
+                hitLabel.visible = false;
+                return;
+            }
+            applyTargetInfoLabel(hitLabel, res);
+            hitLabel.resolution = gridTextResolution();
+            hitLabel.position.set(hoveredToken.center.x, hoveredToken.bounds.top - gridLineWidth(3));
+            hitLabel.visible = true;
+        };
 
         const prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
@@ -45,22 +80,31 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         let safeMove, safeClick, safeAbort, safeKey;
         let stackPopupEl = null;
         let stackOutsideHandler = null;
-        const closeStackPopup = () => {
-            if (stackPopupEl) {
+        const closeStackPopup = () =>
+        {
+            if (stackPopupEl)
+            {
                 stackPopupEl.remove();
                 stackPopupEl = null;
             }
-            if (stackOutsideHandler) {
+            if (stackOutsideHandler)
+            {
                 document.removeEventListener('pointerdown', stackOutsideHandler, true);
                 stackOutsideHandler = null;
             }
         };
 
-        const doCleanup = () => {
+        const doCleanup = () =>
+        {
             _activeCancel = null;
             clearToolPresence('singlePick');
             disposeCursorPreview();
             plus.dispose();
+            if (hitLabel)
+            {
+                hitLabel.destroy();
+                hitLabel = null;
+            }
             if (safeClick)
                 canvas.stage.off('click', safeClick);
             if (safeAbort)
@@ -74,55 +118,32 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             closeStackPopup();
         };
 
-        const toggleTarget = (token, keepOpen = false) => {
+        const toggleTarget = (token, keepOpen = false) =>
+        {
             const already = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
-            token.setTarget(!already, { releaseOthers: false }); // targetToken hook reconciles the shape
+            token.setTarget(!already, { releaseOthers: single }); // single: replace any other target
             playUiSound('targetingConfirm');
-            if (keepOpen)
-                return; // Shift: keep targeting
+            if (keepOpen && !single)
+                return; // Shift: keep targeting (disabled in single mode)
             doCleanup();
             resolve(token);
         };
 
-        const drawCursorHighlight = (tx, ty) => {
-            cursorPreview.clear();
-            const hoveredToken = allTokens.find(token => {
-                const b = token.bounds;
-                return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
-            }) || null;
-            const color = hoveredToken ? 0x0088ff : 0xff0000;
-            const gridSize = canvas.grid.size;
-            cursorPreview.lineStyle(gridLineWidth(2), color, 0.8);
-            cursorPreview.beginFill(color, 0.4);
-            if (hoveredToken) {
-                if (isHexGrid()) {
-                    for (const off of getOccupiedOffsets(hoveredToken))
-                        drawHexAt(cursorPreview, off.col, off.row);
-                } else {
-                    cursorPreview.drawRect(
-                        hoveredToken.document.x,
-                        hoveredToken.document.y,
-                        hoveredToken.document.width * gridSize,
-                        hoveredToken.document.height * gridSize
-                    );
-                }
-            } else {
-                const cur = pixelToOffset(tx, ty);
-                if (isHexGrid()) {
-                    drawHexAt(cursorPreview, cur.col, cur.row);
-                } else {
-                    const c = getHexCenter(cur.col, cur.row);
-                    cursorPreview.drawRect(c.x - gridSize / 2, c.y - gridSize / 2, gridSize, gridSize);
-                }
-            }
-            cursorPreview.endFill();
+        const drawCursorHighlight = (tx, ty) =>
+        {
+            const { hoveredToken } = paintSingleMarkCursor(cursorPreview, tx, ty, { caster: casterToken, range, tokens: allTokens });
+            updateHitLabels(hoveredToken);
             if (hoveredToken)
                 broadcastToolPresence('singlePick', { tokens: [hoveredToken.id], relatedToken: casterToken });
             else
-                broadcastToolPresence('singlePick', { cells: [`${pixelToOffset(tx, ty).col},${pixelToOffset(tx, ty).row}`], relatedToken: casterToken });
+            {
+                const cursorCell = pixelToOffset(tx, ty);
+                broadcastToolPresence('singlePick', { cells: [`${cursorCell.col},${cursorCell.row}`], relatedToken: casterToken });
+            }
         };
 
-        const moveHandler = (event) => {
+        const moveHandler = (event) =>
+        {
             const { x: tx, y: ty } = pointerToWorld(event);
             drawCursorHighlight(tx, ty);
             plus.move(!!event?.data?.originalEvent?.shiftKey, tx, ty);
@@ -130,12 +151,14 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             playTargetingMove(o.col, o.row);
         };
 
-        const showStackPicker = (tokens, screenX, screenY) => {
+        const showStackPicker = (tokens, screenX, screenY) =>
+        {
             closeStackPopup();
             const el = document.createElement('div');
             el.className = 'la-stack-picker';
             el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
-            for (const token of tokens) {
+            for (const token of tokens)
+            {
                 const isTargeted = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
                 const row = document.createElement('div');
                 row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${isTargeted ? 'background:rgba(255,100,0,0.25);' : ''}`;
@@ -143,13 +166,16 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
                     <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
                     <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
                     ${isTargeted ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
-                row.addEventListener('mouseenter', () => {
+                row.addEventListener('mouseenter', () =>
+                {
                     row.style.background = 'rgba(255,100,0,0.4)';
                 });
-                row.addEventListener('mouseleave', () => {
+                row.addEventListener('mouseleave', () =>
+                {
                     row.style.background = isTargeted ? 'rgba(255,100,0,0.25)' : 'transparent';
                 });
-                row.addEventListener('click', (e) => {
+                row.addEventListener('click', (e) =>
+                {
                     e.stopPropagation();
                     const keep = !!e.shiftKey;
                     toggleTarget(token, keep);
@@ -165,51 +191,63 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
                 el.style.left = `${Math.max(0, window.innerWidth - r.width - 4)}px`;
             if (r.bottom > window.innerHeight)
                 el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
-            stackOutsideHandler = (e) => {
+            stackOutsideHandler = (e) =>
+            {
                 if (stackPopupEl && !stackPopupEl.contains(/** @type {Node} */ (e.target)))
                     closeStackPopup();
             };
             setTimeout(() => document.addEventListener('pointerdown', stackOutsideHandler, true), 0);
         };
 
-        const clickHandler = (event) => {
+        const clickHandler = (event) =>
+        {
             const shift = !!event?.data?.originalEvent?.shiftKey;
             const { x: tx, y: ty } = pointerToWorld(event);
-            const tokensHere = allTokens.filter(token => {
+            const tokensHere = allTokens.filter(token =>
+            {
                 const b = token.bounds;
                 return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
             });
             if (tokensHere.length === 0)
                 return;
-            if (tokensHere.length === 1) {
+            if (tokensHere.length === 1)
+            {
                 toggleTarget(tokensHere[0], shift);
                 return;
             }
-            const oe = event?.data?.originalEvent;
-            showStackPicker(tokensHere, (oe?.clientX ?? 0) + 10, (oe?.clientY ?? 0) + 10);
+            const originalEvent = event?.data?.originalEvent;
+            showStackPicker(tokensHere, (originalEvent?.clientX ?? 0) + 10, (originalEvent?.clientY ?? 0) + 10);
         };
 
-        const keyHandler = (event) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation();
-                if (stackPopupEl) {
+        const keyHandler = (event) =>
+        {
+            if (event.key === 'Escape')
+            {
+                suppressEvent(event);
+                if (stackPopupEl)
+                {
                     closeStackPopup();
                     return;
                 }
+                playUiSound('toggle');
                 doCleanup();
                 resolve(null);
             }
         };
 
-        const safe = makeSafe('pickSingleTargetToggle', () => {
-            try {
+        const safe = makeSafe('pickSingleTargetToggle', () =>
+        {
+            try
+            {
                 doCleanup();
-            } catch { /* */ }
+            }
+            catch
+            { /* */ }
             resolve(null);
         });
-        _activeCancel = () => {
+        _activeCancel = () =>
+        {
+            playUiSound('toggle');
             doCleanup();
             resolve(null);
         };

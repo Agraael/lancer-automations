@@ -1,9 +1,10 @@
 /* global canvas, PIXI, game, ui, $ */
 
 import { startChoiceCard, startVoteCard } from "./network.js";
+import { isWhiteSvgIcon } from "./cards.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
 import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
-import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
+import { getWeaponProfiles_WithBonus, getActorActionItems } from "../tools/misc-tools.js";
 import { clearTokenMovementHistory, revertLastMovement, getRecordedWaypoints } from "../movement/history.js";
 
 /**
@@ -11,19 +12,23 @@ import { clearTokenMovementHistory, revertLastMovement, getRecordedWaypoints } f
  * @param {Actor} [actor] - The actor throwing the weapon. Defaults to the character of the first controlled token.
  * @returns {Promise<void>}
  */
-export async function openThrowMenu(actor) {
+export async function openThrowMenu(actor)
+{
     const controlled = canvas.tokens.controlled;
     const activeActor = actor || controlled[0]?.actor;
 
-    if (!activeActor) {
+    if (!activeActor)
+    {
         ui.notifications.warn("No actor found. Select a token or provide an actor.");
         return;
     }
 
     const token = activeActor.getActiveTokens()?.[0] || controlled[0];
 
-    const throwWeapons = activeActor.items.filter(item => {
-        if (item.type === 'mech_weapon') {
+    const throwWeapons = activeActor.items.filter(item =>
+    {
+        if (item.type === 'mech_weapon')
+        {
             const profiles = item.system?.profiles ?? [];
             const activeProfileIndex = item.system?.selected_profile_index ?? 0;
             const activeProfile = profiles[activeProfileIndex];
@@ -31,19 +36,23 @@ export async function openThrowMenu(actor) {
                 return false;
             const tags = activeProfile.tags ?? [];
             return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
-        } else if (item.type === 'npc_feature' && item.system?.type === 'Weapon') {
+        }
+        else if (item.type === 'npc_feature' && item.system?.type === 'Weapon')
+        {
             const tags = item.system?.tags ?? [];
             return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
         }
         return false;
     });
 
-    if (throwWeapons.length === 0) {
+    if (throwWeapons.length === 0)
+    {
         ui.notifications.warn(`No throwable weapons found for ${activeActor.name}.`);
         return;
     }
 
-    const available = throwWeapons.filter(weapon => {
+    const available = throwWeapons.filter(weapon =>
+    {
         const uses = weapon.system?.uses;
         const hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
         const noUsesLeft = hasUses && uses.value <= 0;
@@ -52,7 +61,8 @@ export async function openThrowMenu(actor) {
         return !noUsesLeft && !isDestroyed && isLoaded && !weapon.system?.disabled;
     });
 
-    if (available.length === 0) {
+    if (available.length === 0)
+    {
         ui.notifications.warn(`All throwable weapons for ${activeActor.name} are unavailable.`);
         return;
     }
@@ -62,7 +72,8 @@ export async function openThrowMenu(actor) {
         description: "Select a throwable weapon to attack with.",
         icon: "cci cci-weapon-range",
         relatedToken: token,
-        formatText: (weapon) => {
+        formatText: (weapon) =>
+        {
             const profile = getWeaponProfiles_WithBonus(weapon, activeActor)?.[weapon.system?.selected_profile_index ?? 0];
             const tags = profile?.all_tags ?? profile?.tags ?? weapon.system?.tags ?? [];
             const thrown = tags.find(tag => tag.lid === 'tg_thrown' || tag.id === 'tg_thrown');
@@ -80,13 +91,13 @@ export async function openThrowMenu(actor) {
         return;
 
     const api = game.modules.get('lancer-automations')?.api;
-    if (api?.beginWeaponThrowFlow) {
+    if (api?.beginWeaponThrowFlow)
         await api.beginWeaponThrowFlow(weapon);
-    } else if (/** @type {any} */ (weapon).beginWeaponAttackFlow) {
+    else if (/** @type {any} */ (weapon).beginWeaponAttackFlow)
+    {
         await /** @type {any} */ (weapon).beginWeaponAttackFlow(true);
-        if (api?.deployWeaponToken) {
+        if (api?.deployWeaponToken)
             await api.deployWeaponToken(weapon, activeActor, token);
-        }
     }
 }
 
@@ -96,38 +107,48 @@ export async function openThrowMenu(actor) {
  * @param {Object} [destination=null] - Optional explicit destination override.
  * @returns {Promise<boolean>} - True if history is clean (0 or 1 point remain), false otherwise.
  */
-export async function revertMovement(token, destination = null) {
+export async function revertMovement(token, destination = null)
+{
     if (!token)
         return true;
 
-    const getDist = (p1, p2) => {
-        const d = canvas.grid.measurePath([p1, p2], {}).distance;
-        return Math.round(d / canvas.scene.grid.distance);
+    const getDist = (p1, p2) =>
+    {
+        const rawDist = canvas.grid.measurePath([p1, p2], {}).distance;
+        return Math.round(rawDist / canvas.scene.grid.distance);
     };
 
-    if (!token.document.isOwner) {
+    if (!token.document.isOwner)
+    {
         ui.notifications.warn(`You do not own ${token.name} and cannot revert their movement.`);
         return false;
     }
 
     const sourceHistory = token.document._source?._movementHistory ?? [];
     const recorded = getRecordedWaypoints(token);
-    const _laDebug = (() => {
-        try {
+    const _laDebug = (() =>
+    {
+        try
+        {
             return !!game.settings.get('lancer-automations', 'debugMovement');
-        } catch {
+        }
+        catch
+        {
             return false;
         }
     })();
     if (_laDebug)
+    {
         console.log('lancer-automations | revertMovement', {
             tokenId: token.id,
             recordedLen: recorded.length,
             sourceLen: sourceHistory.length,
             hasDestination: !!destination
         });
+    }
 
-    if (sourceHistory.length > 0) {
+    if (sourceHistory.length > 0)
+    {
         const currentPos = { x: token.document.x, y: token.document.y };
         const isClean = await revertLastMovement(token);
         const newPos = { x: token.document.x, y: token.document.y };
@@ -136,7 +157,8 @@ export async function revertMovement(token, destination = null) {
         return isClean;
     }
 
-    if (destination) {
+    if (destination)
+    {
         const currentPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, destination);
         await token.document.update(destination, /** @type {any} */ ({ isUndo: true }));
@@ -154,20 +176,24 @@ export async function revertMovement(token, destination = null) {
  * @param {boolean} [revert=false] - Whether to also revert movement visually
  * @returns {Promise<void>}
  */
-export async function clearMovementHistory(tokens, revert = false) {
+export async function clearMovementHistory(tokens, revert = false)
+{
     const tokenList = Array.isArray(tokens) ? tokens : [tokens];
     if (tokenList.length === 0)
         return;
 
     const lancerAutomations = game.modules.get('lancer-automations');
 
-    for (const token of tokenList) {
-        if (revert) {
-            while (true) {
+    for (const token of tokenList)
+    {
+        if (revert)
+        {
+            while (true)
+            {
                 const isClean = await revertMovement(token);
                 if (isClean)
                     break;
-                await new Promise(r => setTimeout(r, 250));
+                await new Promise(resolve => setTimeout(resolve, 250));
             }
         }
 
@@ -178,7 +204,8 @@ export async function clearMovementHistory(tokens, revert = false) {
     ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
 }
 
-export async function resetMovementCap(token) {
+export async function resetMovementCap(token)
+{
     const api = game.modules.get('lancer-automations')?.api;
     api.initMovementCap(token.document.id);
 }
@@ -188,27 +215,29 @@ export async function resetMovementCap(token) {
  * On response, a chat message from the requester is posted showing the selection.
  * @returns {Promise<void>}
  */
-export async function openChoiceMenu() {
+export async function openChoiceMenu()
+{
     const activeUsers = game.users.filter(user => user.active);
-    if (activeUsers.length === 0) {
+    if (activeUsers.length === 0)
+    {
         ui.notifications.warn("No active users found.");
         return;
     }
 
-    // Initial State
     let choicesInfo = [
         { text: "Confirm" },
         { text: "Decline" }
     ];
-    let selectedUserIds = []; // No pre-selection per user request
-    let title = "CHOICE"; // Default title per user request
+    let selectedUserIds = [];
+    let title = "CHOICE";
     let description = "Please select an option:";
     let mode = "vote";
     let hidden = false;
 
-    function refresh(html) {
-        // Render users grid - Compact 3-column grid
-        const usersHtml = activeUsers.map(user => {
+    function refresh(html)
+    {
+        const usersHtml = activeUsers.map(user =>
+        {
             const isSelected = selectedUserIds.includes(user.id);
             return `
             <div class="la-choice-user-card ${isSelected ? 'selected' : ''}"
@@ -222,7 +251,6 @@ export async function openChoiceMenu() {
         }).join('');
         html.find('.la-choice-users-grid').html(usersHtml);
 
-        // Render mode choices
         const modeHtml = `
             <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                 <label style="font-size: 0.85em; flex: 1;">Mode</label>
@@ -236,50 +264,50 @@ export async function openChoiceMenu() {
         `;
         html.find('.la-choice-mode-container').html(modeHtml);
 
-        const choicesHtml = choicesInfo.map((c, idx) => `
+        const choicesHtml = choicesInfo.map((choice, idx) => `
             <div class="form-group la-choice-row" data-idx="${idx}" style="display: flex; gap: 5px; margin-bottom: 2px; align-items: center;">
                 <span style="font-size: 0.9em; font-weight: bold; width: 15px; text-align: right;">${idx + 1}.</span>
-                <input type="text" class="la-choice-text" value="${c.text || ''}" placeholder="Option Text" style="flex: 1; height: 24px; font-size: 0.9em;" />
+                <input type="text" class="la-choice-text" value="${choice.text || ''}" placeholder="Option Text" style="flex: 1; height: 24px; font-size: 0.9em;" />
                 <button type="button" class="la-choice-remove" style="flex: 0 0 24px; height: 24px; padding: 0; background: none; border: none; color: #c33; cursor: pointer;"><i class="fas fa-times"></i></button>
             </div>
         `).join('');
         html.find('.la-choices-container').html(choicesHtml);
 
-        // Event Listeners
-        html.find('.la-choice-user-card').off('click').on('click', function () {
+        html.find('.la-choice-user-card').off('click').on('click', function ()
+        {
             const id = $(this).data('user-id');
-            if (selectedUserIds.includes(id)) {
+            if (selectedUserIds.includes(id))
                 selectedUserIds = selectedUserIds.filter(uid => uid !== id);
-            } else {
+            else
                 selectedUserIds.push(id);
-            }
             refresh(html);
         });
 
-        html.find('.la-choice-remove').off('click').on('click', function () {
+        html.find('.la-choice-remove').off('click').on('click', function ()
+        {
             const idx = Number.parseInt($(this).closest('.la-choice-row').data('idx'));
-            if (!Number.isNaN(idx)) {
+            if (!Number.isNaN(idx))
+            {
                 choicesInfo.splice(idx, 1);
                 refresh(html);
             }
         });
 
-        html.find('.la-choice-text').off('input').on('input', function () {
+        html.find('.la-choice-text').off('input').on('input', function ()
+        {
             const idx = Number.parseInt($(this).closest('.la-choice-row').data('idx'));
-            if (!Number.isNaN(idx)) {
+            if (!Number.isNaN(idx))
                 choicesInfo[idx].text = $(this).val();
-            }
         });
 
-        html.find('.la-choice-mode').off('change').on('change', function () {
+        html.find('.la-choice-mode').off('change').on('change', function ()
+        {
             mode = $(this).val();
             hidden = mode === "vote-hidden";
         });
 
-        // Auto-resize the dialog window to fit content
-        if (typeof this?.setPosition === "function") {
+        if (typeof this?.setPosition === "function")
             this.setPosition({ height: "auto" });
-        }
     }
 
     const htmlContent = `
@@ -290,9 +318,10 @@ export async function openChoiceMenu() {
             .la-choice-user-card:hover { opacity: 1; background: rgba(255,255,255,0.05) !important; }
             .la-choice-user-card.selected { border-color: #ff6400 !important; background: rgba(255, 100, 0, 0.25) !important; box-shadow: 0 0 4px #ff6400 inset; font-weight: bold; opacity: 1; }
             .la-choices-container { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-            .la-choice-add { background: #333; color: #eee; border: 1px solid #666; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em; align-self: flex-start; margin-top: 4px; }
-            .la-choice-add:hover { background: #444; border-color: #ff6400; color: #fff; }
-            .la-choice-mode:focus { border-color: #ff6400; outline: none; }
+            .la-choice-config input, .la-choice-config select, .la-choice-config textarea { background: color-mix(in srgb, var(--la-plate), var(--la-ink) 8%); color: var(--la-ink); border: 1px solid var(--la-edge); border-radius: 4px; }
+            .la-choice-add { background: var(--la-plate); color: var(--la-ink); border: 2px solid var(--la-edge); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; font-weight: 600; align-self: flex-start; margin-top: 4px; }
+            .la-choice-add:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); border-color: var(--primary-color); color: var(--la-ink); }
+            .la-choice-mode:focus { border-color: var(--primary-color); outline: none; }
         </style>
         <div class="lancer-dialog-base la-choice-config">
             <div class="lancer-dialog-header">
@@ -327,25 +356,30 @@ export async function openChoiceMenu() {
             send: {
                 icon: '<i class="fas fa-paper-plane"></i>',
                 label: "Send",
-                callback: async (html) => {
+                callback: async (html) =>
+                {
                     const finalTitle = String(html.find('.la-choice-title').val() || "Choice");
                     const finalDesc = String(html.find('.la-choice-description').val() || "");
 
-                    if (selectedUserIds.length === 0) {
+                    if (selectedUserIds.length === 0)
+                    {
                         ui.notifications.warn("No recipients selected.");
                         return;
                     }
-                    if (choicesInfo.length === 0) {
+                    if (choicesInfo.length === 0)
+                    {
                         ui.notifications.warn("No options provided.");
                         return;
                     }
 
-                    if (mode === "vote" || mode === "vote-hidden") {
-                        // Vote mode — one winner callback posted as chat when creator confirms
-                        const voteChoices = choicesInfo.map((c, idx) => ({
-                            text: `${idx + 1}. ${c.text}`,
-                            data: { text: c.text, number: idx + 1 },
-                            callback: async (data) => {
+                    if (mode === "vote" || mode === "vote-hidden")
+                    {
+                        // Vote mode: one winner callback posted as chat when creator confirms
+                        const voteChoices = choicesInfo.map((choice, idx) => ({
+                            text: `${idx + 1}. ${choice.text}`,
+                            data: { text: choice.text, number: idx + 1 },
+                            callback: async (data) =>
+                            {
                                 await ChatMessage.create({
                                     content: `
                                         <div>
@@ -368,12 +402,14 @@ export async function openChoiceMenu() {
                             userIdControl: selectedUserIds,
                             hidden
                         });
-                    } else {
-                        // Map choices to startChoiceCard format
-                        const mappedChoices = choicesInfo.map((c, idx) => ({
-                            text: `${idx + 1}. ${c.text}`,
-                            data: { text: c.text, number: idx + 1 },
-                            callback: async (data) => {
+                    }
+                    else
+                    {
+                        const mappedChoices = choicesInfo.map((choice, idx) => ({
+                            text: `${idx + 1}. ${choice.text}`,
+                            data: { text: choice.text, number: idx + 1 },
+                            callback: async (data) =>
+                            {
                                 const name = data.responderName || "A user";
                                 await ChatMessage.create({
                                     content: `
@@ -390,7 +426,6 @@ export async function openChoiceMenu() {
                             }
                         }));
 
-                        // Use the built-in startChoiceCard with the full selection array
                         startChoiceCard(/** @type {any} */ ({
                             choices: mappedChoices,
                             title: finalTitle,
@@ -407,9 +442,11 @@ export async function openChoiceMenu() {
             cancel: { label: "Cancel" }
         },
         default: "send",
-        render: (html) => {
+        render: (html) =>
+        {
             refresh.call(dialogObj, html);
-            html.find('.la-choice-add').on('click', () => {
+            html.find('.la-choice-add').on('click', () =>
+            {
                 choicesInfo.push({ text: "Option " + (choicesInfo.length + 1) });
                 refresh.call(dialogObj, html);
             });
@@ -435,7 +472,8 @@ export async function openChoiceMenu() {
  * @param {Array<{id:number,item:any,img:string,labelHtml:string,sublabel:string,selectable:boolean,destroyed:boolean}>} choices
  * @param {{title:string,titleHtml:string,subtitle:string,hint:string,numberToChoose:number,selectionValidator:Function|null,onContextMenu:Function|null,resolve:Function}} opts
  */
-function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberToChoose, selectionValidator, onContextMenu, resolve }) {
+export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberToChoose, selectionValidator, onContextMenu, resolve })
+{
     const content = `
         <div class="lancer-dialog-header">
             <div class="lancer-dialog-title">${titleHtml}</div>
@@ -445,20 +483,28 @@ function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberT
             <div class="la-selection-validation-msg" style="color: #d97000; font-style: italic; font-size: 0.9em; margin-bottom: 4px; min-height: 18px;"></div>
             <div style="font-size: 0.72em; color: #777; font-style: italic; margin-bottom: 6px;"><i class="fas fa-mouse-pointer"></i> ${hint}</div>
             <div class="la-choice-list" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
-                ${choices.map(c => `
-                    <div class="la-choice-item ${c.selectable ? '' : 'unselectable'}" data-idx="${c.id}"
-                         style="display: flex; align-items: center; padding: 5px 8px; border: 1px solid ${c.selectable ? '#444' : (c.destroyed ? '#b71c1c' : '#222')};
-                                margin-bottom: 3px; cursor: ${c.selectable ? 'pointer' : 'not-allowed'}; border-radius: 3px;
-                                background: ${c.selectable ? 'rgba(255,255,255,0.03)' : (c.destroyed ? 'rgba(183,28,28,0.08)' : 'rgba(0,0,0,0.2)')};
-                                opacity: ${c.selectable ? '1' : '0.75'}; transition: all 0.15s;">
-                        <img src="${c.img}" style="width: 28px; height: 28px; object-fit: contain; margin-right: 8px; border: 1px solid #333; flex-shrink: 0;">
+                ${choices.map(choice =>
+                {
+                    // SVG icons are monochrome (light-mode base filter here); .la-dark flips them for a dark plate.
+                    // Raster art (png/webp) is left untouched so real weapon images keep their colours.
+                    const isSvg = typeof choice.img === 'string' && choice.img.endsWith('.svg');
+                    const iconCls = isSvg ? ` class="la-hud-icon--${isWhiteSvgIcon(choice.img) ? 'white' : 'dark'}"` : '';
+                    const iconFilter = isSvg ? `filter:${isWhiteSvgIcon(choice.img) ? 'invert(1)' : 'none'};` : '';
+                    return `
+                    <div class="la-choice-item ${choice.selectable ? '' : 'unselectable'}" data-idx="${choice.id}"
+                         style="display: flex; align-items: center; padding: 5px 8px; border: 1px solid ${choice.selectable ? '#444' : (choice.destroyed ? '#b71c1c' : '#222')};
+                                margin-bottom: 3px; cursor: ${choice.selectable ? 'pointer' : 'not-allowed'}; border-radius: 3px;
+                                background: ${choice.selectable ? 'rgba(255,255,255,0.03)' : (choice.destroyed ? 'rgba(183,28,28,0.08)' : 'rgba(0,0,0,0.2)')};
+                                opacity: ${choice.selectable ? '1' : '0.75'}; transition: all 0.15s;">
+                        <img${iconCls} src="${choice.img}" style="width: 28px; height: 28px; object-fit: contain; margin-right: 8px; border: 1px solid #333; flex-shrink: 0;${iconFilter}">
                         <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                            <div style="margin-bottom: 1px;">${c.labelHtml}</div>
-                            <span style="font-size: 0.68em; opacity: 0.45; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">${c.sublabel}</span>
+                            <div style="margin-bottom: 1px;">${choice.labelHtml}</div>
+                            <span style="font-size: 0.68em; opacity: 0.45; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">${choice.sublabel}</span>
                         </div>
                         <i class="fas fa-check selection-check" style="color: #ff6400; margin-left: 6px; font-size: 0.85em; visibility: hidden;"></i>
                     </div>
-                `).join('')}
+                `;
+                }).join('')}
             </div>
         </div>
     `;
@@ -479,48 +525,60 @@ function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberT
             }
         },
         default: "confirm",
-        render: (html) => {
+        render: (html) =>
+        {
             const listItems = html.find('.la-choice-item');
             const confirmBtn = html.parent().find('button.confirm');
             const validationMsg = html.find('.la-selection-validation-msg');
-            const updateValidation = () => {
-                if (selectionValidator) {
+            const updateValidation = () =>
+            {
+                if (selectionValidator)
+                {
                     const selectedItems = Array.from(selectedIndices).map(i => choices[i].item);
                     const result = selectionValidator(selectedItems);
                     confirmBtn.prop('disabled', !result.valid);
                     validationMsg.text(result.message || '');
-                    if (result.level === 'success') {
+                    if (result.level === 'success')
                         validationMsg.css('color', '#4caf50');
-                    } else if (result.level === 'error') {
+                    else if (result.level === 'error')
                         validationMsg.css('color', '#f44336');
-                    } else {
+                    else
                         validationMsg.css('color', '#d97000');
-                    }
-                } else {
+                }
+                else
+                {
                     confirmBtn.prop('disabled', selectedIndices.size === 0);
                     validationMsg.text('');
                 }
             };
             updateValidation();
-            if (onContextMenu) {
-                listItems.on('contextmenu', function(e) {
+            if (onContextMenu)
+            {
+                listItems.on('contextmenu', function(e)
+                {
                     e.preventDefault();
                     onContextMenu(choices[Number.parseInt($(this).data('idx'))], html);
                 });
             }
-            listItems.filter(':not(.unselectable)').click(function() {
+            listItems.filter(':not(.unselectable)').click(function()
+            {
                 const idx = Number.parseInt($(this).data('idx'));
-                if (selectedIndices.has(idx)) {
+                if (selectedIndices.has(idx))
+                {
                     selectedIndices.delete(idx);
                     $(this).css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
                         .find('.selection-check').css('visibility', 'hidden');
-                } else {
-                    if (numberToChoose === 1) {
+                }
+                else
+                {
+                    if (numberToChoose === 1)
+                    {
                         selectedIndices.clear();
                         listItems.css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
                             .find('.selection-check').css('visibility', 'hidden');
                     }
-                    if (selectedIndices.size < numberToChoose) {
+                    if (selectedIndices.size < numberToChoose)
+                    {
                         selectedIndices.add(idx);
                         $(this).css({ 'border-color': '#ff6400', 'background': 'rgba(255,100,0,0.05)' })
                             .find('.selection-check').css('visibility', 'visible');
@@ -539,7 +597,8 @@ function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, numberT
 }
 
 /** @returns {Promise<object[]|null>} array of selected mounts, or null if cancelled */
-export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null) {
+export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null)
+{
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return null;
@@ -547,24 +606,24 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
     const isMech = actor.type === 'mech' && actor.system.loadout?.weapon_mounts;
     let allItems = [];
 
-    if (isMech) {
-        allItems = actor.system.loadout.weapon_mounts.map(mount => {
+    if (isMech)
+    {
+        allItems = actor.system.loadout.weapon_mounts.map(mount =>
+        {
             if (allowedMountTypes && !allowedMountTypes.includes(mount.type))
                 return { item: mount, hidden: true };
 
-            // Collect weapon data and their states
-            const weaponData = mount.slots.map(slot => {
+            const weaponData = mount.slots.map(slot =>
+            {
                 const weapon = slot.weapon?.value;
-                if (!weapon) {
+                if (!weapon)
                     return null;
-                }
                 const sys = weapon.system;
                 const profiles = sys?.profiles || [];
                 const activeProfileIndex = sys?.selected_profile_index ?? 0;
                 let profileName = "";
-                if (profiles.length > 1 && profiles[activeProfileIndex]) {
+                if (profiles.length > 1 && profiles[activeProfileIndex])
                     profileName = profiles[activeProfileIndex].name;
-                }
                 const allTags     = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
                 const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading'  || tag.id === 'tg_loading');
                 const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge' || tag.id === 'tg_recharge');
@@ -572,10 +631,11 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 const loadStatus   = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')   : '';
                 const chargeStatus = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED')  : '';
                 let usesText = '';
-                if (hasLimited) {
-                    const val = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
+                if (hasLimited)
+                {
+                    const usesValue = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
                     const max = sys.uses == null ? 0 : typeof sys.uses === 'number' ? 0 : (sys.uses.max ?? 0);
-                    usesText = `${val}/${max}`;
+                    usesText = `${usesValue}/${max}`;
                 }
 
                 return {
@@ -613,15 +673,19 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 hidden: false
             };
         }).filter(mountEntry => !mountEntry.hidden);
-    } else {
-        allItems = actor.items.filter(item => {
+    }
+    else
+    {
+        allItems = actor.items.filter(item =>
+        {
             const isWeapon = ['mech_weapon', 'npc_feature', 'pilot_weapon'].includes(item.type);
             if (!isWeapon)
                 return false;
             if (item.type === 'npc_feature' && item.system.type !== 'Weapon')
                 return false;
             return true;
-        }).map(item => {
+        }).map(item =>
+        {
             const sys = item.system;
             const destroyed = !!sys.destroyed;
             const fitsFilter = !filterPredicate || filterPredicate(item);
@@ -629,24 +693,26 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const profiles = sys?.profiles || [];
             const activeProfileIndex = sys?.selected_profile_index ?? 0;
             let profileName = "";
-            if (item.type === 'npc_feature') {
+            if (item.type === 'npc_feature')
+            {
                 const tierOverride = sys?.tier_override ?? 0;
                 const actorTier = actor.system?.tier ?? 1;
                 profileName = `T${tierOverride > 0 ? tierOverride : actorTier}`;
-            } else if (profiles.length > 1 && profiles[activeProfileIndex]) {
-                profileName = profiles[activeProfileIndex].name;
             }
+            else if (profiles.length > 1 && profiles[activeProfileIndex])
+                profileName = profiles[activeProfileIndex].name;
             const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
-            const hasLoadingNM    = allTagsNonMech.some(tag => tag.lid === 'tg_loading');
+            const hasLoading      = allTagsNonMech.some(tag => tag.lid === 'tg_loading');
             const hasRechargeNM   = allTagsNonMech.some(tag => tag.lid === 'tg_recharge');
             const hasLimitedNM    = allTagsNonMech.some(tag => tag.lid === 'tg_limited');
-            const loadStatusNM    = hasLoadingNM  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
+            const loadStatusNM    = hasLoading    ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
             const chargeStatusNM  = hasRechargeNM ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
             let usesTextNM = '';
-            if (hasLimitedNM) {
-                const val = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
+            if (hasLimitedNM)
+            {
+                const usesValue = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
                 const max = sys.uses == null ? 0 : typeof sys.uses === 'number' ? 0 : (sys.uses.max ?? 0);
-                usesTextNM = `${val}/${max}`;
+                usesTextNM = `${usesValue}/${max}`;
             }
 
             return {
@@ -676,62 +742,67 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
         });
     }
 
-    if (allItems.length === 0) {
+    if (allItems.length === 0)
+    {
         ui.notifications.warn(`No ${isMech ? 'mounts' : 'weapons'} found.`);
         return [];
     }
 
-    return new Promise((resolve) => {
-        const choices = allItems.map((choice, idx) => {
+    return new Promise((resolve) =>
+    {
+        const choices = allItems.map((choice, idx) =>
+        {
             const weaponData = choice.weaponData;
             const isMount = choice.isMount;
 
             // Group identical weapons for display
             const counts = {};
             const uniqueWeapons = [];
-            for (const weapon of weaponData) {
+            for (const weapon of weaponData)
+            {
                 const key = `${weapon.name}|${weapon.mod || ""}|${weapon.destroyed}|${weapon.disabled}|${weapon.loadStatus}|${weapon.chargeStatus}|${weapon.usesText}`;
-                if (!counts[key]) {
+                if (!counts[key])
+                {
                     counts[key] = 0;
                     uniqueWeapons.push({ ...weapon, key });
                 }
                 counts[key]++;
             }
 
-            const labelHtml = uniqueWeapons.map(weapon => {
+            const labelHtml = uniqueWeapons.map(weapon =>
+            {
                 let style = "display: block; margin-bottom: 2px;";
                 let nameStyle = "font-weight: bold;";
                 let statusTags = "";
 
-                if (weapon.disabled) {
+                if (weapon.disabled)
+                {
                     nameStyle += " color: #ff9800;";
                     statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
                 }
 
                 const sizeTypeArr = [weapon.size, weapon.type].filter(Boolean);
                 let typeText = "";
-                if (sizeTypeArr.length > 0) {
+                if (sizeTypeArr.length > 0)
                     typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeArr.join(' ')}</span>`;
-                }
 
-                if (weapon.profileName) {
+                if (weapon.profileName)
                     typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${weapon.profileName})</span>`;
-                }
 
                 const countStr = counts[weapon.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[weapon.key]}</span>` : "";
-                const S_TAG     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
-                const S_TAG_RED = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
+                const tagStyle     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
+                const tagStyleRed = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
                 const bottomParts = [];
                 if (weapon.destroyed)
-                    bottomParts.push(`<span style="${S_TAG_RED}">✕ DESTROYED</span>`);
+                    bottomParts.push(`<span style="${tagStyleRed}">✕ DESTROYED</span>`);
                 if (weapon.mod)
-                    bottomParts.push(`<span style="${S_TAG}">MOD: ${weapon.mod}</span>`);
+                    bottomParts.push(`<span style="${tagStyle}">MOD: ${weapon.mod}</span>`);
                 if (weapon.loadStatus)
-                    bottomParts.push(`<span style="${S_TAG}">${weapon.loadStatus}</span>`);
+                    bottomParts.push(`<span style="${tagStyle}">${weapon.loadStatus}</span>`);
                 if (weapon.chargeStatus)
-                    bottomParts.push(`<span style="${S_TAG}">${weapon.chargeStatus}</span>`);
+                    bottomParts.push(`<span style="${tagStyle}">${weapon.chargeStatus}</span>`);
                 if (weapon.usesText)
-                    bottomParts.push(`<span style="${S_TAG}">${weapon.usesText}</span>`);
+                    bottomParts.push(`<span style="${tagStyle}">${weapon.usesText}</span>`);
                 const modHtml = bottomParts.length ? `<div style="margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;">${bottomParts.join('')}</div>` : "";
 
                 return `
@@ -746,13 +817,15 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const img = weaponData[0]?.img || "icons/svg/item-bag.svg";
 
             // Build detail data for right-click popup
-            const weaponDetails = weaponData.map(wd => {
-                const wItem = wd.value;
-                if (!wItem?.system)
+            const weaponDetails = weaponData.map(wData =>
+            {
+                const weaponItem = wData.value;
+                if (!weaponItem?.system)
                     return null;
-                const sys = wItem.system;
+                const sys = weaponItem.system;
                 let allProfiles = [];
-                if (wItem.type === 'npc_feature') {
+                if (weaponItem.type === 'npc_feature')
+                {
                     // NPC weapon: show only the effective tier
                     const tierOverride = sys.tier_override ?? 0;
                     const actorTier = actor.system?.tier ?? 1;
@@ -761,19 +834,20 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     const tierDmg = (sys.damage ?? [])[tierIndex] ?? [];
                     const _tierRegex = /\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g;
                     const _resolveTier = str => String(str ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
-                    const resolvedTags = (sys.tags ?? []).map(tag => {
+                    const resolvedTags = (sys.tags ?? []).map(tag =>
+                    {
                         const raw = tag.name ?? tag.lid ?? tag.id ?? '';
                         const resolvedVal = _resolveTier(tag.val);
                         const resolved = _resolveTier(raw).replace(/\{VAL\}/gi, resolvedVal);
                         return { ...tag, _resolvedName: resolved };
                     });
                     allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
-                } else {
-                    allProfiles = getWeaponProfiles_WithBonus(wItem, actor);
                 }
+                else
+                    allProfiles = getWeaponProfiles_WithBonus(weaponItem, actor);
                 if (allProfiles.length === 0)
                     return null;
-                return { name: wItem.name, img: wItem.img, size: wd.size, type: wd.type, mod: wd.mod || null, modItem: wd.modItem || null, profiles: allProfiles, actions: sys.actions ?? [], activeProfile: sys.selected_profile_index ?? 0 };
+                return { name: weaponItem.name, img: weaponItem.img, size: wData.size, type: wData.type, mod: wData.mod || null, modItem: wData.modItem || null, profiles: allProfiles, actions: sys.actions ?? [], activeProfile: sys.selected_profile_index ?? 0 };
             }).filter(Boolean);
 
             return {
@@ -795,16 +869,18 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             hint: 'Right-click a row for weapon details',
             numberToChoose,
             selectionValidator,
-            onContextMenu: (choice, html) => {
+            onContextMenu: (choice, html) =>
+            {
                 $('.la-weapon-detail-popup').remove();
                 if (!choice.weaponDetails?.length)
                     return;
 
-                const detailHtml = choice.weaponDetails.map(wd => {
+                const detailHtml = choice.weaponDetails.map(detail =>
+                {
                     const wName = choice.weaponDetails.length > 1
-                        ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${wd.name}</div>`
+                        ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${detail.name}</div>`
                         : '';
-                    return wName + laRenderWeaponBody(wd.profiles, { actions: wd.actions, modName: wd.mod, modItem: wd.modItem, activeProfileIndex: wd.activeProfile });
+                    return wName + laRenderWeaponBody(detail.profiles, { actions: detail.actions, modName: detail.mod, modItem: detail.modItem, activeProfileIndex: detail.activeProfile });
                 }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
 
                 const title = choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '');
@@ -831,7 +907,8 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
  * @param {Function|null} [selectionValidator=null] - (items[]) => {valid, message, level}
  * @returns {Promise<Array|null>}
  */
-export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedSystemTypes = null, title = null, selectionValidator = null) {
+export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedSystemTypes = null, title = null, selectionValidator = null)
+{
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return null;
@@ -839,8 +916,10 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
     const isMech = actor.type === 'mech';
     let allItems = [];
 
-    if (isMech) {
-        for (const s of (actor.system?.loadout?.systems ?? [])) {
+    if (isMech)
+    {
+        for (const s of (actor.system?.loadout?.systems ?? []))
+        {
             const item = s?.value;
             if (!item)
                 continue;
@@ -870,9 +949,13 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
                 deployableActors: []
             });
         }
-    } else {
-        for (const item of actor.items) {
-            if (item.type === 'npc_feature' && item.system?.type === 'System') {
+    }
+    else
+    {
+        for (const item of actor.items)
+        {
+            if (item.type === 'npc_feature' && item.system?.type === 'System')
+            {
                 if (allowedSystemTypes && !allowedSystemTypes.includes(item.system.type))
                     continue;
                 const sys = item.system;
@@ -903,8 +986,10 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
     }
 
     // Resolve deployable actors (checks world then compendium)
-    for (const entry of allItems) {
-        if (entry.deployableLids.length > 0) {
+    for (const entry of allItems)
+    {
+        if (entry.deployableLids.length > 0)
+        {
             const resolved = await Promise.all(
                 entry.deployableLids.map(lid => resolveDeployable(lid, actor))
             );
@@ -912,28 +997,32 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
         }
     }
 
-    if (allItems.length === 0) {
+    if (allItems.length === 0)
+    {
         ui.notifications.warn(`No systems found.`);
         return [];
     }
 
-    return new Promise((resolve) => {
-        const choices = allItems.map((entry, idx) => {
+    return new Promise((resolve) =>
+    {
+        const choices = allItems.map((entry, idx) =>
+        {
             let nameStyle = "font-weight: bold;";
             let statusTags = "";
 
-            if (entry.destroyed) {
+            if (entry.destroyed)
                 statusTags += `<span style="font-size: 0.7em; background: #b71c1c; color: #fff; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">✕ DESTROYED</span>`;
-            } else if (entry.disabled) {
+            else if (entry.disabled)
+            {
                 nameStyle += " color: #ff9800;";
                 statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
             }
 
             let infoTags = "";
-            if (entry.sp > 0) {
+            if (entry.sp > 0)
                 infoTags += `<span style="font-size: 0.7em; background: #1a3a5c; color: #7ec8e3; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">SP: ${entry.sp}</span>`;
-            }
-            if (entry.uses) {
+            if (entry.uses)
+            {
                 const usesColor = entry.uses.value <= 0 ? '#888' : '#e6a817';
                 infoTags += `<span style="font-size: 0.7em; background: rgba(230,168,23,0.15); color: ${usesColor}; border: 1px solid rgba(230,168,23,0.3); padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">${entry.uses.value}/${entry.uses.max}</span>`;
             }
@@ -968,7 +1057,8 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             hint: 'Right-click a row for system details',
             numberToChoose,
             selectionValidator,
-            onContextMenu: (choice, html) => {
+            onContextMenu: (choice, html) =>
+            {
                 $('.la-system-detail-popup').remove();
                 if (!choice.effect && !choice.tags?.length && !choice.actions?.length && !choice.deployableActors?.length)
                     return;
@@ -996,12 +1086,14 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
  * @param {Function|null} [selectionValidator=null] - (items[]) => {valid, message, level}
  * @returns {Promise<Array|null>}
  */
-export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredicate = null, title = null, selectionValidator = null) {
+export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredicate = null, title = null, selectionValidator = null)
+{
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return null;
 
-    if (actor.type !== 'npc') {
+    if (actor.type !== 'npc')
+    {
         ui.notifications.warn("choseTrait: only NPC actors are supported.");
         return null;
     }
@@ -1009,7 +1101,8 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
     const tier = actor.system?.tier ?? 1;
 
     const allItems = [];
-    for (const item of actor.items) {
+    for (const item of actor.items)
+    {
         if (item.type !== 'npc_feature' || item.system?.type !== 'Trait')
             continue;
         const sys = item.system;
@@ -1031,19 +1124,23 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
         });
     }
 
-    if (allItems.length === 0) {
+    if (allItems.length === 0)
+    {
         ui.notifications.warn("No traits found.");
         return [];
     }
 
-    return new Promise((resolve) => {
-        const choices = allItems.map((entry, idx) => {
+    return new Promise((resolve) =>
+    {
+        const choices = allItems.map((entry, idx) =>
+        {
             let nameStyle = "font-weight: bold;";
             let statusTags = "";
 
-            if (entry.destroyed) {
+            if (entry.destroyed)
                 statusTags += `<span style="font-size: 0.7em; background: #b71c1c; color: #fff; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">✕ DESTROYED</span>`;
-            } else if (entry.disabled) {
+            else if (entry.disabled)
+            {
                 nameStyle += " color: #ff9800;";
                 statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
             }
@@ -1075,12 +1172,14 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
             hint: 'Right-click a row for trait details',
             numberToChoose,
             selectionValidator,
-            onContextMenu: (choice, html) => {
+            onContextMenu: (choice, html) =>
+            {
                 $('.la-trait-detail-popup').remove();
                 if (!choice.effect && !choice.tags?.length && !choice.actions?.length)
                     return;
 
-                const _resolveTierStr = (s) => {
+                const _resolveTierStr = (s) =>
+                {
                     const tierIndex = Math.max(0, Math.min(2, (choice.item.system?.tier_override > 0 ? choice.item.system.tier_override : tier) - 1));
                     return String(s ?? '').replaceAll(/\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
                 };
@@ -1103,14 +1202,14 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
  * @param {Actor|Token} actorOrToken
  * @returns {Promise<Object|null>} Selected invade entry or null if cancelled.
  */
-export async function chooseInvade(actorOrToken) {
+export async function chooseInvade(actorOrToken)
+{
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return null;
 
     const isNPC = actor.type === 'npc';
 
-    // --- Collect invades ---
     const invades = [];
 
     // Built-in Fragment Signal
@@ -1128,66 +1227,22 @@ export async function chooseInvade(actorOrToken) {
         img: "systems/lancer/assets/icons/tech_quick.svg"
     });
 
-    if (actor.type === 'mech') {
-        // Mech loadout systems
-        for (const s of (actor.system?.loadout?.systems ?? [])) {
-            const item = s?.value;
-            if (!item)
-                continue;
-            for (const action of (item.system?.actions ?? [])) {
-                if (action.activation === "Invade") {
-                    invades.push({
-                        name: action.name,
-                        detail: action.detail || '',
-                        item,
-                        action,
-                        tags: item.system?.tags ?? [],
-                        isFragmentSignal: false,
-                        sourceItemName: item.name,
-                        img: item.img || "systems/lancer/assets/icons/mech_system.svg"
-                    });
-                }
-            }
-        }
-        // Frame core system passive actions
-        const frame = actor.system?.loadout?.frame?.value;
-        if (frame) {
-            for (const action of (frame.system?.core_system?.passive_actions ?? [])) {
-                if (action.activation === "Invade") {
-                    invades.push({
-                        name: action.name,
-                        detail: action.detail || '',
-                        item: frame,
-                        action,
-                        tags: [],
-                        isFragmentSignal: false,
-                        sourceItemName: `${frame.name} (Core)`,
-                        img: frame.img || "systems/lancer/assets/icons/frame.svg"
-                    });
-                }
-            }
-        }
-    } else {
-        // NPC and others: check all items
-        for (const item of actor.items) {
-            for (const action of (item.system?.actions ?? [])) {
-                if (action.activation === "Invade") {
-                    invades.push({
-                        name: action.name,
-                        detail: action.detail || '',
-                        item,
-                        action,
-                        tags: item.system?.tags ?? [],
-                        isFragmentSignal: false,
-                        sourceItemName: item.name,
-                        img: item.img || "systems/lancer/assets/icons/generic_item.svg"
-                    });
-                }
-            }
-        }
+    for (const { action, sourceItem } of getActorActionItems(actor, 'Invade'))
+    {
+        invades.push({
+            name: action.name,
+            detail: action.detail || '',
+            item: sourceItem ?? null,
+            action,
+            tags: sourceItem?.system?.active_profile?.tags ?? sourceItem?.system?.tags ?? action.tags ?? [],
+            isFragmentSignal: false,
+            sourceItemName: sourceItem?.name ?? 'Extra Action',
+            img: sourceItem?.img || "systems/lancer/assets/icons/mech_system.svg"
+        });
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve) =>
+    {
         const content = `
             <div class="lancer-dialog-header">
                 <div class="lancer-dialog-title">CHOOSE INVADE</div>
@@ -1225,7 +1280,8 @@ export async function chooseInvade(actorOrToken) {
                 confirm: {
                     icon: '<i class="fas fa-check"></i>',
                     label: "Confirm",
-                    callback: () => {
+                    callback: () =>
+                    {
                         if (selectedIdx >= 0)
                             resolve(invades[selectedIdx]);
                         else
@@ -1239,12 +1295,14 @@ export async function chooseInvade(actorOrToken) {
                 }
             },
             default: "confirm",
-            render: (html) => {
+            render: (html) =>
+            {
                 const listItems = html.find('.la-invade-item');
                 const confirmBtn = html.parent().find('button.confirm');
                 confirmBtn.prop('disabled', true);
 
-                const _showInvadeDetailPopup = (inv) => {
+                const _showInvadeDetailPopup = (inv) =>
+                {
                     $('.la-invade-detail-popup').remove();
                     const bodyHtml = laRenderTextSection('EFFECT', inv.detail, '#e65100')
                         + laRenderTags(inv.tags);
@@ -1252,13 +1310,15 @@ export async function chooseInvade(actorOrToken) {
                     laPositionPopup(popup, html);
                 };
 
-                listItems.on('contextmenu', function(e) {
+                listItems.on('contextmenu', function(e)
+                {
                     e.preventDefault();
                     const idx = Number.parseInt($(this).data('idx'));
                     _showInvadeDetailPopup(invades[idx]);
                 });
 
-                listItems.on('click', function() {
+                listItems.on('click', function()
+                {
                     const idx = Number.parseInt($(this).data('idx'));
                     listItems.css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
                         .find('.la-invade-check').css('visibility', 'hidden');
@@ -1283,7 +1343,8 @@ export async function chooseInvade(actorOrToken) {
  * @param {Actor|Token} actorOrToken
  * @returns {Promise<void>}
  */
-export async function executeInvade(actorOrToken, bypassChoice = null) {
+export async function executeInvade(actorOrToken, bypassChoice = null)
+{
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return;
@@ -1293,12 +1354,14 @@ export async function executeInvade(actorOrToken, bypassChoice = null) {
         return;
 
     const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
-    if (!TechAttackFlow) {
+    if (!TechAttackFlow)
+    {
         ui.notifications.error("TechAttackFlow not found in game.lancer.flows.");
         return;
     }
 
-    if (selected.isFragmentSignal) {
+    if (selected.isFragmentSignal)
+    {
         const flow = new TechAttackFlow(actor.uuid, {
             title: "Fragment Signal",
             invade: true,
@@ -1306,8 +1369,10 @@ export async function executeInvade(actorOrToken, bypassChoice = null) {
             attack_type: "Tech"
         });
         await flow.begin();
-    } else {
-        // TechAttackFlow only accepts actors and system/npc_feature items — weapons are invalid
+    }
+    else
+    {
+        // TechAttackFlow only accepts actors and system/npc_feature items; weapons are invalid
         const isWeapon = /** @type {any} */ (selected.item)?.type?.includes('weapon');
         const uuid = (!isWeapon && selected.item?.uuid) ? selected.item.uuid : actor.uuid;
         const flow = new TechAttackFlow(uuid, {
