@@ -56,17 +56,17 @@ A heads-up: not all of it is built to be fully customizable, a lot is just how I
 <summary><h2>⚠️ Please read before you install ⚠️</h2></summary>
 <br>
 
-**First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
-
-This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well; if you're new to Foundry, get comfortable there first or you risk losing a lot of time.
-
-**The default setup is more than enough for most Lancer GMs.** Writing your own activations and effects takes real coding know-how; if you go there and get stuck, ask me on Discord.
-
-**It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal activation set is my own automations for my own games, shared as-is, not part of the core module.
-
-**Docs are split in two:** feature guides for what a feature does and how to reach it, `doc/API_*.md` for the code side. The very latest additions land first on my [Patreon](https://www.patreon.com/cw/LaSossis), with illustrations.
-
-**Before asking questions**, explore and try stuff first. It's a lot easier on me if I don't have to answer the same obvious questions, and it may be that I just haven't documented it yet. Thanks.
+> **First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
+>
+> This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well; if you're new to Foundry, get comfortable there first or you risk losing a lot of time.
+>
+> **The default setup is more than enough for most Lancer GMs.** Writing your own activations and effects takes real coding know-how; if you go there and get stuck, ask me on Discord.
+>
+> **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal activation set is my own automations for my own games, shared as-is, not part of the core module.
+>
+> **Docs are split in two:** feature guides for what a feature does and how to reach it, `doc/API_*.md` for the code side. The very latest additions land first on my [Patreon](https://www.patreon.com/cw/LaSossis), with illustrations.
+>
+> **Before asking questions**, explore and try stuff first. It's a lot easier on me if I don't have to answer the same obvious questions, and it may be that I just haven't documented it yet. Thanks.
 
 </details>
 
