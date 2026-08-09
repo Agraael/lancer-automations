@@ -1,3 +1,7 @@
+
+
+
+
 # FX and Sounds
 
 [← Back to the README](../../README.md)
@@ -79,7 +83,7 @@ Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer We
 ## Damage feedback
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/Agraael/lancer-automations/main/doc/vid/fs-damage-feedback.mp4" controls muted loop width="70%"></video>
+  <video src="https://github.com/user-attachments/assets/f08e03c5-8234-431b-95f8-a16f8b96afc4" controls muted loop width="70%"></video>
 </p>
 
 Applying damage plays an impact sprite and sound on the target per damage type: one impact per 3 damage inflicted, staggered, each at a random spot on the token.
