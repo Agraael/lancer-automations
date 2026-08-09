@@ -52,7 +52,7 @@ When an action runs, a matching animation plays through Sequencer: a slash on a 
 ## Damage feedback
 
 <p align="center">
-  <video src="../vid/fs-damage-feedback.mp4" controls muted loop width="70%"></video>
+  <video src="https://raw.githubusercontent.com/Agraael/lancer-automations/main/doc/vid/fs-damage-feedback.mp4" controls muted loop width="70%"></video>
 </p>
 
 Applying damage plays an impact sprite and sound on the target per damage type: one impact per 3 damage inflicted, staggered, each at a random spot on the token. Armor-absorbed damage plays a clank instead, and overshield hits have their own impact.

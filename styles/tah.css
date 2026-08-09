@@ -785,7 +785,11 @@ input.la-status-search {
     align-items: stretch;
     gap: 4px;
     padding: 3px;
-    background: color-mix(in srgb, var(--la-plate, #f5f5f5), var(--primary-color) 10%);
+    background: color-mix(in srgb, var(--la-plate, #f5f5f5), #000 8%);
+}
+
+.la-dark .la-status-search-row {
+    background: color-mix(in srgb, var(--la-plate, #1a1a1a), #fff 8%);
 }
 
 .la-status-search-row .la-status-search-wrap {
