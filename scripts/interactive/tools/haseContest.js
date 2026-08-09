@@ -2,8 +2,8 @@
 
 import { _queueCard, _createInfoCard, _removeInfoCard } from "../cards.js";
 import { isSingleTargetPickerActive, cancelSingleTargetPicker } from "../canvas.js";
-import { isHexGrid, drawHexAt, getOccupiedOffsets } from "../../combat/grid-helpers.js";
-import { gridLineWidth, TG } from "../canvas-helpers.js";
+import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
+import { TG, paintDashedFootprint } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 
 const STAT_DEFS = [
@@ -82,16 +82,8 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
         const paintMark = (token, markGraphic) =>
         {
             markGraphic.clear();
-            markGraphic.lineStyle(gridLineWidth(4), TG.placed, 0.85);
-            markGraphic.beginFill(TG.placed, 0.22);
-            if (isHexGrid())
-            {
-                for (const offset of getOccupiedOffsets(token))
-                    drawHexAt(markGraphic, offset.col, offset.row);
-            }
-            else
-                markGraphic.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
-            markGraphic.endFill();
+            const cells = getOccupiedOffsets(token).map(offset => [offset.col, offset.row]);
+            paintDashedFootprint(markGraphic, cells, TG.placed);
         };
         const drawMark = (token) =>
         {

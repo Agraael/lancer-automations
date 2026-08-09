@@ -89,6 +89,16 @@ function brighten(hex, amount = 25)
     return `rgb(${r},${g},${b})`;
 }
 
+// Profile switches from anywhere (TAH row, popup dot, sheet) refresh an open weapon popup in place.
+Hooks.on('updateItem', (item, changes) =>
+{
+    if (!foundry.utils.hasProperty(changes, 'system.selected_profile_index'))
+        return;
+    const popup = $('.la-hud-weapon-popup');
+    if (popup.length && popup.data('weapon-id') === item.id)
+        popup.data('laRebuild')?.();
+});
+
 /** Toggle .la-dark on <html> from the actual --la-plate luminance, so CSS can flip icon
     filters for a dark panel. Read via a probe + canvas so any colour format resolves to bytes. */
 function applyPlateThemeClass()
@@ -1439,6 +1449,8 @@ export class LancerHUD
 
             const _stripeStyle = (() =>
             {
+                if (item.stripeStyle)
+                    return item.stripeStyle;
                 if (item.softDisabled)
                 {
                     return document.documentElement.classList.contains('la-dark')
@@ -1501,14 +1513,15 @@ export class LancerHUD
             else if (item.highlightBg)
             {
                 const borderColor = item.highlightBorderColor ?? '#3a78b5';
+                const hoverBg = item.highlightHoverBg ?? (item.highlightBg.startsWith('#') ? brighten(item.highlightBg) : item.highlightBg);
                 row.data('restingBg', item.highlightBg);
                 row.data('restingBorder', borderColor);
-                row.data('hoverBg', brighten(item.highlightBg));
+                row.data('hoverBg', hoverBg);
                 row.css({ background: item.highlightBg, borderLeftColor: borderColor });
             }
 
             // Subtle automation hint: tiny rightward triangle attached to the left status bar (same color as the bar).
-            if (hasAutomation(item.hoverData?.item ?? item.hoverData?.action?.name ?? item.label))
+            if (hasAutomation(item.hoverData?.item) || hasAutomation(item.hoverData?.action?.name ?? item.label))
             {
                 row.css('position', 'relative');
                 const _tickColor = _stripeStyle ? _stripeStyle.color : 'var(--primary-color)';
@@ -4726,34 +4739,60 @@ export class LancerHUD
 
     _weaponItem(weapon, modItem, mount = null)
     {
-        const sys    = weapon.system;
         return this._itemRow(weapon, {
             category: 'Weapons',
             childColLabel: weapon.name,
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
             onRightClick: (row) =>
             {
-                let profiles = getWeaponProfiles_WithBonus(weapon, this._actor);
-                if (!profiles.length && weapon.type === 'npc_feature')
+                const buildBody = () =>
                 {
-                    const tierOverride = sys.tier_override ?? 0;
-                    const tier = tierOverride > 0 ? tierOverride : (this._actor?.system?.tier ?? 1);
-                    const tierIdx = Math.max(0, Math.min(2, tier - 1));
-                    const atkBonus = Array.isArray(sys.attack_bonus) ? (sys.attack_bonus[tierIdx] ?? 0) : 0;
-                    const atkAcc = Array.isArray(sys.accuracy) ? (sys.accuracy[tierIdx] ?? 0) : 0;
-                    profiles = [{ name: null, damage: (sys.damage ?? [])[tierIdx] ?? [], range: sys.range ?? [], tags: sys.tags ?? [], effect: sys.effect || '', on_hit: sys.on_hit || '', attack_bonus: atkBonus, accuracy: atkAcc, tech_attack: sys.tech_attack ?? false, weapon_type: sys.weapon_type ?? '' }];
-                }
-                if (!profiles.length && weapon.type === 'pilot_weapon')
-                    profiles = [{ name: null, damage: sys.damage ?? [], range: sys.range ?? [], tags: sys.tags ?? [], effect: sys.effect || '', on_hit: sys.on_hit || '' }];
-                const bodyHtml = laRenderWeaponBody(profiles, {
-                    actions: sys.actions ?? [],
-                    modName: modItem?.name ?? null,
-                    modItem: modItem ?? null,
-                    activeProfileIndex: sys.selected_profile_index ?? 0,
-                });
-                const profileType = sys.profiles?.[sys.selected_profile_index ?? 0]?.type;
-                const subtitle = this._joinSubtitle(sys.mount_type ?? sys.size, profileType ?? sys.weapon_type);
-                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle, bodyHtml, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks() });
+                    const sys = weapon.system;
+                    let profiles = getWeaponProfiles_WithBonus(weapon, this._actor);
+                    if (!profiles.length && weapon.type === 'npc_feature')
+                    {
+                        const tierOverride = sys.tier_override ?? 0;
+                        const tier = tierOverride > 0 ? tierOverride : (this._actor?.system?.tier ?? 1);
+                        const tierIdx = Math.max(0, Math.min(2, tier - 1));
+                        const atkBonus = Array.isArray(sys.attack_bonus) ? (sys.attack_bonus[tierIdx] ?? 0) : 0;
+                        const atkAcc = Array.isArray(sys.accuracy) ? (sys.accuracy[tierIdx] ?? 0) : 0;
+                        profiles = [{ name: null, damage: (sys.damage ?? [])[tierIdx] ?? [], range: sys.range ?? [], tags: sys.tags ?? [], effect: sys.effect || '', on_hit: sys.on_hit || '', attack_bonus: atkBonus, accuracy: atkAcc, tech_attack: sys.tech_attack ?? false, weapon_type: sys.weapon_type ?? '' }];
+                    }
+                    if (!profiles.length && weapon.type === 'pilot_weapon')
+                        profiles = [{ name: null, damage: sys.damage ?? [], range: sys.range ?? [], tags: sys.tags ?? [], effect: sys.effect || '', on_hit: sys.on_hit || '' }];
+                    return laRenderWeaponBody(profiles, {
+                        actions: sys.actions ?? [],
+                        modName: modItem?.name ?? null,
+                        modItem: modItem ?? null,
+                        activeProfileIndex: sys.selected_profile_index ?? 0,
+                        switchable: (sys.profiles?.length ?? 0) > 1,
+                    });
+                };
+                const weaponSubtitle = () =>
+                {
+                    const sys = weapon.system;
+                    const profileType = sys.profiles?.[sys.selected_profile_index ?? 0]?.type;
+                    return this._joinSubtitle(sys.mount_type ?? sys.size, profileType ?? sys.weapon_type);
+                };
+                const bindProfileSwitch = (popup) =>
+                {
+                    popup.data('laRebuild', () =>
+                    {
+                        popup.find('.la-weapon-body').html(buildBody());
+                        popup.find('.la-detail-subtitle').text(weaponSubtitle());
+                        bindProfileSwitch(popup);
+                    });
+                    popup.find('.la-profile-set[data-profile-idx]').on('click', async function (ev)
+                    {
+                        ev.stopPropagation();
+                        const idx = Number(this.dataset.profileIdx);
+                        if (idx === (weapon.system?.selected_profile_index ?? 0))
+                            return;
+                        playUiSound('toggle');
+                        await weapon.update({ 'system.selected_profile_index': idx });
+                    });
+                };
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle: weaponSubtitle(), bodyHtml: `<div class="la-weapon-body">${buildBody()}</div>`, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks(), postRender: bindProfileSwitch });
             },
         });
     }
@@ -4823,16 +4862,14 @@ export class LancerHUD
         const rangeToggle = () =>
         {
             const profiles = getWeaponProfiles_WithBonus(weapon, actor);
+            const activeProfile = profiles[weapon.system?.selected_profile_index ?? 0] ?? profiles[0];
             const rangeMap = {};
-            for (const p of profiles)
+            for (const r of (activeProfile?.range ?? []))
             {
-                for (const r of (p.range ?? []))
-                {
-                    const type = r.type ?? 'Range';
-                    const val = Number(r.val) || 0;
-                    if (val > (rangeMap[type] ?? 0))
-                        rangeMap[type] = val;
-                }
+                const type = r.type ?? 'Range';
+                const val = Number(r.val) || 0;
+                if (val > (rangeMap[type] ?? 0))
+                    rangeMap[type] = val;
             }
             const weaponRange = Math.max(0, ...Object.values(rangeMap));
             if (weaponRange <= 0)
@@ -4875,7 +4912,7 @@ export class LancerHUD
 
         if (actor.type === 'pilot')
         {
-            const buildPilot = () => [...addRightClicks(addHover(laHudItemChildren(weapon, {
+            const buildPilot = () => patchProfileRefresh([...addRightClicks(addHover(laHudItemChildren(weapon, {
                 defaultActions: [
                     {
                         label: 'FIGHT',
@@ -4901,15 +4938,15 @@ export class LancerHUD
                 modItem,
                 showPopup: (popup, row) => this._showPopupAt(popup, row),
                 onActivate,
-            })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] }), ...rangeToggle()];
-            return patchProfileRefresh(buildPilot(), buildPilot);
+            })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] }), ...rangeToggle()], buildPilot);
+            return buildPilot();
         }
         // Mech: sys.size === "Superheavy". NPC weapons store it in sys.weapon_type ("Superheavy Rifle", etc.).
         const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy'
             || String(sys.weapon_type || '').toLowerCase().startsWith('superheavy');
         const bypassMount = mount ?? { slots: [{ weapon: { value: weapon } }] };
         const attackLabel = isSuperHeavy ? 'BARRAGE' : 'SKIRMISH';
-        const buildMech = () => [...addRightClicks(addHover(laHudItemChildren(weapon, {
+        const buildMech = () => patchProfileRefresh([...addRightClicks(addHover(laHudItemChildren(weapon, {
             defaultActions: [
                 {
                     label: attackLabel,
@@ -4940,8 +4977,8 @@ export class LancerHUD
             modItem,
             showPopup: (popup, row) => this._showPopupAt(popup, row),
             onActivate,
-        })), attackLabel, bypassMount), ...rangeToggle()];
-        return patchProfileRefresh(buildMech(), buildMech);
+        })), attackLabel, bypassMount), ...rangeToggle()], buildMech);
+        return buildMech();
     }
 
     _getInvadeOptions(actor)

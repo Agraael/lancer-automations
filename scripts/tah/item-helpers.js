@@ -263,7 +263,13 @@ export function laHudItemChildren(item, opts = {})
             items.push({
                 label: (isActive ? '● ' : '○ ') + profileName,
                 icon: ICON_PROFILE,
-                highlightBg: isActive ? '#cce0f5' : null,
+                stripeStyle: isActive ? {
+                    bg: 'repeating-linear-gradient(45deg, #2e5a80 0 6px, #26496a 6px 12px)',
+                    hoverBg: 'repeating-linear-gradient(45deg, #3f74a3 0 6px, #356088 6px 12px)',
+                    border: '#5b9bd5',
+                    color: '#d8ebfb',
+                    hoverColor: '#ecf5fd'
+                } : null,
                 keepOpen: true,
                 _profile: profile,
                 onClick: isActive ? null : async () => item.update({ 'system.selected_profile_index': idx }),

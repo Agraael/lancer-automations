@@ -399,6 +399,97 @@ export function gridLineWidth(base = 2)
     return Math.max(1, base * canvas.grid.size / 100);
 }
 
+export function drawDashedEdges(gfx, edges, dash, gap, phase)
+{
+    const step = dash + gap;
+    const offset = ((phase % step) + step) % step;
+    for (const [from, to] of edges)
+    {
+        const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+        const ux = (to.x - from.x) / len;
+        const uy = (to.y - from.y) / len;
+        for (let pos = -offset; pos < len; pos += step)
+        {
+            const start = Math.max(0, pos);
+            const end = Math.min(pos + dash, len);
+            if (end <= start)
+                continue;
+            gfx.moveTo(from.x + ux * start, from.y + uy * start);
+            gfx.lineTo(from.x + ux * end, from.y + uy * end);
+        }
+    }
+}
+
+function footprintCellPoints(col, row)
+{
+    if (isHexGrid())
+        return getHexVertices(col, row);
+    const center = getHexCenter(col, row);
+    const half = canvas.grid.size / 2;
+    return [
+        { x: center.x - half, y: center.y - half },
+        { x: center.x + half, y: center.y - half },
+        { x: center.x + half, y: center.y + half },
+        { x: center.x - half, y: center.y + half },
+    ];
+}
+
+function footprintPerimeterEdges(cells)
+{
+    const counts = new Map();
+    const segs = new Map();
+    const roundKey = (point) => `${Math.round(point.x)},${Math.round(point.y)}`;
+    for (const [col, row] of cells)
+    {
+        const pts = footprintCellPoints(col, row);
+        for (let idx = 0; idx < pts.length; idx++)
+        {
+            const from = pts[idx];
+            const to = pts[(idx + 1) % pts.length];
+            const ends = [roundKey(from), roundKey(to)].sort((keyA, keyB) => keyA.localeCompare(keyB));
+            const key = `${ends[0]}|${ends[1]}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+            if (!segs.has(key))
+                segs.set(key, [from, to]);
+        }
+    }
+    const out = [];
+    for (const [key, count] of counts)
+    {
+        if (count === 1)
+            out.push(segs.get(key));
+    }
+    return out;
+}
+
+// Light fill + marching dashed stroke on the outer perimeter only; cells = [[col,row], ...].
+export function paintDashedFootprint(graphic, cells, color, { halo = false } = {})
+{
+    if (!cells.length)
+        return;
+    const dash = canvas.grid.size * 0.16;
+    const gap = canvas.grid.size * 0.11;
+    const phase = performance.now() * 0.013;
+    graphic.lineStyle(0);
+    graphic.beginFill(color, 0.12);
+    for (const [col, row] of cells)
+    {
+        const flat = [];
+        for (const pt of footprintCellPoints(col, row))
+            flat.push(pt.x, pt.y);
+        graphic.drawPolygon(flat);
+    }
+    graphic.endFill();
+    const edges = footprintPerimeterEdges(cells);
+    if (halo)
+    {
+        graphic.lineStyle(gridLineWidth(6), 0x000000, 0.55);
+        drawDashedEdges(graphic, edges, dash, gap, phase);
+    }
+    graphic.lineStyle(gridLineWidth(3), color, 0.95);
+    drawDashedEdges(graphic, edges, dash, gap, phase);
+}
+
 export function paintWithHalo(graphic, drawGeometry, { color = 0xffffff, lineWidth = 2, lineAlpha = 0.8, fillColor = null, fillAlpha = 0 } = {})
 {
     const stroke = gridLineWidth(lineWidth);

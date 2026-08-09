@@ -4,7 +4,7 @@
 import {
     isSingleTargetPickerActive, cancelSingleTargetPicker, clearSingleTargetShape,
     isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape,
-    beginTargetSession, isTargetSessionActive,
+    beginTargetSession, isTargetSessionActive, createTokenMark,
 } from '../interactive/canvas.js';
 import { buildTargetingUI, aoeRanges, clearAttackShapePreview, targetInfoAllowed } from './targeting-ui.js';
 
@@ -166,6 +166,7 @@ export function registerDamageTargetButton()
                     return false;
                 }
             })();
+            let attackerMark = null;
             if (active)
             {
                 try
@@ -173,6 +174,7 @@ export function registerDamageTargetButton()
                     seedTargetsFromHitResults(state);
                     injectWhenReady(state);
                     beginTargetSession(damageRangeLabelFor(state));
+                    attackerMark = createTokenMark(state.actor?.getActiveTokens?.()[0] ?? null);
                 }
                 catch
                 {
@@ -189,6 +191,7 @@ export function registerDamageTargetButton()
                 {
                     try
                     {
+                        attackerMark?.destroy();
                         if (isAreaPickerActive())
                             cancelAreaPicker();
                         if (isSingleTargetPickerActive())

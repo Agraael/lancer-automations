@@ -6,10 +6,10 @@ import { createShapePlacement, createPlacedShapeStore } from "../shape-placement
 import {
     pointerToWorld, makeSafe, suppressTokenLayerClick, addGraphicsBelowTokens, addGraphicsAboveTokens,
     destroyGraphics, paintSingleMarkCursor, gridLineWidth, TG, createMergedRangeHighlight, RANGE_GLOW,
-    createCtrlMarkIndicator,
+    createCtrlMarkIndicator, paintDashedFootprint,
     suppressEvent,
 } from "../canvas-helpers.js";
-import { isHexGrid, getHexCenter, getHexVertices, pixelToOffset, drawHexAt, getOccupiedOffsets } from "../../combat/grid-helpers.js";
+import { isHexGrid, getHexCenter, pixelToOffset, drawHexAt, getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
@@ -91,27 +91,6 @@ function ensureStore()
     return _saved.store;
 }
 
-function drawDashedEdges(gfx, edges, dash, gap, phase)
-{
-    const step = dash + gap;
-    const offset = ((phase % step) + step) % step;
-    for (const [from, to] of edges)
-    {
-        const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-        const ux = (to.x - from.x) / len;
-        const uy = (to.y - from.y) / len;
-        for (let pos = -offset; pos < len; pos += step)
-        {
-            const start = Math.max(0, pos);
-            const end = Math.min(pos + dash, len);
-            if (end <= start)
-                continue;
-            gfx.moveTo(from.x + ux * start, from.y + uy * start);
-            gfx.lineTo(from.x + ux * end, from.y + uy * end);
-        }
-    }
-}
-
 // Marks reuse the gold breathing visual of placed attack-roll targets (target-shapes.js).
 function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn = () => false, drawTokens = true, dashed = false)
 {
@@ -157,19 +136,6 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             gfx.drawRect(center.x - canvas.grid.size / 2, center.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
         }
     };
-    const cellPoints = (col, row) =>
-    {
-        if (isHexGrid())
-            return getHexVertices(col, row);
-        const center = getHexCenter(col, row);
-        const half = canvas.grid.size / 2;
-        return [
-            { x: center.x - half, y: center.y - half },
-            { x: center.x + half, y: center.y - half },
-            { x: center.x + half, y: center.y + half },
-            { x: center.x - half, y: center.y + half },
-        ];
-    };
     const markCells = (mark) =>
     {
         if (!mark.tokenId)
@@ -179,38 +145,8 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
         const token = liveToken(mark.tokenId);
         return token ? getOccupiedOffsets(token).map(offset => [offset.col, offset.row]) : [];
     };
-    const perimeterEdges = (cells) =>
-    {
-        const counts = new Map();
-        const segs = new Map();
-        const roundKey = (point) => `${Math.round(point.x)},${Math.round(point.y)}`;
-        for (const [col, row] of cells)
-        {
-            const pts = cellPoints(col, row);
-            for (let idx = 0; idx < pts.length; idx++)
-            {
-                const from = pts[idx];
-                const to = pts[(idx + 1) % pts.length];
-                const ends = [roundKey(from), roundKey(to)].sort();
-                const key = `${ends[0]}|${ends[1]}`;
-                counts.set(key, (counts.get(key) ?? 0) + 1);
-                if (!segs.has(key))
-                    segs.set(key, [from, to]);
-            }
-        }
-        const out = [];
-        for (const [key, count] of counts)
-        {
-            if (count === 1)
-                out.push(segs.get(key));
-        }
-        return out;
-    };
     const drawDashed = () =>
     {
-        const dash = canvas.grid.size * 0.16;
-        const gap = canvas.grid.size * 0.11;
-        const phase = performance.now() * 0.013;
         const seen = new Set();
         const cells = [];
         for (const mark of marks)
@@ -225,27 +161,7 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
                 }
             }
         }
-        if (!cells.length)
-            return;
-        const color = colorFn(marks[0]);
-        gfx.lineStyle(0);
-        gfx.beginFill(color, 0.12);
-        for (const [col, row] of cells)
-        {
-            const flat = [];
-            for (const pt of cellPoints(col, row))
-                flat.push(pt.x, pt.y);
-            gfx.drawPolygon(flat);
-        }
-        gfx.endFill();
-        const edges = perimeterEdges(cells);
-        if (haloFn(marks[0]))
-        {
-            gfx.lineStyle(gridLineWidth(6), 0x000000, 0.55);
-            drawDashedEdges(gfx, edges, dash, gap, phase);
-        }
-        gfx.lineStyle(gridLineWidth(3), color, 0.95);
-        drawDashedEdges(gfx, edges, dash, gap, phase);
+        paintDashedFootprint(gfx, cells, colorFn(marks[0]), { halo: haloFn(marks[0]) });
     };
     const tick = () =>
     {
@@ -405,15 +321,31 @@ function computeRadiusForToken(token)
     return _saved.manualRadius;
 }
 
+function weaponRangeMap(weapon, actor)
+{
+    const profiles = getWeaponProfiles_WithBonus(weapon, actor);
+    const activeProfile = profiles[weapon.system?.selected_profile_index ?? 0] ?? profiles[0];
+    const ranges = {};
+    for (const { type, val } of (activeProfile?.range ?? []))
+        ranges[type] = Math.max(ranges[type] ?? 0, Number.parseInt(val) || 0);
+    return ranges;
+}
+
 function weaponMaxRange(weapon, actor)
 {
-    const ranges = {};
-    for (const profile of getWeaponProfiles_WithBonus(weapon, actor))
-    {
-        for (const { type, val } of (profile.range ?? []))
-            ranges[type] = Math.max(ranges[type] ?? 0, Number.parseInt(val) || 0);
-    }
-    return weaponPulseRange(ranges);
+    return weaponPulseRange(weaponRangeMap(weapon, actor));
+}
+
+const RANGE_TYPE_CCI = { range: 'cci-range', threat: 'cci-threat', thrown: 'cci-thrown', line: 'cci-line', cone: 'cci-cone', blast: 'cci-blast', burst: 'cci-burst' };
+const RANGE_TYPE_ORDER = Object.keys(RANGE_TYPE_CCI);
+
+function weaponRangeHtml(ranges)
+{
+    const parts = Object.entries(ranges)
+        .filter(([, val]) => val > 0)
+        .sort(([typeA], [typeB]) => RANGE_TYPE_ORDER.indexOf(String(typeA).toLowerCase()) - RANGE_TYPE_ORDER.indexOf(String(typeB).toLowerCase()))
+        .map(([type, val]) => `<i class="cci ${RANGE_TYPE_CCI[String(type).toLowerCase()] ?? 'cci-range'}"></i>${val}`);
+    return parts.join(' ');
 }
 
 // Reference = hovered (priority) or controlled, gated to owned/scanned; merged pulse. No reference = no pulse.
@@ -948,13 +880,33 @@ function onSelectionChange()
     });
 }
 
+// Keep the reference when the un-hover comes from the toolbar covering the token.
 function onHoverToken(token, hovered)
 {
-    if (hovered)
-        _hoverToken = token;
-    else if (_hoverToken === token)
+    if (hovered || _hoverToken !== token)
+    {
+        if (hovered)
+            _hoverToken = token;
+        onSelectionChange();
+        return;
+    }
+    requestAnimationFrame(() =>
+    {
+        if (_hoverToken !== token || token.hover)
+            return;
+        if (_overToolbar || _toolbarEl?.matches(':hover'))
+            return;
         _hoverToken = null;
-    onSelectionChange();
+        onSelectionChange();
+    });
+}
+
+function onProfileSwitched(item, changes)
+{
+    if (!_open || !foundry.utils.hasProperty(changes, 'system.selected_profile_index'))
+        return;
+    rebuildPulse();
+    renderToolbar();
 }
 
 function isTypingInToolbar(event)
@@ -1656,7 +1608,7 @@ function renderAreaParamPopover()
 {
     const pop = makeParamPopover(_animateAreaControls);
     _animateAreaControls = false;
-    const { row } = makeParamRow('Size', _saved.areaRange, 1, 10, next =>
+    const { row } = makeParamRow('Size', _saved.areaRange, 1, 99, next =>
     {
         _saved.areaRange = next;
         _controller?.setAreaRange(next);
@@ -1756,7 +1708,7 @@ function renderManualPopover()
 {
     const pop = makeParamPopover(_animateRangeParam);
     _animateRangeParam = false;
-    const { row } = makeParamRow('Range', _saved.manualRadius, 0, 30, next =>
+    const { row } = makeParamRow('Range', _saved.manualRadius, 0, 99, next =>
     {
         _saved.manualRadius = next;
         rebuildPulse();
@@ -1791,7 +1743,7 @@ function renderWeaponPopover(refToken)
         name.textContent = weapon.name;
         const rng = document.createElement('span');
         rng.className = 'la-mt-weap-r';
-        rng.textContent = `R ${weaponMaxRange(weapon, actor)}`;
+        rng.innerHTML = weaponRangeHtml(weaponRangeMap(weapon, actor)) || `R ${weaponMaxRange(weapon, actor)}`;
         row.append(name, rng);
         if (_saved.weaponItemId === weapon.id)
             row.classList.add('active');
@@ -1913,6 +1865,14 @@ function buildToolbar()
     _toolbarEl.addEventListener('mouseleave', () =>
     {
         _overToolbar = false;
+        requestAnimationFrame(() =>
+        {
+            if (!_overToolbar && _hoverToken && !_hoverToken.hover)
+            {
+                _hoverToken = null;
+                onSelectionChange();
+            }
+        });
     });
     document.body.appendChild(_toolbarEl);
     renderToolbar();
@@ -2089,6 +2049,7 @@ export function openAdvancedMeasure(options)
     Hooks.on('combatRound', onCombatStateChange);
     Hooks.on('deleteCombat', onCombatStateChange);
     Hooks.on('deleteToken', onWhiteMarkTokenDeleted);
+    Hooks.on('updateItem', onProfileSwitched);
     window.addEventListener('resize', onHotbarChange);
     ensureWhiteMarkStore();
     const safeMark = makeSafe('advancedMeasureMark', () => closeAdvancedMeasure());
@@ -2140,6 +2101,7 @@ export function closeAdvancedMeasure()
     Hooks.off('combatRound', onCombatStateChange);
     Hooks.off('deleteCombat', onCombatStateChange);
     Hooks.off('deleteToken', onWhiteMarkTokenDeleted);
+    Hooks.off('updateItem', onProfileSwitched);
     window.removeEventListener('resize', onHotbarChange);
     if (_safeCtrlMove)
         canvas.stage.off('pointermove', _safeCtrlMove);

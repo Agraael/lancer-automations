@@ -614,6 +614,107 @@ const GROUPS = [
     },
 ];
 
+// One-click loadout: question id -> answer. Absent id = leave the current value.
+const RECOMMENDED = {
+    'tah-enabled': true,
+    'range-preview-hover': true,
+    'tah-narrative-mode': true,
+    'token-stat-bar': true,
+    'token-stat-hint': true,
+    'status-fx-master': true,
+    'additional-statuses': true,
+    'deployable-lines': true,
+    'guardian-bulwark-aura': 'combat',
+    'attack-targeting': true,
+    'auto-start-targeting': true,
+    'stat-roll-targeting': true,
+    'target-info': 'gm',
+    'area-elevation-aware': true,
+    'overlap-picker': true,
+    'range-preview-attack-card': true,
+    'display-tools-to-others': true,
+    'knockback-flow': true,
+    'throw-flow': true,
+    'builtin-ruler': true,
+    'count-3d-distance': true,
+    'climb-waypoints': true,
+    'terrain-elevation': true,
+    'tactical-distance': 'combat',
+    'ruler-per-step': true,
+    'pathfind-drag': true,
+    'split-at-speed-tiers': true,
+    'ctrl-ruler': 'tool',
+    'target-cursor': true,
+    'ruler-cursor': true,
+    'split-at-boundaries': true,
+    'alt-struct': false,
+    'one-struct-npc': true,
+    'infection-damage': false,
+    'heat-as-energy': true,
+    'resist-self-heat': true,
+    'per-round-tags': true,
+    'lancer-vision': true,
+    'lancer-los': true,
+    'detection-combat-only': true,
+    'bulwark-los': true,
+    'vision-from-edge': true,
+    'auto-token-height': true,
+    'vehicle-squad-height': false,
+    'reaction-notify': 'both',
+    'consume-action': true,
+    'consume-reaction': true,
+    'link-manual-deploy': true,
+    'lasossis-items': false,
+    'scan-ownership': 'group',
+    'battle-log': true,
+    'wrecks': true,
+    'wreck-cinematics': true,
+    'remove-wrecks-combat': true,
+    'actor-token-sync': true,
+};
+
+const QUICK_IDS = new Set([
+    'prevent-wasd-movement',
+    'tah-keyboard-nav',
+    'tah-click-to-open',
+    'half-size-tokens',
+    'overwatch-style',
+    'engagement-block',
+    'movement-cap',
+    'auto-damage-roll',
+    'auto-damage-apply',
+    'scan-source',
+]);
+
+// Shown by default in the walk-through; the rest sits behind each group's "Show all" expander.
+const ESSENTIAL_IDS = new Set([
+    'tah-enabled',
+    'tah-click-to-open',
+    'token-stat-bar',
+    'token-stat-hint',
+    'attack-targeting',
+    'target-info',
+    'knockback-flow',
+    'throw-flow',
+    'auto-damage-roll',
+    'auto-damage-apply',
+    'builtin-ruler',
+    'tactical-distance',
+    'pathfind-drag',
+    'ctrl-ruler',
+    'overwatch-style',
+    'engagement-block',
+    'movement-cap',
+    'alt-struct',
+    'lancer-los',
+    'auto-token-height',
+    'reaction-notify',
+    'lasossis-items',
+    'scan-source',
+    'battle-log',
+    'wrecks',
+]);
+
 // Scope and reload are read from the live registrations, never authored above.
 const _mod = (question) => question.module ?? MODULE_ID;
 const _reg = (key, mod = MODULE_ID) => game.settings.settings.get(`${mod}.${key}`);
@@ -689,6 +790,7 @@ function _questionVM(question, fcs)
         label: question.label,
         explain: question.explain,
         warn: question.warn ?? null,
+        advanced: !ESSENTIAL_IDS.has(question.id),
         isChoice: question.kind === 'choice' || question.kind === 'reactions',
         choices: (question.kind === 'choice' || question.kind === 'reactions')
             ? (question.choices || []).map(choice => ({ value: choice.value, label: choice.label, selected: choice.value === current }))
@@ -740,6 +842,7 @@ export class SettingsOnboarding extends FormApplication
     {
         super({}, options);
         this._page = 0;
+        this._quickPages = null;
         this._needsReload = false;
         this._applied = false;
         this._reloadPending = false;
@@ -778,7 +881,7 @@ export class SettingsOnboarding extends FormApplication
                 .map(question => _questionVM(question, fcs));
             if (!questions.length)
                 continue;
-            pages.push({ type: 'group', isGroup: true, id: group.id, label: group.label, icon: group.icon, blurb: group.blurb, questions });
+            pages.push({ type: 'group', isGroup: true, id: group.id, label: group.label, icon: group.icon, blurb: group.blurb, questions, advCount: questions.filter(question => question.advanced).length });
         }
         pages.push({ type: 'summary', isSummary: true });
 
@@ -801,15 +904,31 @@ export class SettingsOnboarding extends FormApplication
         const root = html[0] ?? html;
         this.bringToTop?.();
 
-        root.querySelector('.la-onb-back')?.addEventListener('click', () => this._goto(this._page - 1));
+        root.querySelector('.la-onb-back')?.addEventListener('click', () => this._goto(this._step(-1)));
         root.querySelector('.la-onb-skip')?.addEventListener('click', () => this._onSkip());
+        root.querySelector('.la-onb-reco')?.addEventListener('click', () => this._applyRecommended(root));
+        root.querySelectorAll('.la-onb-more').forEach(button =>
+        {
+            button.addEventListener('click', () =>
+            {
+                if (!button.dataset.showLabel)
+                    button.dataset.showLabel = button.innerHTML;
+                const expanded = button.dataset.expanded === '1';
+                button.dataset.expanded = expanded ? '' : '1';
+                button.innerHTML = expanded ? button.dataset.showLabel : '<i class="fas fa-chevron-up"></i> Hide advanced';
+                button.closest('.la-onb-page')?.querySelectorAll('.la-onb-q.la-onb-adv').forEach(row =>
+                {
+                    row.style.display = expanded ? 'none' : '';
+                });
+            });
+        });
         root.querySelector('.la-onb-next')?.addEventListener('click', () =>
         {
             const lastIndex = root.querySelectorAll('.la-onb-page').length - 1;
             if (this._page >= lastIndex)
                 this.submit();
             else
-                this._goto(this._page + 1);
+                this._goto(this._step(1));
         });
         this._syncChrome(root);
     }
@@ -820,6 +939,21 @@ export class SettingsOnboarding extends FormApplication
         const pages = root.querySelectorAll('.la-onb-page');
         const clamped = Math.max(0, Math.min(target, pages.length - 1));
         this._page = clamped;
+        if (this._quickPages && clamped === 0)
+        {
+            this._quickPages = null;
+            root.querySelectorAll('.la-onb-q').forEach(row =>
+            {
+                row.style.display = row.classList.contains('la-onb-adv') ? 'none' : '';
+            });
+            root.querySelectorAll('.la-onb-more').forEach(button =>
+            {
+                button.style.display = '';
+                button.dataset.expanded = '';
+                if (button.dataset.showLabel)
+                    button.innerHTML = button.dataset.showLabel;
+            });
+        }
         pages.forEach((page, index) =>
         {
             page.style.display = index === clamped ? '' : 'none';
@@ -833,7 +967,11 @@ export class SettingsOnboarding extends FormApplication
         const lastIndex = pages.length - 1;
         const step = root.querySelector('.la-onb-step');
         if (step)
-            step.textContent = `Step ${this._page + 1} of ${pages.length}`;
+        {
+            step.textContent = this._quickPages
+                ? `Step ${this._quickPages.indexOf(this._page) + 1} of ${this._quickPages.length}`
+                : `Step ${this._page + 1} of ${pages.length}`;
+        }
         const back = root.querySelector('.la-onb-back');
         if (back)
             back.style.visibility = this._page === 0 ? 'hidden' : 'visible';
@@ -868,6 +1006,56 @@ export class SettingsOnboarding extends FormApplication
         list.innerHTML = rows.length
             ? rows.join('')
             : '<p style="opacity:0.7;">No changes - everything stays as it is.</p>';
+    }
+
+    _applyRecommended(root)
+    {
+        for (const question of _visibleQuestions())
+        {
+            const value = RECOMMENDED[question.id];
+            if (value === undefined || QUICK_IDS.has(question.id))
+                continue;
+            const questionEl = root.querySelector(`.la-onb-q[data-qid="${question.id}"]`);
+            if (!questionEl)
+                continue;
+            const select = questionEl.querySelector('select');
+            if (select)
+            {
+                select.value = String(value);
+                continue;
+            }
+            const radio = questionEl.querySelector(`input[type="radio"][value="${value ? 'yes' : 'no'}"]`);
+            if (radio)
+                radio.checked = true;
+        }
+        const pages = [...root.querySelectorAll('.la-onb-page')];
+        this._quickPages = [0];
+        pages.forEach((page, index) =>
+        {
+            const rows = [...page.querySelectorAll('.la-onb-q')];
+            if (!rows.some(row => QUICK_IDS.has(row.dataset.qid)))
+                return;
+            for (const row of rows)
+                row.style.display = QUICK_IDS.has(row.dataset.qid) ? '' : 'none';
+            this._quickPages.push(index);
+        });
+        root.querySelectorAll('.la-onb-more').forEach(button =>
+        {
+            button.style.display = 'none';
+        });
+        this._quickPages.push(pages.length - 1);
+        this._goto(this._quickPages[1]);
+    }
+
+    _step(direction)
+    {
+        if (!this._quickPages)
+            return this._page + direction;
+        const pos = this._quickPages.indexOf(this._page);
+        if (pos < 0)
+            return this._page + direction;
+        const next = Math.max(0, Math.min(pos + direction, this._quickPages.length - 1));
+        return this._quickPages[next];
     }
 
     _onSkip()

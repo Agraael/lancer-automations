@@ -188,7 +188,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         state.__laAttackShapeDefaults = {
             pattern: firstAoe.type.toLowerCase(),
             size: firstAoe.val,
-            range: Math.max(0, (resolved.val || 0) + firstAoe.val),
+            range: Math.max(0, resolved.val || 0),
         };
         state.__laAttackShape = state.__laAttackShape ?? { ...state.__laAttackShapeDefaults };
 
@@ -211,7 +211,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
             $lastActive = $activeBtn;
             $activeBtn.addClass('la-targeting-active');
-            setPickPulse(shape.range);
+            setPickPulse(shapeReach(shape));
             pickerRun = (async () =>
             {
                 try
@@ -224,7 +224,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                             keepExisting,
                             getToggles: () => readToggles($form),
                             hitChanceFor: hitChanceForFactory(state),
-                            castRange: shape.range > 0 ? shape.range : -1,
+                            castRange: shape.range > 0 ? shapeReach(shape) : -1,
                         });
                     }
                     else
@@ -416,7 +416,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         else
             $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
         $targetBtn.addClass('la-targeting-active');
-        setPickPulse(shape.range);
+        setPickPulse(shapeReach(shape));
         pickerRun = (async () =>
         {
             try
@@ -427,7 +427,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                         pattern: shape.pattern,
                         areaRange: Math.max(1, Number(shape.size) || 1),
                         hitChanceFor: hitChanceForFactory(state),
-                        castRange: shape.range > 0 ? shape.range : -1,
+                        castRange: shape.range > 0 ? shapeReach(shape) : -1,
                         includeSelf: true,
                     });
                 }
@@ -532,6 +532,15 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     maybeAutoStart($form, { mode: autoStart, hudHasTargets });
 }
 
+// Display keeps the base range; placement/pulse reach adds the area size under the hood.
+function shapeReach(shape)
+{
+    const range = Math.max(0, Number(shape.range) || 0);
+    if (shape.pattern && shape.pattern !== 'target')
+        return range + Math.max(1, Number(shape.size) || 1);
+    return range;
+}
+
 function shapesEqual(shapeA, shapeB)
 {
     return !!shapeA && !!shapeB && shapeA.pattern === shapeB.pattern
@@ -554,10 +563,10 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
                 <option value="burst">Burst</option>
             </select>
             <label class="la-bas-size-lbl" style="display:flex;align-items:center;gap:3px;">Size
-                <input type="number" class="la-bas-size" min="1" max="20" value="${shape.size}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
+                <input type="number" class="la-bas-size" min="1" value="${shape.size}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
             </label>
             <label style="display:flex;align-items:center;gap:3px;">Range
-                <input type="number" class="la-bas-range" min="0" max="30" value="${shape.range}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
+                <input type="number" class="la-bas-range" min="0" value="${shape.range}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
             </label>
         </div>
     `);
@@ -575,7 +584,7 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
         if (shapesEqual(next, state.__laAttackShapeDefaults))
             clearAttackShapePreview();
         else
-            updateAttackShapePreview(caster, next.range);
+            updateAttackShapePreview(caster, shapeReach(next));
     };
     const setFields = (next) =>
     {
@@ -589,8 +598,8 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
     {
         const next = {
             pattern: String($strip.find('.la-bas-shape').val()),
-            size: Math.max(1, Number($strip.find('.la-bas-size').val()) || 1),
-            range: Math.max(0, Number($strip.find('.la-bas-range').val()) || 0),
+            size: Math.min(99, Math.max(1, Number($strip.find('.la-bas-size').val()) || 1)),
+            range: Math.min(99, Math.max(0, Number($strip.find('.la-bas-range').val()) || 0)),
         };
         state.__laAttackShape = next;
         syncPreview(next);

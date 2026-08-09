@@ -717,7 +717,7 @@ export function laRenderCoreBonusBody(cbItem)
  */
 export function laRenderWeaponBody(profiles, opts = {})
 {
-    const { actions = [], modName = null, modItem = null, activeProfileIndex = 0 } = opts;
+    const { actions = [], modName = null, modItem = null, activeProfileIndex = 0, switchable = false } = opts;
     const actionsHtml = laRenderActions(actions);
 
     let profilesHtml = '';
@@ -731,16 +731,19 @@ export function laRenderWeaponBody(profiles, opts = {})
             const name    = (profile.name || 'Profile').toUpperCase();
             const isActive = idx === activeProfileIndex;
             const blockStyle = isActive
-                ? 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-left:3px solid #4caf50;border-radius:3px;cursor:pointer;'
+                ? 'margin-bottom:6px;padding:5px 7px;background:repeating-linear-gradient(45deg, #16283a 0 6px, #101f2e 6px 12px);border:1px solid rgba(160,160,160,0.35);border-left:3px solid #3a78b5;border-radius:3px;cursor:pointer;'
                 : 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-radius:3px;cursor:pointer;';
             const nameStyle = isActive
                 ? 'font-size:0.75em;font-weight:bold;color:#bbb;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;'
                 : 'font-size:0.75em;font-weight:bold;color:#e06060;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;';
             const bodyDisplay = isActive ? 'block' : 'none';
             const toggleChar  = isActive ? '▼' : '▶';
+            const setDot = switchable
+                ? `<span class="la-profile-set" data-profile-idx="${idx}" title="${isActive ? 'Active profile' : 'Switch to this profile'}" style="cursor:${isActive ? 'default' : 'pointer'};color:${isActive ? '#5b9bd5' : '#777'};margin-right:5px;">${isActive ? '●' : '○'}</span>`
+                : '';
             return `<div class="la-mod-block" style="${blockStyle}">
                 <div style="${nameStyle}">
-                    <span>${name}</span>
+                    <span>${setDot}${name}</span>
                     <span class="la-mod-toggle" style="opacity:0.6;font-size:0.9em;">${toggleChar}</span>
                 </div>
                 <div class="la-mod-body" style="display:${bodyDisplay};margin-top:4px;">${inner}</div>
@@ -857,7 +860,7 @@ export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weap
             <div style="background:linear-gradient(90deg,${themeColors.gradFrom},${themeColors.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${themeColors.headerBorder};border-radius:4px 4px 0 0;">
                 <div>
                     <div style="font-weight:bold;font-size:0.95em;color:#fff;">${displayTitle}</div>
-                    <div style="font-size:0.72em;color:#aaa;">${subtitle}</div>
+                    <div class="la-detail-subtitle" style="font-size:0.72em;color:#aaa;">${subtitle}</div>
                 </div>
                 <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
             </div>

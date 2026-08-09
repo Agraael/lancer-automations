@@ -13,6 +13,10 @@
             <div style="padding:6px 2px; line-height:1.55; color:var(--la-ink);">
                 <p style="margin:0 0 10px;">This wizard walks you through the module's main features as plain yes/no questions. Your answers flip the matching settings; nothing is saved until you reach the end and press <b>Apply</b>.</p>
                 <p style="margin:0 0 10px;">You can change any of these later in <b>Game Settings &rarr; Configure Settings &rarr; Lancer Automations</b>, or re-run this wizard from there at any time.</p>
+                <div style="margin:12px 0 0; display:flex; align-items:center; gap:10px; padding:9px 11px; border-left:3px solid var(--primary-color, #782e22); background:color-mix(in srgb, var(--primary-color, #782e22) 8%, transparent);">
+                    <button type="button" class="la-onb-reco" style="width:auto; margin:0; flex:0 0 auto; background:var(--primary-color, #991e2a); border:1px solid var(--primary-color, #991e2a); color:#fff; padding:7px 16px; cursor:pointer; font-weight:bold; white-space:nowrap;"><i class="fas fa-wand-magic-sparkles"></i> Use recommended setup</button>
+                    <span style="font-size:0.85em; color:var(--la-ink-dim); line-height:1.4;">My recommended answers for everything, then a handful of choices only you can make.</span>
+                </div>
                 <div style="margin:12px 0 0; padding:9px 11px; border-left:3px solid var(--la-edge); background:rgba(0,0,0,0.03); font-size:0.9em; line-height:1.5;">
                     <b>Already set up another world?</b> Export your config there (<b>Tools &amp; Extras &rarr; Export to JSON</b>) and import it here to skip all of this.
                 </div>
@@ -31,7 +35,7 @@
             <p style="margin:0 0 8px; font-size:0.85em; color:var(--la-ink-dim); line-height:1.45;">{{this.blurb}}</p>
 
             {{#each this.questions}}
-            <div class="la-onb-q" data-qid="{{this.id}}" data-original="{{this.originalValue}}" data-label="{{this.label}}" style="padding:11px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 15%, transparent);">
+            <div class="la-onb-q{{#if this.advanced}} la-onb-adv{{/if}}" data-qid="{{this.id}}" data-original="{{this.originalValue}}" data-label="{{this.label}}" style="{{#if this.advanced}}display:none; {{/if}}padding:11px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 15%, transparent);">
                 <div style="display:flex; align-items:flex-start; gap:12px;">
                     <div style="flex:1 1 auto; min-width:0;">
                         <div style="font-weight:bold; color:var(--la-ink); line-height:1.3;">{{this.label}}</div>
@@ -68,6 +72,9 @@
                 </div>
             </div>
             {{/each}}
+            {{#if this.advCount}}
+            <button type="button" class="la-onb-more" style="width:auto; margin:10px 0 0; background:transparent; border:1px dashed var(--la-edge); color:var(--la-ink-dim); padding:5px 14px; cursor:pointer; font-size:0.82em;"><i class="fas fa-chevron-down"></i> Show all ({{this.advCount}} more)</button>
+            {{/if}}
             {{/if}}
 
             {{#if this.isSummary}}

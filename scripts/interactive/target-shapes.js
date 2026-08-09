@@ -1,7 +1,7 @@
 /* global canvas, PIXI, game, Hooks, performance */
 
-import { isHexGrid, drawHexAt, getOccupiedOffsets } from "../combat/grid-helpers.js";
-import { gridLineWidth, makeText, gridTextResolution, applyTargetInfoLabel, HIT_LABEL_STYLE, hitLabelFontSize, TG } from "./canvas-helpers.js";
+import { getOccupiedOffsets } from "../combat/grid-helpers.js";
+import { gridLineWidth, makeText, gridTextResolution, applyTargetInfoLabel, HIT_LABEL_STYLE, hitLabelFontSize, TG, paintDashedFootprint } from "./canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
 
 let _persistG = null;              // Container above tokens (pulsing marks)
@@ -89,16 +89,8 @@ function paintShape(token, markGraphic, color = TG.placed)
     markGraphic.clear();
     if (!token?.document || token.destroyed)
         return;
-    markGraphic.lineStyle(gridLineWidth(4), color, 0.85);
-    markGraphic.beginFill(color, 0.22);
-    if (isHexGrid())
-    {
-        for (const offset of getOccupiedOffsets(token))
-            drawHexAt(markGraphic, offset.col, offset.row);
-    }
-    else
-        markGraphic.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
-    markGraphic.endFill();
+    const cells = getOccupiedOffsets(token).map(offset => [offset.col, offset.row]);
+    paintDashedFootprint(markGraphic, cells, color, { halo: color === TG.reference });
 }
 
 function drawShape(token)
