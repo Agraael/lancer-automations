@@ -45,7 +45,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 await api.removeEffectsByNameFromTokens(options)
 ```
 
-Finds all effects matching the given name(s) and removes them, not a targeted removal by ID. To delete a specific known effect by ID, use `deleteEffect` instead.
+Removes every effect matching the given name(s). Use `deleteEffect` for one specific effect by ID.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -55,7 +55,7 @@ Finds all effects matching the given name(s) and removes them, not a targeted re
 | <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
 | <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config |
 
-`originId` and `extraFlags` are independent filters - both are applied when provided. Use `extraFlags` when the source identity was stored as a custom flag (not as `originID`).
+`originId` and `extraFlags` are independent filters, both applied when provided.
 
 **Example:**
 ```js
@@ -79,7 +79,7 @@ await api.removeEffectsByNameFromTokens({
 await api.removeEffectsByName(targetID, effectName, originID, extraFlags)
 ```
 
-Removes effects from a single token by name. Lower-level than `removeEffectsByNameFromTokens` (which operates on arrays of tokens).
+Single-token version of `removeEffectsByNameFromTokens`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -101,7 +101,7 @@ Removes effects from a single token by name. Lower-level than `removeEffectsByNa
 api.deleteEffect(token, effect)
 ```
 
-Deletes a specific active effect by object or ID. Unlike `removeEffectsByNameFromTokens`, this targets one exact effect - no name matching, no side effects. Routes through the GM socket automatically for non-GM users.
+Deletes one active effect by object or ID, no name matching. Routes through the GM socket automatically for non-GM users.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -290,7 +290,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
 | <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 
-`"provoke"` acts like permanent DISENGAGE: the actor cannot be engaged and its movement does not provoke reactions from others. No extra fields required.
+`"provoke"` acts like permanent DISENGAGE. No extra fields required.
 
 </details>
 
@@ -300,7 +300,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | Property | Type | Description |
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
-| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` - survives reloads. For dynamic filters (range, target status) that can't be pinned to a static `applyTo` array. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
 
 `"no_invisible"` forces `plugins.invisibility.data = 0` on the target, bypassing `"invisible"`.
 
@@ -359,7 +359,7 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 | `"lowest"`  | Auto-keep `min(originalTotal, altTotal)`. Stacking gives worst-of-N+1. |
 | `"choose"`  | Second card prompts `Original (X)` / `Alt (Y)` and the user picks. |
 
-**Stacking:** when an actor has multiple `reroll` bonuses matching a roll, they fire sequentially - each operates on the *current* total. Candidates are sorted by subtype priority (`retry` → `highest`/`lowest` → `choose`) so the choose prompt always sees the running best total. Damage rolls deep-snapshot `damage_results`/`reliable_results`/`targets` so a "keep original" decision restores the full damage breakdown, not only the total.
+**Stacking:** when an actor has multiple `reroll` bonuses matching a roll, they fire sequentially, each operating on the *current* total. Candidates are sorted by subtype priority (`retry` → `highest`/`lowest` → `choose`). Damage rolls deep-snapshot `damage_results`/`reliable_results`/`targets`, so "keep original" restores the full breakdown.
 
 </details>
 
@@ -460,7 +460,7 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 | <kbd>bonusData</kbd> | `Object` | Same shape as `addGlobalBonus` |
 | <kbd>bonusIdOrPredicate</kbd> | `string\|((bonus) => boolean)` | Bonus ID or predicate `(bonus) => boolean` |
 
-> When the target is an **item** or a **prototype actor**, use `linkBonusToItem` / `linkBonusToActor` instead - see below.
+> When the target is an **item** or a **prototype actor**, use `linkBonusToItem` / `linkBonusToActor` instead.
 
 </details>
 
@@ -468,7 +468,7 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 
 ## Attach to items and prototype actors
 
-Statuses and bonuses can be attached directly to an **item** or a **prototype actor** instead of a token. The entry lives on the source doc. When the item is added to an actor, when a token spawns from the actor, or when a destroyed / disabled item flips back on, it applies to the token's actor as if you'd used the Effect Manager on the token. When the item is destroyed / disabled / removed, it's cleaned up. Charges persist across the cycle.
+Statuses and bonuses can be attached directly to an **item** or a **prototype actor** instead of a token. The entry lives on the source doc, and applies to the token's actor on item-add, token-spawn, or re-enable. It's cleaned up on remove / destroy / disable. Charges persist across the cycle.
 
 <details>
 <summary><b><code>linkEffectToItem</code></b> · <b><code>linkEffectToActor</code></b> <sup>async</sup> → <code>Array</code></summary>
@@ -489,7 +489,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
 | <kbd>duration</kbd> | `Object` | `{ label: 'permanent' }` | `{ label, turns?, rounds? }` |
 
-`extraOptions` keys are stored on the source and copied to every effect that comes from it (useful for source markers). `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
+`extraOptions` keys are stored on the source and copied to every effect that comes from it. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
 
 </details>
 

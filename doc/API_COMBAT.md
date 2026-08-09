@@ -94,12 +94,12 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 
 | Key | Type | Default | Meaning |
 |:----|:-----|:--------|:--------|
-| <kbd>ap</kbd> | `boolean` | `false` | Armor Piercing - damage ignores the target's armor. |
+| <kbd>ap</kbd> | `boolean` | `false` | Armor Piercing. |
 | <kbd>paracausal</kbd> | `boolean` | `false` | Damage can't be reduced (bypasses armor **and** resistances). |
 | <kbd>overkill</kbd> | `boolean` | `false` | Overkill - the flow rerolls 1s on the damage dice (self-heat per reroll). |
-| <kbd>reliable</kbd> | `boolean` | `false` | Reliable - applies a minimum-damage floor. |
+| <kbd>reliable</kbd> | `boolean` | `false` | Reliable. |
 | <kbd>half_damage</kbd> | `boolean` | `false` | Halve all damage dealt. |
-| <kbd>add_burn</kbd> | `boolean` | `true` | Whether Burn-type damage also accumulates on the target's burn track. `false` = immediate burn hit only, no ongoing burn. |
+| <kbd>add_burn</kbd> | `boolean` | `true` | Whether Burn-type damage also accumulates on the target's burn track. |
 | <kbd>invade</kbd> | `boolean` | `false` | Flags the roll as an Invade tech-attack (passed to Lancer flow). |
 | <kbd>has_normal_hit</kbd> | `boolean` | `true` | At least one normal (non-crit) hit exists -> rolls normal damage. |
 | <kbd>has_crit_hit</kbd> | `boolean` | `false` | At least one crit exists -> rolls crit damage. |
@@ -203,8 +203,6 @@ await api.executeSimpleActivation(actor, options, extraData)
 await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter)
 ```
 
-Optionally bypasses mount selection or pre-targets a token.
-
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | The actor or token performing the skirmish |
@@ -225,7 +223,7 @@ Optionally bypasses mount selection or pre-targets a token.
 await api.beginWeaponAttackFlow(weapon, options, extraData)
 ```
 
-Starts a weapon attack flow for a specific weapon item (e.g. an NPC's specific rifle).
+Starts a weapon attack flow for a given weapon item.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -250,7 +248,7 @@ Processed weapon/item info, with active actor bonuses applied (e.g. Accuracy, Th
 await api.getItemTags_WithBonus(item, actor)
 ```
 
-Returns the effective tag list for a single item, with actor bonuses applied.
+Effective tag list for one item.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

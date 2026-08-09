@@ -167,13 +167,13 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 |--------|-------------------|
 | [CodeMirror](https://github.com/League-of-Foundry-Developers/codemirror-lib) | Syntax highlighting in the evaluate/activation code editors |
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
-| [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons so you can see remaining charges at a glance |
-| [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix so you can have more than two sides |
+| [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons |
+| [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix, for more than two sides |
 | [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
 | [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
 | [Lancer Weapon FX](https://github.com/BoltsJ/lancer-weapon-fx) | Visual/audio effects on attacks and built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) |
 | [Wall Height](https://foundryvtt.com/packages/wall-height) | Required for elevation-aware Token Blocks Line of Sight (Bulwark / per-token blocker): walls inherit the token's height, letting same-height observers peek over. Without it, blocking is purely 2D. |
-| [Force Client Settings](https://gitlab.com/kimitsu_desu/force-client-settings) | Push client-scoped settings to all your players, so your whole table shares one baseline config instead of each player setting their own. |
+| [Force Client Settings](https://gitlab.com/kimitsu_desu/force-client-settings) | Push client-scoped settings to all your players, so your whole table shares one config. |
 
 ### Recommended
 
@@ -192,7 +192,7 @@ Almost everything in the module is configured from one place: **Game Settings > 
 
 Every feature has its toggles here, and a handful of buttons open dedicated tools: the Activation Manager, export and import, the guided tour, the news popup, and a full reset.
 
-There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting carries an inline hint in the config window itself.
+There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting has an inline hint.
 
 > [!TIP]
 > Go through the settings before your first session and set a baseline; the module is largely opt-in. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
@@ -203,7 +203,7 @@ There are a lot of settings, so they aren't all listed here. Each feature guide 
 
 Export your whole setup (automations, startup scripts, settings, and keybindings) to a JSON file for a backup or to share a build, then import it back through a review dialog that lets you pick exactly what comes in.
 
-A full reset is here too, for starting clean.
+A full reset is here too.
 
 <br clear="right"/>
 
@@ -339,7 +339,7 @@ An upgrade to the Lancer system's targeting flow: choose your target or place a 
 
 Through the automation engine and many tweaks to the Lancer system, Lancer Automations runs Lancer's actions and reactions for you, from combat to the out-of-combat flows: scanning, rest, downtime, and reserves.
 
-It also handles skill checks and contests, and tracks usage on a per-turn, per-round, or per-scene basis.
+It also handles skill checks and contests, and tracks usage per turn, per round, or per scene.
 
 → Full guide: [`doc/feature/GAMEPLAY_AUTOMATION.md`](doc/feature/GAMEPLAY_AUTOMATION.md)
 
@@ -409,7 +409,7 @@ When a combat ends the module tracks the whole fight and hands you a recap, XCom
 
 <img align="right" src="doc/img/feature-system.png" width="53%"/>
 
-Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry so your whole table benefits without installing anything extra: item-disabled state for dropped or jammed gear, smoother handling of a system's ammo, extra status effects, and extra trackable attributes for token bars (Move, Reaction).
+Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry: item-disabled state for dropped or jammed gear, smoother handling of a system's ammo, extra status effects, and extra trackable attributes for token bars (Move, Reaction).
 
 The GM setup and maintenance tools have their own guide.
 
@@ -437,7 +437,7 @@ You get the damage type itself, the turn-end check flow, an Infection card on th
 
 ## Optional integrations
 
-Lancer Automations works on its own, but a few features unlock or improve when these optional modules are present. Install details are in the tables above.
+Lancer Automations works on its own, but a few features need or improve with these optional modules. Install details are in the tables above.
 
 | Feature | Needs |
 |---------|-------|

@@ -23,7 +23,7 @@ Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token,
 const id = await api.addExtraBar(target, partial)
 ```
 
-Create a new extra bar by overlaying `partial` on the default shape. Token target returns the entry id; Item/Actor target returns the template id. Defaults to `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan); see the [stat bars guide](feature/TOKEN_DISPLAY.md)).
+Create a new extra bar by overlaying `partial` on the default shape. Token target returns the entry id; Item/Actor target returns the template id. Defaults to `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan)).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

@@ -21,9 +21,9 @@ const targets = await api.chooseToken(casterToken, options)
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
 | <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` - excludes tokens when returning false |
 | <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
-| <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections (old behavior). |
+| <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections. |
 | <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
-| <kbd>includeSelf</kbd> | `boolean` | `false` | Is the caster selectable? |
+| <kbd>includeSelf</kbd> | `boolean` | `false` | Caster is selectable |
 | <kbd>title</kbd> | `string` | `"SELECT TARGETS"` | Card header |
 | <kbd>description</kbd> | `string` | `""` | Card description |
 | <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
@@ -121,7 +121,7 @@ Each hook entry supports two formats:
 | `{ command: string, asGM: boolean }` | JS code stored in template flags (persists across reloads) |
 | `{ function: Function, asGM: boolean }` | JS function in runtime registry (lost on reload) |
 
-Both formats **stack** - if you provide both for the same trigger, both run.
+Both formats **stack**.
 
 **Trigger List:** `created`, `deleted`, `moved`, `hidden`, `revealed`, `entered`, `left`, `through`, `staying`, `turnStart`, `turnEnd`.
 
@@ -168,7 +168,7 @@ api.placeZone(token, {
 const targets = api.tokensInTemplate(templateOrResult)
 ```
 
-Actor-bearing Tokens currently inside a template, ready for `executeDamageRoll`. Wraps templatemacro's `findContained` (elevation/terrain-aware, multi-cell + donut templates). Returns `[]` if templatemacro is inactive.
+Actor-bearing Tokens currently inside a template. Wraps templatemacro's `findContained` (elevation/terrain-aware, multi-cell + donut templates). Returns `[]` if templatemacro is inactive.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -236,7 +236,7 @@ Interactive knockback tool. Shows movement traces and requires confirmation per 
 | <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
 | <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
 | <kbd>item</kbd> | `Item` | `null` | Source item |
-| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire; no `onInvoluntaryMove`). If false (default), moves are involuntary and fire `onInvoluntaryMove` before each move. |
+| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire; no `onInvoluntaryMove`). |
 
 </details>
 
@@ -368,8 +368,6 @@ Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote
 await api.moveToken(token, options)
 ```
 
-Moves a token to a destination. Two modes: pass `destination` for a direct move, or omit it for an interactive picker.
-
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token</kbd> | `Token` | *required* | The token to move |
@@ -394,7 +392,7 @@ Moves a token to a destination. Two modes: pass `destination` for a direct move,
 | `crawl` | Crawl | only while prone |
 | `forced` | Forced | GM only |
 
-`swim` and `burrow` are disabled by the Lancer system; `displace` is the internal fallback for unknown keys. The API forwards `action` straight to `token.document.move`, so it accepts any key in `CONFIG.Token.movement.actions`, `canSelect` only governs the wheel, not code-driven moves.
+`swim` and `burrow` are disabled by the Lancer system; `displace` is the internal fallback for unknown keys. The API forwards `action` straight to `token.document.move`, so it accepts any key in `CONFIG.Token.movement.actions`. `canSelect` only governs the wheel, not code-driven moves.
 
 </details>
 
@@ -480,7 +478,7 @@ await api.setHidePrimaryAction(itemOrUuid, hidden)   // hidden defaults to true
 api.isPrimaryActionHidden(item)
 ```
 
-Hides an item's primary (base) action row in the HUD, leaving only its deployables / extra actions. For deploy-only items whose base action just re-prints the card the deploy row already prints. Also toggleable via the item's Extra Config dialog ("Hide primary action" checkbox). Applies to mech systems and NPC features.
+Hides an item's primary (base) action row in the HUD, leaving only its deployables / extra actions. Also toggleable via the item's Extra Config dialog ("Hide primary action" checkbox). Applies to mech systems and NPC features.
 
 | Param | Type | Description |
 |:------|:-----|:------------|

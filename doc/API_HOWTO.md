@@ -138,7 +138,7 @@ macros: [{
 await api.deleteAuras(owner, filter, options)
 ```
 
-Deletes the owner's auras and cleans up associated lambda callbacks.
+Deletes the owner's auras and their function callbacks.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

@@ -6,7 +6,7 @@
 
 ## Extra Actions
 
-Inject actions onto items or actors, drive their charge / limited state, and lock native actions. Everything here surfaces in the TAH action menu.
+Inject actions onto items or actors, drive their charge / limited state, and lock native actions. Everything here shows up in the TAH action menu.
 
 <details>
 <summary><b><code>addExtraActions</code></b> <sup>async</sup> · <b><code>getItemActions</code></b> · <b><code>getActorActions</code></b> · <b><code>getLinkedActions</code></b> · <b><code>removeExtraActions</code></b> <sup>async</sup></summary>
@@ -53,7 +53,7 @@ Item-held actions appear under their item in the TAH menu, actor-held actions in
 
 **Auto-behaviors when target is an Item:**
 - `_sourceItemId` is stamped onto every added action so [`onlyOnSourceMatch`](AUTOMATION_SYSTEM.md) reactions can resolve the parent item.
-- If the action carries a consumable tag (`tg_loading` / `tg_recharge` / `tg_limited`) that's already on the parent item, that tag is stripped from the action along with its state field (`loaded` / `charged`+`recharge` / `uses`). A warning is shown. Keeps the item-level state as the single source of truth.
+- If the action carries a consumable tag (`tg_loading` / `tg_recharge` / `tg_limited`) that's already on the parent item, that tag is stripped from the action along with its state field (`loaded` / `charged`+`recharge` / `uses`). A warning is shown. Item-level state stays authoritative.
 
 **Example:**
 ```js

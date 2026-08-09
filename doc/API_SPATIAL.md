@@ -6,7 +6,7 @@
 
 ## Distance Calculations
 
-Three distance functions at different abstraction levels. All return distance in **grid spaces** (not pixels).
+Three distance functions. All return distance in **grid spaces** (not pixels).
 
 | Function | Input | Size-aware | Use case |
 |:---------|:------|:---:|:---------|
@@ -170,7 +170,7 @@ Compatible with the Token Factions module.
 api.getRelativeDisposition(viewer, other)
 ```
 
-Disposition of `other` as seen from `viewer`, returned as a `CONST.TOKEN_DISPOSITIONS` value. With Token Factions active it resolves the advanced-team matrix, otherwise it falls back to `other`'s own token disposition. Use this instead of reading `token.disposition` when you need faction-correct relationships.
+Disposition of `other` as seen from `viewer`, returned as a `CONST.TOKEN_DISPOSITIONS` value. With Token Factions active it resolves the advanced-team matrix, otherwise it falls back to `other`'s own token disposition. Use instead of `token.disposition` for faction-correct results.
 
 | Param | Type | Description |
 |:------|:-----|:------------|

@@ -25,10 +25,9 @@
 const api = game.modules.get('lancer-automations').api;
 ```
 
-Also available via hook for safe timing:
+Or via hook:
 ```javascript
 Hooks.on('lancer-automations.ready', (api) => {
-    // api is ready
 });
 ```
 
@@ -277,7 +276,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 - `cancel(reason?)` synchronously skips this specific token's move; other tokens in the batch still proceed.
 - Does **not** fire when `knockBackToken()` is called with `{ asVoluntary: true }` - in that mode the move goes through `onPreMove`/`onMove` like a regular drag.
-- `actionName` and `item` are passed from the caller (e.g. `"Grapple"`) - enables `onlyOnSourceMatch` matching.
+- `actionName` and `item` are passed from the caller (e.g. `"Grapple"`), used by `onlyOnSourceMatch`.
 
 </details>
 
@@ -665,11 +664,14 @@ Determines if an activation should trigger. Called for every potential reactor.
 Code to run when activated.
 - **Returns**: `Promise<void>`.
 
-> Discovery tip: call `triggerData.debugActivation()` inside either callback to console-log all params and the available `triggerData` helpers. Also `api.debugActivation(triggerType, triggerData, reactorToken, item, name)`.
-
 #### `onInit(token, item, api)`
 Code to run when a token is created on the scene.
 - **Returns**: `Promise<void>`.
+
+#### `triggerData.debugActivation(label?)`
+Console-logs everything the current callback received, including the helper functions that trigger provides. Available in `evaluate` and `activationCode`.
+- **Returns**: the same content as a summary `Object`.
+- Also on the api: `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`.
 
 ---
 
@@ -677,7 +679,9 @@ Code to run when a token is created on the scene.
 
 ### Consumption
 
-Charge-consumption config attached to an effect. Set it via `extraOptions.consumption` on `applyEffectsToTokens`, or `options.consumption` on `addGlobalBonus`. `consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0; `processEffectConsumption` matches and spends it on every trigger. `grouped` / `groupId` make several effects share one counter (deleted together).
+Charge-consumption config attached to an effect. Set it via `extraOptions.consumption` on `applyEffectsToTokens`, or `options.consumption` on `addGlobalBonus`.
+
+`consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0; `processEffectConsumption` matches and spends it on every trigger. `grouped` / `groupId` make several effects share one counter (deleted together).
 
 ```javascript
 {
@@ -700,12 +704,12 @@ Charge-consumption config attached to an effect. Set it via `extraOptions.consum
 ### Reaction economy
 
 Two separate keys:
-- **`checkReaction`** (reaction config, default `true` via `!== false`) - the availability GATE. When set, the reaction is skipped if the reactor has no reaction left this round.
-- **`consumeReaction`** (world setting, default off) - what SPENDS a reaction: when a `Reaction`-type action fires, it decrements `system.action_tracker.reaction` by 1.
+- **`checkReaction`** (reaction config, default `true` via `!== false`) - the availability **gate**. When set, the reaction is skipped if the reactor has no reaction left this round.
+- **`consumeReaction`** (world setting, default off) - what **spends** a reaction: when a `Reaction`-type action fires, it decrements `system.action_tracker.reaction` by 1.
 
 ### Effect flags
 
-Every effect this module creates stores its metadata under `flags['lancer-automations']`. Any extra keys you pass in `extraOptions` (beyond reserved meta keys like `stack` / `consumption` / `changes`) are copied there as-is, so they can serve as removal filters later: `extraFlags` on `removeEffectsByName*` deletes an effect only if ALL supplied keys equal the stored values.
+Every effect this module creates stores its metadata under `flags['lancer-automations']`. Any extra keys you pass in `extraOptions` (beyond reserved meta keys like `stack` / `consumption` / `changes`) are copied there as-is: `extraFlags` on `removeEffectsByName*` deletes an effect only if ALL supplied keys equal the stored values.
 
 Two keys the module manages itself:
 - **`linkedBonusId`** - ties an effect to a bonus so removing one removes the other.

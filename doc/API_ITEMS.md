@@ -170,7 +170,7 @@ Detection order:
 await api.updateTokenSystem(token, data)
 ```
 
-Updates system data on a token's actor. Automatically routes through the GM socket if the current user doesn't own the actor.
+Updates system data on a token's actor. Routes through the GM via socket when the calling user does not own the actor.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -188,7 +188,7 @@ await api.updateTokenSystem(target, { 'system.burn': 0 });
 
 ## Extra Config
 
-Per-item config controlling Lancer's automation of the item. First feature: opt out of auto-consuming specific resource types on activation. Stored at `item.flags['lancer-automations'].extraConfig`.
+Per-item config controlling Lancer's automation of the item. Currently: opt out of auto-consuming specific resource types on activation. Stored at `item.flags['lancer-automations'].extraConfig`.
 
 Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `reserveUsed`.
 
@@ -303,7 +303,7 @@ Reverse of consume. Same signature, same validation.
 await api.configureItemExtraConfig(item, { autoConsumeDisabled: ['uses', 'loading'] });
 ```
 
-Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature; use this only for future Extra Config fields.
+Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature; use this only for fields with no helper.
 
 </details>
 
