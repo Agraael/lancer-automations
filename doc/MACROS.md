@@ -4,6 +4,8 @@
 
 Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set. Drag one to the hotbar and run it on the selected token. Each runs the matching feature documented in the other guides.
 
+---
+
 ## Actions
 
 | Macro | What it does |
@@ -30,6 +32,8 @@ Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set.
 | Handle | Drag or lift an adjacent object or character. |
 | Interact | Manipulate a nearby object. |
 | Squeeze | Count as one Size smaller, and Prone. |
+
+---
 
 ## Tools
 

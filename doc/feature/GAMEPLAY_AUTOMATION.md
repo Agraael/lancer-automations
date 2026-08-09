@@ -14,6 +14,8 @@ Lancer Automations runs the procedural parts of play for you: combat actions and
 
 <br clear="right"/>
 
+---
+
 ## Built-in actions and reactions
 
 Almost all of Lancer's actions and reactions are automated here. These aren't new rules, only Lancer's own actions run for you, and each one can be turned off or rewritten in the Activation Manager (see [Automation Engine](./AUTOMATION_ENGINE.md)). Stabilize and Scan already have a version in the Lancer system, which the module swaps for a fuller one.
@@ -33,6 +35,8 @@ Auto-knockback (the damage dialog's **Knockback** checkbox, reading a weapon's K
 
 With **`autoDamageRoll`** on, the damage roll opens on its own after an attack, and **`autoDamageApply`** applies the rolled damage to the targets.
 
+---
+
 ## Overwatch
 
 <img align="right" src="../img/ga-overwatch.png" width="45%"/>
@@ -46,17 +50,27 @@ Threat range reads from Grid-Aware-Auras threat auras when present, otherwise fr
 
 <br clear="right"/>
 
+---
+
 ## Grapple
 
 <img align="right" src="../img/ga-grapple.png" width="45%"/>
 
-Grapple is automated: on a melee hit it applies **Grappled** and **Grappling**, and **Immobilizes** the smaller side by combined size, with equal sizes settled by a **HULL** contest at the start of each turn. The immobilized side is dragged along when the controlling side moves, and a knockback breaks the grapple. The Grapple card also offers **End Grapple** and **Break Free**. A target immune to Grappled is skipped, and there's a Grapple macro too.
+Grapple is automated: on a melee hit it applies **Grappled** and **Grappling**, and **Immobilizes** the smaller side by combined size, with equal sizes settled by a **HULL** contest at the start of each turn.
+
+The immobilized side is dragged along when the controlling side moves, and a knockback breaks the grapple. The Grapple card also offers **End Grapple** and **Break Free**.
+
+A target immune to Grappled is skipped, and there's a Grapple macro too.
 
 <br clear="right"/>
+
+---
 
 ## Action limits
 
 **Brace**, **Dazed**, **Staggered** (Dead Rings), and **Slow** grey out the actions they block in the HUD while the status is on; the action popup names the locking status. Dazed also shows no movement on the ruler.
+
+---
 
 ## Stabilize
 
@@ -66,11 +80,15 @@ Stabilize gets a clearer dialog for its two choices; an NPC only cools and reloa
 
 <br clear="right"/>
 
+---
+
 ## Usage limits
 
 <img align="right" src="../img/ga-usage.png" width="45%"/>
 
-Beyond Lancer's own limited and recharge tracking, weapons and systems tagged **per round**, **per turn**, or **per scene** get their own pip counters injected straight onto their cards in the actor sheet. Spending the action ticks a pip, the action is blocked once they run out, and they reset at the matching boundary: the start of a round, your turn, or a new scene. Turn this on with **`enablePerRoundTurnTags`** (needs a reload).
+Beyond Lancer's own limited and recharge tracking, weapons and systems tagged **per round**, **per turn**, or **per scene** get their own pip counters injected straight onto their cards in the actor sheet. Spending the action ticks a pip, the action is blocked once they run out, and they reset at the matching boundary: the start of a round, your turn, or a new scene.
+
+Turn this on with **`enablePerRoundTurnTags`** (needs a reload).
 
 <br clear="right"/>
 
@@ -80,6 +98,8 @@ The counters are drawn to match whichever sheet you use, both the default Lancer
 
 <br clear="right"/>
 
+---
+
 ## Skip resource consumption
 
 <img align="right" src="../img/ga-consume-optout.png" width="45%"/>
@@ -87,6 +107,8 @@ The counters are drawn to match whichever sheet you use, both the default Lancer
 Stop an item from spending its resources when it fires, per resource type. Toggle it from the item's popup in the [Token Action HUD](./HUD.md), or from **Extra Config** on the item sheet (same menu as [Add Extra](./INTERACTIVE_TOOLS.md#add-extra)).
 
 <br clear="right"/>
+
+---
 
 ## Reinforcement
 
@@ -100,11 +122,17 @@ When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a 
 
 <br clear="right"/>
 
+---
+
 ## Alt structure & stress
 
-Off by default, **`enableAltStruct`** swaps Lancer's structure and overheat rolls for the alternative ruleset, my implementation of BadIdeasBureau and Kaffo's [LANCER Alternative Structure](https://github.com/BadIdeasBureau/lancer-alt-structure). Both are rolled on keep-lowest tables: structure outcomes run from a glancing blow up to a crushing hit, with **HULL** checks and a system-trauma dialog where you tear off a weapon or system; stress outcomes cover power failure, emergency shunt, and reactor meltdown, gated by **ENGINEERING** checks and a meltdown countdown.
+Off by default, **`enableAltStruct`** swaps Lancer's structure and overheat rolls for the alternative ruleset, my implementation of BadIdeasBureau and Kaffo's [LANCER Alternative Structure](https://github.com/BadIdeasBureau/lancer-alt-structure).
+
+Both are rolled on keep-lowest tables: structure outcomes run from a glancing blow up to a crushing hit, with **HULL** checks and a system-trauma dialog where you tear off a weapon or system; stress outcomes cover power failure, emergency shunt, and reactor meltdown, gated by **ENGINEERING** checks and a meltdown countdown.
 
 **`enableOneStructNpc`** simplifies NPCs down to a single structure or stress: they're destroyed or Exposed outright instead of rolling.
+
+---
 
 ## Scan
 
@@ -117,6 +145,8 @@ LA's scan runs on both the **legacy** scan and the **native** Lancer-system scan
 
 Other LA features read that ownership to tell whether a player may see a target's data, so an NPC's information stays hidden until it's scanned. The [token stat hint](./TOKEN_DISPLAY.md) reads **UNKNOWN** until then, the custom [stat bars](./TOKEN_DISPLAY.md) can be set to appear only once scanned, and the HUD glossary panel lists what you've scanned.
 
+---
+
 ## Rest
 
 <img align="right" src="../img/ga-rest.png" width="40%"/>
@@ -125,9 +155,13 @@ Pick a mech or pilot and open Rest to spend its repair pool. You can pull repair
 
 <br clear="right"/>
 
+---
+
 ## Downtime
 
 A guided downtime flow: pick the pilot, choose one of the nine downtime activities, set an objective, and roll its skill trigger (with manual-roll and accuracy/difficulty overrides for the GM). The result card shows the outcome and can be logged to a downtime journal, with activity names shown as either in-world or rulebook terms.
+
+---
 
 ## Reserves
 

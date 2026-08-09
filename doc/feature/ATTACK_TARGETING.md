@@ -14,13 +14,19 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 **`targetToolCursor`** and **`rulerToolCursor`** swap the cursor and play a sound while the Select Target and Measure Distance tools are active.
 
+---
+
 ## The targeting buttons
 
 <img align="right" src="../img/at-buttons.png" width="45%"/>
 
-When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a tech attack gets **Sensors N**, and an AoE weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation aware / Auto elevation / Propagation** toggle row below them. Click a button to start picking, click it again (or Esc) to stop.
+When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a tech attack gets **Sensors N**, and an AoE weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation aware / Auto elevation / Propagation** toggle row below them.
+
+Click a button to start picking, click it again (or Esc) to stop.
 
 <br clear="right"/>
+
+---
 
 ## Single-target picking
 
@@ -36,6 +42,8 @@ Where tokens overlap, a small picker lists them to choose from.
 
 <br clear="right"/>
 
+---
+
 ## Hit chance and damage
 
 <img align="right" src="../vid/at-hitchance.gif" width="45%"/>
@@ -43,6 +51,8 @@ Where tokens overlap, a small picker lists them to choose from.
 Each targeted token gets a live **hit chance** and **damage range** label. **`targetInfoDisplay`** sets who sees them: **No**, **GM only** (default), or **GM and players**.
 
 <br clear="right"/>
+
+---
 
 ## Throwing
 
@@ -58,6 +68,8 @@ Rolling the attack then lands the weapon on the field as a token and disables it
 
 <br clear="right"/>
 
+---
+
 ## Area templates
 
 <img align="right" src="../img/at-area.png" width="45%"/>
@@ -65,6 +77,8 @@ Rolling the attack then lands the weapon on the field as a token and disables it
 Placing a template catches every token inside it as a target. **Blast** drops a disk on the hovered cell, **Burst** centers on the token under the cursor, and **Cone** and **Line** aim from the cursor and rotate with **Ctrl + mouse-wheel** (a line also tilts into a slope). Hold **Shift** while placing to stack more shapes onto the same target set.
 
 <br clear="right"/>
+
+---
 
 ## Elevation, auto-elevation, propagation
 
@@ -74,9 +88,13 @@ The toggle row controls the 3-D side. **Elevation aware** catches tokens by vert
 
 <br clear="right"/>
 
+---
+
 ## Keybinds
 
 **E / Q** raise and lower the area's elevation, **W / S** tilt a line, and **Ctrl + wheel** rotates a cone or line. All are rebindable under Configure Controls → Lancer Automations.
+
+---
 
 ## After the roll
 
@@ -94,7 +112,9 @@ Press **Shift+R** to toggle a standalone measure toolbar, docked above the macro
 - **Range** - pulse the reference token's range on the canvas: threat, sensors, reach, weapon, or a manual radius. The reference is whatever you have selected.
 - **Move** - the reference token's movement reach, in the ruler's speed tiers.
 
-**Clear** wipes the current placements; the **✕** (or Shift+R again) closes the toolbar. Closing hides the marks and toolbar but keeps them, so reopening picks up where you left off. Hover the **?** for the keybinds: Ctrl+wheel rotates, Shift+wheel resizes, Q/E shifts elevation, W/S tilts a line, and Escape stops placing.
+**Clear** wipes the current placements; the **✕** (or Shift+R again) closes the toolbar. Closing hides the marks and toolbar but keeps them, so reopening picks up where you left off.
+
+Hover the **?** for the keybinds: Ctrl+wheel rotates, Shift+wheel resizes, Q/E shifts elevation, W/S tilts a line, and Escape stops placing.
 
 Move mode works for one token or a whole selection at once:
 

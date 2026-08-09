@@ -14,11 +14,15 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 <br clear="right"/>
 
+---
+
 ## The Lancer ruler
 
 <img align="right" src="../img/mv-ruler.png" width="45%"/>
 
-Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it). While you drag a token, the ruler shows the **movement cost** and colors the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colors. All five colors are set in **Ruler Speed Colors**.
+Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it).
+
+While you drag a token, the ruler shows the **movement cost** and colors the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colors. All five colors are set in **Ruler Speed Colors**.
 
 Each waypoint label shows the running cost, the delta from your last click, an ↑/↓ elevation change, and a ⚠ marker on cells that cross difficult terrain. Turn on **Per-step Ruler Path** (`rulerPerStepRender`) to draw the path through each grid cell instead of a straight line.
 
@@ -27,6 +31,8 @@ Status effects shape the tiers: **prone** halves speed, **slow** removes boost a
 <br clear="right"/>
 
 <img src="../vid/mv-ruler-demo.gif" width="70%"/>
+
+---
 
 ## How movement cost is figured
 
@@ -43,6 +49,8 @@ The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/F
 
 <img src="../vid/mv-difficult-terrain.gif" width="70%"/>
 
+---
+
 ## Elevation
 
 <img align="right" src="../img/mv-elevation.png" width="45%"/>
@@ -55,6 +63,8 @@ With Terrain Height Tools, the token also **auto-elevates** to sit on the terrai
 
 <br clear="right"/>
 
+---
+
 ## Movement types and the wheel
 
 <img align="right" src="../img/mv-wheel.png" width="45%"/>
@@ -64,6 +74,8 @@ A token moves with a **movement type**: walk, fly, crawl (only while prone), for
 Press **M** for the **movement wheel**: outside a drag it opens a radial picker; during a drag it cycles the active type without moving the token.
 
 <br clear="right"/>
+
+---
 
 ## Keybinds
 
@@ -76,6 +88,8 @@ All four are rebindable under **Configure Controls → Lancer Automations**.
 | **M** | **Movement wheel** - open the picker, or cycle the type mid-drag. |
 | **Q / E** | During a drag, raise / lower elevation by one. |
 
+---
+
 ## Tactical distance
 
 <img align="right" src="../img/mv-tactical.png" width="45%"/>
@@ -83,6 +97,8 @@ All four are rebindable under **Configure Controls → Lancer Automations**.
 While you drag a token, **Tactical Distance Labels** show the distance and elevation delta to every other visible token, right under each one. Set it to **off**, **only in combat**, or **always** (`enableTacticalDistance`).
 
 <br clear="right"/>
+
+---
 
 ## History and revert
 

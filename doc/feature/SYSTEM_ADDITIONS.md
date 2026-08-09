@@ -10,9 +10,13 @@ A few changes Lancer Automations makes to the Lancer system and its sheets.
 
 <img align="right" src="../img/sa-item-disabled.png" width="45%"/>
 
-Right-click a mech weapon, mech system, NPC feature, or weapon mod on its sheet to **disable** it. A disabled item dims with a power-off icon and is blocked from every attack and activation flow; a Full Repair clears the flag. The throw-weapon automation uses it to disable a weapon while it's out on the field.
+Right-click a mech weapon, mech system, NPC feature, or weapon mod on its sheet to **disable** it. A disabled item dims with a power-off icon and is blocked from every attack and activation flow; a Full Repair clears the flag.
+
+The throw-weapon automation uses it to disable a weapon while it's out on the field.
 
 <br clear="right"/>
+
+---
 
 ## Ammo
 
@@ -28,6 +32,8 @@ A system's ammo is set up on its item sheet. The **Apply Fixes (LCP Data)** tool
 
 <br clear="right"/>
 
+---
+
 ## Extra status effects
 
 <img align="right" src="../img/sa-statuses.png" width="45%"/>
@@ -36,17 +42,28 @@ A system's ammo is set up on its item sheet. The **Apply Fixes (LCP Data)** tool
 
 These are mine and predate the module by years: states LCPs and alternate structure tables describe but never register as statuses. Safe to leave off, automations that use them just skip.
 
-Some carry mechanics: **Resist All** sets every resistance, **Shredded** zeroes armor + resistances, **Throttled** pre-checks Half Damage on the damage card. Dead Rings LCP: **Stripped** zeroes armor, **Staggered** locks actions.
+Some carry mechanics:
+
+- **Resist All** sets every resistance
+- **Shredded** zeroes armor + resistances
+- **Throttled** pre-checks Half Damage on the damage card
+- Dead Rings LCP: **Stripped** zeroes armor, **Staggered** locks actions
 
 <br clear="right"/>
+
+---
 
 ## Permanent statuses
 
 A status whose duration is set to **permanent** (in the [Effect Manager](./EFFECTS_AND_BONUSES.md)) survives a Full Repair.
 
+---
+
 ## Extra trackable attributes
 
 The module exposes **move** and **reaction** from the action tracker, plus **infection**, as token resource-bar options in the Token Config Resources tab.
+
+---
 
 ## Self-heat resistance
 

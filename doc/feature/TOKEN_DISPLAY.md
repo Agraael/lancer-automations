@@ -16,6 +16,8 @@ Turn the bars on with **`tokenStatBar`** (Enable Custom Token Stat Bars). It nee
 
 <br clear="right"/>
 
+---
+
 ## What the bars show
 
 <img align="right" src="../vid/td-bars.gif" width="45%"/>
@@ -31,6 +33,8 @@ Under the token, depending on the actor type:
 Elevation also gets a small badge at the token's corner (up/down arrow with the value) instead of Foundry's default tooltip. Numeric values next to the bars can be turned off with **Show Numeric Values on Bars**, and the status-effect icons on the token are scaled by **Effect Icon Scale** to make room.
 
 <br clear="right"/>
+
+---
 
 ## Visibility and defaults
 
@@ -50,6 +54,8 @@ Hold **Alt** to peek: while held, the bars show on every visible token regardles
 
 <br clear="right"/>
 
+---
+
 ## Extra bars
 
 <img align="right" src="../img/td-extra-bars.png" width="45%"/>
@@ -67,13 +73,19 @@ Set on an item or actor instead of one token, an extra bar becomes a template th
 
 <br clear="right"/>
 
+---
+
 ## Auto talent counters
 
 <img align="right" src="../img/td-talent-counters.png" width="45%"/>
 
-With **Auto-add Talent Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section. A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-Injected** button rebuilds them from its current talents and frame.
+With **Auto-add Talent Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section.
+
+A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-Injected** button rebuilds them from its current talents and frame.
 
 <br clear="right"/>
+
+---
 
 ## Maintenance buttons
 
@@ -82,15 +94,21 @@ In the Custom Token Stat Bars settings:
 - **Apply Defaults to Current Scene** - push the world default flags (hidden, combat-only, row height, visibility) onto every Lancer token on the active scene, clearing per-token overrides.
 - **Reinject Auto-Bars on All Tokens** - wipe and rebuild the auto-injected talent/frame bars across every scene token and actor prototype in the world.
 
+---
+
 ## Token stat hint
 
 <img align="right" src="../img/td-stat-hint.png" width="45%"/>
 
 A hover popup with a token's full stats, enabled with **`tokenStatHintEnabled`**. Settings cover the hover **delay**, the popup **scale**, whether it shows for the token you control, and whether it's **combat only**.
 
-For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned). A scanned token (or the GM view) shows the full stat block; an unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
+For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned).
+
+A scanned token (or the GM view) shows the full stat block; an unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
 
 <br clear="right"/>
+
+---
 
 ## Half-size tokens
 

@@ -206,6 +206,11 @@
     align-items: center;
 }
 
+#la-hud.la-hud-unlocked .la-hud-col-label,
+#la-hud.la-hud-unlocked .la-hud-token-title {
+    cursor: grab;
+}
+
 #la-hud {
     position: fixed;
     z-index: 70;

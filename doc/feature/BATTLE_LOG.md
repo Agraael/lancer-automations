@@ -16,27 +16,51 @@ When a combat ends, the GM gets a card first. Pick the outcome, **SUCCESS**, **P
 
 The rest is in the **Battle Log** settings tab: **Enable Battle Log**, **Disable awards**, and **Theme music** (a default, or one per outcome).
 
+---
+
 ## A word on accuracy
 
 Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item the moment it hits the chat, that is what it reads as "used."
 
 Past that it tracks kills, assists, accuracy, damage, movement, and saves, per token, so every grunt in a squad gets its own line.
 
+---
+
 ## Squad
 
 <img src="../vid/bl-squad.gif" width="80%"/>
 
-One card per pilot. Each shows the mech's HP and heat, structure and stress pips, damage dealt and taken (physical/heat split in the tooltip), distance moved, kills and assists, favorite weapon and most-used action, save rates, repairs spent, core power used or held, and any gear lost. Accuracy has its own breakdown: ranged, melee, and tech hit rates, crits, and how much you dodged or blocked.
+One card per pilot. Each shows:
+
+- the mech's HP and heat, structure and stress pips
+- damage dealt and taken (physical/heat split in the tooltip)
+- distance moved, kills and assists
+- favorite weapon and most-used action
+- save rates, repairs spent, core power used or held, and any gear lost
+
+Accuracy has its own breakdown: ranged, melee, and tech hit rates, crits, and how much you dodged or blocked.
 
 ### Awards
 
-Up top sit the awards, medals for how the fight went: most kills (**EXECUTIONER**), most physical damage (**HEAVY HITTER**), most assists (**SUPPORT**), best accuracy (**SHARPSHOOTER**), most attacks dodged (**GHOST**), and more. Each has a threshold, so it only shows when someone earns it. The **MVP** goes to whoever collected the most, unless the GM picks by hand. Not your thing? Flip **Disable awards**.
+Up top sit the awards, medals for how the fight went:
+
+- most kills (**EXECUTIONER**)
+- most physical damage (**HEAVY HITTER**)
+- most assists (**SUPPORT**)
+- best accuracy (**SHARPSHOOTER**)
+- most attacks dodged (**GHOST**), and more
+
+Each has a threshold, so it only shows when someone earns it. The **MVP** goes to whoever collected the most, unless the GM picks by hand. Not your thing? Flip **Disable awards**.
+
+---
 
 ## Encounter
 
 <img src="../vid/bl-encounter.gif" width="80%"/>
 
 The enemy side. Each hostile gets a card: whether it died and on which round, who landed the kill and who assisted, and its tier, size, and frame. The nastiest ones pick up a **NEMESIS** or **TOP THREAT** badge.
+
+---
 
 ## Telemetry
 

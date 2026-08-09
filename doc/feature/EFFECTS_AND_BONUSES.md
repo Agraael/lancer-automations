@@ -23,6 +23,8 @@ Its tabs:
 
 Everything here can also be driven from automation code; signatures are in [API_EFFECTS.md](../API_EFFECTS.md).
 
+---
+
 ## Standard tab
 
 <img align="right" src="../img/em-standard.png" width="55%"/>
@@ -38,13 +40,19 @@ Hover a status for its description. Save common setups as **presets** from the b
 
 <br clear="right"/>
 
+---
+
 ## Custom tab
 
 <img align="right" src="../img/em-custom.png" width="55%"/>
 
-This tab appears only when the **Temporary Custom Statuses** module is active, as the front-end for its custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes). A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
+This tab appears only when the **Temporary Custom Statuses** module is active, as the front-end for its custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes).
+
+A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
 
 <br clear="right"/>
+
+---
 
 ## Consuming effects
 
@@ -58,6 +66,8 @@ Most triggers offer **filters** so the charge only burns in the right situation 
 - **boost only**, for move triggers.
 
 For anything the filters can't express, write a short **evaluate function** that decides whether a given event should consume a charge. It receives the trigger type, the trigger data, the effect's token, and the effect object.
+
+---
 
 ## Bonuses
 
@@ -101,6 +111,8 @@ Accuracy and difficulty bonuses show up in the roll HUD before you confirm; dama
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
 
+---
+
 ## Attach to items and prototype actors
 
 <img align="right" src="../img/em-item-template.png" width="45%"/>
@@ -113,6 +125,8 @@ When the owner is a tiered NPC, an entry can be **tier-gated** so it only applie
 
 <br clear="right"/>
 
+---
+
 ## Immunity and the choice card
 
 <img align="right" src="../img/em-immunity-card.png" width="53%"/>
@@ -121,11 +135,15 @@ When a token holds an immunity bonus and takes matching damage, a **choice card*
 
 <br clear="right"/>
 
+---
+
 ## Manage tab
 
 <img align="right" src="../img/em-manage.png" width="55%"/>
 
-See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Duplicate module effects that share a name collapse into one icon with a count badge.
+See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included.
+
+Duplicate module effects that share a name collapse into one icon with a count badge.
 
 <br clear="right"/>
 

@@ -100,41 +100,41 @@ This README is the hub. The detailed guides live under `doc/`.
 
 | Guide | Covers |
 |-------|--------|
-| [`doc/feature/AUTOMATION_ENGINE.md`](doc/feature/AUTOMATION_ENGINE.md) | The Activation Manager, reaction config, how activations run, the popup, and startup scripts |
-| [`doc/feature/EFFECTS_AND_BONUSES.md`](doc/feature/EFFECTS_AND_BONUSES.md) | Effect Manager, the bonus types, consumption, immunity, attach to items and prototype actors |
-| [`doc/feature/HUD.md`](doc/feature/HUD.md) | The Token Action HUD: panels, action menus, search, favorites, range previews |
-| [`doc/feature/TOKEN_DISPLAY.md`](doc/feature/TOKEN_DISPLAY.md) | Custom token stat bars (Bar Brawl replacement), extra bars, and the token stat hint |
-| [`doc/feature/MOVEMENT.md`](doc/feature/MOVEMENT.md) | The Lancer ruler, movement cost, elevation, movement types, the wheel, keybinds, history and revert |
-| [`doc/feature/MOVEMENT_ADVANCED.md`](doc/feature/MOVEMENT_ADVANCED.md) | Advanced/beta: boost detection, the movement cap and offer cards, trigger-boundary splits, debug |
-| [`doc/feature/ISOMETRIC.md`](doc/feature/ISOMETRIC.md) | Isometric compatibility: elevation animation and the `iso.*` display toggles |
-| [`doc/feature/INTERACTIVE_TOOLS.md`](doc/feature/INTERACTIVE_TOOLS.md) | Choice and vote cards, the canvas tools, deployables, selectors, Add Extra on items |
-| [`doc/feature/ATTACK_TARGETING.md`](doc/feature/ATTACK_TARGETING.md) | Target / AoE picking from the attack HUD: single target, blast/burst/cone/line, elevation, propagation |
-| [`doc/feature/GAMEPLAY_AUTOMATION.md`](doc/feature/GAMEPLAY_AUTOMATION.md) | Built-in actions/reactions, overwatch, grapple, stabilize, action limits, usage tracking, alt structure, scan, rest, downtime, reserves |
-| [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md) | Status visual effects, action FX, the JB2A free-pack fallback, and the sound system |
-| [`doc/feature/VISION.md`](doc/feature/VISION.md) | Vision from edge, token-blocks-LOS, the Lancer detection modes |
-| [`doc/feature/WRECK.md`](doc/feature/WRECK.md) | The wreck system: spawning, per-category, per-token config, terrain, resurrect |
-| [`doc/feature/BATTLE_LOG.md`](doc/feature/BATTLE_LOG.md) | The end-of-combat recap: the GM outcome card, squad / encounter / telemetry tabs, awards and MVP |
-| [`doc/feature/SYSTEM_ADDITIONS.md`](doc/feature/SYSTEM_ADDITIONS.md) | Item disabled, ammo, extra status effects, permanent statuses, trackable attributes |
-| [`doc/feature/SETUP_AND_TOOLS.md`](doc/feature/SETUP_AND_TOOLS.md) | Content packs, actor↔token sync, maintenance and repair, news, tours, scene-config tools |
-| [`doc/feature/INFECTION.md`](doc/feature/INFECTION.md) | The Infection damage type: damage, the end-of-turn check, the sheet card |
-| [`doc/feature/NPC_EXAMPLES.md`](doc/feature/NPC_EXAMPLES.md) | Worked NPC automation examples (Dispersal Shield, Smoke Launcher, and more) |
-| [`doc/MACROS.md`](doc/MACROS.md) | The built-in `L.A -` macro compendium |
+| [Automation Engine](doc/feature/AUTOMATION_ENGINE.md) | The Activation Manager, reaction config, how activations run, the popup, and startup scripts |
+| [Effects & Bonuses](doc/feature/EFFECTS_AND_BONUSES.md) | Effect Manager, the bonus types, consumption, immunity, attach to items and prototype actors |
+| [Token Action HUD](doc/feature/HUD.md) | The Token Action HUD: panels, action menus, search, favorites, range previews |
+| [Token Display](doc/feature/TOKEN_DISPLAY.md) | Custom token stat bars (Bar Brawl replacement), extra bars, and the token stat hint |
+| [Movement](doc/feature/MOVEMENT.md) | The Lancer ruler, movement cost, elevation, movement types, the wheel, keybinds, history and revert |
+| [Movement Advanced](doc/feature/MOVEMENT_ADVANCED.md) | Advanced/beta: boost detection, the movement cap and offer cards, trigger-boundary splits, debug |
+| [Isometric](doc/feature/ISOMETRIC.md) | Isometric compatibility: elevation animation and the `iso.*` display toggles |
+| [Interactive Tools](doc/feature/INTERACTIVE_TOOLS.md) | Choice and vote cards, the canvas tools, deployables, selectors, Add Extra on items |
+| [Attack Targeting](doc/feature/ATTACK_TARGETING.md) | Target / AoE picking from the attack HUD: single target, blast/burst/cone/line, elevation, propagation |
+| [Gameplay Automation](doc/feature/GAMEPLAY_AUTOMATION.md) | Built-in actions/reactions, overwatch, grapple, stabilize, action limits, usage tracking, alt structure, scan, rest, downtime, reserves |
+| [FX and Sounds](doc/feature/FX_AND_SOUNDS.md) | Status visual effects, action FX, the JB2A free-pack fallback, and the sound system |
+| [Vision](doc/feature/VISION.md) | Vision from edge, token-blocks-LOS, the Lancer detection modes |
+| [Wrecks](doc/feature/WRECK.md) | The wreck system: spawning, per-category, per-token config, terrain, resurrect |
+| [Battle Log](doc/feature/BATTLE_LOG.md) | The end-of-combat recap: the GM outcome card, squad / encounter / telemetry tabs, awards and MVP |
+| [System Additions](doc/feature/SYSTEM_ADDITIONS.md) | Item disabled, ammo, extra status effects, permanent statuses, trackable attributes |
+| [Setup & Tools](doc/feature/SETUP_AND_TOOLS.md) | Content packs, actor↔token sync, maintenance and repair, news, tours, scene-config tools |
+| [Infection](doc/feature/INFECTION.md) | The Infection damage type: damage, the end-of-turn check, the sheet card |
+| [NPC Examples](doc/feature/NPC_EXAMPLES.md) | Worked NPC automation examples (Dispersal Shield, Smoke Launcher, and more) |
+| [Macros](doc/MACROS.md) | The built-in `L.A -` macro compendium |
 
 **API and engine reference** (for writing automation code):
 
 | Doc | Covers |
 |-----|--------|
-| [`doc/AUTOMATION_SYSTEM.md`](doc/AUTOMATION_SYSTEM.md) | How the automation engine works end to end |
-| [`doc/API_REFERENCE.md`](doc/API_REFERENCE.md) | API hub, fundamentals, trigger data schemas |
-| [`doc/API_COMBAT.md`](doc/API_COMBAT.md) | Combat & execution flows, weapon/item details |
-| [`doc/API_SPATIAL.md`](doc/API_SPATIAL.md) | Distance & grid math, disposition, cell data |
-| [`doc/API_EFFECTS.md`](doc/API_EFFECTS.md) | Effects, bonuses, immunity, flow injection |
-| [`doc/API_INTERACTIVE.md`](doc/API_INTERACTIVE.md) | Cards, tokens, zones, deployables, hard cover |
-| [`doc/API_ITEMS.md`](doc/API_ITEMS.md) | Item & actor flags, tags, resources, auto-consume |
-| [`doc/API_HUD.md`](doc/API_HUD.md) | Injecting extra actions into the TAH |
-| [`doc/API_MOVEMENT.md`](doc/API_MOVEMENT.md) | Movement tracking, history, cap |
-| [`doc/API_TOKEN_DISPLAY.md`](doc/API_TOKEN_DISPLAY.md) | Extra token stat bars |
-| [`doc/API_HOWTO.md`](doc/API_HOWTO.md) | Recipes: registering activations, helpers, GAA wrapper |
+| [Automation System](doc/AUTOMATION_SYSTEM.md) | How the automation engine works end to end |
+| [API Reference](doc/API_REFERENCE.md) | API hub, fundamentals, trigger data schemas |
+| [API - Combat](doc/API_COMBAT.md) | Combat & execution flows, weapon/item details |
+| [API - Spatial](doc/API_SPATIAL.md) | Distance & grid math, disposition, cell data |
+| [API - Effects](doc/API_EFFECTS.md) | Effects, bonuses, immunity, flow injection |
+| [API - Interactive](doc/API_INTERACTIVE.md) | Cards, tokens, zones, deployables, hard cover |
+| [API - Items](doc/API_ITEMS.md) | Item & actor flags, tags, resources, auto-consume |
+| [API - HUD](doc/API_HUD.md) | Injecting extra actions into the TAH |
+| [API - Movement](doc/API_MOVEMENT.md) | Movement tracking, history, cap |
+| [API - Token Display](doc/API_TOKEN_DISPLAY.md) | Extra token stat bars |
+| [API - How-To](doc/API_HOWTO.md) | Recipes: registering activations, helpers, GAA wrapper |
 
 </details>
 
@@ -227,6 +227,8 @@ I also ship my personal set of activations, but that's separate: just my own gam
 
 <br clear="right"/>
 
+---
+
 ### Effect Manager & Bonuses
 
 <img align="right" src="doc/vid/feature-effect-manager.gif" width="43%"/>
@@ -239,6 +241,8 @@ It manages effects, custom effects, and many bonuses and status effects so you c
 
 <br clear="right"/>
 
+---
+
 ### Token Action HUD
 
 <img align="right" src="doc/vid/feature-tah.gif" width="60%"/>
@@ -248,6 +252,8 @@ The TAH, or Token Action HUD, is a custom-built action menu attached right to yo
 → Full guide: [`doc/feature/HUD.md`](doc/feature/HUD.md)
 
 <br clear="right"/>
+
+---
 
 ### Custom Token Stat Bars
 
@@ -263,6 +269,8 @@ You can add extra custom bars per token, and talent counters can be injected aut
 
 <br clear="right"/>
 
+---
+
 ### Movement & the Lancer Ruler
 
 <img align="right" src="doc/vid/feature-ruler.gif" width="53%"/>
@@ -277,6 +285,8 @@ The same system powers boost detection, cancelling movement through engagement, 
 
 <br clear="right"/>
 
+---
+
 ### Isometric handling
 
 <img align="right" src="doc/img/feature-isometric.png" width="53%"/>
@@ -287,11 +297,15 @@ It animates token elevation in iso view and adapts its own UI (stat bars, tactic
 
 Each piece can be toggled from the Isometric settings tab.
 
-Fair warning though: the module keeps growing, and these isometric adaptations aren't enough to cover all of it. In time Lancer Automations will need every visual feature brought fully into 3D, and that's a long road. Honestly, I don't play isometric myself, so it's lower on my priority list for now. What exists works, but some features built to handle 3D elevation on a flat grid don't have an isometric counterpart yet.
+Fair warning though: the module keeps growing, and these isometric adaptations aren't enough to cover all of it. In time Lancer Automations will need every visual feature brought fully into 3D, and that's a long road.
+
+Honestly, I don't play isometric myself, so it's lower on my priority list for now. What exists works, but some features built to handle 3D elevation on a flat grid don't have an isometric counterpart yet.
 
 → Full guide: [`doc/feature/ISOMETRIC.md`](doc/feature/ISOMETRIC.md)
 
 <br clear="right"/>
+
+---
 
 ### Interactive Tools
 
@@ -305,6 +319,8 @@ Lancer Automations provides many of them to build multi-step actions: applying k
 
 <br clear="right"/>
 
+---
+
 ### Advanced Targeting and Measurement
 
 <img align="right" src="doc/vid/feature-attack-targeting.gif" width="53%"/>
@@ -314,6 +330,8 @@ An upgrade to the Lancer system's targeting flow: choose your target or place a 
 → Full guide: [`doc/feature/ATTACK_TARGETING.md`](doc/feature/ATTACK_TARGETING.md)
 
 <br clear="right"/>
+
+---
 
 ### Gameplay Automation
 
@@ -327,6 +345,8 @@ It also handles skill checks and contests, and tracks usage on a per-turn, per-r
 
 <br clear="right"/>
 
+---
+
 ### FX and Sounds
 
 <img align="right" src="doc/img/feature-fx.png" width="53%"/>
@@ -338,6 +358,8 @@ Sounds and graphical effects run throughout the module, and almost all of them c
 → Full guide: [`doc/feature/FX_AND_SOUNDS.md`](doc/feature/FX_AND_SOUNDS.md)
 
 <br clear="right"/>
+
+---
 
 ### Vision
 
@@ -355,6 +377,8 @@ There are also performance tools for light and movement, and a system that emula
 
 <br clear="right"/>
 
+---
+
 ### Wrecks
 
 <img align="right" src="doc/img/feature-wreck.png" width="53%"/>
@@ -367,6 +391,8 @@ Art, FX, sound, and scale can be overridden per token.
 
 <br clear="right"/>
 
+---
+
 ### Battle Log
 
 <img align="right" src="doc/img/feature-battlelog.png" width="53%"/>
@@ -376,6 +402,8 @@ When a combat ends the module tracks the whole fight and hands you a recap, XCom
 → Full guide: [`doc/feature/BATTLE_LOG.md`](doc/feature/BATTLE_LOG.md)
 
 <br clear="right"/>
+
+---
 
 ### System Additions
 
@@ -388,6 +416,8 @@ The GM setup and maintenance tools have their own guide.
 → Full guide: [`doc/feature/SYSTEM_ADDITIONS.md`](doc/feature/SYSTEM_ADDITIONS.md) ・ setup & tools: [`doc/feature/SETUP_AND_TOOLS.md`](doc/feature/SETUP_AND_TOOLS.md)
 
 <br clear="right"/>
+
+---
 
 ### Infection damage type
 

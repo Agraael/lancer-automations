@@ -17,6 +17,8 @@ Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near t
 
 <br clear="right"/>
 
+---
+
 ## Settings
 
 <img align="right" src="../img/hud-settings.png" width="35%"/>
@@ -24,6 +26,8 @@ Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near t
 The **Token Action HUD** tab.
 
 <br clear="right"/>
+
+---
 
 ## The header
 
@@ -33,6 +37,8 @@ The bar at the top of the HUD shows:
 - a **combat toggle** (the swords icon) to add or remove the token from combat,
 - an optional **team / disposition stripe** down the edge (`showDisposition`; uses Token Factions teams if installed, otherwise the disposition).
 
+---
+
 ## Stats bar
 
 <img align="right" src="../img/hud-stats.png" width="35%"/>
@@ -40,6 +46,8 @@ The bar at the top of the HUD shows:
 A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it); then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
 
 <br clear="right"/>
+
+---
 
 ## Combat bar
 
@@ -53,6 +61,8 @@ Appears while combat is running:
 - Buttons to **reset actions**, **revert your last move**, and **clear movement history** (movement itself lives in [MOVEMENT.md](./MOVEMENT.md)).
 
 <br clear="right"/>
+
+---
 
 ## Action menus
 
@@ -80,6 +90,8 @@ Toggle `showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, *
 
 See also: movement actions → [MOVEMENT.md](./MOVEMENT.md), resurrect → [WRECK.md](./WRECK.md), reinforcement → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md), scan → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).
 
+---
+
 ## Item interaction
 
 <img align="right" src="../img/hud-popup.png" width="35%"/>
@@ -102,6 +114,8 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 **Disable / destroy toggles** appear on items that support them (grayed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded; clicking still fires it with a warning).
 
+---
+
 ## Status panel
 
 <img align="right" src="../img/hud-status-panel.png" width="35%"/>
@@ -115,6 +129,8 @@ Search and toggle statuses on a grid: left-click adds or increments a stack, rig
 
 <br clear="right"/>
 
+---
+
 ## Log panel
 
 <img align="right" src="../img/hud-log.png" width="35%"/>
@@ -123,6 +139,8 @@ The token's last ~40 action cards, newest first. Click one to expand the full ca
 
 <br clear="right"/>
 
+---
+
 ## Glossary panel
 
 <img align="right" src="../img/hud-glossary.png" width="35%"/>
@@ -130,6 +148,8 @@ The token's last ~40 action cards, newest first. Click one to expand the full ca
 The scans you've run, shown with portraits and names and searchable by name. Click one to open its scan journal entry. (The scan tools themselves are in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).)
 
 <br clear="right"/>
+
+---
 
 ## Search, favorites, macros, and HUD position
 
@@ -157,6 +177,8 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
+---
+
 ## Keyboard control
 
 With **`tah.keyboardNav`** on (default), you can drive the whole HUD from the keyboard instead of the mouse:
@@ -166,6 +188,8 @@ With **`tah.keyboardNav`** on (default), you can drive the whole HUD from the ke
 - The cursor clears after a spell of no input; **`tah.keyboardNavResetDelay`** sets how long it lingers.
 
 The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token; turn on **`tah.preventWasdMovement`** to block that during nav.
+
+---
 
 ## Range previews and measures
 
@@ -182,6 +206,8 @@ The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry'
 - **Area Elevation Aware** (`areaElevationAware`) - default for area pickers (blast etc.); when on, areas become 3D volumes that clip to terrain.
 
 <br clear="right"/>
+
+---
 
 ## Narrative mode
 

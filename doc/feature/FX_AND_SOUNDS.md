@@ -15,23 +15,39 @@ The cosmetic and feedback layer: visual effects on statuses, animations when act
 
 The **Statuses & FX** tab for the visuals, and the **Sounds** tab for audio.
 
+---
+
 ## Status effect visuals
 
 <img align="right" src="../img/fs-status-fx.png" width="45%"/>
 
-Each status gets a Token Magic FX overlay (Token Magic FX must be installed), applied and cleared with the status itself: a danger-zone glow, a burn shimmer, an overshield outline, chains for immobilized, film grain for stunned, and so on. Every one has its own toggle under **Visual effects**, all under a single master switch.
+Each status gets a Token Magic FX overlay (Token Magic FX must be installed), applied and cleared with the status itself:
+
+- a danger-zone glow
+- a burn shimmer
+- an overshield outline
+- chains for immobilized
+- film grain for stunned, and so on
+
+Every one has its own toggle under **Visual effects**, all under a single master switch.
 
 <br clear="right"/>
 
 <img align="right" src="../img/fs-lowquality.png" width="45%"/>
 
-**Low-quality mode** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions; the glow and bloom filters they normally use are GPU-hungry. **Remove statuses on death** clears a token's statuses when its structure hits 0.
+**Low-quality mode** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions; the glow and bloom filters they normally use are GPU-hungry.
+
+**Remove statuses on death** clears a token's statuses when its structure hits 0.
 
 <br clear="right"/>
+
+---
 
 ## Auto-status icons
 
 Some statuses are applied straight from the actor's numbers: the danger-zone overlay at heat ≥ 50%, plus burn, overshield, infection, and cascading whenever those values rise above zero. Each has its own toggle under **Auto-status icons**.
+
+---
 
 ## Guardian / Bulwark aura
 
@@ -41,13 +57,24 @@ A soft aura is drawn around tokens with **Guardian** or **Bulwark**. **`guardian
 
 <br clear="right"/>
 
+---
+
 ## Action FX
 
 <img align="right" src="../img/fs-action-fx.png" width="45%"/>
 
-When an action runs, a matching animation plays through Sequencer: a slash on a skirmish, a downdraft on boost, an impact on ram, smoke on hide, and so on. Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer Weapon FX installed; without either, they're skipped.
+When an action runs, a matching animation plays through Sequencer:
+
+- a slash on a skirmish
+- a downdraft on boost
+- an impact on ram
+- smoke on hide, and so on
+
+Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer Weapon FX installed; without either, they're skipped.
 
 <br clear="right"/>
+
+---
 
 ## Damage feedback
 
@@ -55,16 +82,33 @@ When an action runs, a matching animation plays through Sequencer: a slash on a 
   <video src="https://raw.githubusercontent.com/Agraael/lancer-automations/main/doc/vid/fs-damage-feedback.mp4" controls muted loop width="70%"></video>
 </p>
 
-Applying damage plays an impact sprite and sound on the target per damage type: one impact per 3 damage inflicted, staggered, each at a random spot on the token. Armor-absorbed damage plays a clank instead, and overshield hits have their own impact.
+Applying damage plays an impact sprite and sound on the target per damage type: one impact per 3 damage inflicted, staggered, each at a random spot on the token.
+
+Armor-absorbed damage plays a clank instead, and overshield hits have their own impact.
+
+---
 
 ## JB2A free-pack fallback
 
-Many of the action animations use JB2A. If you only have the free pack, the module substitutes free-pack equivalents (tinting them to match) so the effects still play instead of erroring on a missing asset. **`debugForceJb2aFree`** forces that path even when the Patreon pack is installed.
+Many of the action animations use JB2A. If you only have the free pack, the module substitutes free-pack equivalents (tinting them to match) so the effects still play instead of erroring on a missing asset.
+
+**`debugForceJb2aFree`** forces that path even when the Patreon pack is installed.
+
+---
 
 ## Sounds
 
 <img align="right" src="../img/fs-sounds.png" width="45%"/>
 
-Most things at the table make a sound: HUD clicks, token hover, select and target, damage by type, stat changes, action FX, and wreck explosions. Each family has a master volume, and every event inside it can be muted on its own, click a toggle to preview it.
+Most things at the table make a sound:
+
+- HUD clicks
+- token hover, select and target
+- damage by type
+- stat changes
+- action FX
+- wreck explosions
+
+Each family has a master volume, and every event inside it can be muted on its own, click a toggle to preview it.
 
 <br clear="right"/>

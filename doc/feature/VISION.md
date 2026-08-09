@@ -14,6 +14,8 @@ The **Vision** tab.
 
 <br clear="right"/>
 
+---
+
 ## Lancer line of sight
 
 <img align="right" src="../img/vis-los.gif" width="45%"/>
@@ -21,6 +23,8 @@ The **Vision** tab.
 **`lancerLos`** emulates Lancer's line-of-sight rules: a token behind a wall stays visible if another token can see it. Turn on **`lancerLosDebug`** to see how it resolves.
 
 <br clear="right"/>
+
+---
 
 ## Vision from edge
 
@@ -32,6 +36,8 @@ Tune it with the **sample density** (`visionFromEdgeSampleMode`: 4 corners, 8 pe
 
 <br clear="right"/>
 
+---
+
 ## Token blocks line of sight
 
 <img align="right" src="../img/vis-blocks-los.png" width="45%"/>
@@ -42,9 +48,15 @@ With **Wall Height** installed it's elevation-aware: the blocking edge sits slig
 
 <br clear="right"/>
 
+---
+
 ## Token height (Wall Height)
 
-For the elevation-aware blocking above to work, tokens need a height. **Auto Token Height** (`autoTokenHeight`, in the Token Display settings) sets each token's Wall-Height height to its size, so it peeks over walls and tokens of its own size. **`autoTokenHeightVehicleSquad`** lowers that for vehicles and squads (my own interpretation of their heights, not an official rule), and a **Sync All Token Heights** button writes it onto every existing actor and token at once.
+For the elevation-aware blocking above to work, tokens need a height. **Auto Token Height** (`autoTokenHeight`, in the Token Display settings) sets each token's Wall-Height height to its size, so it peeks over walls and tokens of its own size.
+
+**`autoTokenHeightVehicleSquad`** lowers that for vehicles and squads (my own interpretation of their heights, not an official rule), and a **Sync All Token Heights** button writes it onto every existing actor and token at once.
+
+---
 
 ## Lancer vision modes
 
@@ -55,13 +67,21 @@ Two detection modes, auto-added to tokens on creation (`lancerVisionAutoAdd`):
 - **Sensors** - blue scanlines, ranged to the actor's `sensor_range`, a precise read of who's on sensors.
 - **Battlefield Awareness** - a fuzzy yellow silhouette at infinite range, for "you know something's there."
 
-When both could see a target, **Sensors win**. Either can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or read its range from the token's detection-mode entry (`...UseModeRange`). A per-token **Detection Visual** (Token Config) sets how a token reads: **Default**, **Simple Object**, **Visible**, or **Ignore** - any non-default also turns Sensors off for it. **`basicSightTo999`** gives new tokens full basic sight, and **Refresh Tokens** re-applies the modes across scenes and actors.
+When both could see a target, **Sensors win**. Either can be limited to combat (`lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`) or read its range from the token's detection-mode entry (`...UseModeRange`).
+
+A per-token **Detection Visual** (Token Config) sets how a token reads: **Default**, **Simple Object**, **Visible**, or **Ignore** - any non-default also turns Sensors off for it.
+
+**`basicSightTo999`** gives new tokens full basic sight, and **Refresh Tokens** re-applies the modes across scenes and actors.
 
 <br clear="right"/>
+
+---
 
 ## Drag vision
 
 While a token is dragged, its vision can be shrunk so you don't reveal new map as you move. **`dragVisionMultiplier`** sets how much (1 = full, 0 = none), read as a ratio of the current radius or a flat range depending on **`dragVisionMode`**.
+
+---
 
 ## Performance
 

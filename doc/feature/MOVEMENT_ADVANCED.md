@@ -15,6 +15,8 @@ In the **Combat & Movement** tab: boost detection, the movement cap, the boost o
 
 When it fires, the `onMove` trigger data carries `moveInfo.isBoost` (this move crossed a threshold) and `moveInfo.boostSet` (which boost numbers were crossed). Cumulative movement resets when the move history clears (combat start, or per turn/round if you enabled those). **`debugBoostDetection`** shows a notification with the numbers each time it triggers.
 
+---
+
 ## Movement cap and the offer cards
 
 <img align="right" src="../img/mv-boost-offer.png" width="45%"/>
@@ -28,13 +30,19 @@ If neither is enough, the move is rejected with a reminder to hold the free-move
 
 <br clear="right"/>
 
+---
+
 ## Drag pathfinding
 
 **`pathfindDragMovement`** routes a dragged token around hostile bodies and tall terrain instead of straight through them. A live overlay shows how far it can still reach as you drag.
 
+---
+
 ## Split movement at trigger boundaries
 
-**`splitMovementAtTriggerBoundaries`** (also in the Lancer Automations Ruler settings) splits a drag into sub-moves at each cell where the token crosses a trigger boundary - Terrain Height Tools, TemplateMacro, Grid-Aware Auras, or a Foundry region. The triggers then fire as the token visually reaches each boundary, instead of all at once at the end of the move. The visible path is unchanged.
+**`splitMovementAtTriggerBoundaries`** (also in the Lancer Automations Ruler settings) splits a drag into sub-moves at each cell where the token crosses a trigger boundary - Terrain Height Tools, TemplateMacro, Grid-Aware Auras, or a Foundry region.
+
+The triggers then fire as the token visually reaches each boundary, instead of all at once at the end of the move. The visible path is unchanged.
 
 On hex grids the sub-waypoints can occasionally drift the resolved path from the preview. Stabilization code softens it, but the clean fix is two hooks in Foundry's source (self-hosted only, in `resources/app/public/scripts/foundry.mjs`).
 
@@ -78,9 +86,13 @@ Keep the original final `else` and closing brace as-is.
 
 </details>
 
+---
+
 ## Path hex calculation
 
 **`enablePathHexCalculation`** (default on) records the exact grid cells a move passes through, which interception and trigger logic use to know what the token crossed. **`debugPathHexCalculation`** draws those cells on the canvas for a few seconds.
+
+---
 
 ## Debug
 

@@ -679,7 +679,7 @@ export class LancerHUD
             unlocked = !unlocked;
             lockBtn.text(unlocked ? '🔓' : '🔒').css('opacity', unlocked ? 0.9 : 0).attr('title', unlocked ? 'Lock position' : 'Unlock to drag');
             resetBtn.css('opacity', unlocked ? 0.6 : 0);
-            hud.css('cursor', unlocked ? 'grab' : '');
+            hud.toggleClass('la-hud-unlocked', unlocked);
         });
 
         resetBtn.on('click', (ev) =>
@@ -694,8 +694,9 @@ export class LancerHUD
         {
             if (!unlocked || ev.button !== 0)
                 return;
-            if ($(ev.target).closest('.la-hud-col').length && !$(ev.target).closest('.la-hud-lock, .la-hud-reset').length)
-                return; // don't drag from menu items
+            const onHandle = $(ev.target).closest('.la-hud-col-label, .la-hud-token-title, .la-hud-lock, .la-hud-reset').length > 0;
+            if (!onHandle && $(ev.target).closest('.la-hud-col').length)
+                return; // rows stay clickable; drag only from the bars
             ev.preventDefault();
             dragStart = { x: ev.clientX, y: ev.clientY, left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
             hud.css('cursor', 'grabbing');
@@ -713,7 +714,7 @@ export class LancerHUD
             if (!dragStart)
                 return;
             dragStart = null;
-            hud.css('cursor', unlocked ? 'grab' : '');
+            hud.css('cursor', '');
             const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
             game.settings.set('lancer-automations', 'tah.position', pos);
         });

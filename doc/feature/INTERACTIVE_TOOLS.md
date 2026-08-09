@@ -16,9 +16,13 @@ A choice card pauses and waits for a player to pick. `startChoiceCard` has four 
 - **AND** - every option must be clicked; each runs as soon as it's confirmed.
 - **Vote** and **Hidden Vote** - the card is broadcast to its recipients; you watch a live tally and click **Confirm** to resolve (hidden keeps votes secret until then, ties are broken by you).
 
-**`userIdControl`** routes a card to one player or a list (first to respond wins). A non-interactive **waiting card** (`startWaitCard`) shows "waiting for X" in the meantime. **openChoiceMenu** builds and sends a choice or vote card from a dialog, no code needed.
+**`userIdControl`** routes a card to one player or a list (first to respond wins). A non-interactive **waiting card** (`startWaitCard`) shows "waiting for X" in the meantime.
+
+**openChoiceMenu** builds and sends a choice or vote card from a dialog, no code needed.
 
 <br clear="right"/>
+
+---
 
 ## Card and flow stacking
 
@@ -28,13 +32,21 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <br clear="right"/>
 
+---
+
 ## Picking targets and areas
 
 <img align="right" src="../img/it-target-picker.png" width="45%"/>
 
-**chooseToken** highlights the valid tokens in range and asks you to pick one or more, with an optional **filter** (allies only, for example). For area effects it switches to **blast / cone / line / burst**: place the shape on the canvas, **Ctrl+wheel** to rotate, and toggle **elevation-aware**, **auto-elevation**, and **propagation** (flood-fill that terrain blocks). **pickSingleTargetToggle** skips the card: click a token to toggle it as your target.
+**chooseToken** highlights the valid tokens in range and asks you to pick one or more, with an optional **filter** (allies only, for example).
+
+For area effects it switches to **blast / cone / line / burst**: place the shape on the canvas, **Ctrl+wheel** to rotate, and toggle **elevation-aware**, **auto-elevation**, and **propagation** (flood-fill that terrain blocks).
+
+**pickSingleTargetToggle** skips the card: click a token to toggle it as your target.
 
 <br clear="right"/>
+
+---
 
 ## HASE contest
 
@@ -44,6 +56,8 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <br clear="right"/>
 
+---
+
 ## Force check
 
 <img align="right" src="../vid/it-forcecheck.gif" width="45%"/>
@@ -51,6 +65,8 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 **openForceCheckCard** sends a HASE check to a batch of tokens: pick the skill, pick the targets like an attack roll, and each token's owner rolls it themselves. Give it a save-vs token and every check becomes a save against that actor's SAVE, pre-targeted in the roller's HUD. It's reachable from a token's **Force Check** entry under Skills.
 
 <br clear="right"/>
+
+---
 
 ## Placing zones
 
@@ -60,13 +76,19 @@ Lancer shows one roll card at a time, and so do these. When several fire at once
 
 <br clear="right"/>
 
+---
+
 ## Moving and knocking back tokens
 
 <img align="right" src="../img/it-knockback.png" width="45%"/>
 
-**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage. **placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Shift+click** waypoints for multi-leg paths.
+**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage.
+
+**placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Shift+click** waypoints for multi-leg paths.
 
 <br clear="right"/>
+
+---
 
 ## Targeting in attack and check flows
 
@@ -79,6 +101,8 @@ The attack HUD's target and area buttons are covered in [Advanced Targeting and 
 
 <br clear="right"/>
 
+---
+
 ## Colors
 
 <img align="right" src="../img/it-colors.png" width="45%"/>
@@ -86,6 +110,8 @@ The attack HUD's target and area buttons are covered in [Advanced Targeting and 
 The **Colors** settings tab lets each player recolor the targeting and range-glow palette, with a button to reset them.
 
 <br clear="right"/>
+
+---
 
 ## Deployables
 
@@ -106,6 +132,8 @@ Delayed appearance / reinforcement is in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUT
 
 <br clear="right"/>
 
+---
+
 ## Add Extra
 
 <img align="right" src="../img/it-extras.png" width="45%"/>
@@ -118,6 +146,8 @@ Open it from the **Add Extra** button on the actor or item sheet header, or from
 
 <img src="../vid/it-extras.gif" width="70%"/>
 
+---
+
 ## Overlap token picker
 
 <img align="right" src="../img/it-overlap-picker.png" width="45%"/>
@@ -125,6 +155,8 @@ Open it from the **Add Extra** button on the actor or item sheet header, or from
 With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows a small picker so you choose which one.
 
 <br clear="right"/>
+
+---
 
 ## Share Interactive Tools
 

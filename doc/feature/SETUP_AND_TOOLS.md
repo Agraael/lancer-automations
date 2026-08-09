@@ -14,17 +14,25 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
 <br clear="right"/>
 
+---
+
 ## Optional content packs
 
 **`enableLaSossisItems`** loads a shared set of item and NPC automations; **`enablePersonalStuff`** loads the author's own personal set. Both load as startup scripts, so toggling either needs a reload.
+
+---
 
 ## Actor ↔ token sync
 
 **`syncActorImgToToken`** and **`syncActorNameToToken`** copy a prototype token's image and name onto the actor whenever they change, and **Sync All Actors Now** does it across every world actor at once.
 
+---
+
 ## Maintenance & data repair
 
-**Apply Fixes (LCP Data)** rebuilds compendium and actor item data with the module's patches: ammo metadata, merged multi-profile weapon text, and blank action names. **Reset to Defaults** clears all module settings and automations. (Export and Import are in the [Automation Engine](./AUTOMATION_ENGINE.md) guide.)
+**Apply Fixes (LCP Data)** rebuilds compendium and actor item data with the module's patches: ammo metadata, merged multi-profile weapon text, and blank action names.
+
+**Reset to Defaults** clears all module settings and automations. (Export and Import are in the [Automation Engine](./AUTOMATION_ENGINE.md) guide.)
 
 ## News & releases
 
@@ -34,6 +42,8 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 
 <br clear="right"/>
 
+---
+
 ## Guided tours
 
 <img align="right" src="../img/st-tour.png" width="45%"/>
@@ -41,6 +51,8 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 There are guided in-app tours to explain the main systems, from the **Tutorial & Help** tab. A welcome dialog offers them on first install, along with a **Setup Wizard** for the main settings.
 
 <br clear="right"/>
+
+---
 
 ## Scene dimensions
 

@@ -8,9 +8,13 @@ Automate almost any Lancer action.
 
 Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md)**.
 
+---
+
 ## What's automated by default
 
 Lancer Automations provides basic automation for most of the game's base actions. There's no ready-made automation for specific NPC or mech items yet. For those, it's up to you to build your own, and the Activation Manager is where you do it.
+
+---
 
 ## The Activation Manager
 
@@ -36,6 +40,8 @@ Each activation has an **enable / disable** toggle. It works per sub-reaction on
 Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger); covered in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
 
 <br clear="right"/>
+
+---
 
 ## Configuring an activation
 
@@ -90,6 +96,8 @@ What makes it self-react on use:
 
 - **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action; drop `reactionPath` to bind the whole item.
 
+---
+
 ## How an activation runs
 
 <img src="../img/ae-example.png" width="45%"/>
@@ -108,6 +116,8 @@ You write these as plain function bodies, or full functions (the wrapper is stri
 
 By default `onActivation` fires when an item runs through an activation; **`treatGenericPrintAsActivation`** also fires it for items printed via Lancer's generic print.
 
+---
+
 ## The activation popup
 
 <img align="right" src="../img/ae-activation-popup.png" width="45%"/>
@@ -120,9 +130,13 @@ When a trigger fires reactions that aren't set to auto-activate, they're collect
 
 <br clear="right"/>
 
+---
+
 ## Reaction economy
 
 If **`consumeReaction`** is on, activating a reaction spends that token's reaction for the round. The popup shows the reaction as unavailable once it's spent.
+
+---
 
 ## Startup scripts
 
@@ -133,6 +147,8 @@ The **Startup Scripts** tab in the Activation Manager holds code that runs once 
 The registration patterns are in [API_HOWTO.md](../API_HOWTO.md).
 
 <br clear="right"/>
+
+---
 
 ## The personal activation set
 

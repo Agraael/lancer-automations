@@ -14,6 +14,8 @@ The **Wrecks** tab.
 
 <br clear="right"/>
 
+---
+
 ## On death
 
 <img align="right" src="../img/wr-wreck.png" width="45%"/>
@@ -22,13 +24,19 @@ When a token's structure hits 0, the module drops its wreck in place and clears 
 
 <br clear="right"/>
 
+---
+
 ## Per-category behaviour
 
 The dead token is sorted into an auto-detected category, **Mech**, **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. Each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, set in the per-category table along with its on-wreck terrain.
 
+---
+
 ## Wreck terrain
 
 A wreck can leave something on its footprint: **THT difficult terrain** (needs Terrain Height Tools, painting the type set by **`wreckTerrainType`**) or a **movement +1 aura** (needs the GAA fork). It's set per category, so mech hulls can clog the field while corpses don't.
+
+---
 
 ## Per-token config
 
@@ -38,13 +46,19 @@ A single token can override its category in the Token Config **L.A** tab: its wr
 
 <br clear="right"/>
 
+---
+
 ## Resurrect
 
 Wreck **tiles** get a **Resurrect** button in their token HUD that brings the original token back, fully restored, and deletes the tile. Token wrecks are resurrected from a macro or the API.
 
+---
+
 ## FX & sound
 
 The explosion animation and sound are **`enableWreckAnimation`** and **`enableWreckAudio`**, with **`wreckMasterVolume`** over the top and **`disableHumanDeathSound`** to keep corpses quiet.
+
+---
 
 ## Custom wreck assets
 
@@ -74,4 +88,6 @@ The explosion animation and sound are **`enableWreckAnimation`** and **`enableWr
     └── biological/
 ```
 
-On a wreck, the module picks a random file from the folder that matches the token's category (and size, for images). Empty folders fall back, squad → human → biological, monstrosity → biological, and mech images fall back to the bare `s{size}` folder. A per-token image, effect, or sound set in the Token Config L.A tab overrides all of it.
+On a wreck, the module picks a random file from the folder that matches the token's category (and size, for images). Empty folders fall back, squad → human → biological, monstrosity → biological, and mech images fall back to the bare `s{size}` folder.
+
+A per-token image, effect, or sound set in the Token Config L.A tab overrides all of it.
