@@ -142,7 +142,7 @@ This README is the hub. The detailed guides live under `doc/`.
 
 ## Installation
 
-**Manifest URL:**
+In Foundry, go to **Add-on Modules → Install Module**, paste this into the **Manifest URL** field at the bottom, and hit Install:
 ```
 https://github.com/Agraael/lancer-automations/releases/latest/download/module.json
 ```

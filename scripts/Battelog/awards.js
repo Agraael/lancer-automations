@@ -67,8 +67,8 @@ export const AWARDS = [
         format: v => `${v} ASSISTS`,
     },
     {
-        key: 'MOVER',
-        label: 'MOVER',
+        key: 'TURBO',
+        label: 'TURBO',
         icon: 'fa-person-running',
         description: 'Covered the most ground across the engagement',
         stat: p => p.moves ?? 0,

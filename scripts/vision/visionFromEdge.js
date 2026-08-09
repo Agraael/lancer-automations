@@ -48,14 +48,66 @@ function _getSampleCount(tokenDoc)
         return 4;
     if (mode === 'perimeter8')
         return 8;
-    const w = tokenDoc?.width ?? 1;
-    const h = tokenDoc?.height ?? 1;
-    return (w >= 3 || h >= 3) ? 8 : 4;
+    if (mode === 'perimeter16')
+        return 16;
+    const tokenWidth = tokenDoc?.width ?? 1;
+    const tokenHeight = tokenDoc?.height ?? 1;
+    return (tokenWidth >= 3 || tokenHeight >= 3) ? 8 : 4;
 }
 
 export function getEdgeSamplePoints(token)
 {
     return _getSamplePoints(token);
+}
+
+// Tangents touch a convex shape at a vertex, so reflex corners never shape the shadow.
+function _convexShapeVertices(token, center, outset)
+{
+    const shapePoints = token.getShape?.()?.points;
+    if (!shapePoints?.length)
+        return null;
+    const outline = [];
+    for (let idx = 0; idx < shapePoints.length; idx += 2)
+    {
+        const vertX = shapePoints[idx] + token.x;
+        const vertY = shapePoints[idx + 1] + token.y;
+        const lastPt = outline.at(-1);
+        if (lastPt && Math.abs(lastPt.x - vertX) < 0.01 && Math.abs(lastPt.y - vertY) < 0.01)
+            continue;
+        outline.push({ x: vertX, y: vertY });
+    }
+    const firstPt = outline[0];
+    const finalPt = outline.at(-1);
+    if (outline.length > 1 && firstPt && finalPt
+        && Math.abs(firstPt.x - finalPt.x) < 0.01 && Math.abs(firstPt.y - finalPt.y) < 0.01)
+        outline.pop();
+    if (outline.length < 3)
+        return null;
+
+    let signedArea = 0;
+    for (let idx = 0; idx < outline.length; idx++)
+    {
+        const curPt = outline[idx];
+        const nextPt = outline[(idx + 1) % outline.length];
+        signedArea += (curPt.x * nextPt.y) - (nextPt.x * curPt.y);
+    }
+    const winding = Math.sign(signedArea);
+
+    const samples = [];
+    for (let idx = 0; idx < outline.length; idx++)
+    {
+        const prevPt = outline[(idx - 1 + outline.length) % outline.length];
+        const curPt = outline[idx];
+        const nextPt = outline[(idx + 1) % outline.length];
+        const cross = ((curPt.x - prevPt.x) * (nextPt.y - curPt.y)) - ((curPt.y - prevPt.y) * (nextPt.x - curPt.x));
+        if (cross === 0 || Math.sign(cross) !== winding)
+            continue;
+        const dirX = curPt.x - center.x;
+        const dirY = curPt.y - center.y;
+        const dist = Math.hypot(dirX, dirY) || 1;
+        samples.push({ x: curPt.x + (dirX / dist) * outset, y: curPt.y + (dirY / dist) * outset });
+    }
+    return samples;
 }
 
 function _getSamplePoints(token)
@@ -64,55 +116,80 @@ function _getSamplePoints(token)
     const count = _getSampleCount(tokenDoc);
     // v13 deprecated Token#getSize in favor of TokenDocument#getSize.
     const size = tokenDoc.getSize?.() ?? token.getSize?.() ?? { width: token.w, height: token.h };
-    const x0 = tokenDoc.x;
-    const y0 = tokenDoc.y;
-    const x1 = x0 + size.width;
-    const y1 = y0 + size.height;
-    const cx = x0 + size.width / 2;
-    const cy = y0 + size.height / 2;
-    let eps = 0;
+    const boxLeft = tokenDoc.x;
+    const boxTop = tokenDoc.y;
+    const boxRight = boxLeft + size.width;
+    const boxBottom = boxTop + size.height;
+    const centerX = boxLeft + size.width / 2;
+    const centerY = boxTop + size.height / 2;
+    let offset = 0;
     try
     {
-        eps = Number(game.settings.get(MODULE_ID, SETTING_SAMPLE_OFFSET)) || 0;
+        offset = Number(game.settings.get(MODULE_ID, SETTING_SAMPLE_OFFSET)) || 0;
     }
     catch
     {
-        /* default */
+        offset = 0;
     }
-    const ix0 = x0 - eps;
-    const iy0 = y0 - eps;
-    const ix1 = x1 + eps;
-    const iy1 = y1 + eps;
+    const left = boxLeft - offset;
+    const top = boxTop - offset;
+    const right = boxRight + offset;
+    const bottom = boxBottom + offset;
+    const center = { x: centerX, y: centerY };
 
-    const raw = [
-        { x: ix0, y: iy0 },
-        { x: ix1, y: iy0 },
-        { x: ix1, y: iy1 },
-        { x: ix0, y: iy1 }
+    if (game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE) === 'silhouette')
+    {
+        const hull = _convexShapeVertices(token, center, offset - 2);
+        if (hull?.length)
+            return hull.map(point => _nudgePastWall(point, center, token));
+    }
+
+    const samples = [
+        { x: left, y: top },
+        { x: right, y: top },
+        { x: right, y: bottom },
+        { x: left, y: bottom }
     ];
     if (count > 4)
     {
-        raw.push(
-            { x: cx, y: iy0 },
-            { x: ix1, y: cy },
-            { x: cx, y: iy1 },
-            { x: ix0, y: cy }
+        samples.push(
+            { x: centerX, y: top },
+            { x: right, y: centerY },
+            { x: centerX, y: bottom },
+            { x: left, y: centerY }
         );
     }
-    return raw.map(pt => _nudgePastWall(pt, { x: cx, y: cy }, token));
+    if (count > 8)
+    {
+        const quarterX = boxLeft + size.width * 0.25;
+        const threeQuarterX = boxLeft + size.width * 0.75;
+        const quarterY = boxTop + size.height * 0.25;
+        const threeQuarterY = boxTop + size.height * 0.75;
+        samples.push(
+            { x: quarterX, y: top },
+            { x: threeQuarterX, y: top },
+            { x: right, y: quarterY },
+            { x: right, y: threeQuarterY },
+            { x: quarterX, y: bottom },
+            { x: threeQuarterX, y: bottom },
+            { x: left, y: quarterY },
+            { x: left, y: threeQuarterY }
+        );
+    }
+    return samples.map(point => _nudgePastWall(point, center, token));
 }
 
 export function getTokenVisionLOS(token)
 {
-    const doc = token.document;
-    const elev = doc.elevation ?? 0;
-    const tokenHeight = doc.flags?.['wall-height']?.tokenHeight
-        ?? doc.flags?.elevatedvision?.tokenHeight
+    const tokenDoc = token.document;
+    const elevation = tokenDoc.elevation ?? 0;
+    const tokenHeight = tokenDoc.flags?.['wall-height']?.tokenHeight
+        ?? tokenDoc.flags?.elevatedvision?.tokenHeight
         ?? 1;
-    return elev + tokenHeight;
+    return elevation + tokenHeight;
 }
 
-function _edgeBlocksAtLOS(edge, los)
+function _edgeBlocksAtLOS(edge, losHeight)
 {
     if ((edge.sight ?? 0) <= 0)
         return false;
@@ -121,50 +198,68 @@ function _edgeBlocksAtLOS(edge, los)
         ?? {};
     const wallBottom = flags.bottom ?? Number.NEGATIVE_INFINITY;
     const wallTop = flags.top ?? Number.POSITIVE_INFINITY;
-    return wallBottom <= los && los <= wallTop;
+    return wallBottom <= losHeight && losHeight <= wallTop;
+}
+
+function _rayGrazesEnd(sample, edge, dirX, dirY, lenSq)
+{
+    const cornerTol = 1.5;
+    for (const endPoint of [edge.a, edge.b])
+    {
+        const along = (((endPoint.x - sample.x) * dirX) + ((endPoint.y - sample.y) * dirY)) / lenSq;
+        if (along <= 0 || along >= 1)
+            continue;
+        const projX = sample.x + (dirX * along);
+        const projY = sample.y + (dirY * along);
+        if (Math.hypot(endPoint.x - projX, endPoint.y - projY) <= cornerTol)
+            return { x: endPoint.x, y: endPoint.y };
+    }
+    return null;
 }
 
 function _nudgePastWall(sample, center, token)
 {
     if (!canvas?.edges || !token)
         return sample;
-    const los = getTokenVisionLOS(token);
-    const dx = center.x - sample.x;
-    const dy = center.y - sample.y;
-    const len2 = dx * dx + dy * dy;
-    if (len2 === 0)
+    const losHeight = getTokenVisionLOS(token);
+    const dirX = center.x - sample.x;
+    const dirY = center.y - sample.y;
+    const lenSq = dirX * dirX + dirY * dirY;
+    if (lenSq === 0)
         return sample;
 
     const ownPrefix = `la-block-los-${token.id}-`;
-    let closest = null;
-    let closestT = Infinity;
+    let lastHit = null;
+    let lastAlong = -Infinity;
     for (const edge of canvas.edges.values())
     {
         if (edge.type !== 'wall')
             continue;
         if (edge.id?.startsWith(ownPrefix))
             continue;
-        if (!_edgeBlocksAtLOS(edge, los))
+        if (!_edgeBlocksAtLOS(edge, losHeight))
             continue;
-        if (!foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b))
+        let hit = foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b)
+            ? foundry.utils.lineLineIntersection(sample, center, edge.a, edge.b)
+            : null;
+        if (!hit)
+            hit = _rayGrazesEnd(sample, edge, dirX, dirY, lenSq);
+        if (!hit)
             continue;
-        const inter = foundry.utils.lineLineIntersection(sample, center, edge.a, edge.b);
-        if (!inter)
-            continue;
-        const t = ((inter.x - sample.x) * dx + (inter.y - sample.y) * dy) / len2;
-        if (t < closestT)
+        const along = ((hit.x - sample.x) * dirX + (hit.y - sample.y) * dirY) / lenSq;
+        if (along > lastAlong)
         {
-            closestT = t;
-            closest = inter;
+            lastAlong = along;
+            lastHit = hit;
         }
     }
-    if (!closest)
+    if (!lastHit)
         return sample;
-    const len = Math.sqrt(len2);
-    const past = 4;
+    const dist = Math.sqrt(lenSq);
+    const stepInside = 4;
     return {
-        x: closest.x + (dx / len) * past,
-        y: closest.y + (dy / len) * past
+        x: lastHit.x + (dirX / dist) * stepInside,
+        y: lastHit.y + (dirY / dist) * stepInside
     };
 }
 
@@ -188,7 +283,7 @@ function _destroyEdgeSources(token)
             {
                 source?.destroy?.();
             }
-            catch (e)
+            catch (err)
             {
                 // ignore
             }
@@ -221,7 +316,7 @@ function _buildEdgeSources(token)
     {
         primaryData = token._getVisionSourceData();
     }
-    catch (e)
+    catch (err)
     {
         return false;
     }
@@ -230,14 +325,14 @@ function _buildEdgeSources(token)
 
     const samples = _getSamplePoints(token);
     let added = false;
-    samples.forEach((pt, idx) =>
+    samples.forEach((point, idx) =>
     {
         const sourceId = _edgeSourceId(token, idx);
         try
         {
             // Lie about shape/bounds so Foundry's sweep filters don't
             // claim the whole token footprint as "self area".
-            const tinyBounds = new PIXI.Rectangle(pt.x - 1, pt.y - 1, 2, 2);
+            const tinyBounds = new PIXI.Rectangle(point.x - 1, point.y - 1, 2, 2);
             const objectStandIn = new Proxy(token, {
                 get(target, prop)
                 {
@@ -255,8 +350,8 @@ function _buildEdgeSources(token)
                 source._laEdgeClipCircle = new PIXI.Circle(primaryData.x, primaryData.y, clipRadius);
             source.initialize({
                 ...primaryData,
-                x: pt.x,
-                y: pt.y,
+                x: point.x,
+                y: point.y,
                 disabled: false,
                 externalRadius: 1,
                 radius: Math.max(0, (primaryData.radius ?? 0) - halfSize),
@@ -268,9 +363,9 @@ function _buildEdgeSources(token)
                 canvas.effects.visionSources.set(sourceId, source);
             added = true;
         }
-        catch (e)
+        catch (err)
         {
-            console.warn(`${MODULE_ID} | edge vision source ${idx} for token ${token.id} failed to initialize:`, e);
+            console.warn(`${MODULE_ID} | edge vision source ${idx} for token ${token.id} failed to initialize:`, err);
         }
     });
     return added;
@@ -296,7 +391,7 @@ function _isVisionRelevantChange(change)
 {
     if (!change)
         return false;
-    if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(k => k in change))
+    if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(key => key in change))
         return true;
     if (change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined)
         return true;
@@ -361,7 +456,7 @@ function _cleanOrphanEdgeSources()
 {
     if (!canvas?.effects?.visionSources)
         return;
-    const validSourceIds = new Set((canvas.tokens?.placeables ?? []).map(t => t.sourceId));
+    const validSourceIds = new Set((canvas.tokens?.placeables ?? []).map(token => token.sourceId));
     const marker = `.${SOURCE_ID_PART}.`;
     let changed = false;
     for (const id of [...canvas.effects.visionSources.keys()])
@@ -377,7 +472,7 @@ function _cleanOrphanEdgeSources()
         {
             source?.destroy?.();
         }
-        catch (e)
+        catch (err)
         {
             // ignore
         }
@@ -395,7 +490,7 @@ function _onControlToken(token)
         _buildEdgeSources(token);
         _refreshVision();
     }
-    catch (e)
+    catch (err)
     {
         // ignore
     }
@@ -410,7 +505,7 @@ function _onRenderTokenConfig(app, html)
 
     const tokenDoc = app.token ?? app.object ?? app.document;
     const current = tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
-    const val = current === 'on' ? 'on' : current === 'off' ? 'off' : 'default';
+    const selected = current === 'on' ? 'on' : current === 'off' ? 'off' : 'default';
 
     const block = `
         <hr/>
@@ -418,9 +513,9 @@ function _onRenderTokenConfig(app, html)
             <label data-tooltip="Vision computed from the token's perimeter (Lancer LOS-style) so larger tokens can peek around corners. 'Default' follows the world setting.">Vision From Edge</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.${FLAG_KEY}">
-                    <option value="default" ${val === 'default' ? 'selected' : ''}>Default (world setting)</option>
-                    <option value="on" ${val === 'on' ? 'selected' : ''}>On</option>
-                    <option value="off" ${val === 'off' ? 'selected' : ''}>Off</option>
+                    <option value="default" ${selected === 'default' ? 'selected' : ''}>Default (world setting)</option>
+                    <option value="on" ${selected === 'on' ? 'selected' : ''}>On</option>
+                    <option value="off" ${selected === 'off' ? 'selected' : ''}>Off</option>
                 </select>
             </div>
         </div>
@@ -436,8 +531,8 @@ function _drawDebugMarkers()
 {
     if (!_debugContainer)
         return;
-    for (const c of _debugContainer.removeChildren())
-        c.destroy();
+    for (const child of _debugContainer.removeChildren())
+        child.destroy();
     const colors = [0xff0000, 0x00ff00, 0x3366ff, 0xffff00, 0xff00ff, 0x00ffff, 0xff8000, 0x8000ff];
     for (const token of canvas.tokens?.controlled ?? [])
     {
@@ -449,10 +544,10 @@ function _drawDebugMarkers()
             if (!id.startsWith(prefix))
                 continue;
             const color = colors[idx % colors.length];
-            const g = new PIXI.Graphics();
-            g.lineStyle(2, color, 0.6).moveTo(center.x, center.y).lineTo(source.data.x, source.data.y);
-            g.beginFill(color, 0.9).lineStyle(0).drawCircle(source.data.x, source.data.y, 8).endFill();
-            _debugContainer.addChild(g);
+            const marker = new PIXI.Graphics();
+            marker.lineStyle(2, color, 0.6).moveTo(center.x, center.y).lineTo(source.data.x, source.data.y);
+            marker.beginFill(color, 0.9).lineStyle(0).drawCircle(source.data.x, source.data.y, 8).endFill();
+            _debugContainer.addChild(marker);
             idx++;
         }
     }
@@ -476,8 +571,8 @@ window.lancerVisionDebug = {
     {
         if (!_debugContainer)
             return;
-        for (const h of _debugHookIds)
-            Hooks.off(h.name, h.id);
+        for (const hook of _debugHookIds)
+            Hooks.off(hook.name, hook.id);
         _debugHookIds = [];
         _debugContainer.destroy({ children: true });
         _debugContainer = null;
@@ -504,13 +599,13 @@ export function initVisionFromEdge()
         config: false,
         type: Boolean,
         default: false,
-        onChange: (val) =>
+        onChange: (enabled) =>
         {
-            const dbg = /** @type {any} */ (globalThis).lancerVisionDebug;
-            if (val)
-                dbg?.show?.();
+            const debugApi = /** @type {any} */ (globalThis).lancerVisionDebug;
+            if (enabled)
+                debugApi?.show?.();
             else
-                dbg?.hide?.();
+                debugApi?.hide?.();
         }
     });
 
@@ -527,13 +622,15 @@ export function initVisionFromEdge()
 
     game.settings.register(MODULE_ID, SETTING_SAMPLE_MODE, {
         name: 'Vision From Edge: Sample Density',
-        hint: 'Vision sample points per token. Adaptive uses 8 for size 3+, else 4.',
+        hint: 'Vision sample points per token, one sweep each. Token shape corners follows the real outline. Adaptive uses 8 for size 3+, else 4.',
         scope: 'world',
         config: false,
         type: String,
         choices: {
             corners4: '4 (corners only)',
             perimeter8: '8 (corners + edge midpoints)',
+            perimeter16: '16 (dense perimeter)',
+            silhouette: 'Token shape corners',
             adaptive: 'Adaptive (recommended)'
         },
         default: 'adaptive',
@@ -565,7 +662,7 @@ export function initVisionFromEdge()
                 else
                     _buildEdgeSources(this);
             }
-            catch (e)
+            catch (err)
             {
                 // ignore
             }
@@ -587,7 +684,7 @@ export function initVisionFromEdge()
                     this.shape = clipped;
                     this.los = clipped;
                 }
-                catch (e)
+                catch (err)
                 {
                     // ignore
                 }

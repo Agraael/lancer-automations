@@ -1,10 +1,28 @@
 /* global Dialog, game, fromUuid */
 
-import { playBattleLogSound, playUiSound, stopBattleLogTheme, setBattleLogThemeMuted } from '../tah/sound.js';
+import { playBattleLogSound, playUiSound, stopBattleLogTheme, setBattleLogThemeMuted, getBattleLogThemeSrc } from '../tah/sound.js';
 import { getStatsForActor, buildRevealRowsHtml, ensureStyleSheet } from '../tah/tokenStatHint.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 
 const _escape = str => String(str ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+function _themeNameHtml()
+{
+    const src = getBattleLogThemeSrc();
+    if (!src)
+        return '';
+    let name = String(src).split('/').pop() ?? '';
+    try
+    {
+        name = decodeURIComponent(name);
+    }
+    catch
+    { /* keep raw */ }
+    name = name.replace(/\.[^.]+$/, '');
+    if (!name)
+        return '';
+    return `<span class="battelog-recap-theme-name" title="${_escape(name)}"><i class="fas fa-music"></i><span class="battelog-recap-theme-clip"><span class="battelog-recap-theme-scroll">${_escape(name)}</span></span></span>`;
+}
 
 const RECAP_OPEN_DELAY_MS = 125;
 const RECAP_OPEN_SOUND_DELAY_MS = RECAP_OPEN_DELAY_MS + 120;
@@ -103,6 +121,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
 
         <footer class="battelog-recap-foot">
             <span class="battelog-recap-brand"><i class="fas fa-file-lines"></i> LANCER AUTOMATIONS · BATTLE LOG</span>
+            ${_themeNameHtml()}
             <button type="button" class="battelog-recap-theme-mute" data-action="toggle-theme" title="Mute theme">
                 <i class="fas fa-volume-high"></i>
             </button>
@@ -155,6 +174,21 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             };
             globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(equalizeMedalBlocks));
             globalThis.setTimeout(equalizeMedalBlocks, 500);
+
+            globalThis.requestAnimationFrame(() =>
+            {
+                const themeName = $root[0]?.querySelector('.battelog-recap-theme-name');
+                const themeClip = themeName?.querySelector('.battelog-recap-theme-clip');
+                const themeScroll = themeClip?.querySelector('.battelog-recap-theme-scroll');
+                if (!themeName || !themeClip || !themeScroll)
+                    return;
+                if (themeScroll.scrollWidth <= themeClip.clientWidth + 4)
+                    return;
+                const single = themeScroll.innerHTML + '<span class="battelog-recap-theme-gap"></span>';
+                themeScroll.innerHTML = single + single;
+                themeName.classList.add('is-scrolling');
+                themeScroll.style.animationDuration = `${Math.max(8, themeScroll.scrollWidth / 2 / 14)}s`;
+            });
 
             $root.on('click', '.battelog-pcol-medals-scroll', function ()
             {

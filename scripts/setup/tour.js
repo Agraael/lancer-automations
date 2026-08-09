@@ -801,7 +801,7 @@ const TAH_STEPS = [
     _tahDrillStep('utility-misc', 'Misc', "A grab-bag of TAH tools: Vote, Downtime, Reserve, Rest, Add Extra, and more.", ['utility'], 'misc'),
     _tahDrillStep('add-extra', 'Add Extra', "Attach custom actions or extra deployables to the actor.", ['utility', 'misc'], 'add extra'),
     _tahDrillStep('glossary', 'Glossary', "Scanned actors, gated by read permission.", ['utility'], 'glossary'),
-    _tahCategoryStep('Statuses', "Status effects on the token."),
+    _tahCategoryStep('Statuses', "Status effects on the token. Click applies or stacks, right-click removes, Ctrl+click marks a favorite."),
     _tahCategoryStep('Macros', "Pinned macros for quick access. Per-user."),
     {
         id: 'outro',

@@ -2270,8 +2270,15 @@ const DAMAGE_IMPACT_FX = {
     hit_overshield: 'jb2a.impact.010.blue',
 };
 
-/** Play a single damage-type impact effect at the target token. */
-export async function playDamageImpactFX(type, target)
+export const DAMAGE_IMPACT_DELAY_MS = 250;
+
+export function damageImpactHits(amount)
+{
+    return Math.max(1, Math.floor((Number(amount) || 0) / 3));
+}
+
+/** Damage-type impact at the target token: one hit per 3 damage inflicted, staggered, each at a random offset. */
+export async function playDamageImpactFX(type, target, amount = null)
 {
     if (!_canPlay() || !target)
         return;
@@ -2279,22 +2286,29 @@ export async function playDamageImpactFX(type, target)
     const file = DAMAGE_IMPACT_FX[key];
     if (!file)
         return;
-    // Random offset within the token's radius, like a splash pattern.
     const tokenSize = Number(target?.document?.width ?? target?.w ?? 1);
     const gridSize = canvas?.grid?.size ?? 100;
     const radius = (tokenSize * gridSize) / 2;
-    const angle = Math.random() * Math.PI * 2;
-    const randomRadius = Math.random() * radius;
-    const offset = { x: Math.cos(angle) * randomRadius, y: Math.sin(angle) * randomRadius };
+    const randomOffset = () =>
+    {
+        const angle = Math.random() * Math.PI * 2;
+        const randomRadius = Math.random() * radius;
+        return { x: Math.cos(angle) * randomRadius, y: Math.sin(angle) * randomRadius };
+    };
+    const hits = damageImpactHits(amount);
     await Sequencer.Preloader.preloadForClients([file]);
-    const seq = new Sequence()
-        .effect()
-        .file(file)
-        .atLocation(target, { offset })
-        .scaleToObject(2.5)
-        .playbackRate(0.8);
-    if (key === 'hit_overshield')
-        seq.filter('ColorMatrix', { saturate: -1, brightness: 1.3 });
+    const seq = new Sequence();
+    for (let hit = 0; hit < hits; hit++)
+    {
+        const effect = seq.effect()
+            .file(file)
+            .atLocation(target, { offset: randomOffset() })
+            .scaleToObject(2.5)
+            .playbackRate(0.8)
+            .delay(hit * DAMAGE_IMPACT_DELAY_MS);
+        if (key === 'hit_overshield')
+            effect.filter('ColorMatrix', { saturate: -1, brightness: 1.3 });
+    }
     seq.play();
 }
 

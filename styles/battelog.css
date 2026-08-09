@@ -1666,6 +1666,59 @@
     outline: none !important;
 }
 
+.battelog-recap-theme-name {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 260px;
+    margin-right: 10px;
+    opacity: 0.55;
+    text-transform: none;
+    letter-spacing: 0.5px;
+}
+
+.battelog-recap-theme-name i {
+    flex: 0 0 auto;
+    font-size: 9px;
+}
+
+.battelog-recap-theme-clip {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.battelog-recap-theme-scroll {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.battelog-recap-theme-gap {
+    display: inline-block;
+    width: 40px;
+}
+
+.battelog-recap-theme-name.is-scrolling .battelog-recap-theme-clip {
+    text-overflow: clip;
+}
+
+.battelog-recap-theme-name.is-scrolling .battelog-recap-theme-scroll {
+    animation: battelog-theme-scroll linear infinite;
+}
+
+@keyframes battelog-theme-scroll {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(-50%);
+    }
+}
+
 .battelog-recap-theme-mute {
     flex: 0 0 auto !important;
     width: 34px !important;

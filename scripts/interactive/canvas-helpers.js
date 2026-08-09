@@ -7,6 +7,7 @@ import {
     getInRangeOffsets, isPositionInRange
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { getIsoProvider } from "../setup/iso-settings.js";
 import { _rulerMove } from "../main.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
 import { movePathLegs } from "./move-waypoints.js";
@@ -521,6 +522,13 @@ export function makeText(text, style)
 {
     const pixiText = new PIXI.Text(text, style);
     pixiText.resolution = gridTextResolution();
+    const iso = getIsoProvider();
+    if (iso)
+    {
+        pixiText.rotation = iso.reverseRotation;
+        pixiText.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+        pixiText.scale.set(iso.counterScale, 1 / iso.counterScale);
+    }
     return pixiText;
 }
 
@@ -633,6 +641,19 @@ export function _groupCellsByDistance(originOffsets, cellKeys)
 }
 
 /** Wave-pulse tick for canvas.app.ticker.add(...). */
+// Client-tunable thickness multiplier for the range-pulse line + its black outline (Colors tab).
+function _rangePulseWidthMul()
+{
+    try
+    {
+        return Number(game.settings.get('lancer-automations', 'rangePulseLineWidth')) || 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
+
 export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
 {
     const {
@@ -658,9 +679,10 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const rawPeriod = opts.periodMs ?? (range < slowRangeThreshold ? Math.max(slowFloorMs, basePeriod) : basePeriod);
     const periodMs = rawPeriod / Math.max(0.01, RANGE_PULSE_STYLE.pulseSpeed);
     const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
-    const lineW = Math.max(1, lineWidth * gridScale);
-    const glowW = lineW + Math.max(1, 1.5 * gridScale);
-    const haloW = glowColor === null ? lineW + Math.max(1, gridScale) : glowW + Math.max(1, gridScale);
+    const widthMul = _rangePulseWidthMul();
+    const lineW = Math.max(1, lineWidth * gridScale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
     let rings = hexesByDist;
     let lastKey = _originPosKey(originToken);
     return () =>
@@ -833,9 +855,10 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
     if (!boundary.length)
         return;
     const gridScale = canvas.grid.size / 100;
-    const lineW = Math.max(1, lineWidth * gridScale);
-    const glowW = lineW + Math.max(1, 1.5 * gridScale);
-    const haloW = glowColor === null ? lineW + Math.max(1, gridScale) : glowW + Math.max(1, gridScale);
+    const widthMul = _rangePulseWidthMul();
+    const lineW = Math.max(1, lineWidth * gridScale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
     const strokeBoundary = (width, colorInt, alpha) =>
     {
         graphic.lineStyle(width, colorInt, alpha);

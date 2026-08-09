@@ -10,7 +10,7 @@ import {
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
 import {
-    _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
+    _queueCard, _queueCardUrgent, _createInfoCard, _updateInfoCard, _removeInfoCard,
 } from "../cards.js";
 
 import {
@@ -33,7 +33,8 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 export function chooseToken(casterToken, options = {})
 {
     const _title = options.title || 'SELECT TARGETS';
-    return _queueCard(() => new Promise((resolve) =>
+    const _queue = options.urgent ? _queueCardUrgent : _queueCard;
+    return _queue(() => new Promise((resolve) =>
     {
         const {
             range = null,
@@ -55,6 +56,8 @@ export function chooseToken(casterToken, options = {})
             autoElevation: optAutoElevation = null,
             propagation: optPropagation = null,
             size = 1,
+            allowEmptyConfirm = false,
+            autoConfirm = false,
         } = /** @type {any} */ (options);
 
         const isBlastMode = pattern === 'blast';
@@ -365,7 +368,7 @@ export function chooseToken(casterToken, options = {})
             if (selectedTokens.size > 0)
                 resolve(Array.from(selectedTokens));
             else
-                resolve(null);
+                resolve(allowEmptyConfirm ? [] : null);
         };
 
         const doCancel = () =>
@@ -1533,6 +1536,8 @@ export function chooseToken(casterToken, options = {})
             selectedTokens.add(token);
             drawSelectionHighlight(token);
             refreshCard();
+            if (autoConfirm && count !== -1 && selectedTokens.size >= count)
+                doConfirm();
         };
 
         const showStackPicker = (tokens, screenX, screenY) =>

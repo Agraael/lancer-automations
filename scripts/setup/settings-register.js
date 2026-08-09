@@ -26,6 +26,13 @@ export function registerSettings()
         default: false
     });
 
+    game.settings.register('lancer-automations', 'qolAdvisoryShown', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'consumeAction', {
         name: 'Consume Action on Activation',
         hint: 'Auto-spend the token\'s Quick / Full action when an activation flow succeeds.',
@@ -304,6 +311,16 @@ export function registerSettings()
         type: Number,
         range: { min: 0, max: 1, step: 0.05 },
         default: 1
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseLineWidth', {
+        name: 'Range Pulse Line Width',
+        hint: 'Thickness of the range-pulse line and its black outline. 1 = original.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        range: { min: 1, max: 4, step: 0.25 },
+        default: 1.5
     });
 
     // Wreck system

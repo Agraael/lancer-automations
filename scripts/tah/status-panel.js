@@ -1,6 +1,8 @@
 /* global $, game, CONFIG */
 
 import { removeGlobalBonus, removeConstantBonus } from '../bonuses/genericBonuses.js';
+import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
+import { durationFieldsHtml, setupDurationUI, getDurationConfig, createDurationMarks } from '../bonuses/duration-widget.js';
 import { playUiSound } from './sound.js';
 import { tahScale } from './item-helpers.js';
 
@@ -77,6 +79,9 @@ function getBonusDetailStr(/** @type {any} */ bonus)
     return bonus.type || '?';
 }
 
+let _lastSearchQuery = '';
+let _lastDurationLabel = null;
+
 const BG_DEFAULT = 'var(--la-plate)';
 const BG_HOVER   = 'color-mix(in srgb, var(--la-plate), #000 12%)';
 // Row text: plate ink when inactive (flips with the plate), dark on the light active/permanent bg.
@@ -85,7 +90,7 @@ const FG_ACTIVE  = '#111';
 
 export class StatusPanel
 {
-    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth })
+    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth, suppressCollapse, extendCollapse })
     {
         this._actor           = actor;
         this._token           = token;
@@ -95,10 +100,23 @@ export class StatusPanel
         this._scheduleCollapse = scheduleCollapse;
         this._incDepth        = incDepth;
         this._decDepth        = decDepth;
+        this._suppressCollapse = suppressCollapse;
+        this._extendCollapse  = extendCollapse;
 
         this._panel        = null;
         this._anchor       = null;
         this._subtypePanel = null;
+        this._durMarks     = null;
+    }
+
+    async _applyWithDuration(status)
+    {
+        const { duration, originID } = getDurationConfig(this._panel, 'la-sdur');
+        await applyEffectsToTokens({
+            tokens: this._tokens,
+            effectNames: status.name,
+            duration: { ...duration, overrideTurnOriginId: originID },
+        });
     }
 
     get isVisible()
@@ -108,6 +126,9 @@ export class StatusPanel
 
     close()
     {
+        this._suppressCollapse?.(false);
+        this._durMarks?.destroy();
+        this._durMarks = null;
         $('.la-status-tooltip').remove();
         if (this._subtypePanel)
         {
@@ -198,7 +219,30 @@ export class StatusPanel
         });
         const customSaved = [...customMap.values()];
 
-        // active first, alphabetic within each group
+        // active first, then favorites, alphabetic within each group
+        const readFavorites = () =>
+        {
+            try
+            {
+                return new Set(game.settings.get('lancer-automations', 'tah.statusFavorites') ?? []);
+            }
+            catch
+            {
+                return new Set();
+            }
+        };
+        const favoriteIds = readFavorites();
+        const toggleStatusFavorite = async (/** @type {string} */ sid) =>
+        {
+            const current = readFavorites();
+            const nowFav = !current.has(sid);
+            if (nowFav)
+                current.add(sid);
+            else
+                current.delete(sid);
+            await game.settings.set('lancer-automations', 'tah.statusFavorites', [...current]);
+            return nowFav;
+        };
         const activeStatusIds = new Set();
         for (const eff of /** @type {any} */ (actor.effects))
         {
@@ -215,6 +259,10 @@ export class StatusPanel
                 const bActive = activeStatusIds.has(bStatus.id);
                 if (aActive !== bActive)
                     return aActive ? -1 : 1;
+                const aFav = favoriteIds.has(aStatus.id);
+                const bFav = favoriteIds.has(bStatus.id);
+                if (aFav !== bFav)
+                    return aFav ? -1 : 1;
                 return (aStatus.name ?? aStatus.id).localeCompare(bStatus.name ?? bStatus.id);
             });
 
@@ -332,6 +380,45 @@ export class StatusPanel
         const searchWrap = $(`<div class="la-status-search-wrap"><i class="fas fa-search la-status-search-icon"></i></div>`);
         searchWrap.append(searchBar);
 
+        searchBar.val(_lastSearchQuery);
+        const durTool = $(durationFieldsHtml('la-sdur', this._token?.id));
+        if (_lastDurationLabel && durTool.find(`#la-sdur-duration option[value="${_lastDurationLabel}"]`).length)
+            durTool.find('#la-sdur-duration').val(_lastDurationLabel);
+        durTool.find('#la-sdur-duration').on('change', function ()
+        {
+            _lastDurationLabel = String($(this).val());
+        });
+        const searchRow = $(`<div class="la-status-search-row"></div>`);
+        const helpTip = $(`<i class="fas fa-circle-question la-status-help" title="Click: apply or add a stack&#10;Right-click: remove or reduce&#10;Ctrl+click: favorite&#10;Hover: description"></i>`);
+        searchRow.append(searchWrap, durTool, helpTip);
+        const refreshDurMarks = () =>
+        {
+            this._durMarks ??= createDurationMarks();
+            const label = String(durTool.find('#la-sdur-duration').val());
+            const turnBased = label === 'end' || label === 'start';
+            const originToken = turnBased ? (game.canvas?.tokens?.get(String(durTool.find('#la-sdur-origin').val())) ?? null) : null;
+            this._durMarks.update({ targetTokens: this._tokens, originToken });
+        };
+        setupDurationUI(durTool, 'la-sdur', {
+            onChange: () =>
+            {
+                this._suppressCollapse?.(false);
+                refreshDurMarks();
+            },
+            onPickStart: () =>
+            {
+                this._suppressCollapse?.(true);
+                this._durMarks?.destroy();
+            },
+        });
+        searchRow.on('click mousedown', (ev) =>
+        {
+            ev.stopPropagation();
+            this._cancelCollapse?.();
+            this._extendCollapse?.();
+        });
+        refreshDurMarks();
+
         const gridEl =$(`<div class="lancer-scroll la-hud-status-grid"></div>`);
         for (const status of allStatuses)
         {
@@ -348,6 +435,8 @@ export class StatusPanel
             </div>`);
             rowEl.data('active', active);
             rowEl.data('permanent', perm);
+            if (favoriteIds.has(status.id))
+                rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
 
             let tooltipEl = /** @type {any} */ (null);
             let tooltipTimer = null;
@@ -370,8 +459,17 @@ export class StatusPanel
                 $(this).css({ background: active ? activeBg(perm) : BG_DEFAULT, borderLeftColor: active ? activeBorder(perm) : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
             });
 
-            rowEl.on('click', async () =>
+            rowEl.on('click', async (ev) =>
             {
+                if (ev.ctrlKey)
+                {
+                    const nowFav = await toggleStatusFavorite(status.id);
+                    playUiSound('toggle');
+                    rowEl.find('.la-hud-fav-mark').remove();
+                    if (nowFav)
+                        rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
+                    return;
+                }
                 playUiSound('toggle');
                 const effects = getEffectsForStatus(status.id);
                 if (effects.length > 1)
@@ -387,6 +485,8 @@ export class StatusPanel
                         const eff = effects[0];
                         await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                     }
+                    else if (effects.length === 0)
+                        await this._applyWithDuration(status);
                     else
                     {
                         for (const token of this._tokens)
@@ -417,8 +517,7 @@ export class StatusPanel
                     this._incDepth();
                     try
                     {
-                        for (const token of this._tokens)
-                            await /** @type {any} */ (token).toggleEffect(status);
+                        await this._applyWithDuration(status);
                         updateRowBadge(rowEl, status);
                         setRowActive(rowEl, isActive(status), isPermanent(status));
                     }
@@ -698,15 +797,27 @@ export class StatusPanel
         const header = $(`<div class="la-hud-col-label">Statuses</div>`);
         searchBar.on('input', function ()
         {
-            const query = String($(this).val()).toLowerCase().trim();
+            _lastSearchQuery = String($(this).val());
+            const query = _lastSearchQuery.toLowerCase().trim();
             gridEl.find('[data-status-id]').each(function ()
             {
                 const name = $(this).find('.la-status-name').text().toLowerCase();
                 $(this).toggle(!query || name.includes(query));
             });
         });
-        searchBar.on('click mousedown', (ev) => ev.stopPropagation());
-        leftWrap.append(header, searchWrap, gridEl);
+        const extendFade = () =>
+        {
+            this._cancelCollapse?.();
+            this._extendCollapse?.();
+        };
+        searchBar.on('click mousedown', (ev) =>
+        {
+            ev.stopPropagation();
+            extendFade();
+        });
+        if (_lastSearchQuery)
+            searchBar.trigger('input');
+        leftWrap.append(header, searchRow, gridEl);
         panel.append(leftWrap, rightEl);
 
         const scale = tahScale();
@@ -726,6 +837,7 @@ export class StatusPanel
         panel.css({ top: topInHud });
 
         panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
+        panel.on('click', extendFade);
         panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
         this._panel = panel;
     }

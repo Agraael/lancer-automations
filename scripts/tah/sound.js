@@ -1,6 +1,6 @@
 /* global game, foundry, Hooks, $, fromUuidSync, FilePicker, canvas */
 
-import { playDamageImpactFX } from '../fx/actionFX.js';
+import { playDamageImpactFX, damageImpactHits, DAMAGE_IMPACT_DELAY_MS } from '../fx/actionFX.js';
 
 const _lastSoundAt = new Map();
 let _lastTargetingCell = null;
@@ -215,7 +215,12 @@ export function playBattleLogTheme(outcome)
         /** @type {any} */ ({ src, volume: _battleLogThemeMuted ? 0 : target, autoplay: true, loop: true }),
         false,
     ));
-    _battleLogTheme = { promise, target };
+    _battleLogTheme = { promise, target, src };
+}
+
+export function getBattleLogThemeSrc()
+{
+    return _battleLogTheme?.src ?? null;
 }
 
 /**
@@ -496,13 +501,17 @@ $(document).on('click', '.lancer-damage-apply', (ev) =>
         _markDamageApplied(actorId);
         const preHp = Number(actor?.system?.hp?.value ?? 0);
         const preOvershield = Number(actor?.system?.overshield?.value ?? 0);
-        const types = new Set();
+        const typeAmounts = new Map();
         for (const d of targetResult.damage ?? [])
         {
             const amt = Number(d.amount);
             if (amt > 0)
-                types.add(String(d.type).toLowerCase());
+            {
+                const typeKey = String(d.type).toLowerCase();
+                typeAmounts.set(typeKey, (typeAmounts.get(typeKey) ?? 0) + amt);
+            }
         }
+        const types = new Set(typeAmounts.keys());
         const audioOn = _damageVolume() > 0;
         const PHYSICAL = new Set(['kinetic', 'energy', 'explosive', 'variable']);
         const physTypes = [...types].filter((type) => PHYSICAL.has(type));
@@ -532,8 +541,12 @@ $(document).on('click', '.lancer-damage-apply', (ev) =>
                 for (const damageType of types)
                 {
                     if (audioOn)
-                        playDamageSound(damageType);
-                    playDamageImpactFX(damageType, targetTokenObj);
+                    {
+                        const hits = damageImpactHits(typeAmounts.get(damageType));
+                        for (let hit = 0; hit < hits; hit++)
+                            setTimeout(() => playDamageSound(damageType), hit * DAMAGE_IMPACT_DELAY_MS);
+                    }
+                    playDamageImpactFX(damageType, targetTokenObj, typeAmounts.get(damageType));
                 }
             }
         }, 250);

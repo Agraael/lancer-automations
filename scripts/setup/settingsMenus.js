@@ -761,6 +761,8 @@ const COLORS_FIELDS = [
     { key: 'color.glowWeapon', type: 'color', label: 'Weapon' },
     { key: 'color.glowReach', type: 'color', label: 'Max Reach' },
     { key: 'color.glowMark', type: 'color', label: 'Mark' },
+    { type: 'section', label: 'Range Pulse' },
+    { key: 'rangePulseLineWidth', type: 'slider', label: 'Line Width', min: 1, max: 4, step: 0.25 },
     { type: 'section', label: 'Ruler Colors' },
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
     { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },

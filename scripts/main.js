@@ -16,6 +16,7 @@ import './filters/customFilters.js';
 import './setup/scene-dim-from-image.js';
 import './setup/migrations.js';
 import "./setup/status-effects.js";
+import "./setup/qol-compat.js";
 import "./combat/actor-change-hooks.js";
 import "./movement/token-move-hooks.js";
 

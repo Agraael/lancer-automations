@@ -913,9 +913,9 @@ function tokenScreenRect(token)
     const bottomRight = canvas.stage.toGlobal(new PIXI.Point(rectCenterX + halfW, rectCenterY + halfH));
     const view = canvas.app.view;
     const viewRect = view.getBoundingClientRect?.() ?? { left: 0, top: 0, width: view.width, height: view.height };
-    // widthRatio = 1/dpr when autoDensity=false. Yields CSS pixels in both modes.
-    const widthRatio = view.width > 0 ? (viewRect.width / view.width) : 1;
-    const cssScale = widthRatio > 0 ? widthRatio : 1;
+    // toGlobal yields logical px; renderer.screen is that space (view.width is backing px, off by dpr)
+    const screenW = canvas.app.renderer?.screen?.width || viewRect.width;
+    const cssScale = screenW > 0 ? (viewRect.width / screenW) : 1;
     const left = viewRect.left + topLeft.x * cssScale;
     const top = viewRect.top + topLeft.y * cssScale;
     const right = viewRect.left + bottomRight.x * cssScale;

@@ -316,6 +316,33 @@ function getConflictRules()
     ];
 }
 
+// One-time heads-up that QoL is redundant next to LA and only loosely supported.
+function showQolAdvisoryOnce()
+{
+    if (!game.modules.get('csm-lancer-qol')?.active)
+        return;
+    if (game.settings.get(MODULE_ID, 'qolAdvisoryShown'))
+        return;
+    game.settings.set(MODULE_ID, 'qolAdvisoryShown', true);
+    new Dialog({
+        title: 'Lancer Automations: about Lancer QoL',
+        content: `
+            <p><b>Lancer QoL</b> is enabled. Lancer Automations covers all of its features, and keeping the two modules compatible gets more tedious with every release.</p>
+            <p>You can keep using it, but some issues can occur when both run together. Known ones are already patched by Lancer Automations.</p>
+            <p style="font-size:0.85em; opacity:0.7;">This notice is only shown once.</p>
+        `,
+        buttons: {
+            ok: {
+                icon: '<i class="fas fa-check"></i>',
+                label: 'Understood',
+                callback: () =>
+                {}
+            }
+        },
+        default: 'ok'
+    }).render(true);
+}
+
 /**
  * Run all conflict checks. If any are found, show a dialog with details
  * and an "Auto-fix & Reload" button.
@@ -325,6 +352,8 @@ export function checkCompatibility()
 {
     if (!game.user.isGM)
         return;
+
+    showQolAdvisoryOnce();
 
     const rules = getConflictRules();
     const conflicts = rules.filter(rule => rule.check());

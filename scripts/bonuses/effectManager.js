@@ -21,8 +21,7 @@ import {
     linkEffectToItem,
     linkEffectToActor
 } from "./flagged-effects.js";
-import { isHexGrid, drawHexAt, getOccupiedOffsets } from "../combat/grid-helpers.js";
-import { gridLineWidth } from "../interactive/canvas-helpers.js";
+import { createDurationMarks } from "./duration-widget.js";
 import {
     addGlobalBonus,
     addConstantBonus,
@@ -1680,61 +1679,15 @@ export async function executeEffectManager(options = {})
     </div>
     `;
 
-    // Gold pulsing footprint on the active tab's target token, while the manager is open.
-    let activeHighlight = null;
-    const clearEmHighlight = () =>
+    // White target mark / yellow duration-origin mark while the manager is open.
+    const emMarks = createDurationMarks();
+    const clearEmHighlight = () => emMarks.destroy();
+    const highlightEmToken = (tokenId, originId) =>
     {
-        if (!activeHighlight)
-            return;
-        try
-        {
-            canvas.app?.ticker?.remove(activeHighlight.tick);
-        }
-        catch
-        { /* */ }
-        try
-        {
-            if (activeHighlight.g?.parent)
-                activeHighlight.g.parent.removeChild(activeHighlight.g);
-            activeHighlight.g?.destroy?.();
-        }
-        catch
-        { /* */ }
-        activeHighlight = null;
-    };
-    const highlightEmToken = (tokenId) =>
-    {
-        clearEmHighlight();
-        const token = tokenId ? canvas.tokens?.get(String(tokenId)) : null;
-        if (!token)
-            return; // off-scene target (e.g. a prototype token): nothing to show
-        const g = new PIXI.Graphics();
-        canvas.stage.addChild(g).eventMode = 'none';
-        const paint = (alpha) =>
-        {
-            g.clear();
-            g.lineStyle(gridLineWidth(4), 0xffd84a, alpha);
-            g.beginFill(0xffd84a, alpha * 0.18);
-            if (isHexGrid())
-            {
-                for (const o of getOccupiedOffsets(token))
-                    drawHexAt(g, o.col, o.row);
-            }
-            else
-                g.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
-            g.endFill();
-        };
-        const tick = () =>
-        {
-            if (!activeHighlight || activeHighlight.g?.destroyed)
-            {
-                clearEmHighlight();
-                return;
-            }
-            paint(0.55 + 0.35 * Math.abs(Math.sin(performance.now() / 300)));
-        };
-        canvas.app.ticker.add(tick);
-        activeHighlight = { g, tick };
+        emMarks.update({
+            targetToken: tokenId ? canvas.tokens?.get(String(tokenId)) : null,
+            originToken: originId ? canvas.tokens?.get(String(originId)) : null,
+        });
     };
 
     const dialog = new Dialog({
@@ -1818,12 +1771,19 @@ export async function executeEffectManager(options = {})
 
             // Highlight the active tab's target token on the scene. Tab keys differ from select prefixes.
             const TAB_TARGET_PREFIX = { standard: 'std', custom: 'cust', bonus: 'bonus', manage: 'manage' };
+            const TAB_ORIGIN_SELECT = { std: '#std-origin', cust: '#cust-origin', bonus: '#bonus-durOrigin' };
+            const TAB_DURATION_SELECT = { std: '#std-duration', cust: '#cust-duration', bonus: '#bonus-duration' };
             const refreshEmHighlight = () =>
             {
                 const prefix = TAB_TARGET_PREFIX[html.find('.te-tab.active').data('tab')] || 'std';
-                highlightEmToken(html.find(`#${prefix}-target`).val());
+                const label = String(html.find(TAB_DURATION_SELECT[prefix] ?? '').val() ?? '');
+                const turnBased = label === 'end' || label === 'start';
+                const originSelect = TAB_ORIGIN_SELECT[prefix];
+                highlightEmToken(html.find(`#${prefix}-target`).val(), turnBased && originSelect ? html.find(originSelect).val() : null);
             };
             html.find('#std-target, #cust-target, #bonus-target, #manage-target').on('change', refreshEmHighlight);
+            html.find('#std-origin, #cust-origin, #bonus-durOrigin').on('change', refreshEmHighlight);
+            html.find('#std-duration, #cust-duration, #bonus-duration').on('change', refreshEmHighlight);
 
             // Tier pills only where a tier can matter; std/cust also hide for live-token targets (direct apply, no template).
             const updateTierSlots = () =>
@@ -2843,6 +2803,8 @@ export async function executeEffectManager(options = {})
                 const selected = await api.chooseToken(caster, {
                     count: count,
                     includeSelf: true,
+                    urgent: true,
+                    autoConfirm: count === 1,
                     title: count === 1 ? "Pick Token" : "Select Tokens",
                     description: count === 1 ? "Select a token on the map to update the field." : "Select tokens to apply this bonus to. Close the card to confirm.",
                     icon: "fas fa-crosshairs"

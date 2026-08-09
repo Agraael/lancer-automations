@@ -28,6 +28,8 @@ const targets = await api.chooseToken(casterToken, options)
 | <kbd>description</kbd> | `string` | `""` | Card description |
 | <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
 | <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
+| <kbd>urgent</kbd> | `boolean` | `false` | Show the card immediately instead of waiting in the card queue |
+| <kbd>autoConfirm</kbd> | `boolean` | `false` | Resolve as soon as `count` tokens are selected, no Confirm click |
 
 Generic range failures render as `Out of range (X > Y)`; filter failures render as `filterWarning` (or `Invalid target` if omitted).
 

@@ -364,6 +364,40 @@ function _tokenLosPoints(token, aCenter, bCenter)
     return [center, leftPt, rightPt];
 }
 
+// Centre plus every silhouette vertex, for the dense LOS fallback.
+function _tokenSamplePoints(token)
+{
+    const center = token.center;
+    const points = [center];
+    if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS && token.document.width === token.document.height)
+    {
+        const radius = token.w / 2;
+        for (let step = 0; step < 8; step++)
+        {
+            const angle = (step / 8) * Math.PI * 2;
+            points.push({ x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius });
+        }
+        return points;
+    }
+    if (canvas.grid.isHexagonal)
+    {
+        const pts = token.getShape().points;
+        for (let idx = 0; idx < pts.length; idx += 2)
+            points.push({ x: Math.round(pts[idx] + token.x), y: Math.round(pts[idx + 1] + token.y) });
+        return points;
+    }
+    const shape = token.getShape();
+    const originX = token.document.x;
+    const originY = token.document.y;
+    points.push(
+        { x: originX, y: originY },
+        { x: originX + shape.width, y: originY },
+        { x: originX + shape.width, y: originY + shape.height },
+        { x: originX, y: originY + shape.height },
+    );
+    return points;
+}
+
 export function lancerHasLineOfSight(tokenA, tokenB)
 {
     const docA = tokenA?.document;
@@ -384,7 +418,14 @@ export function lancerHasLineOfSight(tokenA, tokenB)
     const centerB = tokenB.center;
     const pointsA = _tokenLosPoints(tokenA, centerA, centerB);
     const pointsB = _tokenLosPoints(tokenB, centerA, centerB);
-    const edges = _collectSightEdges();
+    // cull walls to the pair's corridor once; every ray below scans only those
+    const pad = canvas.grid.size * 0.1;
+    const pairMinX = Math.min(tokenA.x, tokenB.x) - pad;
+    const pairMaxX = Math.max(tokenA.x + tokenA.w, tokenB.x + tokenB.w) + pad;
+    const pairMinY = Math.min(tokenA.y, tokenB.y) - pad;
+    const pairMaxY = Math.max(tokenA.y + tokenA.h, tokenB.y + tokenB.h) + pad;
+    const edges = _collectSightEdges().filter(record =>
+        record.maxX >= pairMinX && record.minX <= pairMaxX && record.maxY >= pairMinY && record.minY <= pairMaxY);
     const ctx = {
         skipPrefixA: `la-block-los-${docA.id}-`,
         skipPrefixB: `la-block-los-${docB.id}-`,
@@ -402,8 +443,26 @@ export function lancerHasLineOfSight(tokenA, tokenB)
             break;
         }
     }
+    // The 3 sampled rays can miss a clear line threading a gap; only on failure, test every vertex pair.
+    if (!result)
+        result = _denseLosClear(tokenA, tokenB, heightA, heightB, edges, ctx);
     _losPairCache.set(pairKey, result);
     return result;
+}
+
+function _denseLosClear(tokenA, tokenB, heightA, heightB, edges, ctx)
+{
+    const pointsA = _tokenSamplePoints(tokenA);
+    const pointsB = _tokenSamplePoints(tokenB);
+    for (const pointA of pointsA)
+    {
+        for (const pointB of pointsB)
+        {
+            if (!_segmentBlocked(pointA, heightA, pointB, heightB, edges, ctx))
+                return true;
+        }
+    }
+    return false;
 }
 
 function _resolveToken(ref)
@@ -577,6 +636,38 @@ function _drawLosDebug()
                 const labelPoint = (!clear && ctx.blockPoint) ? ctx.blockPoint : { x: (viewerPoints[index].x + targetPoints[index].x) / 2, y: (viewerPoints[index].y + targetPoints[index].y) / 2 };
                 reasonText.position.set(labelPoint.x, labelPoint.y);
                 _losDebugLayer.addChild(reasonText);
+            }
+            if (!anyClear)
+            {
+                const denseV = _tokenSamplePoints(effectiveViewer);
+                const denseT = _tokenSamplePoints(effectiveTarget);
+                let found = null;
+                for (const pointV of denseV)
+                {
+                    for (const pointT of denseT)
+                    {
+                        if (!_segmentBlocked(pointV, eyeViewer, pointT, eyeTarget, edges, ctx))
+                        {
+                            found = { pointV, pointT, reason: ctx.lastReason };
+                            break;
+                        }
+                    }
+                    if (found)
+                        break;
+                }
+                if (found)
+                {
+                    anyClear = true;
+                    gfx.lineStyle(2, 0x22ff44, 0.9);
+                    gfx.moveTo(found.pointV.x, found.pointV.y);
+                    gfx.lineTo(found.pointT.x, found.pointT.y);
+                    const denseText = new PIXI.Text(`dense:${found.reason}`, {
+                        fontFamily: 'monospace', fontSize: 10, fill: 0x22ff44, stroke: 0x000000, strokeThickness: 3,
+                    });
+                    denseText.anchor.set(0.5, 0.5);
+                    denseText.position.set((found.pointV.x + found.pointT.x) / 2, (found.pointV.y + found.pointT.y) / 2);
+                    _losDebugLayer.addChild(denseText);
+                }
             }
             const center = effectiveTarget.center;
             const label = new PIXI.Text(`${anyClear ? 'LOS' : 'NO LOS'}  eye ${eyeViewer.toFixed(1)} -> ${eyeTarget.toFixed(1)}`, {
@@ -999,8 +1090,8 @@ function _registerVisionSettings()
         onChange: () => _drawLosDebug()
     });
     game.settings.register(MODULE_ID, SETTING_BASIC_SIGHT_999, {
-        name: 'Basic vision range = 999',
-        hint: 'Override basicSight and lightPerception detection range to 999 on auto-created tokens.',
+        name: 'Unlimited basic vision range',
+        hint: 'Set sight range to unlimited on auto-created tokens.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1023,12 +1114,17 @@ function _registerVisionSettings()
 // v13 first-hit order: sensor+awareness precede shadow so they fire on no-LOS tokens; shadow is last.
 const _CANONICAL_ORDER = ['basicSight', 'lightPerception', 'lancerLineOfSight', 'lancerSensor', 'lancerAwareness', 'lancerLosShadow'];
 
-// Pass through; forcing 0 broke infinite semantics in the UI (Foundry reduces on write).
+const _ZERO_SCRUB_IDS = new Set(['lancerLineOfSight', 'lancerLosShadow', 'lancerSensor', 'lancerAwareness', 'lightPerception', 'basicSight']);
+
+// range 0 = legacy sanitizer damage (it zeroed every row it touched); v13 reads 0 as "detects nothing"
 function _sanitizeMode(mode)
 {
     if (!mode)
         return null;
-    return { ...mode };
+    const copy = { ...mode };
+    if (_ZERO_SCRUB_IDS.has(copy.id) && copy.range === 0)
+        copy.range = null;
+    return copy;
 }
 
 function _augmentDetectionModes(existing)
@@ -1075,8 +1171,8 @@ function _onCreateToken(tokenDoc, _options, userId)
     const { updates, changed } = _augmentDetectionModes(tokenDoc._source?.detectionModes ?? tokenDoc.detectionModes);
     if (changed)
         update.detectionModes = updates;
-    if (_getSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== 999)
-        update["sight.range"] = 999;
+    if (_getSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== null)
+        update["sight.range"] = null;
     if (Object.keys(update).length > 0)
         tokenDoc.update(update);
 }
@@ -1095,8 +1191,8 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
         const update = {};
         if (changed)
             update["prototypeToken.detectionModes"] = updates;
-        if (overrideSightRange && proto?.sight?.range !== 999)
-            update["prototypeToken.sight.range"] = 999;
+        if (overrideSightRange && proto?.sight?.range !== null)
+            update["prototypeToken.sight.range"] = null;
         if (Object.keys(update).length === 0)
             return null;
         return actor.update(update);
@@ -1120,9 +1216,9 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
                 tokenUpdate.detectionModes = detectionModeUpdates;
                 hasUpdates = true;
             }
-            if (overrideSightRange && tokenDoc.sight?.range !== 999)
+            if (overrideSightRange && tokenDoc.sight?.range !== null)
             {
-                tokenUpdate["sight.range"] = 999;
+                tokenUpdate["sight.range"] = null;
                 hasUpdates = true;
             }
             if (hasUpdates)

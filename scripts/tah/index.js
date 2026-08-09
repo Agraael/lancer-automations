@@ -219,6 +219,12 @@ Hooks.on('init', () =>
         range: { min: 0.6, max: 1.6, step: 0.05 },
         onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
     });
+    game.settings.register(MODULE, 'tah.statusFavorites', {
+        scope: 'client',
+        config: false,
+        type: Array,
+        default: [],
+    });
     game.settings.register(MODULE, 'tah.showAidHandleInteractSqueeze', {
         name: 'Aid / Handle / Interact / Squeeze Actions',
         hint: 'Show these actions in the Actions category. They come from PPG (Prototype Pattern Group).',

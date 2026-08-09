@@ -100,7 +100,8 @@ async function injectButton(state, $form)
     const $targetingSection = $row.closest('.accdiff-grid__section');
     ($targetingSection.length ? $targetingSection : $row).addClass('la-targeting-section');
 
-    return buildTargetingUI(state, $form, $row, { weapon, aoe, hitChanceForFactory: buildHitChanceFor });
+    // Weapon attacks honor the auto-start setting; bare basic/tech attacks start empty like bare damage rolls.
+    return buildTargetingUI(state, $form, $row, { weapon, aoe, hitChanceForFactory: buildHitChanceFor, autoStart: weapon ? 'setting' : 'ifEmpty' });
 }
 
 export function registerAccDiffTargetButton()

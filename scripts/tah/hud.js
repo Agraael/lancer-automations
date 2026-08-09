@@ -165,6 +165,8 @@ export class LancerHUD
         this._statusPanelInstance  = null;
         this._suppressRefreshDepth = 0;
         this._searchActive         = false;
+        this._pickerSuppress       = false;
+        this._collapseBonusMs      = 0;
         this._favoritesActive      = false;
         this._categories           = null;
         this._pendingBlockReason   = null;
@@ -836,9 +838,11 @@ export class LancerHUD
         const _scheduleCollapse = () =>
         {
             clearTimeout(_leaveTimer);
+            const delay = hoverCloseDelay + this._collapseBonusMs;
+            this._collapseBonusMs = 0;
             _leaveTimer = setTimeout(() =>
             {
-                if (this._searchActive)
+                if (this._searchActive || this._pickerSuppress)
                     return;
                 closeCol(c2);
                 closeCol(c3);
@@ -857,6 +861,7 @@ export class LancerHUD
         this._scheduleCollapse = _scheduleCollapse;
         this._cancelCollapse   = _cancelCollapse;
         this._clearC1Active    = _clearC1Active;
+        this._statusPanelInstance?.close();
         this._statusPanelInstance = new StatusPanel({
             actor: this._actor,
             token: this._token,
@@ -867,6 +872,8 @@ export class LancerHUD
             {} : _scheduleCollapse,
             incDepth: () => this._suppressRefreshDepth++,
             decDepth: () => this._suppressRefreshDepth--,
+            suppressCollapse: (on) => { this._pickerSuppress = on; },
+            extendCollapse: () => { this._collapseBonusMs = 1000; },
         });
         this._logPanelInstance = new LogPanel({
             actor: this._actor,

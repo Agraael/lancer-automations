@@ -2250,6 +2250,21 @@ function _ensureSyncTicker(token)
                     child.scale.set((ky / kx) / 8, 1 / 8);
             }
         }
+        else if (minZoom > 0 && iso)
+        {
+            // local axes stay screen-aligned under the counter-transform, so per-axis growth is safe
+            const zoom = canvas.stage?.scale?.x || 1;
+            const effW = Math.max(entry.tokenW, entry.width);
+            const kx = Math.max(1, (REF_GRID_SIZE * minZoom) / (effW * zoom));
+            const ky = Math.max(1, (REF_ROW_HEIGHT * minZoom) / (entry.rowHeight * zoom));
+            entry.wrapper.scale.set(iso.counterScale * kx, (1 / iso.counterScale) * ky);
+            entry.hub.position.set(-entry.width / 2, ((entry.tokenH / 2) + 3 - entry.rowHeight) / ky);
+            for (const child of entry.hub.children)
+            {
+                if (child?.name === 'la-bar-label')
+                    child.scale.set((ky / kx) / 8, 1 / 8);
+            }
+        }
         // Keep the name below the live-scaled hub (non-iso; iso is set on refresh).
         const nameplate = token.nameplate;
         if (nameplate?.visible && !iso)
@@ -3285,7 +3300,7 @@ export function registerTokenStatBarSettings()
         scope: 'world',
         config: false,
         type: Number,
-        default: 0,
+        default: 1,
         range: { min: 0, max: 4, step: 0.1 },
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENTS, {

@@ -1141,6 +1141,7 @@ export async function executeReactorExplosion(token)
         pattern: "burst",
         areaRange: 2,
         includeSelf: true,
+        allowEmptyConfirm: true,
         title: "REACTOR EXPLOSION",
         description: "Confirm the tokens caught in the Burst 2. Close the card to cancel.",
         icon: "fas fa-radiation",
@@ -1150,9 +1151,12 @@ export async function executeReactorExplosion(token)
 
     token.control({ releaseOthers: true });
 
-    const { completed } = await executeDamageRoll(token, caught, "4d6", "Explosive", "REACTOR EXPLOSION");
-    if (!completed)
-        return;
+    if (caught.length)
+    {
+        const { completed } = await executeDamageRoll(token, caught, "4d6", "Explosive", "REACTOR EXPLOSION");
+        if (!completed)
+            return;
+    }
 
     const BASE_SCALE = 0.2;
     const systemSize = Math.floor(actor?.system?.size || 1);
